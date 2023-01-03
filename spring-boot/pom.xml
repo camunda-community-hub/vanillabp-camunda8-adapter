@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.vanillabp</groupId>
+    <artifactId>camunda8-adapter</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+  </parent>
+  <artifactId>camunda8-spring-boot-adapter</artifactId>
+  <name>VanillaBP SPI adapter for Camunda 8.x for Spring Boot</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <zeebe.version>8.1.13</zeebe.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>spring-boot-support</artifactId>
+      <version>${vanillabp-spring-boot-support.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.camunda</groupId>
+      <artifactId>spring-zeebe-starter</artifactId>
+      <version>${zeebe.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-tx</artifactId>
+      <version>5.3.23</version>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.persistence</groupId>
+      <artifactId>jakarta.persistence-api</artifactId>
+      <version>2.2.3</version>
+    </dependency>
+  </dependencies>
+</project>

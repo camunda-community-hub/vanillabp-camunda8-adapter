@@ -1,0 +1,3 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  io.vanillabp.camunda8.wiring.ZeebeClientConfiguration,\
+  io.vanillabp.camunda8.Camunda8AdapterConfiguration
