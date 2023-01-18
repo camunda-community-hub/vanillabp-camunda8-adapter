@@ -9,7 +9,46 @@ This adapter is aware of all the details needed to keep in mind on using Camunda
 
 To run Camunda 8 on your local computer for development purposes consider to use [docker-compose](https://github.com/camunda/camunda-platform#using-docker-compose).
 
+## Usage
+
+Just add this dependency to your project, no additional dependencies from Camunda needed:
+
+```xml
+<dependency>
+  <groupId>org.camunda.community.vanillabp</groupId>
+  <artifactId>camunda8-spring-boot-adapter</artifactId>
+  <version>1.0.0</version>
+</dependency>
+```
+
+If you want a certain version of Zeebe client then you have to replace the transitive dependencies like this:
+
+```xml
+<dependency>
+  <groupId>io.camunda</groupId>
+  <artifactId>spring-zeebe-starter</artifactId>
+  <version>8.1.14</version>
+</dependency>
+<dependency>
+  <groupId>org.camunda.community.vanillabp</groupId>
+  <artifactId>camunda7-spring-boot-adapter</artifactId>
+  <version>1.0.0</version>
+  <exclusions>
+    <exclusion>
+      <groupId>io.camunda</groupId>
+      <artifactId>spring-zeebe-starter</artifactId>
+    </exclusion>
+  </exclusions>
+</dependency>
+```
+
+*Hint:* This adapter is compatible with the configuration of the regular Zeebe Spring Boot auto-configuration. However, some additional configuration is described in the upcoming sections.
+
 ## Features
+
+### Worker ID
+
+When using asynchronious task processing one has to define a worker id. There is no default value to avoid bringing anything unwanted into production. On using [VanillaBP's SpringApplication](https://github.com/vanillabp/spring-boot-support#spring-boot-support) instead of `org.springframework.boot.SpringApplication` [additional support](https://github.com/vanillabp/spring-boot-support#worker-id) is available.
 
 ### Module aware deployment
 

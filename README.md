@@ -1,9 +1,17 @@
+[![](https://img.shields.io/badge/Community%20Extension-An%20open%20source%20community%20maintained%20project-FF4700)](https://github.com/camunda-community-hub/community)
+![Compatible with: Camunda Platform 8](https://img.shields.io/badge/Compatible%20with-Camunda%20Platform%208-0072Ce)
+
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.camunda.community.vanillabp/camunda8-adapter/badge.svg)](https://maven-badges.herokuapp.com/maven-central/org.camunda.community.vanillabp/camunda8-adapter)
+[![](https://img.shields.io/badge/Lifecycle-Incubating-blue)](https://github.com/Camunda-Community-Hub/community/blob/main/extension-lifecycle.md#incubating-)
+[![Apache License V.2](https://img.shields.io/badge/license-Apache%20V.2-blue.svg)](./LICENSE)
+
 ![VanillaBP](./readme/vanillabp-headline.png)
+
 # Camunda 8 adapter
 
 This is an adapter which implements the binding of the [VanillaBP SPI](https://github.com/vanillabp/spi-for-java) in order to run business processes using [Camunda 8](https://docs.camunda.io).
 
-If you are interested in migrating from [Camunda 7](https://docs.camunda.org) then checkout the [drop-in replacement adapter for Camunda 7](https://github.com/vanillabp/camunda7-adapter).
+If you are interested in migrating from [Camunda 7](https://docs.camunda.org) then checkout the [drop-in replacement adapter for Camunda 7](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter).
 
 ## Runtime environments
 
@@ -11,7 +19,7 @@ Currently, only Spring Boot is supported by including this Maven dependency:
 
 ```xml
 <dependency>
-  <groupId>io.vanillabp</groupId>
+  <groupId>org.camunda.community.vanillabp</groupId>
   <artifactId>camunda8-spring-boot-adapter</artifactId>
 </dependency>
 ```
