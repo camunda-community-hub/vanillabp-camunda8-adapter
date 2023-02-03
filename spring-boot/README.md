@@ -9,6 +9,18 @@ This adapter is aware of all the details needed to keep in mind on using Camunda
 
 To run Camunda 8 on your local computer for development purposes consider to use [docker-compose](https://github.com/camunda/camunda-platform#using-docker-compose).
 
+## Content
+
+1. [Usage](#usage)
+1. [Features](#features)
+    1. [Worker ID](#worker-id)
+    1. [Module aware deployment](#module-aware-deployment)
+    1. [SPI Binding validation](#spi-binding-validation)
+1. [Multi-instance](#multi-instance)
+1. [Message correlation IDs](#message-correlation-ids)
+1. [Transaction behavior](#transaction-behavior)
+1. [Workflow aggregate serialization](#workflow-aggregate-serialization)
+
 ## Usage
 
 Just add this dependency to your project, no additional dependencies from Camunda needed:
@@ -67,7 +79,7 @@ On starting the application BPMNs of all workflow modules will be wired to the S
    
 This ensures that correct wiring of all process definitions according to the SPI is done.
 
-#### Multi-instance
+## Multi-instance
 
 Since Camunda 8 is a remote engine the workflow is processed in a different runtime environment. Due to this fact the Blueprint adapter cannot do the entire binding of multi-instance context information under the hood. In the BPMN the multi-instance aspects like the input element, the element's index and the total number of elements have to be defined according to a certain naming convention:
 
@@ -79,13 +91,13 @@ Last two one needs to be defined as input mappings where the index always points
 
 This naming convention might look a little bit strange but is necessary to hide the BPMS in the business code. Unfortunately, since Camunda 8 is a remote engine, BPMNs get a little bit verbose as information needed to process the BPMN cannot be passed on-the-fly/at runtime and have to be provided upfront.
 
-#### Message correlation IDs
+## Message correlation IDs
 
 On using receive tasks Camunda 8 requires us to define correlation IDs. If your process does not have any special correlation strategy then use the expression `=id` and use the two-parameter method `ProcessService#correlateMessage` to correlate incoming messages.
 
 In case your model has more than one receive task active you have to define unique correlation IDs for each receive task of that message name to enable the BPMS to find the right receive task to correlate to. This might happen for multi-instance receive tasks or receive tasks within a multi-instance embedded sub-process. In that case use the workflow id in combination with the multi-instance element as a correlation id: `=id+"+"+RequestRideOffer` (where "RequestRideOffer" is the name of the multi-instance element).
 
-### Transaction behavior
+## Transaction behavior
 
 Since Camunda 8 is an external system to your services one has to deal with eventual consistency in conjunction with transactions. This adapter uses the recommended pattern to report a task as completed and roll back the local transaction in case of errors. Possible errors are:
 
@@ -101,3 +113,39 @@ If there is an exception in your business code and you have to roll back the tra
 public class TaxiRide {
 ```
 
+## Workflow aggregate serialization
+
+On using C7 one can use workflow aggregates having relations and calculated values:
+
+```java
+@Entity
+public class MyAwesomeAggregate {
+  ...
+  @ManyToMany
+  private List<MyAwesomeOtherEntity> others;
+  
+  @Column(name = "MY_VALUE")
+  private float myValue;
+  ...
+  public boolean isValidValue() {
+      return getMyValue() > 1.0f;
+  }
+}
+```
+
+Since the aggregate is attached to the underlying persistence (e.g. JPA/Hibernate) any lazy loaded collections or calculated values based on other properties can be used in BPMN expressions e.g. at conditional flows: `${validValue}`.
+
+In C8 the workflow is processed in a different runtime environment than the business processing software using VanillaBP. So lazy loading won't work any more. Therefore, after processing a task using a method annotated by `@WorkflowTask` **the entire aggregate is serialized every time into a JSON object and passed to C8** as a data context. This means that lazy loaded collections are read from the database and calculated values are determined.
+
+So, when designing your aggregate you should have this in mind:
+1. One solution to keep your aggregate simple is to not use relations but rather store reference ids if the referred object is not needed in BMPN expressions.
+1. Another approach is to mark certain properties as transient by adding this annotation: `@com.fasterxml.jackson.annotation.JsonIgnore`. As you can see this annotation belongs to the serialization framework used by C8 and therefore may change in the future.
+1. If you need a value based on a relation you may mark it as transient and add an additional getter to make this value available to expressions:
+```java
+public List<String> getOthersNames() {
+    return getOthers()
+            .stream()
+            .map(MyAwesomeOtherEntity::getName)
+            .collect(Collectors.toList());
+}
+```
