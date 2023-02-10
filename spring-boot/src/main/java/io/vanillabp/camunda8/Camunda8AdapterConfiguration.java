@@ -9,14 +9,14 @@ import io.vanillabp.camunda8.deployment.DeploymentRepository;
 import io.vanillabp.camunda8.deployment.DeploymentResourceRepository;
 import io.vanillabp.camunda8.deployment.DeploymentService;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
+import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.camunda8.wiring.Camunda8UserTaskHandler;
-import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.springboot.adapter.AdapterConfigurationBase;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
+import io.vanillabp.springboot.adapter.VanillaBpProperties;
 import io.vanillabp.springboot.parameters.MethodParameter;
-import org.springframework.beans.factory.InjectionPoint;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +33,8 @@ import java.util.List;
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @EnableZeebeClient
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
+
+    public static final String ADAPTER_ID = "camunda8";
 
     @Value("${workerId}")
     private String workerId;
@@ -55,12 +57,21 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Autowired
     private DeploymentResourceRepository deploymentResourceRepository;
 
+    @Override
+    public String getAdapterId() {
+        
+        return ADAPTER_ID;
+        
+    }
+    
     @Bean
     public Camunda8DeploymentAdapter camunda8Adapter(
+            final VanillaBpProperties properties,
             final DeploymentService deploymentService,
             final Camunda8TaskWiring camunda8TaskWiring) {
 
         return new Camunda8DeploymentAdapter(
+                properties,
                 deploymentService,
                 clientLifecycle,
                 camunda8TaskWiring);
@@ -125,23 +136,21 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         
     }
     
-    @SuppressWarnings("unchecked")
-    @Bean
-    @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-    public <DE> Camunda8ProcessService<?> camundaProcessService(
+    @Override
+    public <DE> Camunda8ProcessService<?> newProcessServiceImplementation(
             final SpringDataUtil springDataUtil,
-            final InjectionPoint injectionPoint) throws Exception {
+            final Class<DE> workflowAggregateClass,
+            final CrudRepository<DE, String> workflowAggregateRepository) {
 
-        return registerProcessService(
-                springDataUtil,
-                injectionPoint,
-                (workflowDomainEntityRepository, workflowDomainEntityClass) ->
-                new Camunda8ProcessService<DE>(
-                        (CrudRepository<DE, String>) workflowDomainEntityRepository,
-                        domainEntity -> springDataUtil.getId(domainEntity),
-                        (Class<DE>) workflowDomainEntityClass)
-            );
+        final var result = new Camunda8ProcessService<DE>(
+                workflowAggregateRepository,
+                domainEntity -> springDataUtil.getId(domainEntity),
+                workflowAggregateClass);
 
+        putConnectableService(workflowAggregateClass, result);
+        
+        return result;
+        
     }
     
 }

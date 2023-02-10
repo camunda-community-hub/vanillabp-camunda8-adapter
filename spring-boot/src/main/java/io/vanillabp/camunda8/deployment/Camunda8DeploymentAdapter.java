@@ -12,10 +12,12 @@ import io.camunda.zeebe.model.bpmn.instance.ServiceTask;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
 import io.camunda.zeebe.spring.client.event.ClientStartedEvent;
 import io.camunda.zeebe.spring.client.lifecycle.ZeebeClientLifecycle;
+import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.utils.HashCodeInputStream;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.springboot.adapter.ModuleAwareBpmnDeployment;
+import io.vanillabp.springboot.adapter.VanillaBpProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -48,11 +50,12 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     private ZeebeClient client;
 
     public Camunda8DeploymentAdapter(
+            final VanillaBpProperties properties,
             final DeploymentService deploymentService,
             final ZeebeClientLifecycle clientLifecycle,
             final Camunda8TaskWiring taskWiring) {
         
-        super();
+        super(properties);
         this.taskWiring = taskWiring;
         this.deploymentService = deploymentService;
         this.clientLifecycle = clientLifecycle;
@@ -64,6 +67,13 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     	
     	return logger;
     	
+    }
+    
+    @Override
+    protected String getAdapterId() {
+        
+        return Camunda8AdapterConfiguration.ADAPTER_ID;
+        
     }
     
     @EventListener
@@ -80,6 +90,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     @Override
     protected void doDeployment(
     		final String workflowModuleId,
+            final String workflowModuleName,
             final Resource[] bpmns,
             final Resource[] dmns,
             final Resource[] cmms) throws Exception {
@@ -122,7 +133,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                             deploymentHashCode[0])) {
                         
                         logger.info("About to deploy '{}' of workflow-module '{}'",
-                                resource.getFilename(), workflowModuleId);
+                                resource.getFilename(), workflowModuleName);
                     	final var model = bpmnParser.parseModelFromStream(inputStream);
 
                     	final var bpmn = deploymentService.addBpmn(
@@ -172,7 +183,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                             bpmn.getResource())) {
                         
                         logger.info("About to verify old BPMN '{}' of workflow-module '{}'",
-                                bpmn.getResourceName(), workflowModuleId);
+                                bpmn.getResourceName(), workflowModuleName);
                         final var model = bpmnParser.parseModelFromStream(inputStream);
         
                         processBpmnModel(workflowModuleId, deployedProcesses, bpmn, model);

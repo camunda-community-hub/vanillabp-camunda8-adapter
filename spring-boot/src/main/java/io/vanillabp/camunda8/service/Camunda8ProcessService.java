@@ -1,6 +1,8 @@
 package io.vanillabp.camunda8.service;
 
 import io.camunda.zeebe.client.ZeebeClient;
+import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
+import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +22,8 @@ public class Camunda8ProcessService<DE>
 
     private final Function<DE, String> getWorkflowAggregateId;
 
+    private AdapterAwareProcessService<DE> parent;
+    
     private ZeebeClient client;
     
     @SuppressWarnings("unused")
@@ -39,6 +43,14 @@ public class Camunda8ProcessService<DE>
                 
     }
     
+    @Override
+    public void setParent(
+            final AdapterAwareProcessService<DE> parent) {
+        
+        this.parent = parent;
+        
+    }
+    
     public void wire(
             final ZeebeClient client,
             final String workflowModuleId,
@@ -47,6 +59,13 @@ public class Camunda8ProcessService<DE>
         this.client = client;
         this.workflowModuleId = workflowModuleId;
         this.bpmnProcessId = bpmnProcessId;
+        
+        if (parent != null) {
+            parent.wire(
+                    Camunda8AdapterConfiguration.ADAPTER_ID,
+                    workflowModuleId,
+                    bpmnProcessId);
+        }
         
     }
 
