@@ -25,12 +25,7 @@ public class Camunda8ProcessService<DE>
     private AdapterAwareProcessService<DE> parent;
     
     private ZeebeClient client;
-    
-    @SuppressWarnings("unused")
-    private String workflowModuleId;
-
-    private String bpmnProcessId;
-    
+        
     public Camunda8ProcessService(
             final CrudRepository<DE, String> workflowAggregateRepository,
             final Function<DE, String> getWorkflowAggregateId,
@@ -54,26 +49,23 @@ public class Camunda8ProcessService<DE>
     public void wire(
             final ZeebeClient client,
             final String workflowModuleId,
-            final String bpmnProcessId) {
-        
-        this.client = client;
-        this.workflowModuleId = workflowModuleId;
-        this.bpmnProcessId = bpmnProcessId;
-        
-        if (parent != null) {
-            parent.wire(
-                    Camunda8AdapterConfiguration.ADAPTER_ID,
-                    workflowModuleId,
-                    bpmnProcessId);
+            final String bpmnProcessId,
+            final boolean isPrimary) {
+
+        if (parent == null) {
+            throw new RuntimeException("Not yet wired! If this occurs dependency of either "
+                    + "VanillaBP Spring Boot support or Camunda8 adapter was changed introducing this "
+                    + "lack of wiring. Please report a Github issue!");
+            
         }
+
+        this.client = client;
+        parent.wire(
+                Camunda8AdapterConfiguration.ADAPTER_ID,
+                workflowModuleId,
+                bpmnProcessId,
+                isPrimary);
         
-    }
-
-    @Override
-    public String getBpmnProcessId() {
-
-        return bpmnProcessId;
-
     }
 
     @Override
@@ -96,7 +88,7 @@ public class Camunda8ProcessService<DE>
         
         client
                 .newCreateInstanceCommand()
-                .bpmnProcessId(bpmnProcessId)
+                .bpmnProcessId(parent.getPrimaryBpmnProcessId())
                 .latestVersion()
                 .variables(workflowAggregate)
                 .send()
@@ -162,7 +154,10 @@ public class Camunda8ProcessService<DE>
                 .getMessageKey();
         
         logger.trace("Correlated message '{}' using correlation-id '{}' for process '{}' as '{}'",
-                messageName, correlationId, bpmnProcessId, messageKey);
+                messageName,
+                correlationId,
+                parent.getPrimaryBpmnProcessId(),
+                messageKey);
         
         return attachedEntity;
         
@@ -196,7 +191,8 @@ public class Camunda8ProcessService<DE>
                 .join();
 
         logger.trace("Complete usertask '{}' for process '{}'",
-                taskId, bpmnProcessId);
+                taskId,
+                parent.getPrimaryBpmnProcessId());
         
         return attachedEntity;
         
@@ -227,7 +223,8 @@ public class Camunda8ProcessService<DE>
                 .join();
 
         logger.trace("Complete usertask '{}' for process '{}'",
-                taskId, bpmnProcessId);
+                taskId,
+                parent.getPrimaryBpmnProcessId());
         
         return attachedEntity;
         
