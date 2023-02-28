@@ -4,7 +4,6 @@ import io.camunda.zeebe.spring.client.EnableZeebeClient;
 import io.camunda.zeebe.spring.client.jobhandling.DefaultCommandExceptionHandlingStrategy;
 import io.camunda.zeebe.spring.client.lifecycle.ZeebeClientLifecycle;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
-import io.vanillabp.camunda8.deployment.DeployedProcessRepository;
 import io.vanillabp.camunda8.deployment.DeploymentRepository;
 import io.vanillabp.camunda8.deployment.DeploymentResourceRepository;
 import io.vanillabp.camunda8.deployment.DeploymentService;
@@ -50,9 +49,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
 
     @Autowired
     private DeploymentRepository deploymentRepository;
-
-    @Autowired
-    private DeployedProcessRepository deployedProcessRepository;
 
     @Autowired
     private DeploymentResourceRepository deploymentResourceRepository;
@@ -101,8 +97,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         return new DeploymentService(
                 springDataUtil,
                 deploymentRepository,
-                deploymentResourceRepository,
-                deployedProcessRepository);
+                deploymentResourceRepository);
 
     }
 

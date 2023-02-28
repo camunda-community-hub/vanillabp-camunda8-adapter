@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
 
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -50,7 +51,9 @@ public class Camunda8ProcessService<DE>
             final ZeebeClient client,
             final String workflowModuleId,
             final String bpmnProcessId,
-            final boolean isPrimary) {
+            final boolean isPrimary,
+            final Collection<String> messageBasedStartEventsMessageNames,
+            final Collection<String> signalBasedStartEventsSignalNames) {
 
         if (parent == null) {
             throw new RuntimeException("Not yet wired! If this occurs dependency of either "
@@ -64,7 +67,9 @@ public class Camunda8ProcessService<DE>
                 Camunda8AdapterConfiguration.ADAPTER_ID,
                 workflowModuleId,
                 bpmnProcessId,
-                isPrimary);
+                isPrimary,
+                messageBasedStartEventsMessageNames,
+                signalBasedStartEventsSignalNames);
         
     }
 
@@ -114,7 +119,7 @@ public class Camunda8ProcessService<DE>
                 .save(workflowAggregate);
         final var correlationId = getWorkflowAggregateId
                 .apply(workflowAggregate);
-
+        
         correlateMessage(
                 workflowAggregate,
                 messageName,

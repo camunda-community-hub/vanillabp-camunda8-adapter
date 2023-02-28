@@ -22,8 +22,6 @@ public class DeploymentService {
     private final BpmnParser bpmnParser = new BpmnParser();
 
     private final SpringDataUtil springDataUtil;
-    
-    private final DeployedProcessRepository deployedProcessRepository;
 
     private final DeploymentRepository deploymentRepository;
     
@@ -34,13 +32,11 @@ public class DeploymentService {
     public DeploymentService(
             final SpringDataUtil springDataUtil,
             final DeploymentRepository deploymentRepository,
-            final DeploymentResourceRepository deploymentResourceRepository,
-            final DeployedProcessRepository deployedProcessRepository) {
+            final DeploymentResourceRepository deploymentResourceRepository) {
 
         this.springDataUtil = springDataUtil;
         this.deploymentRepository = deploymentRepository;
         this.deploymentResourceRepository = deploymentResourceRepository;
-        this.deployedProcessRepository = deployedProcessRepository;
         
     }
     
@@ -94,7 +90,9 @@ public class DeploymentService {
 
     public List<DeployedBpmn> getBpmnNotOfPackage(final int packageId) {
 
-        return deployedProcessRepository.findDistinctDeployedResourceByPackageIdNot(packageId);
+        return deploymentResourceRepository.findDistinctByTypeAndDeployments_packageIdNot(
+                DeployedBpmn.TYPE,
+                packageId);
 
     }
 

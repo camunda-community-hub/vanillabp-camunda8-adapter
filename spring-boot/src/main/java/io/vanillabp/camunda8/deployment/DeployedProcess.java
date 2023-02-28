@@ -5,8 +5,10 @@ import javax.persistence.DiscriminatorValue;
 import javax.persistence.Entity;
 
 @Entity
-@DiscriminatorValue("PROCESS")
+@DiscriminatorValue(DeployedProcess.TYPE)
 public class DeployedProcess extends Deployment {
+    
+    public static final String TYPE = "PROCESS";
     
     /** the BPMN process id of the process */
     @Column(name = "BPMN_PROCESS_ID")
