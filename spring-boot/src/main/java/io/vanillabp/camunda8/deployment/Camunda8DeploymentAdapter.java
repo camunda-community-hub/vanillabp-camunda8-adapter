@@ -32,7 +32,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -235,8 +234,8 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                     processService[0] = taskWiring.wireService(
                             workflowModuleId,
                             process.getId(),
-                            oldVersionBpmn ? List.of() : messageBasedStartEventsMessageNames,
-                            oldVersionBpmn ? List.of() : signalBasedStartEventsSignalNames);
+                            oldVersionBpmn ? null : messageBasedStartEventsMessageNames,
+                            oldVersionBpmn ? null : signalBasedStartEventsSignalNames);
                     deployedProcesses.put(process.getId(), bpmn);
                 })
                 // wire task methods
