@@ -104,7 +104,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Bean
     public Camunda8UserTaskHandler userTaskHandler() {
 
-        return new Camunda8UserTaskHandler();
+        return new Camunda8UserTaskHandler(workerId);
     }
 
     @Bean
