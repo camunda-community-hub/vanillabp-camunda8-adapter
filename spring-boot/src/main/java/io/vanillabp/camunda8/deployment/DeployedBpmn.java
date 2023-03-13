@@ -4,7 +4,9 @@ import javax.persistence.DiscriminatorValue;
 import javax.persistence.Entity;
 
 @Entity
-@DiscriminatorValue("BPMN")
+@DiscriminatorValue(DeployedBpmn.TYPE)
 public class DeployedBpmn extends DeploymentResource {
 
+    public static final String TYPE = "BPMN";
+    
 }

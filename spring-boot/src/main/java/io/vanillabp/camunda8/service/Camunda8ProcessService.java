@@ -1,11 +1,14 @@
 package io.vanillabp.camunda8.service;
 
 import io.camunda.zeebe.client.ZeebeClient;
+import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
+import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
 
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -20,13 +23,10 @@ public class Camunda8ProcessService<DE>
 
     private final Function<DE, String> getWorkflowAggregateId;
 
+    private AdapterAwareProcessService<DE> parent;
+    
     private ZeebeClient client;
-    
-    @SuppressWarnings("unused")
-    private String workflowModuleId;
-
-    private String bpmnProcessId;
-    
+        
     public Camunda8ProcessService(
             final CrudRepository<DE, String> workflowAggregateRepository,
             final Function<DE, String> getWorkflowAggregateId,
@@ -39,22 +39,38 @@ public class Camunda8ProcessService<DE>
                 
     }
     
+    @Override
+    public void setParent(
+            final AdapterAwareProcessService<DE> parent) {
+        
+        this.parent = parent;
+        
+    }
+    
     public void wire(
             final ZeebeClient client,
             final String workflowModuleId,
-            final String bpmnProcessId) {
-        
+            final String bpmnProcessId,
+            final boolean isPrimary,
+            final Collection<String> messageBasedStartEventsMessageNames,
+            final Collection<String> signalBasedStartEventsSignalNames) {
+
+        if (parent == null) {
+            throw new RuntimeException("Not yet wired! If this occurs dependency of either "
+                    + "VanillaBP Spring Boot support or Camunda8 adapter was changed introducing this "
+                    + "lack of wiring. Please report a Github issue!");
+            
+        }
+
         this.client = client;
-        this.workflowModuleId = workflowModuleId;
-        this.bpmnProcessId = bpmnProcessId;
+        parent.wire(
+                Camunda8AdapterConfiguration.ADAPTER_ID,
+                workflowModuleId,
+                bpmnProcessId,
+                isPrimary,
+                messageBasedStartEventsMessageNames,
+                signalBasedStartEventsSignalNames);
         
-    }
-
-    @Override
-    public String getBpmnProcessId() {
-
-        return bpmnProcessId;
-
     }
 
     @Override
@@ -77,7 +93,7 @@ public class Camunda8ProcessService<DE>
         
         client
                 .newCreateInstanceCommand()
-                .bpmnProcessId(bpmnProcessId)
+                .bpmnProcessId(parent.getPrimaryBpmnProcessId())
                 .latestVersion()
                 .variables(workflowAggregate)
                 .send()
@@ -103,7 +119,7 @@ public class Camunda8ProcessService<DE>
                 .save(workflowAggregate);
         final var correlationId = getWorkflowAggregateId
                 .apply(workflowAggregate);
-
+        
         correlateMessage(
                 workflowAggregate,
                 messageName,
@@ -143,7 +159,10 @@ public class Camunda8ProcessService<DE>
                 .getMessageKey();
         
         logger.trace("Correlated message '{}' using correlation-id '{}' for process '{}' as '{}'",
-                messageName, correlationId, bpmnProcessId, messageKey);
+                messageName,
+                correlationId,
+                parent.getPrimaryBpmnProcessId(),
+                messageKey);
         
         return attachedEntity;
         
@@ -177,7 +196,8 @@ public class Camunda8ProcessService<DE>
                 .join();
 
         logger.trace("Complete usertask '{}' for process '{}'",
-                taskId, bpmnProcessId);
+                taskId,
+                parent.getPrimaryBpmnProcessId());
         
         return attachedEntity;
         
@@ -208,7 +228,8 @@ public class Camunda8ProcessService<DE>
                 .join();
 
         logger.trace("Complete usertask '{}' for process '{}'",
-                taskId, bpmnProcessId);
+                taskId,
+                parent.getPrimaryBpmnProcessId());
         
         return attachedEntity;
         

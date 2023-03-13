@@ -82,6 +82,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                         .newWorker()
                         .jobType("io.camunda.zeebe:userTask")
                         .handler(userTaskHandler)
+                        .timeout(Integer.MAX_VALUE) // user-tasks are not fetched more than once
                         .name(workerId));
         
     }
@@ -163,7 +164,10 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     protected <DE> Camunda8ProcessService<?> connectToBpms(
             final String workflowModuleId,
             final Class<DE> workflowAggregateClass,
-            final String bpmnProcessId) {
+            final String bpmnProcessId,
+            final boolean isPrimary,
+            final Collection<String> messageBasedStartEventsMessageNames,
+            final Collection<String> signalBasedStartEventsSignalNames) {
         
         final var processService = connectableServices
                 .stream()
@@ -171,7 +175,13 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 .findFirst()
                 .get();
 
-        processService.wire(client, workflowModuleId, bpmnProcessId);
+        processService.wire(
+                client,
+                workflowModuleId,
+                bpmnProcessId,
+                isPrimary,
+                messageBasedStartEventsMessageNames,
+                signalBasedStartEventsSignalNames);
 
         return processService;
         

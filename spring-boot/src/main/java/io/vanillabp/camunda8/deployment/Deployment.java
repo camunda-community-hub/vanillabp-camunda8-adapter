@@ -38,6 +38,9 @@ public abstract class Deployment {
 
     @Column(name = "PUBLISHED_AT", nullable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private OffsetDateTime publishedAt;
+    
+    @Column(name = "TYPE", updatable = false, insertable = false)
+    private String type;
 
     public long getDefinitionKey() {
         return definitionKey;
@@ -79,4 +82,12 @@ public abstract class Deployment {
         this.deployedResource = deployedResource;
     }
 
+    public String getType() {
+        return type;
+    }
+    
+    public void setType(String type) {
+        this.type = type;
+    }
+    
 }

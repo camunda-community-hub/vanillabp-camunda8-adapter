@@ -11,7 +11,7 @@
 
 This is an adapter which implements the binding of the [VanillaBP SPI](https://github.com/vanillabp/spi-for-java) in order to run business processes using [Camunda 8](https://docs.camunda.io).
 
-If you are interested in migrating from [Camunda 7](https://docs.camunda.org) then checkout the [drop-in replacement adapter for Camunda 7](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter).
+If you are interested in migrating from [Camunda 7](https://docs.camunda.org) then checkout the [drop-in replacement adapter for Camunda 7](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter) as well as the [documentation of migration scenarios](https://github.com/vanillabp/spring-boot-support#migrating-from-one-bpm-system-to-another).
 
 ## Runtime environments
 

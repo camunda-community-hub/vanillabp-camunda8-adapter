@@ -32,6 +32,9 @@ public abstract class DeploymentResource {
     @Lob
     @Column(name = "RESOURCE")
     private byte[] resource;
+    
+    @Column(name = "TYPE", updatable = false, insertable = false)
+    private String type;
 
     public int getFileId() {
         return fileId;
@@ -65,4 +68,12 @@ public abstract class DeploymentResource {
         this.deployments = deployments;
     }
 
+    public String getType() {
+        return type;
+    }
+    
+    public void setType(String type) {
+        this.type = type;
+    }
+    
 }
