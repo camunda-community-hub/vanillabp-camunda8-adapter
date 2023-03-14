@@ -66,8 +66,6 @@ When using asynchronious task processing one has to define a worker id. There is
 
 To avoid interdependencies between the implementation of different use-cases packed into a single microservice the concept of [workflow modules](https://github.com/vanillabp/spring-boot-support#workflow-modules) is introduced. This adapter builds a Camunda deployment for each workflow module found in the classpath.
 
-Since Camunda 8 does not provide BPMS meta-data (e.g. historical deployments) the adapter stores necessary meta-data in separate DB tables to ensure correct operation.
-
 ### SPI Binding validation
 
 On starting the application BPMNs of all workflow modules will be wired to the SPI. This includes
@@ -78,6 +76,23 @@ On starting the application BPMNs of all workflow modules will be wired to the S
    1. BPMN files which are not part of the current workflow module bundle any more
    
 This ensures that correct wiring of all process definitions according to the SPI is done.
+
+Since Camunda 8 does not provide BPMS meta-data (e.g. historical deployments) the adapter stores necessary meta-data in separate DB tables to ensure correct operation. If you use Liquibase you can include the provided changeset in your Liquibase master file:
+
+```yaml
+databaseChangeLog:
+  - include:
+      file: classpath:/io/vanillabp/camunda8/liquibase/main.yaml
+```
+
+or instead use Hibernate's `ddl-auto` feature to create those tables:
+
+```yaml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+```
 
 ## Multi-instance
 

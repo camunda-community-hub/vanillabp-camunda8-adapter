@@ -1,0 +1,106 @@
+databaseChangeLog:
+  - changeSet:
+      id: initial_setup.yaml
+      author: stephanpelikan
+      changes:
+        - createTable:
+            tableName: CAMUNDA8_RESOURCES
+            columns:
+              - column:
+                  name: ID
+                  type: int
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: RECORD_VERSION
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: TYPE
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: RESOURCE_NAME
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: RESOURCE
+                  type: blob
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: CAMUNDA8_RESOURCES
+            columns:
+              - column:
+                  name: TYPE
+            indexName: IDX_C8R_TYPE
+        - createIndex:
+            tableName: CAMUNDA8_RESOURCES
+            columns:
+              - column:
+                  name: ID
+              - column:
+                  name: TYPE
+            indexName: IDX_C8D_ID_TYPE
+        - createTable:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: DEFINITION_KEY
+                  type: long
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: VERSION
+                  type: int
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: RECORD_VERSION
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: TYPE
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: PACKAGE_ID
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: RESOURCE
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: PUBLISHED_AT
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: BPMN_PROCESS_ID
+                  type: varchar(255)
+        - createIndex:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: TYPE
+            indexName: IDX_C8D_TYPE
+        - createIndex:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: DEFINITION_KEY
+            indexName: IDX_C8D_DEFINITION_KEY
+        - createIndex:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: RESOURCE
+            indexName: IDX_C8D_RESOURCE
