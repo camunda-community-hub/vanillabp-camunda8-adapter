@@ -12,6 +12,7 @@ import javax.persistence.InheritanceType;
 import javax.persistence.Lob;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
+import javax.persistence.Version;
 
 @Entity
 @Table(name = "CAMUNDA8_RESOURCES")
@@ -23,6 +24,10 @@ public abstract class DeploymentResource {
     @Column(name = "ID")
     private int fileId;
 
+    @Version
+    @Column(name = "RECORD_VERSION")
+    private int recordVersion;
+    
     @Column(name = "RESOURCE_NAME")
     private String resourceName;
 
@@ -74,6 +79,14 @@ public abstract class DeploymentResource {
     
     public void setType(String type) {
         this.type = type;
+    }
+
+    public int getRecordVersion() {
+        return recordVersion;
+    }
+    
+    public void setRecordVersion(int recordVersion) {
+        this.recordVersion = recordVersion;
     }
     
 }

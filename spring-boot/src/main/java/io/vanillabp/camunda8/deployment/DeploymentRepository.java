@@ -4,9 +4,10 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
-public interface DeploymentRepository extends CrudRepository<Deployment, Long> {
+public interface DeploymentRepository extends CrudRepository<Deployment, DeploymentId> {
 
     /**
      * <pre>
@@ -15,4 +16,6 @@ public interface DeploymentRepository extends CrudRepository<Deployment, Long> {
      */
     List<DeployedBpmn> findDistinctDeployedResourceByPackageIdNot(int packageId);
 
+    Optional<Deployment> findByDefinitionKey(long definitionKey);
+    
 }

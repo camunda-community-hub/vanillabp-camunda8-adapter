@@ -69,7 +69,7 @@ public class DeploymentService {
         
         final var versionedId = camunda8DeployedProcess.getProcessDefinitionKey();
         
-        final var previous = deploymentRepository.findById(versionedId);
+        final var previous = deploymentRepository.findByDefinitionKey(versionedId);
         if ((previous.isPresent())
                 && (previous.get().getPackageId() == packageId)) {
             return (DeployedProcess) previous.get();
@@ -108,7 +108,7 @@ public class DeploymentService {
            
             final var deployedProcess = (DeployedProcess) springDataUtil
                     .unproxy(deploymentRepository
-                            .findById(processDefinitionKey)
+                            .findByDefinitionKey(processDefinitionKey)
                             .orElseThrow());
             final var deployedResource = deployedProcess.getDeployedResource();
             
