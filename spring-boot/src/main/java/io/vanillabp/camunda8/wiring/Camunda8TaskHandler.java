@@ -48,13 +48,13 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             final Type taskType,
             final DeploymentService deploymentService,
             final DefaultCommandExceptionHandlingStrategy commandExceptionHandlingStrategy,
-            final CrudRepository<Object, String> workflowDomainEntityRepository,
+            final CrudRepository<Object, String> workflowAggregateRepository,
             final Object bean,
             final Method method,
             final List<MethodParameter> parameters,
             final String idPropertyName) {
 
-        super(workflowDomainEntityRepository, bean, method, parameters);
+        super(workflowAggregateRepository, bean, method, parameters);
         this.deploymentService = deploymentService;
         this.taskType = taskType;
         this.commandExceptionHandlingStrategy = commandExceptionHandlingStrategy;
@@ -87,7 +87,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             
             final var taskIdRetrieved = new AtomicBoolean(false);
             
-            final var domainEntity = super.execute(
+            final var workflowAggregate = super.execute(
                     businessKey,
                     multiInstanceVariable -> getVariable(job, multiInstanceVariable),
                     taskParameter -> getVariable(job, taskParameter),
@@ -99,7 +99,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
             if ((taskType != Type.USERTASK)
                     && !taskIdRetrieved.get()) {
-                command = createCompleteCommand(client, job, domainEntity);
+                command = createCompleteCommand(client, job, workflowAggregate);
             }
         } catch (TaskException bpmnError) {
             command = createThrowErrorCommand(client, job, bpmnError);
@@ -172,7 +172,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
     @Deprecated
     protected Map<String, MultiInstanceElementResolver.MultiInstance<Object>> getMultiInstanceContext(
             final ActivatedJob job,
-            final String workflowDomainEntityId) {
+            final String workflowAggregateId) {
 
         final var result = new LinkedHashMap<String, MultiInstanceElementResolver.MultiInstance<Object>>();
 
@@ -226,13 +226,13 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
     public CommandWrapper createCompleteCommand(
             final JobClient jobClient,
             final ActivatedJob job,
-            final Object domainEntity) {
+            final Object workflowAggregateId) {
 
         var completeCommand = jobClient
                 .newCompleteCommand(job.getKey());
         
-        if (domainEntity != null) {
-            completeCommand = completeCommand.variables(domainEntity);
+        if (workflowAggregateId != null) {
+            completeCommand = completeCommand.variables(workflowAggregateId);
         }
         
         return new CommandWrapper(

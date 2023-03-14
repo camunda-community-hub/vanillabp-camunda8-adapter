@@ -139,7 +139,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
 
         final var result = new Camunda8ProcessService<DE>(
                 workflowAggregateRepository,
-                domainEntity -> springDataUtil.getId(domainEntity),
+                workflowAggregate -> springDataUtil.getId(workflowAggregate),
                 workflowAggregateClass);
 
         putConnectableService(workflowAggregateClass, result);

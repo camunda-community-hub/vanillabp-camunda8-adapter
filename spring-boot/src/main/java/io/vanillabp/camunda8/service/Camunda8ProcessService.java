@@ -7,11 +7,14 @@ import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+@Transactional(propagation = Propagation.MANDATORY)
 public class Camunda8ProcessService<DE>
         implements ProcessServiceImplementation<DE> {
 
@@ -91,20 +94,23 @@ public class Camunda8ProcessService<DE>
     public DE startWorkflow(
             final DE workflowAggregate) throws Exception {
         
+        // persist to get ID in case of @Id @GeneratedValue
+        // or force optimistic locking exceptions before running
+        // the workflow if aggregate was already persisted before
+        final var attachedAggregate = workflowAggregateRepository
+                .save(workflowAggregate);
+        
         client
                 .newCreateInstanceCommand()
                 .bpmnProcessId(parent.getPrimaryBpmnProcessId())
                 .latestVersion()
-                .variables(workflowAggregate)
+                .variables(attachedAggregate)
                 .send()
                 .get(10, TimeUnit.SECONDS);
 
         try {
-            return workflowAggregateRepository
-                    .save(workflowAggregate);
+            return attachedAggregate;
         } catch (RuntimeException exception) {
-            // HibernateH2PostgresIdempotency.ignoreDuplicatesExceptionAndRethrow(exception,
-            // processEntity);
             throw exception;
         }
         
@@ -115,7 +121,7 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String messageName) {
         
-        final var attachedEntity = workflowAggregateRepository
+        final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
         final var correlationId = getWorkflowAggregateId
                 .apply(workflowAggregate);
@@ -125,7 +131,7 @@ public class Camunda8ProcessService<DE>
                 messageName,
                 correlationId);
         
-        return attachedEntity;
+        return attachedAggregate;
         
     }
     
@@ -146,14 +152,15 @@ public class Camunda8ProcessService<DE>
             final String messageName,
             final String correlationId) {
             
-        final var attachedEntity = workflowAggregateRepository
+        // force optimistic locking exceptions before running the workflow
+        final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
         
         final var messageKey = client
                 .newPublishMessageCommand()
                 .messageName(messageName)
                 .correlationKey(correlationId)
-                .variables(workflowAggregate)
+                .variables(attachedAggregate)
                 .send()
                 .join()
                 .getMessageKey();
@@ -164,7 +171,7 @@ public class Camunda8ProcessService<DE>
                 parent.getPrimaryBpmnProcessId(),
                 messageKey);
         
-        return attachedEntity;
+        return attachedAggregate;
         
     }
     
@@ -186,12 +193,13 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String taskId) {
         
-        final var attachedEntity = workflowAggregateRepository
+        // force optimistic locking exceptions before running the workflow
+        final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
         
         client
                 .newCompleteCommand(Long.parseLong(taskId, 16))
-                .variables(workflowAggregate)
+                .variables(attachedAggregate)
                 .send()
                 .join();
 
@@ -199,7 +207,7 @@ public class Camunda8ProcessService<DE>
                 taskId,
                 parent.getPrimaryBpmnProcessId());
         
-        return attachedEntity;
+        return attachedAggregate;
         
     }
     
@@ -218,7 +226,8 @@ public class Camunda8ProcessService<DE>
             final String taskId,
             final String errorCode) {
 
-        final var attachedEntity = workflowAggregateRepository
+        // force optimistic locking exceptions before running the workflow
+        final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
         
         client
@@ -231,7 +240,7 @@ public class Camunda8ProcessService<DE>
                 taskId,
                 parent.getPrimaryBpmnProcessId());
         
-        return attachedEntity;
+        return attachedAggregate;
         
     }
     

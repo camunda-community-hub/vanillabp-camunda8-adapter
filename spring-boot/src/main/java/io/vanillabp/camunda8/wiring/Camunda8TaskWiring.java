@@ -196,7 +196,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             final List<MethodParameter> parameters) {
         
         final var repository = processService.getWorkflowAggregateRepository();
-        final var idPropertyName = getWorkflowDomainEntityIdPropertyName(
+        final var idPropertyName = getWorkflowAggregateIdPropertyName(
                 processService.getWorkflowAggregateClass());
 
         final var taskHandler = taskHandlers.getObject(
@@ -253,7 +253,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         
     }
 
-    private String getWorkflowDomainEntityIdPropertyName(
+    private String getWorkflowAggregateIdPropertyName(
             final Class<?> workflowAggregateClass) {
         
         if (workflowAggregateClass == null) {
@@ -270,7 +270,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                         .filter(method -> method.getAnnotation(Id.class) != null)
                         .findFirst()
                         .map(this::propertyName)
-                        .orElse(getWorkflowDomainEntityIdPropertyName(workflowAggregateClass.getSuperclass())));
+                        .orElse(getWorkflowAggregateIdPropertyName(workflowAggregateClass.getSuperclass())));
         
     }
     
@@ -305,7 +305,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         
         final var result = new LinkedList<String>();
         
-        // the domain entity's id aka the business key
+        // the aggregate's id aka the business key
         result.add(idPropertyName);
         
         parameters
