@@ -152,7 +152,9 @@ public class Camunda8ProcessService<DE>
             final String messageName,
             final String correlationId) {
             
-        // force optimistic locking exceptions before running the workflow
+        // persist to get ID in case of @Id @GeneratedValue
+        // and force optimistic locking exceptions before running
+        // the workflow if aggregate was already persisted before
         final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
         

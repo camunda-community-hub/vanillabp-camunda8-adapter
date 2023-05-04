@@ -4,31 +4,23 @@ import io.camunda.zeebe.client.api.command.FinalCommandStep;
 import io.camunda.zeebe.client.api.response.ActivatedJob;
 import io.camunda.zeebe.client.api.worker.JobClient;
 import io.camunda.zeebe.client.api.worker.JobHandler;
-import io.camunda.zeebe.model.bpmn.instance.Activity;
-import io.camunda.zeebe.model.bpmn.instance.BaseElement;
-import io.camunda.zeebe.model.bpmn.instance.MultiInstanceLoopCharacteristics;
 import io.camunda.zeebe.spring.client.jobhandling.CommandWrapper;
 import io.camunda.zeebe.spring.client.jobhandling.DefaultCommandExceptionHandlingStrategy;
-import io.vanillabp.camunda8.deployment.DeploymentService;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MultiInstanceIndexMethodParameter;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MultiInstanceTotalMethodParameter;
-import io.vanillabp.spi.service.MultiInstanceElementResolver;
 import io.vanillabp.spi.service.TaskEvent.Event;
 import io.vanillabp.spi.service.TaskException;
 import io.vanillabp.springboot.adapter.MultiInstance;
 import io.vanillabp.springboot.adapter.TaskHandlerBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
-import org.camunda.bpm.model.xml.ModelInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -40,13 +32,10 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
     private final Type taskType;
 
-    private final DeploymentService deploymentService;
-
     private final String idPropertyName;
 
     public Camunda8TaskHandler(
             final Type taskType,
-            final DeploymentService deploymentService,
             final DefaultCommandExceptionHandlingStrategy commandExceptionHandlingStrategy,
             final CrudRepository<Object, String> workflowAggregateRepository,
             final Object bean,
@@ -55,7 +44,6 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             final String idPropertyName) {
 
         super(workflowAggregateRepository, bean, method, parameters);
-        this.deploymentService = deploymentService;
         this.taskType = taskType;
         this.commandExceptionHandlingStrategy = commandExceptionHandlingStrategy;
         this.idPropertyName = idPropertyName;
@@ -164,62 +152,6 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                 .getVariablesAsMap()
                 .get(name);
         
-    }
-
-    /**
-     * @deprecated Attempt to calculate variables but it's not possible
-     */
-    @Deprecated
-    protected Map<String, MultiInstanceElementResolver.MultiInstance<Object>> getMultiInstanceContext(
-            final ActivatedJob job,
-            final String workflowAggregateId) {
-
-        final var result = new LinkedHashMap<String, MultiInstanceElementResolver.MultiInstance<Object>>();
-
-        final var process = deploymentService
-                .getProcess(job.getProcessDefinitionKey());
-
-        ModelInstance model = process.getModelInstance();
-        String miElement = job.getElementId();
-        MultiInstanceLoopCharacteristics loopCharacteristics = null;
-        // find multi-instance element from current element up to the root of the
-        // process-hierarchy
-        while (loopCharacteristics == null) {
-            
-            // check current element for multi-instance
-            final var bpmnElement = model.getModelElementById(miElement);
-            if (bpmnElement instanceof Activity) {
-                loopCharacteristics = (MultiInstanceLoopCharacteristics) ((Activity) bpmnElement)
-                        .getLoopCharacteristics();
-            }
-            
-            // if still not found then check parent
-            if (loopCharacteristics == null) {
-                miElement = bpmnElement.getParentElement() != null
-                        ? ((BaseElement) bpmnElement.getParentElement()).getId()
-                        : null;
-            }
-            // multi-instance found
-            else {
-                
-                result.put(((BaseElement) bpmnElement).getId(),
-                        new MultiInstance<Object>(null, -1, -1));
-                
-            }
-            
-            // if there is no parent then multi-instance task was used in a
-            // non-multi-instance environment
-            if ((miElement == null) && (loopCharacteristics == null)) {
-                throw new RuntimeException(
-                        "No multi-instance context found for element '"
-                        + job.getElementId()
-                                + "' or its parents! In case of a call-activity this is not supported by ");
-            }
-            
-        }
-        
-        return result;
-
     }
 
     @SuppressWarnings("unchecked")

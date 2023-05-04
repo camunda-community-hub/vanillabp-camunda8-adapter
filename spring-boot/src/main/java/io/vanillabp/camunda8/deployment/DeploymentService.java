@@ -3,38 +3,21 @@ package io.vanillabp.camunda8.deployment;
 import io.camunda.zeebe.client.api.response.Process;
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
-import io.camunda.zeebe.model.bpmn.impl.BpmnParser;
-import io.vanillabp.springboot.adapter.SpringDataUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.time.OffsetDateTime;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class DeploymentService {
-
-    private static final Logger logger = LoggerFactory.getLogger(DeploymentService.class);
-
-    private final BpmnParser bpmnParser = new BpmnParser();
-
-    private final SpringDataUtil springDataUtil;
 
     private final DeploymentRepository deploymentRepository;
     
     private final DeploymentResourceRepository deploymentResourceRepository;
 
-    private final Map<Long, io.camunda.zeebe.model.bpmn.instance.Process> cachedProcesses = new HashMap<>();
-
     public DeploymentService(
-            final SpringDataUtil springDataUtil,
             final DeploymentRepository deploymentRepository,
             final DeploymentResourceRepository deploymentResourceRepository) {
 
-        this.springDataUtil = springDataUtil;
         this.deploymentRepository = deploymentRepository;
         this.deploymentResourceRepository = deploymentResourceRepository;
         
@@ -94,54 +77,6 @@ public class DeploymentService {
                 DeployedBpmn.TYPE,
                 packageId);
 
-    }
-
-    public io.camunda.zeebe.model.bpmn.instance.Process getProcess(
-            final long processDefinitionKey) {
-        
-        synchronized (cachedProcesses) {
-            
-            final var cached = cachedProcesses.get(processDefinitionKey);
-            if (cached != null) {
-                return cached;
-            }
-           
-            final var deployedProcess = (DeployedProcess) springDataUtil
-                    .unproxy(deploymentRepository
-                            .findByDefinitionKey(processDefinitionKey)
-                            .orElseThrow());
-            final var deployedResource = deployedProcess.getDeployedResource();
-            
-            try (final var inputStream = new ByteArrayInputStream(
-                    deployedResource.getResource())) {
-
-                bpmnParser
-                        .parseModelFromStream(inputStream)
-                        .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.Process.class)
-                        .stream()
-                        .filter(io.camunda.zeebe.model.bpmn.instance.Process::isExecutable)
-                        .map(process -> {
-                            final var key = deployedResource
-                                    .getDeployments()
-                                    .stream()
-                                    .filter(deployment -> ((DeployedProcess) deployment)
-                                            .getBpmnProcessId()
-                                            .equals(process.getId()))
-                                    .findFirst()
-                                    .get()
-                                    .getDefinitionKey();
-                            return Map.entry(key, process);
-                        })
-                        .forEach(entry -> cachedProcesses.put(entry.getKey(), entry.getValue()));
-
-            } catch (Exception e) {
-                logger.warn("Could not parse stored BPMN resource '{}'!", deployedResource.getResourceName());
-            }
-            
-            return cachedProcesses.get(processDefinitionKey);
-
-        }
-        
     }
 
 }
