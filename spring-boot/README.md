@@ -60,7 +60,7 @@ If you want a certain version of Zeebe client then you have to replace the trans
 
 ### Worker ID
 
-When using asynchronious task processing one has to define a worker id. There is no default value to avoid bringing anything unwanted into production. On using [VanillaBP's SpringApplication](https://github.com/vanillabp/spring-boot-support#spring-boot-support) instead of `org.springframework.boot.SpringApplication` [additional support](https://github.com/vanillabp/spring-boot-support#worker-id) is available.
+When using asynchronous task processing one has to define a worker id. There is no default value to avoid bringing anything unwanted into production. On using [VanillaBP's SpringApplication](https://github.com/vanillabp/spring-boot-support#spring-boot-support) instead of `org.springframework.boot.SpringApplication` [additional support](https://github.com/vanillabp/spring-boot-support#worker-id) is available.
 
 ### Module aware deployment
 
@@ -70,10 +70,10 @@ To avoid interdependencies between the implementation of different use-cases pac
 
 On starting the application BPMNs of all workflow modules will be wired to the SPI. This includes
 
-1. BPMN files which are part of the current workflow module bundle (e.g. classpath:processes/*.bpmn)
+1. BPMN files which are part of the current workflow module bundle (e.g. `classpath:processes/*.bpmn`)
 1. BPMN files deployed as part of previous versions of the workflow module
    1. Older versions of BPMN files which are part of the current workflow module bundle
-   1. BPMN files which are not part of the current workflow module bundle any more
+   1. BPMN files which are not part of the current workflow module bundle anymore
    
 This ensures that correct wiring of all process definitions according to the SPI is done.
 
@@ -102,7 +102,7 @@ Since Camunda 8 is a remote engine the workflow is processed in a different runt
 1. The current element's index: The ID of the BPMN element plus `_index` (e.g. `Activity_RequestRide_index`)
 1. The total number of elements: The ID of the BPMN element plus `_total` (e.g. `Activity_RequestRide_total`)
 
-Last two one needs to be defined as input mappings where the index always points to `=loopCounter` and the total number of elements can be determinated using an expression like `=count(nearbyDrivers)` where "nearbyDrivers" is the collection used as a basis for multi-instance iteration.
+Last two one needs to be defined as input mappings where the index always points to `=loopCounter` and the total number of elements can be determined using an expression like `=count(nearbyDrivers)` where "nearbyDrivers" is the collection used as a basis for multi-instance iteration.
 
 This naming convention might look a little bit strange but is necessary to hide the BPMS in the business code. Unfortunately, since Camunda 8 is a remote engine, BPMNs get a little bit verbose as information needed to process the BPMN cannot be passed on-the-fly/at runtime and have to be provided upfront.
 
@@ -150,10 +150,10 @@ public class MyAwesomeAggregate {
 
 Since the aggregate is attached to the underlying persistence (e.g. JPA/Hibernate) any lazy loaded collections or calculated values based on other properties can be used in BPMN expressions e.g. at conditional flows: `${validValue}`.
 
-In C8 the workflow is processed in a different runtime environment than the business processing software using VanillaBP. So lazy loading won't work any more. Therefore, after processing a task using a method annotated by `@WorkflowTask` **the entire aggregate is serialized every time into a JSON object and passed to C8** as a data context. This means that lazy loaded collections are read from the database and calculated values are determined.
+In C8 the workflow is processed in a different runtime environment than the business processing software using VanillaBP. So lazy loading won't work anymore. Therefore, after processing a task using a method annotated by `@WorkflowTask` **the entire aggregate is serialized every time into a JSON object and passed to C8** as a data context. This means that lazy loaded collections are read from the database and calculated values are determined.
 
 So, when designing your aggregate you should have this in mind:
-1. One solution to keep your aggregate simple is to not use relations but rather store reference ids if the referred object is not needed in BMPN expressions.
+1. One solution to keep your aggregate simple is to not use relations but rather store reference ids if the referred object is not needed in BPMN expressions.
 1. Another approach is to mark certain properties as transient by adding this annotation: `@com.fasterxml.jackson.annotation.JsonIgnore`. As you can see this annotation belongs to the serialization framework used by C8 and therefore may change in the future.
 1. If you need a value based on a relation you may mark it as transient and add an additional getter to make this value available to expressions:
 ```java
