@@ -20,19 +20,19 @@ public class Camunda8ProcessService<DE>
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8ProcessService.class);
     
-    private final CrudRepository<DE, String> workflowAggregateRepository;
+    private final CrudRepository<DE, Object> workflowAggregateRepository;
 
     private final Class<DE> workflowAggregateClass;
 
-    private final Function<DE, String> getWorkflowAggregateId;
+    private final Function<DE, Object> getWorkflowAggregateId;
 
     private AdapterAwareProcessService<DE> parent;
     
     private ZeebeClient client;
         
     public Camunda8ProcessService(
-            final CrudRepository<DE, String> workflowAggregateRepository,
-            final Function<DE, String> getWorkflowAggregateId,
+            final CrudRepository<DE, Object> workflowAggregateRepository,
+            final Function<DE, Object> getWorkflowAggregateId,
             final Class<DE> workflowAggregateClass) {
         
         super();
@@ -84,7 +84,7 @@ public class Camunda8ProcessService<DE>
     }
     
     @Override
-    public CrudRepository<DE, String> getWorkflowAggregateRepository() {
+    public CrudRepository<DE, Object> getWorkflowAggregateRepository() {
 
         return workflowAggregateRepository;
 
@@ -129,7 +129,7 @@ public class Camunda8ProcessService<DE>
         correlateMessage(
                 workflowAggregate,
                 messageName,
-                correlationId);
+                correlationId.toString());
         
         return attachedAggregate;
         

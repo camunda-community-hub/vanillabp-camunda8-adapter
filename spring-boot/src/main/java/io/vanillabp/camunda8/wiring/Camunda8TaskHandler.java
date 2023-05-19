@@ -37,7 +37,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
     public Camunda8TaskHandler(
             final Type taskType,
             final DefaultCommandExceptionHandlingStrategy commandExceptionHandlingStrategy,
-            final CrudRepository<Object, String> workflowAggregateRepository,
+            final CrudRepository<Object, Object> workflowAggregateRepository,
             final Object bean,
             final Method method,
             final List<MethodParameter> parameters,
@@ -65,7 +65,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
         CommandWrapper command = null;
         try {
-            final var businessKey = (String) getVariable(job, idPropertyName);
+            final var businessKey = getVariable(job, idPropertyName);
             
             logger.trace("Will handle task '{}' of workflow '{}' ('{}') as job '{}'",
                     job.getElementId(),
