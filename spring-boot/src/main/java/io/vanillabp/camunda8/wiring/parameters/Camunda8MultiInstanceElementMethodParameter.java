@@ -8,9 +8,10 @@ public class Camunda8MultiInstanceElementMethodParameter extends MultiInstanceEl
         implements ParameterVariables {
 
     public Camunda8MultiInstanceElementMethodParameter(
+            final String parameter,
             final String name) {
         
-        super(name);
+        super(parameter, name);
         
     }
 

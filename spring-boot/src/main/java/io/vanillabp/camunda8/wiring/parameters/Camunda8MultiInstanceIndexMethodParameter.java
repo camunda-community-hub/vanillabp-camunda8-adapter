@@ -10,9 +10,10 @@ public class Camunda8MultiInstanceIndexMethodParameter extends MultiInstanceInde
     public static final String SUFFIX = "_index";
 
     public Camunda8MultiInstanceIndexMethodParameter(
+            final String parameter,
             final String name) {
 
-        super(name);
+        super(parameter, name);
 
     }
 

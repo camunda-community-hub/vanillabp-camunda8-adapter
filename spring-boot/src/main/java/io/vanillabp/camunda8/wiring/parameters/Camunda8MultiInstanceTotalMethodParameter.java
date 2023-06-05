@@ -10,9 +10,10 @@ public class Camunda8MultiInstanceTotalMethodParameter extends MultiInstanceTota
     public static final String SUFFIX = "_total";
 
     public Camunda8MultiInstanceTotalMethodParameter(
+            final String parameter,
             final String name) {
         
-        super(name);
+        super(parameter, name);
         
     }
 

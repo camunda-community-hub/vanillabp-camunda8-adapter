@@ -1,5 +1,19 @@
 package io.vanillabp.camunda8.wiring;
 
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
+
+import javax.persistence.Id;
+
+import org.camunda.bpm.model.xml.instance.ModelElementInstance;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationContext;
+
 import io.camunda.zeebe.client.ZeebeClient;
 import io.camunda.zeebe.client.api.worker.JobWorkerBuilderStep1.JobWorkerBuilderStep3;
 import io.camunda.zeebe.model.bpmn.impl.BpmnModelInstanceImpl;
@@ -14,22 +28,10 @@ import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MethodParameterFactory;
 import io.vanillabp.camunda8.wiring.parameters.ParameterVariables;
+import io.vanillabp.spi.service.WorkflowTask;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.TaskWiringBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
-import org.camunda.bpm.model.xml.instance.ModelElementInstance;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.ApplicationContext;
-
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.stream.Stream;
-
-import javax.persistence.Id;
 
 public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camunda8ProcessService<?>>
         implements Consumer<ZeebeClient> {
@@ -62,6 +64,13 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         this.taskHandlers = taskHandlers;
         this.userTaskHandler = userTaskHandler;
         this.connectableServices = connectableServices;
+        
+    }
+    
+    @Override
+    protected Class<WorkflowTask> getAnnotationType() {
+        
+        return WorkflowTask.class;
         
     }
     
@@ -317,5 +326,19 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         return result;
         
     }
-
+    
+    public void wireTask(
+            final Camunda8ProcessService<?> processService,
+            final Camunda8Connectable connectable) {
+        
+        super.wireTask(
+                connectable,
+                false,
+                (method, annotation) -> methodMatchesTaskDefinition(connectable, method, annotation),
+                (method, annotation) -> methodMatchesElementId(connectable, method, annotation),
+                (method, annotation) -> validateParameters(processService, method),
+                (bean, method, parameters) -> connectToBpms(processService, bean, connectable, method, parameters));
+                
+    }
+    
 }

@@ -12,41 +12,56 @@ public class Camunda8MethodParameterFactory extends MethodParameterFactory {
 
     @Override
     public ResolverBasedMultiInstanceMethodParameter getResolverBasedMultiInstanceMethodParameter(
+            final String parameter,
             final MultiInstanceElementResolver<?, ?> resolverBean) {
 
-        return new Camunda8ResolverBasedMethodParameter(resolverBean);
+        return new Camunda8ResolverBasedMethodParameter(
+                parameter,
+                resolverBean);
 
     }
 
     @Override
     public MultiInstanceElementMethodParameter getMultiInstanceElementMethodParameter(
+            final String parameter,
             final String name) {
 
-        return new Camunda8MultiInstanceElementMethodParameter(name);
+        return new Camunda8MultiInstanceElementMethodParameter(
+                parameter,
+                name);
 
     }
 
     @Override
     public MultiInstanceIndexMethodParameter getMultiInstanceIndexMethodParameter(
+            final String parameter,
             final String name) {
 
-        return new Camunda8MultiInstanceIndexMethodParameter(name);
+        return new Camunda8MultiInstanceIndexMethodParameter(
+                parameter,
+                name);
 
     }
 
     @Override
     public MultiInstanceTotalMethodParameter getMultiInstanceTotalMethodParameter(
+            final String parameter,
             final String name) {
 
-        return new Camunda8MultiInstanceTotalMethodParameter(name);
+        return new Camunda8MultiInstanceTotalMethodParameter(
+                parameter,
+                name);
 
     }
     
     @Override
     public TaskParameter getTaskParameter(
+            final String parameter,
             final String name) {
         
-        return new Camunda8TaskParameter(name);
+        return new Camunda8TaskParameter(
+                parameter,
+                name);
         
     }
     
