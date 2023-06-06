@@ -70,7 +70,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     public void init() {
         
         logger.debug("Will use SpringDataUtil class '{}'",
-                AopProxyUtils.ultimateTargetClass(springDataUtil.getClass()));
+                AopProxyUtils.ultimateTargetClass(springDataUtil));
         
     }
 
@@ -131,7 +131,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
     public Camunda8TaskHandler camunda8TaskHandler(
             final SpringDataUtil springDataUtil,
-            final CrudRepository<Object, String> repository,
+            final CrudRepository<Object, Object> repository,
             final Type taskType,
             final String taskDefinition,
             final Object bean,
@@ -154,7 +154,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     public <DE> Camunda8ProcessService<?> newProcessServiceImplementation(
             final SpringDataUtil springDataUtil,
             final Class<DE> workflowAggregateClass,
-            final CrudRepository<DE, String> workflowAggregateRepository) {
+            final Class<?> workflowAggregateIdClass,
+            final CrudRepository<DE, Object> workflowAggregateRepository) {
 
         final var result = new Camunda8ProcessService<DE>(
                 workflowAggregateRepository,
