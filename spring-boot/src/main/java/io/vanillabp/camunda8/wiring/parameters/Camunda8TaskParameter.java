@@ -7,10 +7,11 @@ import java.util.List;
 public class Camunda8TaskParameter extends TaskParameter implements ParameterVariables {
 
     public Camunda8TaskParameter(
+            final int index,
             final String parameter,
             final String name) {
         
-        super(parameter, name);
+        super(index, parameter, name);
 
     }
     

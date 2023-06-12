@@ -12,10 +12,12 @@ public class Camunda8MethodParameterFactory extends MethodParameterFactory {
 
     @Override
     public ResolverBasedMultiInstanceMethodParameter getResolverBasedMultiInstanceMethodParameter(
+            final int index,
             final String parameter,
             final MultiInstanceElementResolver<?, ?> resolverBean) {
 
         return new Camunda8ResolverBasedMethodParameter(
+                index,
                 parameter,
                 resolverBean);
 
@@ -23,10 +25,12 @@ public class Camunda8MethodParameterFactory extends MethodParameterFactory {
 
     @Override
     public MultiInstanceElementMethodParameter getMultiInstanceElementMethodParameter(
+            final int index,
             final String parameter,
             final String name) {
 
         return new Camunda8MultiInstanceElementMethodParameter(
+                index,
                 parameter,
                 name);
 
@@ -34,10 +38,12 @@ public class Camunda8MethodParameterFactory extends MethodParameterFactory {
 
     @Override
     public MultiInstanceIndexMethodParameter getMultiInstanceIndexMethodParameter(
+            final int index,
             final String parameter,
             final String name) {
 
         return new Camunda8MultiInstanceIndexMethodParameter(
+                index,
                 parameter,
                 name);
 
@@ -45,10 +51,12 @@ public class Camunda8MethodParameterFactory extends MethodParameterFactory {
 
     @Override
     public MultiInstanceTotalMethodParameter getMultiInstanceTotalMethodParameter(
+            final int index,
             final String parameter,
             final String name) {
 
         return new Camunda8MultiInstanceTotalMethodParameter(
+                index,
                 parameter,
                 name);
 
@@ -56,10 +64,12 @@ public class Camunda8MethodParameterFactory extends MethodParameterFactory {
     
     @Override
     public TaskParameter getTaskParameter(
+            final int index,
             final String parameter,
             final String name) {
         
         return new Camunda8TaskParameter(
+                index,
                 parameter,
                 name);
         
