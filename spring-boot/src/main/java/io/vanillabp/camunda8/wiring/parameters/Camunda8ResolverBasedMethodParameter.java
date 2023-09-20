@@ -10,9 +10,11 @@ public class Camunda8ResolverBasedMethodParameter extends ResolverBasedMultiInst
         implements ParameterVariables {
 
     public Camunda8ResolverBasedMethodParameter(
+            final int index,
+            final String parameter,
             final MultiInstanceElementResolver<?, ?> resolverBean) {
 
-        super(resolverBean);
+        super(index, parameter, resolverBean);
 
     }
     

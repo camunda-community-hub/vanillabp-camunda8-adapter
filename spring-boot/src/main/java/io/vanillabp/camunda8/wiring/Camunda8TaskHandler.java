@@ -13,6 +13,7 @@ import io.vanillabp.spi.service.TaskEvent.Event;
 import io.vanillabp.spi.service.TaskException;
 import io.vanillabp.springboot.adapter.MultiInstance;
 import io.vanillabp.springboot.adapter.TaskHandlerBase;
+import io.vanillabp.springboot.adapter.wiring.WorkflowAggregateCache;
 import io.vanillabp.springboot.parameters.MethodParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +58,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
         
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     @Transactional
     public void handle(
@@ -75,19 +77,57 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             
             final var taskIdRetrieved = new AtomicBoolean(false);
             
-            final var workflowAggregate = super.execute(
+            final Function<String, Object> multiInstanceSupplier
+                    = multiInstanceVariable -> getVariable(job, multiInstanceVariable);
+            
+            final var workflowAggregateCache = new WorkflowAggregateCache();
+            
+            super.execute(
+                    workflowAggregateCache,
                     businessKey,
-                    multiInstanceVariable -> getVariable(job, multiInstanceVariable),
-                    taskParameter -> getVariable(job, taskParameter),
-                    () -> {
-                        taskIdRetrieved.set(true);
-                        return Long.toHexString(job.getKey());
-                    },
-                    () -> Event.CREATED);
+                    true,
+                    (args, param) -> processTaskParameter(
+                            args,
+                            param,
+                            taskParameter -> getVariable(job, taskParameter)),
+                    (args, param) -> processTaskIdParameter(
+                            args,
+                            param,
+                            () -> {
+                                taskIdRetrieved.set(true);
+                                return Long.toHexString(job.getKey());
+                            }),
+                    (args, param) -> processTaskEventParameter(
+                            args,
+                            param,
+                            () -> Event.CREATED),
+                    (args, param) -> processMultiInstanceIndexParameter(
+                            args,
+                            param,
+                            multiInstanceSupplier),
+                    (args, param) -> processMultiInstanceTotalParameter(
+                            args,
+                            param,
+                            multiInstanceSupplier),
+                    (args, param) -> processMultiInstanceElementParameter(
+                            args,
+                            param,
+                            multiInstanceSupplier),
+                    (args, param) -> processMultiInstanceResolverParameter(
+                            args,
+                            param,
+                            () -> {
+                                if (workflowAggregateCache.workflowAggregate == null) {
+                                    workflowAggregateCache.workflowAggregate = workflowAggregateRepository
+                                            .findById(businessKey)
+                                            .orElseThrow();
+                                }
+                                return workflowAggregateCache.workflowAggregate;
+                            }, multiInstanceSupplier));
 
             if ((taskType != Type.USERTASK)
                     && !taskIdRetrieved.get()) {
-                command = createCompleteCommand(client, job, workflowAggregate);
+                command = createCompleteCommand(client, job, workflowAggregateCache.workflowAggregate);
             }
         } catch (TaskException bpmnError) {
             command = createThrowErrorCommand(client, job, bpmnError);
