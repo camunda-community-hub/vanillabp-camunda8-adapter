@@ -13,7 +13,7 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <zeebe.version>8.1.13</zeebe.version>
+    <zeebe.version>8.3.1</zeebe.version>
   </properties>
 
   <build>
