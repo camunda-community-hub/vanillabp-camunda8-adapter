@@ -13,11 +13,11 @@ import io.camunda.zeebe.client.impl.ZeebeObjectMapper;
 @AutoConfigureOrder(Ordered.HIGHEST_PRECEDENCE)
 public class ZeebeClientConfiguration {
 
-    @Bean
-    public JsonMapper zeebeJsonMapper(final ObjectMapper mapper) {
-
-        return new ZeebeObjectMapper(mapper);
-
-    }
+//    @Bean
+//    public JsonMapper zeebeJsonMapper(final ObjectMapper mapper) {
+//
+//        return new ZeebeObjectMapper(mapper);
+//
+//    }
 
 }
