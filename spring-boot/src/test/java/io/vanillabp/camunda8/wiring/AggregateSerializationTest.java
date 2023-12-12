@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.camunda.zeebe.client.api.JsonMapper;
+import io.camunda.zeebe.client.impl.ZeebeObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,8 +23,7 @@ public class AggregateSerializationTest {
     @BeforeEach
     public void buildJsonMapper() {
         
-        jsonMapper = new ZeebeClientConfiguration()
-                .zeebeJsonMapper(new ObjectMapper());
+        jsonMapper = new ZeebeObjectMapper(new ObjectMapper());
         
     }
     

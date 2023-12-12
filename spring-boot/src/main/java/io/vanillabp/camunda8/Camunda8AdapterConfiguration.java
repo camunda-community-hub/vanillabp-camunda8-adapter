@@ -34,7 +34,7 @@ import org.springframework.data.repository.CrudRepository;
 import java.lang.reflect.Method;
 import java.util.List;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(ZeebeClientStarterAutoConfiguration.class)

@@ -13,7 +13,7 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <zeebe.version>8.1.13</zeebe.version>
+    <spring.zeebe.version>8.1.15</spring.zeebe.version>
   </properties>
 
   <build>
@@ -23,8 +23,8 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
           <configuration>
-            <source>11</source>
-            <target>11</target>
+            <source>17</source>
+            <target>17</target>
           </configuration>
         </plugin>
       </plugins>
@@ -35,12 +35,12 @@
     <dependency>
       <groupId>io.vanillabp</groupId>
       <artifactId>spring-boot-support</artifactId>
-      <version>1.0.5</version>
+      <version>1.0.6</version>
     </dependency>
     <dependency>
       <groupId>io.camunda</groupId>
       <artifactId>spring-zeebe-starter</artifactId>
-      <version>${zeebe.version}</version>
+      <version>${spring.zeebe.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework</groupId>
@@ -50,7 +50,7 @@
     <dependency>
       <groupId>jakarta.persistence</groupId>
       <artifactId>jakarta.persistence-api</artifactId>
-      <version>2.2.3</version>
+      <version>3.1.0</version>
     </dependency>
     <dependency>
         <groupId>org.junit.jupiter</groupId>
