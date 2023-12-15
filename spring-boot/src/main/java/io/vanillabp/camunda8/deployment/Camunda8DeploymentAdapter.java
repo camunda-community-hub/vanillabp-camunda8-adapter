@@ -13,8 +13,7 @@ import io.camunda.zeebe.model.bpmn.instance.ServiceTask;
 import io.camunda.zeebe.model.bpmn.instance.SignalEventDefinition;
 import io.camunda.zeebe.model.bpmn.instance.StartEvent;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
-import io.camunda.zeebe.spring.client.event.ClientStartedEvent;
-import io.camunda.zeebe.spring.client.lifecycle.ZeebeClientLifecycle;
+import io.camunda.zeebe.spring.client.event.ZeebeClientCreatedEvent;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.utils.HashCodeInputStream;
@@ -48,20 +47,16 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
 
     private final DeploymentService deploymentService;
     
-    private final ZeebeClientLifecycle clientLifecycle;
-	
     private ZeebeClient client;
 
     public Camunda8DeploymentAdapter(
             final VanillaBpProperties properties,
             final DeploymentService deploymentService,
-            final ZeebeClientLifecycle clientLifecycle,
             final Camunda8TaskWiring taskWiring) {
         
         super(properties);
         this.taskWiring = taskWiring;
         this.deploymentService = deploymentService;
-        this.clientLifecycle = clientLifecycle;
 
     }
 
@@ -78,11 +73,12 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         return Camunda8AdapterConfiguration.ADAPTER_ID;
         
     }
-    
-    @EventListener
-    public void zeebeClientStarted(final ClientStartedEvent event) {
 
-        this.client = clientLifecycle.get();
+    @EventListener
+    public void zeebeClientCreated(
+            final ZeebeClientCreatedEvent event) {
+
+        this.client = event.getClient();
 
         deployAllWorkflowModules();
 

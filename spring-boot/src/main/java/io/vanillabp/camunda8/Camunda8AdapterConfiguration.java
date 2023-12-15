@@ -1,9 +1,8 @@
 package io.vanillabp.camunda8;
 
+import io.camunda.zeebe.spring.client.CamundaAutoConfiguration;
 import io.camunda.zeebe.spring.client.EnableZeebeClient;
-import io.camunda.zeebe.spring.client.config.ZeebeClientStarterAutoConfiguration;
 import io.camunda.zeebe.spring.client.jobhandling.DefaultCommandExceptionHandlingStrategy;
-import io.camunda.zeebe.spring.client.lifecycle.ZeebeClientLifecycle;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.deployment.DeploymentRepository;
 import io.vanillabp.camunda8.deployment.DeploymentResourceRepository;
@@ -17,6 +16,7 @@ import io.vanillabp.springboot.adapter.AdapterConfigurationBase;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
 import io.vanillabp.springboot.parameters.MethodParameter;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.AopProxyUtils;
@@ -34,10 +34,8 @@ import org.springframework.data.repository.CrudRepository;
 import java.lang.reflect.Method;
 import java.util.List;
 
-import jakarta.annotation.PostConstruct;
-
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
-@AutoConfigureBefore(ZeebeClientStarterAutoConfiguration.class)
+@AutoConfigureBefore(CamundaAutoConfiguration.class)
 @EnableZeebeClient
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
 
@@ -54,9 +52,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Autowired
     private ApplicationContext applicationContext;
 
-    @Autowired
-    private ZeebeClientLifecycle clientLifecycle;
-    
     @Autowired
     private DefaultCommandExceptionHandlingStrategy commandExceptionHandlingStrategy;
 
@@ -90,7 +85,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         return new Camunda8DeploymentAdapter(
                 properties,
                 deploymentService,
-                clientLifecycle,
                 camunda8TaskWiring);
 
     }
