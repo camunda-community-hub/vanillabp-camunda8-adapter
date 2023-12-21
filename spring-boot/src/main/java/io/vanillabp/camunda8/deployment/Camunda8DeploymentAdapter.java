@@ -46,10 +46,13 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     private final Camunda8TaskWiring taskWiring;
 
     private final DeploymentService deploymentService;
+
+    private final String applicationName;
     
     private ZeebeClient client;
 
     public Camunda8DeploymentAdapter(
+            final String applicationName,
             final VanillaBpProperties properties,
             final DeploymentService deploymentService,
             final Camunda8TaskWiring taskWiring) {
@@ -57,6 +60,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         super(properties);
         this.taskWiring = taskWiring;
         this.deploymentService = deploymentService;
+        this.applicationName = applicationName;
 
     }
 
@@ -89,7 +93,6 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     @Override
     protected void doDeployment(
     		final String workflowModuleId,
-            final String workflowModuleName,
             final Resource[] bpmns,
             final Resource[] dmns,
             final Resource[] cmms) throws Exception {
@@ -132,7 +135,8 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                             deploymentHashCode[0])) {
                         
                         logger.info("About to deploy '{}' of workflow-module '{}'",
-                                resource.getFilename(), workflowModuleName);
+                                resource.getFilename(),
+                                workflowModuleId == null ? "default" : workflowModuleId);
                     	final var model = bpmnParser.parseModelFromStream(inputStream);
 
                     	final var bpmn = deploymentService.addBpmn(
@@ -155,9 +159,13 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                 .reduce((first, second) -> second);
         
         if (hasDeployables[0]) {
-            
+
+            final var tenantId = workflowModuleId == null ? applicationName : workflowModuleId;
             final var deployedResources = deploymentCommand
-                    .map(command -> command.send().join())
+                    .map(command -> tenantId == null ? command : command.tenantId(tenantId))
+                    .map(command -> command
+                            .send()
+                            .join())
                     .orElseThrow();
                     
             // BPMNs which are part of the current package will stored
@@ -182,7 +190,8 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                             bpmn.getResource())) {
                         
                         logger.info("About to verify old BPMN '{}' of workflow-module '{}'",
-                                bpmn.getResourceName(), workflowModuleName);
+                                bpmn.getResourceName(),
+                                workflowModuleId == null ? "default" : workflowModuleId);
                         final var model = bpmnParser.parseModelFromStream(inputStream);
         
                         processBpmnModel(workflowModuleId, deployedProcesses, bpmn, model, true);
@@ -246,7 +255,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                         )
                         .flatMap(i -> i) // map stream of streams to one stream
                     )
-                .forEach(connectable -> taskWiring.wireTask(processService[0], connectable));
+                .forEach(connectable -> taskWiring.wireTask(workflowModuleId, processService[0], connectable));
     	
     }
     

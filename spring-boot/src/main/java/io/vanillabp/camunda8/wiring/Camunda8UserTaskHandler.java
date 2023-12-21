@@ -28,19 +28,21 @@ public class Camunda8UserTaskHandler implements JobHandler {
     }
     
     private String internalKey(
+            final String tenantId,
             final String bpmnProcessId,
             final String elementId) {
         
-        return bpmnProcessId + "#" + elementId;
+        return tenantId + "#" + bpmnProcessId + "#" + elementId;
         
     }
     
     public void addTaskHandler(
+            final String tenantId,
             final String bpmnProcessId,
             final String elementId,
             final Camunda8TaskHandler taskHandler) {
-        
-        final var key = internalKey(bpmnProcessId, elementId);
+
+        final var key = internalKey(tenantId, bpmnProcessId, elementId);
         
         taskHandlers.put(key, taskHandler);
         
@@ -52,6 +54,7 @@ public class Camunda8UserTaskHandler implements JobHandler {
             final ActivatedJob job) throws Exception {
 
         final var key = internalKey(
+                job.getTenantId(),
                 job.getBpmnProcessId(),
                 job.getElementId());
         final var taskHandler = taskHandlers.get(key);

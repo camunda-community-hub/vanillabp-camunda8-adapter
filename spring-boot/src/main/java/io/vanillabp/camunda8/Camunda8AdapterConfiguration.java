@@ -42,9 +42,12 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     private static final Logger logger = LoggerFactory.getLogger(Camunda8AdapterConfiguration.class);
     
     public static final String ADAPTER_ID = "camunda8";
-    
+
     @Value("${workerId}")
     private String workerId;
+
+    @Value("${spring.application.name:@null}")
+    private String applicationName;
 
     @Autowired
     private SpringDataUtil springDataUtil; // ensure persistence is up and running
@@ -83,6 +86,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final Camunda8TaskWiring camunda8TaskWiring) {
 
         return new Camunda8DeploymentAdapter(
+                applicationName,
                 properties,
                 deploymentService,
                 camunda8TaskWiring);
@@ -98,6 +102,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         return new Camunda8TaskWiring(
                 springDataUtil,
                 applicationContext,
+                applicationName,
                 workerId,
                 userTaskHandler,
                 taskHandlers,
@@ -152,6 +157,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final CrudRepository<DE, Object> workflowAggregateRepository) {
 
         final var result = new Camunda8ProcessService<DE>(
+                applicationName,
                 workflowAggregateRepository,
                 workflowAggregate -> springDataUtil.getId(workflowAggregate),
                 workflowAggregateClass);
