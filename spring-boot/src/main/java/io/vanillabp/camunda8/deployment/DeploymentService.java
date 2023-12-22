@@ -73,9 +73,11 @@ public class DeploymentService {
 
     public List<DeployedBpmn> getBpmnNotOfPackage(final int packageId) {
 
-        return deploymentResourceRepository.findDistinctByTypeAndDeployments_packageIdNot(
-                DeployedBpmn.TYPE,
-                packageId);
+        return deploymentResourceRepository
+                .findByTypeAndDeployments_packageIdNot(DeployedBpmn.TYPE, packageId)
+                .stream()
+                .distinct() // Oracle doesn't support distinct queries including blob columns, hence the job is done here
+                .toList();
 
     }
 

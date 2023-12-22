@@ -123,7 +123,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         
         final var deployedProcesses = new HashMap<String, DeployedBpmn>();
 
-        final boolean hasDeployables[] = { false };
+        final boolean[] hasDeployables = { false };
 
         // Add all BPMNs to deploy-command: on one hand to deploy them and on the
         // other hand to wire them to the using project beans according to the SPI
@@ -167,23 +167,20 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                             .send()
                             .join())
                     .orElseThrow();
-                    
+
             // BPMNs which are part of the current package will stored
             deployedResources
                     .getProcesses()
-                    .stream()
-                    .map(process -> deploymentService.addProcess(
+                    .forEach(process -> deploymentService.addProcess(
                             deploymentHashCode[0],
                             process,
-                            deployedProcesses.get(process.getBpmnProcessId())).getDefinitionKey())
-                    .collect(Collectors.toList());
+                            deployedProcesses.get(process.getBpmnProcessId())));
             
         }
         
         // BPMNs which were deployed in the past need to be forced to be parsed for wiring
         deploymentService
                 .getBpmnNotOfPackage(deploymentHashCode[0])
-                .stream()
                 .forEach(bpmn -> {
                     
                     try (var inputStream = new ByteArrayInputStream(

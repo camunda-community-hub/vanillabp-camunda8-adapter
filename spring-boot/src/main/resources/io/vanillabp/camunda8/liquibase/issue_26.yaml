@@ -1,0 +1,164 @@
+databaseChangeLog:
+  - changeSet:
+      id: issue_26.yaml#initial_setup
+      author: stephanpelikan
+      dbms: oracle
+      changes:
+        - createTable:
+            tableName: CAMUNDA8_RESOURCES
+            columns:
+              - column:
+                  name: C8R_ID
+                  type: int
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: C8R_RECORD_VERSION
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8R_TYPE
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8R_RESOURCE_NAME
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8R_RESOURCE
+                  type: blob
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: CAMUNDA8_RESOURCES
+            columns:
+              - column:
+                  name: C8R_TYPE
+            indexName: IDX_C8R_TYPE
+        - createIndex:
+            tableName: CAMUNDA8_RESOURCES
+            columns:
+              - column:
+                  name: C8R_ID
+              - column:
+                  name: C8R_TYPE
+            indexName: IDX_C8R_ID_TYPE
+        - createTable:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: C8D_DEFINITION_KEY
+                  type: int
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: C8D_VERSION
+                  type: int
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: C8D_RECORD_VERSION
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8D_TYPE
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8D_PACKAGE_ID
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8D_RESOURCE
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8D_PUBLISHED_AT
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: C8D_BPMN_PROCESS_ID
+                  type: varchar(255)
+        - createIndex:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: C8D_TYPE
+            indexName: IDX_C8D_TYPE
+        - createIndex:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: C8D_DEFINITION_KEY
+            indexName: IDX_C8D_DEFINITION_KEY
+        - createIndex:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: C8D_RESOURCE
+            indexName: IDX_C8D_RESOURCE
+  - changeSet:
+      id: issue_26.yaml#rename_columns
+      author: stephanpelikan
+      dbms: "!oracle"
+      changes:
+        - renameColumn:
+            tableName: CAMUNDA8_RESOURCES
+            oldColumnName: ID
+            newColumnName: C8R_ID
+        - renameColumn:
+            tableName: CAMUNDA8_RESOURCES
+            oldColumnName: RECORD_VERSION
+            newColumnName: C8R_RECORD_VERSION
+        - renameColumn:
+            tableName: CAMUNDA8_RESOURCES
+            oldColumnName: TYPE
+            newColumnName: C8R_TYPE
+        - renameColumn:
+            tableName: CAMUNDA8_RESOURCES
+            oldColumnName: RESOURCE_NAME
+            newColumnName: C8R_RESOURCE_NAME
+        - renameColumn:
+            tableName: CAMUNDA8_RESOURCES
+            oldColumnName: RESOURCE
+            newColumnName: C8R_RESOURCE
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: DEFINITION_KEY
+            newColumnName: C8D_DEFINITION_KEY
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: VERSION
+            newColumnName: C8D_VERSION
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: RECORD_VERSION
+            newColumnName: C8D_RECORD_VERSION
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: TYPE
+            newColumnName: C8D_TYPE
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: PACKAGE_ID
+            newColumnName: C8D_PACKAGE_ID
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: RESOURCE
+            newColumnName: C8D_RESOURCE
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: PUBLISHED_AT
+            newColumnName: C8D_PUBLISHED_AT
+        - renameColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            oldColumnName: BPMN_PROCESS_ID
+            newColumnName: C8D_BPMN_PROCESS_ID
