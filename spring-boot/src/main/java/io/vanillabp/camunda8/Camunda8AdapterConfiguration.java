@@ -1,7 +1,6 @@
 package io.vanillabp.camunda8;
 
 import io.camunda.zeebe.spring.client.CamundaAutoConfiguration;
-import io.camunda.zeebe.spring.client.EnableZeebeClient;
 import io.camunda.zeebe.spring.client.jobhandling.DefaultCommandExceptionHandlingStrategy;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.deployment.DeploymentRepository;
@@ -36,7 +35,6 @@ import java.util.List;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(CamundaAutoConfiguration.class)
-@EnableZeebeClient
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8AdapterConfiguration.class);
