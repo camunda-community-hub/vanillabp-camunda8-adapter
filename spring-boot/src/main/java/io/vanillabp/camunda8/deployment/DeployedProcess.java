@@ -11,7 +11,7 @@ public class DeployedProcess extends Deployment {
     public static final String TYPE = "PROCESS";
     
     /** the BPMN process id of the process */
-    @Column(name = "BPMN_PROCESS_ID")
+    @Column(name = "C8D_BPMN_PROCESS_ID")
     private String bpmnProcessId;
 
     public String getBpmnProcessId() {

@@ -13,8 +13,7 @@ import io.camunda.zeebe.model.bpmn.instance.ServiceTask;
 import io.camunda.zeebe.model.bpmn.instance.SignalEventDefinition;
 import io.camunda.zeebe.model.bpmn.instance.StartEvent;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
-import io.camunda.zeebe.spring.client.event.ClientStartedEvent;
-import io.camunda.zeebe.spring.client.lifecycle.ZeebeClientLifecycle;
+import io.camunda.zeebe.spring.client.event.ZeebeClientCreatedEvent;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.utils.HashCodeInputStream;
@@ -47,21 +46,21 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     private final Camunda8TaskWiring taskWiring;
 
     private final DeploymentService deploymentService;
+
+    private final String applicationName;
     
-    private final ZeebeClientLifecycle clientLifecycle;
-	
     private ZeebeClient client;
 
     public Camunda8DeploymentAdapter(
+            final String applicationName,
             final VanillaBpProperties properties,
             final DeploymentService deploymentService,
-            final ZeebeClientLifecycle clientLifecycle,
             final Camunda8TaskWiring taskWiring) {
         
         super(properties);
         this.taskWiring = taskWiring;
         this.deploymentService = deploymentService;
-        this.clientLifecycle = clientLifecycle;
+        this.applicationName = applicationName;
 
     }
 
@@ -78,11 +77,12 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         return Camunda8AdapterConfiguration.ADAPTER_ID;
         
     }
-    
-    @EventListener
-    public void zeebeClientStarted(final ClientStartedEvent event) {
 
-        this.client = clientLifecycle.get();
+    @EventListener
+    public void zeebeClientCreated(
+            final ZeebeClientCreatedEvent event) {
+
+        this.client = event.getClient();
 
         deployAllWorkflowModules();
 
@@ -93,7 +93,6 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     @Override
     protected void doDeployment(
     		final String workflowModuleId,
-            final String workflowModuleName,
             final Resource[] bpmns,
             final Resource[] dmns,
             final Resource[] cmms) throws Exception {
@@ -124,7 +123,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         
         final var deployedProcesses = new HashMap<String, DeployedBpmn>();
 
-        final boolean hasDeployables[] = { false };
+        final boolean[] hasDeployables = { false };
 
         // Add all BPMNs to deploy-command: on one hand to deploy them and on the
         // other hand to wire them to the using project beans according to the SPI
@@ -136,7 +135,8 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                             deploymentHashCode[0])) {
                         
                         logger.info("About to deploy '{}' of workflow-module '{}'",
-                                resource.getFilename(), workflowModuleName);
+                                resource.getFilename(),
+                                workflowModuleId == null ? "default" : workflowModuleId);
                     	final var model = bpmnParser.parseModelFromStream(inputStream);
 
                     	final var bpmn = deploymentService.addBpmn(
@@ -159,34 +159,36 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                 .reduce((first, second) -> second);
         
         if (hasDeployables[0]) {
-            
+
+            final var tenantId = workflowModuleId == null ? applicationName : workflowModuleId;
             final var deployedResources = deploymentCommand
-                    .map(command -> command.send().join())
+                    .map(command -> tenantId == null ? command : command.tenantId(tenantId))
+                    .map(command -> command
+                            .send()
+                            .join())
                     .orElseThrow();
-                    
+
             // BPMNs which are part of the current package will stored
             deployedResources
                     .getProcesses()
-                    .stream()
-                    .map(process -> deploymentService.addProcess(
+                    .forEach(process -> deploymentService.addProcess(
                             deploymentHashCode[0],
                             process,
-                            deployedProcesses.get(process.getBpmnProcessId())).getDefinitionKey())
-                    .collect(Collectors.toList());
+                            deployedProcesses.get(process.getBpmnProcessId())));
             
         }
         
         // BPMNs which were deployed in the past need to be forced to be parsed for wiring
         deploymentService
                 .getBpmnNotOfPackage(deploymentHashCode[0])
-                .stream()
                 .forEach(bpmn -> {
                     
                     try (var inputStream = new ByteArrayInputStream(
                             bpmn.getResource())) {
                         
                         logger.info("About to verify old BPMN '{}' of workflow-module '{}'",
-                                bpmn.getResourceName(), workflowModuleName);
+                                bpmn.getResourceName(),
+                                workflowModuleId == null ? "default" : workflowModuleId);
                         final var model = bpmnParser.parseModelFromStream(inputStream);
         
                         processBpmnModel(workflowModuleId, deployedProcesses, bpmn, model, true);
@@ -250,7 +252,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                         )
                         .flatMap(i -> i) // map stream of streams to one stream
                     )
-                .forEach(connectable -> taskWiring.wireTask(processService[0], connectable));
+                .forEach(connectable -> taskWiring.wireTask(workflowModuleId, processService[0], connectable));
     	
     }
     

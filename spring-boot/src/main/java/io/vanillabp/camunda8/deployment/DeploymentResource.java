@@ -1,7 +1,5 @@
 package io.vanillabp.camunda8.deployment;
 
-import java.util.List;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorColumn;
 import jakarta.persistence.Entity;
@@ -14,31 +12,33 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
+import java.util.List;
+
 @Entity
 @Table(name = "CAMUNDA8_RESOURCES")
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name = "TYPE")
+@DiscriminatorColumn(name = "C8R_TYPE")
 public abstract class DeploymentResource {
 
     @Id
-    @Column(name = "ID")
+    @Column(name = "C8R_ID")
     private int fileId;
 
     @Version
-    @Column(name = "RECORD_VERSION")
+    @Column(name = "C8R_RECORD_VERSION")
     private int recordVersion;
     
-    @Column(name = "RESOURCE_NAME")
+    @Column(name = "C8R_RESOURCE_NAME")
     private String resourceName;
 
     @OneToMany(mappedBy = "deployedResource", fetch = FetchType.LAZY)
     private List<Deployment> deployments;
 
     @Lob
-    @Column(name = "RESOURCE")
+    @Column(name = "C8R_RESOURCE")
     private byte[] resource;
     
-    @Column(name = "TYPE", updatable = false, insertable = false)
+    @Column(name = "C8R_TYPE", updatable = false, insertable = false)
     private String type;
 
     public int getFileId() {
@@ -88,5 +88,18 @@ public abstract class DeploymentResource {
     public void setRecordVersion(int recordVersion) {
         this.recordVersion = recordVersion;
     }
-    
+
+    @Override
+    public int hashCode() {
+        return getFileId();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof DeploymentResource other)) {
+            return false;
+        }
+        return getFileId() == other.getFileId();
+    }
+
 }

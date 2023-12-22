@@ -8,6 +8,6 @@ import java.util.List;
 @Repository
 public interface DeploymentResourceRepository extends CrudRepository<DeploymentResource, Integer> {
 
-    List<DeployedBpmn> findDistinctByTypeAndDeployments_packageIdNot(String type, int packageId);
+    List<DeployedBpmn> findByTypeAndDeployments_packageIdNot(String type, int packageId);
     
 }

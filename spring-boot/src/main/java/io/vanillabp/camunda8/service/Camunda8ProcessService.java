@@ -26,16 +26,20 @@ public class Camunda8ProcessService<DE>
 
     private final Function<DE, Object> getWorkflowAggregateId;
 
+    private final String applicationName;
+
     private AdapterAwareProcessService<DE> parent;
     
     private ZeebeClient client;
         
     public Camunda8ProcessService(
+            final String applicationName,
             final CrudRepository<DE, Object> workflowAggregateRepository,
             final Function<DE, Object> getWorkflowAggregateId,
             final Class<DE> workflowAggregateClass) {
         
         super();
+        this.applicationName = applicationName;
         this.workflowAggregateRepository = workflowAggregateRepository;
         this.workflowAggregateClass = workflowAggregateClass;
         this.getWorkflowAggregateId = getWorkflowAggregateId;
@@ -99,12 +103,17 @@ public class Camunda8ProcessService<DE>
         // the workflow if aggregate was already persisted before
         final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
-        
-        client
+
+        final var tenantId = parent.getWorkflowModuleId() == null ? applicationName : parent.getWorkflowModuleId();
+        final var command = client
                 .newCreateInstanceCommand()
                 .bpmnProcessId(parent.getPrimaryBpmnProcessId())
                 .latestVersion()
-                .variables(attachedAggregate)
+                .variables(attachedAggregate);
+
+        (tenantId == null
+                ? command
+                : command.tenantId(tenantId))
                 .send()
                 .get(10, TimeUnit.SECONDS);
 
@@ -157,12 +166,17 @@ public class Camunda8ProcessService<DE>
         // the workflow if aggregate was already persisted before
         final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
-        
-        final var messageKey = client
+
+        final var tenantId = parent.getWorkflowModuleId() == null ? applicationName : parent.getWorkflowModuleId();
+        final var command = client
                 .newPublishMessageCommand()
                 .messageName(messageName)
                 .correlationKey(correlationId)
-                .variables(attachedAggregate)
+                .variables(attachedAggregate);
+
+        final var messageKey = (tenantId == null
+                ? command
+                : command.tenantId(tenantId))
                 .send()
                 .join()
                 .getMessageKey();
