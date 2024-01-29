@@ -12,6 +12,7 @@ import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.camunda8.wiring.Camunda8UserTaskHandler;
 import io.vanillabp.springboot.adapter.AdapterConfigurationBase;
+import io.vanillabp.springboot.adapter.SpringBeanUtil;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
 import io.vanillabp.springboot.parameters.MethodParameter;
@@ -25,6 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Scope;
@@ -94,12 +96,14 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Bean
     public Camunda8TaskWiring camunda8TaskWiring(
             final SpringDataUtil springDataUtil,
+            final SpringBeanUtil springBeanUtil,
             final Camunda8UserTaskHandler userTaskHandler,
             final ObjectProvider<Camunda8TaskHandler> taskHandlers) {
 
         return new Camunda8TaskWiring(
                 springDataUtil,
                 applicationContext,
+                springBeanUtil,
                 applicationName,
                 workerId,
                 userTaskHandler,
@@ -165,5 +169,14 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         return result;
         
     }
-    
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SpringBeanUtil vanillabpSpringBeanUtil(
+            final ApplicationContext applicationContext) {
+
+        return new SpringBeanUtil(applicationContext);
+
+    }
+
 }

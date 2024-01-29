@@ -15,6 +15,7 @@ import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MethodParameterFactory;
 import io.vanillabp.camunda8.wiring.parameters.ParameterVariables;
 import io.vanillabp.spi.service.WorkflowTask;
+import io.vanillabp.springboot.adapter.SpringBeanUtil;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.TaskWiringBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
@@ -23,6 +24,7 @@ import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationContext;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collection;
@@ -57,13 +59,14 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     public Camunda8TaskWiring(
             final SpringDataUtil springDataUtil,
             final ApplicationContext applicationContext,
+            final SpringBeanUtil springBeanUtil,
             final String applicationName,
             final String workerId,
             final Camunda8UserTaskHandler userTaskHandler,
             final ObjectProvider<Camunda8TaskHandler> taskHandlers,
             final Collection<Camunda8ProcessService<?>> connectableServices) {
         
-        super(applicationContext, new Camunda8MethodParameterFactory());
+        super(applicationContext, springBeanUtil, new Camunda8MethodParameterFactory());
         this.workerId = workerId;
         this.applicationName = applicationName;
         this.springDataUtil = springDataUtil;
@@ -287,7 +290,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 .stream(workflowAggregateClass.getDeclaredFields())
                 .filter(field -> field.getAnnotation(Id.class) != null)
                 .findFirst()
-                .map(field -> field.getName())
+                .map(Field::getName)
                 .orElse(Arrays
                         .stream(workflowAggregateClass.getDeclaredMethods())
                         .filter(method -> method.getAnnotation(Id.class) != null)
