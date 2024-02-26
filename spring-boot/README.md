@@ -112,6 +112,35 @@ On using receive tasks Camunda 8 requires us to define correlation IDs. If your 
 
 In case your model has more than one receive task active you have to define unique correlation IDs for each receive task of that message name to enable the BPMS to find the right receive task to correlate to. This might happen for multi-instance receive tasks or receive tasks within a multi-instance embedded sub-process. In that case use the workflow id in combination with the multi-instance element as a correlation id: `=id+"+"+RequestRideOffer` (where "RequestRideOffer" is the name of the multi-instance element).
 
+## Using Camunda multi-tenancy
+
+Typically, on operating multiple workflow modules, one wants to avoid name clashes in Camunda (e.g. of event names, etc.).
+Therefore, each workflow module is deployed to Camunda as a separate tenant using the workflow module's id as the tenant-id.
+
+This behavior can be adapted.
+
+**If you wish to define a custom tenant-id instead:**
+
+```yaml
+vanillabp:
+  workflow-modules:
+    ride:
+      adapters:
+        camunda8:
+          tenant-id: taxiride
+```
+
+**If you want to disable multi-tenancy:**
+
+```yaml
+vanillabp:
+  workflow-modules:
+    ride:
+      adapters:
+        camunda8:
+          use-tenants: false
+```
+
 ## Transaction behavior
 
 Since Camunda 8 is an external system to your services one has to deal with eventual consistency in conjunction with transactions. This adapter uses the recommended pattern to report a task as completed and roll back the local transaction in case of errors. Possible errors are:

@@ -27,6 +27,7 @@ import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Scope;
@@ -37,6 +38,7 @@ import java.util.List;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(CamundaAutoConfiguration.class)
+@EnableConfigurationProperties(Camunda8VanillaBpProperties.class)
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8AdapterConfiguration.class);
@@ -64,6 +66,9 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Autowired
     private DeploymentResourceRepository deploymentResourceRepository;
 
+    @Autowired
+    private Camunda8VanillaBpProperties camunda8Properties;
+
     @PostConstruct
     public void init() {
         
@@ -88,6 +93,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         return new Camunda8DeploymentAdapter(
                 applicationName,
                 properties,
+                camunda8Properties,
                 deploymentService,
                 camunda8TaskWiring);
 
@@ -159,7 +165,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final CrudRepository<DE, Object> workflowAggregateRepository) {
 
         final var result = new Camunda8ProcessService<DE>(
-                applicationName,
+                camunda8Properties,
                 workflowAggregateRepository,
                 workflowAggregate -> springDataUtil.getId(workflowAggregate),
                 workflowAggregateClass);

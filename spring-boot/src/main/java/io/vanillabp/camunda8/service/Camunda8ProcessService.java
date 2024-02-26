@@ -2,6 +2,7 @@ package io.vanillabp.camunda8.service;
 
 import io.camunda.zeebe.client.ZeebeClient;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
+import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
 import org.slf4j.Logger;
@@ -26,20 +27,20 @@ public class Camunda8ProcessService<DE>
 
     private final Function<DE, Object> getWorkflowAggregateId;
 
-    private final String applicationName;
+    private final Camunda8VanillaBpProperties camunda8Properties;
 
     private AdapterAwareProcessService<DE> parent;
     
     private ZeebeClient client;
         
     public Camunda8ProcessService(
-            final String applicationName,
+            final Camunda8VanillaBpProperties camunda8Properties,
             final CrudRepository<DE, Object> workflowAggregateRepository,
             final Function<DE, Object> getWorkflowAggregateId,
             final Class<DE> workflowAggregateClass) {
         
         super();
-        this.applicationName = applicationName;
+        this.camunda8Properties = camunda8Properties;
         this.workflowAggregateRepository = workflowAggregateRepository;
         this.workflowAggregateClass = workflowAggregateClass;
         this.getWorkflowAggregateId = getWorkflowAggregateId;
@@ -104,7 +105,7 @@ public class Camunda8ProcessService<DE>
         final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
 
-        final var tenantId = parent.getWorkflowModuleId() == null ? applicationName : parent.getWorkflowModuleId();
+        final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
         final var command = client
                 .newCreateInstanceCommand()
                 .bpmnProcessId(parent.getPrimaryBpmnProcessId())
@@ -167,7 +168,7 @@ public class Camunda8ProcessService<DE>
         final var attachedAggregate = workflowAggregateRepository
                 .save(workflowAggregate);
 
-        final var tenantId = parent.getWorkflowModuleId() == null ? applicationName : parent.getWorkflowModuleId();
+        final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
         final var command = client
                 .newPublishMessageCommand()
                 .messageName(messageName)

@@ -15,6 +15,7 @@ import io.camunda.zeebe.model.bpmn.instance.StartEvent;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
 import io.camunda.zeebe.spring.client.event.ZeebeClientCreatedEvent;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
+import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.utils.HashCodeInputStream;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
@@ -47,20 +48,21 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
 
     private final DeploymentService deploymentService;
 
-    private final String applicationName;
+    private final Camunda8VanillaBpProperties camunda8Properties;
     
     private ZeebeClient client;
 
     public Camunda8DeploymentAdapter(
             final String applicationName,
             final VanillaBpProperties properties,
+            final Camunda8VanillaBpProperties camunda8Properties,
             final DeploymentService deploymentService,
             final Camunda8TaskWiring taskWiring) {
         
-        super(properties);
+        super(properties, applicationName);
+        this.camunda8Properties = camunda8Properties;
         this.taskWiring = taskWiring;
         this.deploymentService = deploymentService;
-        this.applicationName = applicationName;
 
     }
 
@@ -160,7 +162,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         
         if (hasDeployables[0]) {
 
-            final var tenantId = workflowModuleId == null ? applicationName : workflowModuleId;
+            final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
             final var deployedResources = deploymentCommand
                     .map(command -> tenantId == null ? command : command.tenantId(tenantId))
                     .map(command -> command
