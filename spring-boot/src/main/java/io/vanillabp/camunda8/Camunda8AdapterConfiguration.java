@@ -110,8 +110,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 springDataUtil,
                 applicationContext,
                 springBeanUtil,
-                applicationName,
                 workerId,
+                camunda8Properties,
                 userTaskHandler,
                 taskHandlers,
                 getConnectableServices());

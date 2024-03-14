@@ -9,7 +9,9 @@ import io.camunda.zeebe.model.bpmn.instance.UserTask;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeFormDefinition;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeLoopCharacteristics;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
+import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
+import io.vanillabp.camunda8.deployment.DeployedBpmn;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MethodParameterFactory;
@@ -31,6 +33,8 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -48,31 +52,31 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     
     private final Camunda8UserTaskHandler userTaskHandler;
 
-    private final String applicationName;
-
     private ZeebeClient client;
     
     private List<JobWorkerBuilderStep3> workers = new LinkedList<>();
 
     private Set<String> userTaskTenantIds = new HashSet<>();
     
+    private final Camunda8VanillaBpProperties camunda8Properties;
+    
     public Camunda8TaskWiring(
             final SpringDataUtil springDataUtil,
             final ApplicationContext applicationContext,
             final SpringBeanUtil springBeanUtil,
-            final String applicationName,
             final String workerId,
+            final Camunda8VanillaBpProperties camunda8Properties,
             final Camunda8UserTaskHandler userTaskHandler,
             final ObjectProvider<Camunda8TaskHandler> taskHandlers,
             final Collection<Camunda8ProcessService<?>> connectableServices) {
         
         super(applicationContext, springBeanUtil, new Camunda8MethodParameterFactory());
         this.workerId = workerId;
-        this.applicationName = applicationName;
         this.springDataUtil = springDataUtil;
         this.taskHandlers = taskHandlers;
         this.userTaskHandler = userTaskHandler;
         this.connectableServices = connectableServices;
+        this.camunda8Properties = camunda8Properties;
         
     }
     
@@ -85,7 +89,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     
     /**
      * Called by
-     * {@link Camunda8DeploymentAdapter#processBpmnModel(BpmnModelInstanceImpl)} to
+     * {@link Camunda8DeploymentAdapter#processBpmnModel(String, Map, DeployedBpmn, BpmnModelInstanceImpl, boolean)} to
      * ensure client is available before using wire-methods.
      */
     @Override
@@ -107,7 +111,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                             .handler(userTaskHandler)
                             .timeout(Integer.MAX_VALUE) // user-tasks are not fetched more than once
                             .name(workerId)
-                            .tenantIds(userTaskTenantIds.stream().toList()));
+                            .tenantIds(userTaskTenantIds.stream().filter(Objects::nonNull).toList()));
         }
 
         workers
@@ -219,6 +223,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         final var repository = processService.getWorkflowAggregateRepository();
         final var idPropertyName = getWorkflowAggregateIdPropertyName(
                 processService.getWorkflowAggregateClass());
+        final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
 
         final var taskHandler = taskHandlers.getObject(
                 springDataUtil,
@@ -232,7 +237,6 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
 
         if (connectable.getType() == Type.USERTASK) {
 
-            final var tenantId = workflowModuleId == null ? applicationName : workflowModuleId;
             userTaskHandler.addTaskHandler(
                     tenantId,
                     connectable.getBpmnProcessId(),
@@ -245,7 +249,6 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         
         final var variablesToFetch = getVariablesToFetch(idPropertyName, parameters);
 
-        final var tenantId = workflowModuleId == null ? applicationName : workflowModuleId;
         final var worker = client
                 .newWorker()
                 .jobType(connectable.getTaskDefinition())
