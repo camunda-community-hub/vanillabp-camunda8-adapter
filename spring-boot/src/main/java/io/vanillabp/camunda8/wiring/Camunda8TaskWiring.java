@@ -56,6 +56,8 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     
     private List<JobWorkerBuilderStep3> workers = new LinkedList<>();
 
+    private List<Camunda8TaskHandler> handlers = new LinkedList<>();
+
     private Set<String> userTaskTenantIds = new HashSet<>();
     
     private final Camunda8VanillaBpProperties camunda8Properties;
@@ -97,6 +99,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             final ZeebeClient client) {
         
         this.client = client;
+        handlers.forEach(handler -> handler.accept(client));
 
     }
     
@@ -234,6 +237,11 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 method,
                 parameters,
                 idPropertyName);
+        if (this.client != null) {
+            taskHandler.accept(this.client);
+        } else {
+            handlers.add(taskHandler);
+        }
 
         if (connectable.getType() == Type.USERTASK) {
 
@@ -246,7 +254,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             return;
             
         }
-        
+
         final var variablesToFetch = getVariablesToFetch(idPropertyName, parameters);
 
         final var worker = client
