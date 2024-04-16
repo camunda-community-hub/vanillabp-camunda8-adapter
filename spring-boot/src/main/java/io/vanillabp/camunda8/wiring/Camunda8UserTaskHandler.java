@@ -18,7 +18,7 @@ public class Camunda8UserTaskHandler implements JobHandler {
     
     private final Map<String, Camunda8TaskHandler> taskHandlers = new HashMap<>();
     
-    private String workerId;
+    private final String workerId;
     
     public Camunda8UserTaskHandler(
             final String workerId) {

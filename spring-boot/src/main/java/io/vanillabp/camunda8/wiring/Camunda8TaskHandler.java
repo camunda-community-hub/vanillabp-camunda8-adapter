@@ -1,15 +1,14 @@
 package io.vanillabp.camunda8.wiring;
 
-import io.camunda.zeebe.client.api.command.FinalCommandStep;
+import io.camunda.zeebe.client.ZeebeClient;
 import io.camunda.zeebe.client.api.response.ActivatedJob;
 import io.camunda.zeebe.client.api.worker.JobClient;
 import io.camunda.zeebe.client.api.worker.JobHandler;
-import io.camunda.zeebe.spring.client.jobhandling.CommandWrapper;
-import io.camunda.zeebe.spring.client.jobhandling.DefaultCommandExceptionHandlingStrategy;
+import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MultiInstanceIndexMethodParameter;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MultiInstanceTotalMethodParameter;
-import io.vanillabp.spi.service.TaskEvent.Event;
+import io.vanillabp.spi.service.TaskEvent;
 import io.vanillabp.spi.service.TaskException;
 import io.vanillabp.springboot.adapter.MultiInstance;
 import io.vanillabp.springboot.adapter.TaskHandlerBase;
@@ -18,26 +17,29 @@ import io.vanillabp.springboot.parameters.MethodParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
-public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
+public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, Consumer<ZeebeClient> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8TaskHandler.class);
-
-    private final DefaultCommandExceptionHandlingStrategy commandExceptionHandlingStrategy;
 
     private final Type taskType;
 
     private final String idPropertyName;
 
+    private ZeebeClient zeebeClient;
+
     public Camunda8TaskHandler(
             final Type taskType,
-            final DefaultCommandExceptionHandlingStrategy commandExceptionHandlingStrategy,
             final CrudRepository<Object, Object> workflowAggregateRepository,
             final Object bean,
             final Method method,
@@ -46,11 +48,18 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
         super(workflowAggregateRepository, bean, method, parameters);
         this.taskType = taskType;
-        this.commandExceptionHandlingStrategy = commandExceptionHandlingStrategy;
         this.idPropertyName = idPropertyName;
 
     }
-    
+
+    @Override
+    public void accept(
+            final ZeebeClient zeebeClient) {
+
+        this.zeebeClient = zeebeClient;
+
+    }
+
     @Override
     protected Logger getLogger() {
         
@@ -60,28 +69,34 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
     @SuppressWarnings("unchecked")
     @Override
-    @Transactional
     public void handle(
             final JobClient client,
-            final ActivatedJob job) throws Exception {
+            final ActivatedJob job) {
 
-        CommandWrapper command = null;
+        Runnable jobPostAction = null;
+        Supplier<String> description = null;
         try {
             final var businessKey = getVariable(job, idPropertyName);
-            
-            logger.trace("Will handle task '{}' of workflow '{}' ('{}') as job '{}'",
+
+            logger.trace("Will handle task '{}' (task-definition '{}‘) of workflow '{}' (instance-id '{}') as job '{}'",
                     job.getElementId(),
+                    job.getType(),
+                    job.getBpmnProcessId(),
                     job.getProcessInstanceKey(),
-                    job.getProcessDefinitionKey(),
                     job.getKey());
-            
+
             final var taskIdRetrieved = new AtomicBoolean(false);
-            
+            final var workflowAggregateCache = new WorkflowAggregateCache();
+
+            Camunda8TransactionProcessor.registerCallbacks(
+                    doTestForTaskWasCompletedOrCancelled(job),
+                    doThrowError(client, job, workflowAggregateCache),
+                    doFailed(client, job),
+                    doComplete(client, job, workflowAggregateCache));
+
             final Function<String, Object> multiInstanceSupplier
                     = multiInstanceVariable -> getVariable(job, multiInstanceVariable);
-            
-            final var workflowAggregateCache = new WorkflowAggregateCache();
-            
+
             super.execute(
                     workflowAggregateCache,
                     businessKey,
@@ -100,7 +115,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                     (args, param) -> processTaskEventParameter(
                             args,
                             param,
-                            () -> Event.CREATED),
+                            () -> TaskEvent.Event.CREATED),
                     (args, param) -> processMultiInstanceIndexParameter(
                             args,
                             param,
@@ -127,21 +142,48 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
             if ((taskType != Type.USERTASK)
                     && !taskIdRetrieved.get()) {
-                command = createCompleteCommand(client, job, workflowAggregateCache.workflowAggregate);
+                final var callback = Camunda8TransactionProcessor.handlerCompletedCommandCallback();
+                if (callback != null) {
+                    jobPostAction = callback.getKey();
+                    description = callback.getValue();
+                }
             }
         } catch (TaskException bpmnError) {
-            command = createThrowErrorCommand(client, job, bpmnError);
+            final var callback = Camunda8TransactionProcessor.bpmnErrorCommandCallback();
+            if (callback != null) {
+                jobPostAction = () -> callback.getKey().accept(bpmnError);
+                description = () -> callback.getValue().apply(bpmnError);
+            }
         } catch (Exception e) {
-            logger.error("Failed to execute job '{}'", job.getKey(), e);
-            command = createFailedCommand(client, job, e);
+            final var callback = Camunda8TransactionProcessor.handlerFailedCommandCallback();
+            if (callback != null) {
+                logger.error("Failed to execute job '{}'", job.getKey(), e);
+                jobPostAction = () -> callback.getKey().accept(e);
+                description = () -> callback.getValue().apply(e);
+            }
+        } finally {
+            Camunda8TransactionProcessor.unregisterCallbacks();
         }
 
-        if (command != null) {
-            command.executeAsync();
+        if (jobPostAction != null) {
+            try {
+                jobPostAction.run();
+            } catch (Exception e) {
+                if (description != null) {
+                    logger.error(
+                            "Could not execute '{}'! Manual action required!",
+                            description.get(),
+                            e);
+                } else {
+                    logger.error(
+                            "Manual action required due to:",
+                            e);
+                }
+            }
         }
 
     }
-    
+
     @Override
     protected Object getMultiInstanceElement(
             final String name,
@@ -195,54 +237,105 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
     }
 
     @SuppressWarnings("unchecked")
-    public CommandWrapper createCompleteCommand(
-            final JobClient jobClient,
-            final ActivatedJob job,
-            final Object workflowAggregateId) {
+    public Map.Entry<Runnable, Supplier<String>> doTestForTaskWasCompletedOrCancelled(
+            final ActivatedJob job) {
 
-        var completeCommand = jobClient
-                .newCompleteCommand(job.getKey());
-        
-        if (workflowAggregateId != null) {
-            completeCommand = completeCommand.variables(workflowAggregateId);
-        }
-        
-        return new CommandWrapper(
-                (FinalCommandStep<Void>) ((FinalCommandStep<?>) completeCommand),
-                job,
-                commandExceptionHandlingStrategy);
+        return Map.entry(
+                () -> zeebeClient
+                        .newUpdateTimeoutCommand(job)
+                        .timeout(Duration.ofMinutes(10))
+                        .send()
+                        .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                () -> "update timeout (BPMN: " + job.getBpmnProcessId()
+                        + "; Element: " + job.getElementId()
+                        + "; Task-Definition: " + job.getType()
+                        + "; Process-Instance: " + job.getProcessInstanceKey()
+                        + "; Job: " + job.getKey()
+                        + ")");
 
     }
 
-    private CommandWrapper createThrowErrorCommand(
+    @SuppressWarnings("unchecked")
+    public Map.Entry<Runnable, Supplier<String>> doComplete(
             final JobClient jobClient,
             final ActivatedJob job,
-            final TaskException bpmnError) {
+            final WorkflowAggregateCache workflowAggregateCache) {
 
-        return new CommandWrapper(
-                jobClient
-                        .newThrowErrorCommand(job.getKey())
-                        .errorCode(bpmnError.getErrorCode())
-                        .errorMessage(bpmnError.getErrorName()),
-                job,
-                commandExceptionHandlingStrategy);
+        return Map.entry(
+                () -> {
+                    var completeCommand = jobClient
+                            .newCompleteCommand(job.getKey());
 
+                    if (workflowAggregateCache.workflowAggregate != null) {
+                        completeCommand = completeCommand.variables(workflowAggregateCache.workflowAggregate);
+                    }
+
+                    completeCommand
+                            .send()
+                            .exceptionally(t -> {
+                                throw new RuntimeException("error", t);
+                            });
+                },
+                () -> "complete command (BPMN: " + job.getBpmnProcessId()
+                        + "; Element: " + job.getElementId()
+                        + "; Task-Definition: " + job.getType()
+                        + "; Process-Instance: " + job.getProcessInstanceKey()
+                        + "; Job: " + job.getKey()
+                        + ")");
+
+    }
+
+    private Map.Entry<Consumer<TaskException>, Function<TaskException, String>> doThrowError(
+            final JobClient jobClient,
+            final ActivatedJob job,
+            final WorkflowAggregateCache workflowAggregateCache) {
+
+        return Map.entry(
+                taskException -> {
+                    var throwErrorCommand = jobClient
+                            .newThrowErrorCommand(job.getKey())
+                            .errorCode(taskException.getErrorCode())
+                            .errorMessage(taskException.getErrorName());
+
+                    if (workflowAggregateCache.workflowAggregate != null) {
+                        throwErrorCommand = throwErrorCommand.variables(workflowAggregateCache.workflowAggregate);
+                    }
+
+                    throwErrorCommand
+                            .send()
+                            .exceptionally(t -> { throw new RuntimeException("error", t); });
+                },
+                taskException -> "throw error command (BPMN: " + job.getBpmnProcessId()
+                        + "; Element: " + job.getElementId()
+                        + "; Task-Definition: " + job.getType()
+                        + "; Process-Instance: " + job.getProcessInstanceKey()
+                        + "; Job: " + job.getKey()
+                        + ")");
     }
     
     @SuppressWarnings("unchecked")
-    private CommandWrapper createFailedCommand(
+    private Map.Entry<Consumer<Exception>, Function<Exception, String>> doFailed(
             final JobClient jobClient,
-            final ActivatedJob job,
-            final Exception e) {
-        
-        return new CommandWrapper(
-                (FinalCommandStep<Void>) ((FinalCommandStep<?>) jobClient
-                        .newFailCommand(job)
-                        .retries(0)
-                        .errorMessage(e.getMessage())),
-                job,
-                commandExceptionHandlingStrategy);
-        
+            final ActivatedJob job) {
+
+        return Map.entry(
+                exception -> {
+                    jobClient
+                            .newFailCommand(job)
+                            .retries(0)
+                            .errorMessage(exception.getMessage())
+                            .send()
+                            .exceptionally(t -> {
+                                throw new RuntimeException("error", t);
+                            });
+                },
+                taskException -> "fail command (BPMN: " + job.getBpmnProcessId()
+                        + "; Element: " + job.getElementId()
+                        + "; Task-Definition: " + job.getType()
+                        + "; Process-Instance: " + job.getProcessInstanceKey()
+                        + "; Job: " + job.getKey()
+                        + ")");
+
     }
 
 }

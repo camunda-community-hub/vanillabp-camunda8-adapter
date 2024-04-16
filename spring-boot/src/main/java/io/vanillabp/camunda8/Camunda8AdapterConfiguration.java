@@ -1,12 +1,13 @@
 package io.vanillabp.camunda8;
 
 import io.camunda.zeebe.spring.client.CamundaAutoConfiguration;
-import io.camunda.zeebe.spring.client.jobhandling.DefaultCommandExceptionHandlingStrategy;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.deployment.DeploymentRepository;
 import io.vanillabp.camunda8.deployment.DeploymentResourceRepository;
 import io.vanillabp.camunda8.deployment.DeploymentService;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
+import io.vanillabp.camunda8.service.Camunda8TransactionInterceptor;
+import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
@@ -23,15 +24,19 @@ import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Scope;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -58,9 +63,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     private ApplicationContext applicationContext;
 
     @Autowired
-    private DefaultCommandExceptionHandlingStrategy commandExceptionHandlingStrategy;
-
-    @Autowired
     private DeploymentRepository deploymentRepository;
 
     @Autowired
@@ -68,6 +70,9 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
 
     @Autowired
     private Camunda8VanillaBpProperties camunda8Properties;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     @PostConstruct
     public void init() {
@@ -148,7 +153,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         
         return new Camunda8TaskHandler(
                 taskType,
-                commandExceptionHandlingStrategy,
                 repository,
                 bean,
                 method,
@@ -166,8 +170,9 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
 
         final var result = new Camunda8ProcessService<DE>(
                 camunda8Properties,
+                eventPublisher,
                 workflowAggregateRepository,
-                workflowAggregate -> springDataUtil.getId(workflowAggregate),
+                springDataUtil::getId,
                 workflowAggregateClass);
 
         putConnectableService(workflowAggregateClass, result);
@@ -182,6 +187,31 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final ApplicationContext applicationContext) {
 
         return new SpringBeanUtil(applicationContext);
+
+    }
+
+    /*
+     * https://www.tirasa.net/en/blog/dynamic-spring-s-transactional-2020-edition
+     */
+    @Bean
+    public static BeanFactoryPostProcessor camunda8TransactionInterceptorInjector() {
+
+        return beanFactory -> {
+            String[] names = beanFactory.getBeanNamesForType(TransactionInterceptor.class);
+            for (String name : names) {
+                BeanDefinition bd = beanFactory.getBeanDefinition(name);
+                bd.setBeanClassName(Camunda8TransactionInterceptor.class.getName());
+                bd.setFactoryBeanName(null);
+                bd.setFactoryMethodName(null);
+            }
+        };
+
+    }
+
+    @Bean
+    public Camunda8TransactionProcessor camunda8TransactionProcessor() {
+
+        return new Camunda8TransactionProcessor();
 
     }
 
