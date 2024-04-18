@@ -1,9 +1,11 @@
 package io.vanillabp.camunda8;
 
+import io.camunda.zeebe.client.api.worker.JobWorkerBuilderStep1;
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.util.Map;
 
 @ConfigurationProperties(prefix = VanillaBpProperties.PREFIX, ignoreUnknownFields = true)
@@ -44,7 +46,58 @@ public class Camunda8VanillaBpProperties {
 
     }
 
-    public static class AdapterConfiguration {
+    public WorkerProperties getUserTaskWorkerProperties(
+            final String workflowModuleId) {
+
+        return getWorkerProperties(workflowModuleId, null, null);
+
+    }
+
+    public WorkerProperties getWorkerProperties(
+            final String workflowModuleId,
+            final String bpmnProcessId,
+            final String taskDefinition) {
+
+        WorkerProperties result = new WorkerProperties();
+
+        final var workflowModule = workflowModules.get(workflowModuleId);
+        if (workflowModule == null) {
+            return result;
+        }
+        final var workflowModuleAdapter = workflowModule.getAdapters().get(Camunda8AdapterConfiguration.ADAPTER_ID);
+        if (workflowModuleAdapter != null) {
+            result.apply(workflowModuleAdapter);
+        }
+
+        if (bpmnProcessId == null) {
+            return result;
+        }
+        final var workflow = workflowModule.getWorkflows().get(bpmnProcessId);
+        if (workflow == null) {
+            return result;
+        }
+        final var workflowAdapter = workflow.getAdapters().get(Camunda8AdapterConfiguration.ADAPTER_ID);
+        if (workflowAdapter != null) {
+            result.apply(workflowAdapter);
+        }
+
+        if (taskDefinition == null) {
+            return result;
+        }
+        final var task = workflow.getTasks().get(taskDefinition);
+        if (task == null) {
+            return result;
+        }
+        final var taskAdapter = task.getAdapters().get(Camunda8AdapterConfiguration.ADAPTER_ID);
+        if (taskAdapter != null) {
+            result.apply(taskAdapter);
+        }
+
+        return result;
+
+    }
+
+    public static class AdapterConfiguration extends WorkerProperties {
 
         private boolean useTenants = true;
 
@@ -74,11 +127,180 @@ public class Camunda8VanillaBpProperties {
 
         private Map<String, AdapterConfiguration> adapters = Map.of();
 
+        private Map<String, WorkflowAdapterProperties> workflows = Map.of();
+
         public Map<String, AdapterConfiguration> getAdapters() {
             return adapters;
         }
 
         public void setAdapters(Map<String, AdapterConfiguration> adapters) {
+            this.adapters = adapters;
+        }
+
+        public Map<String, WorkflowAdapterProperties> getWorkflows() { return workflows; }
+
+        public void setWorkflows(Map<String, WorkflowAdapterProperties> workflows) {
+
+            this.workflows = workflows;
+            workflows.forEach((bpmnProcessId, properties) -> {
+                properties.bpmnProcessId = bpmnProcessId;
+                properties.workflowModule = this;
+            });
+
+        }
+
+    }
+
+    public static class WorkflowAdapterProperties {
+
+        String bpmnProcessId;
+
+        WorkflowModuleAdapterProperties workflowModule;
+
+        private Map<String, WorkerProperties> adapters = Map.of();
+
+        private Map<String, TaskProperties> tasks = Map.of();
+
+        public WorkflowModuleAdapterProperties getWorkflowModule() {
+            return workflowModule;
+        }
+
+        public String getBpmnProcessId() {
+            return bpmnProcessId;
+        }
+
+        public Map<String, WorkerProperties> getAdapters() {
+            return adapters;
+        }
+
+        public void setAdapters(Map<String, WorkerProperties> adapters) {
+            this.adapters = adapters;
+        }
+
+        public Map<String, TaskProperties> getTasks() {
+            return tasks;
+        }
+
+        public void setTasks(Map<String, TaskProperties> tasks) {
+            this.tasks = tasks;
+        }
+
+    }
+
+    public static class WorkerProperties {
+
+        public WorkerProperties() {}
+
+        public void apply(
+                final WorkerProperties original) {
+
+            if (original.taskTimeout != null) {
+                this.taskTimeout = original.taskTimeout;
+            }
+            if (original.pollInterval != null) {
+                this.pollInterval = original.pollInterval;
+            }
+            if (original.pollRequestTimeout != null) {
+                this.pollRequestTimeout = original.pollRequestTimeout;
+            }
+            if (original.isStreamEnabled() != null) {
+                this.streamEnabled = original.isStreamEnabled();
+            }
+            if (original.streamTimeout != null) {
+                this.streamTimeout = original.streamTimeout;
+            }
+
+        }
+
+        public void applyToWorker(
+                final JobWorkerBuilderStep1.JobWorkerBuilderStep3 workerBuilder) {
+
+            if (taskTimeout != null) {
+                workerBuilder.timeout(taskTimeout);
+            }
+            applyToUserTaskWorker(workerBuilder);
+
+        }
+
+        public void applyToUserTaskWorker(
+                final JobWorkerBuilderStep1.JobWorkerBuilderStep3 workerBuilder) {
+
+            if (pollInterval != null) {
+                workerBuilder.pollInterval(pollInterval);
+            }
+            if (pollRequestTimeout != null) {
+                workerBuilder.requestTimeout(pollRequestTimeout);
+            }
+            if (streamEnabled!= null) {
+                workerBuilder.streamEnabled(streamEnabled);
+            }
+            if (streamTimeout != null) {
+                workerBuilder.streamTimeout(streamTimeout);
+            }
+
+        }
+
+        private Duration taskTimeout = null;
+
+        private Duration pollInterval = null;
+
+        private Duration pollRequestTimeout = null;
+
+        private Boolean streamEnabled = null;
+
+        private Duration streamTimeout = null;
+
+        public Duration getTaskTimeout() {
+            return taskTimeout;
+        }
+
+        public Duration getPollInterval() {
+            return pollInterval;
+        }
+
+        public Duration getPollRequestTimeout() {
+            return pollRequestTimeout;
+        }
+
+        public Boolean isStreamEnabled() {
+            return streamEnabled;
+        }
+
+        public Duration getStreamTimeout() {
+            return streamTimeout;
+        }
+
+        public void setTaskTimeout(Duration taskTimeout) {
+            this.taskTimeout = taskTimeout;
+        }
+
+        public void setPollInterval(Duration pollInterval) {
+            this.pollInterval = pollInterval;
+        }
+
+        public void setPollRequestTimeout(Duration pollRequestTimeout) {
+            this.pollRequestTimeout = pollRequestTimeout;
+        }
+
+        public void setStreamEnabled(boolean streamEnabled) {
+            this.streamEnabled = streamEnabled;
+        }
+
+        public void setStreamTimeout(Duration streamTimeout) {
+            this.streamTimeout = streamTimeout;
+        }
+
+    }
+
+    public static class TaskProperties {
+
+        private Map<String, WorkerProperties> adapters = Map.of();
+
+        public Map<String, WorkerProperties> getAdapters() {
+            return adapters;
+        }
+
+        public void setAdapters(Map<String, WorkerProperties> adapters) {
             this.adapters = adapters;
         }
 

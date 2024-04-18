@@ -34,7 +34,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -103,16 +102,22 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     public void openWorkers() {
 
         // fetch all usertasks spawned
-        if(!userTaskTenantIds.isEmpty()){
-            workers.add(
-                    client
+        userTaskTenantIds
+                .stream()
+                .map(workflowModuleId -> {
+                    final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
+                    final var userTaskWorker = client
                             .newWorker()
                             .jobType("io.camunda.zeebe:userTask")
                             .handler(userTaskHandler)
                             .timeout(Integer.MAX_VALUE) // user-tasks are not fetched more than once
                             .name(workerId)
-                            .tenantIds(userTaskTenantIds.stream().filter(Objects::nonNull).toList()));
-        }
+                            .tenantId(tenantId);
+                    final var workerProperties = camunda8Properties.getUserTaskWorkerProperties(workflowModuleId);
+                    workerProperties.applyToUserTaskWorker(userTaskWorker);
+                    return userTaskWorker;
+                })
+                .forEach(workers::add);
 
         workers
                 .forEach(JobWorkerBuilderStep3::open);
@@ -242,45 +247,29 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                     connectable.getBpmnProcessId(),
                     connectable.getElementId(),
                     taskHandler);
-            userTaskTenantIds.add(tenantId);
+            userTaskTenantIds.add(workflowModuleId);
             return;
             
         }
         
         final var variablesToFetch = getVariablesToFetch(idPropertyName, parameters);
-
         final var worker = client
                 .newWorker()
                 .jobType(connectable.getTaskDefinition())
                 .handler(taskHandler)
                 .name(workerId)
                 .fetchVariables(variablesToFetch);
+
+        final var workerProperties = camunda8Properties.getWorkerProperties(
+                workflowModuleId,
+                connectable.getBpmnProcessId(),
+                connectable.getTaskDefinition());
+        workerProperties.applyToWorker(worker);
+
         workers.add(
                 tenantId != null
                         ? worker.tenantId(tenantId)
                         : worker);
-
-              // using defaults from config if null, 0 or negative
-//              if (zeebeWorkerValue.getName() != null && zeebeWorkerValue.getName().length() > 0) {
-//                builder.name(zeebeWorkerValue.getName());
-//              } else {
-//                builder.name(beanInfo.getBeanName() + "#" + zeebeWorkerValue.getMethodInfo().getMethodName());
-//              }
-//              if (zeebeWorkerValue.getMaxJobsActive() > 0) {
-//                builder.maxJobsActive(zeebeWorkerValue.getMaxJobsActive());
-//              }
-//              if (zeebeWorkerValue.getTimeout() > 0) {
-//                builder.timeout(zeebeWorkerValue.getTimeout());
-//              }
-//              if (zeebeWorkerValue.getPollInterval() > 0) {
-//                builder.pollInterval(Duration.ofMillis(zeebeWorkerValue.getPollInterval()));
-//              }
-//              if (zeebeWorkerValue.getRequestTimeout() > 0) {
-//                builder.requestTimeout(Duration.ofSeconds(zeebeWorkerValue.getRequestTimeout()));
-//              }
-//              if (zeebeWorkerValue.getFetchVariables().length > 0) {
-//                builder.fetchVariables(zeebeWorkerValue.getFetchVariables());
-//              }
         
     }
 

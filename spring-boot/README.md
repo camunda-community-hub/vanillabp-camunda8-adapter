@@ -16,6 +16,7 @@ To run Camunda 8 on your local computer for development purposes consider to use
     1. [Worker ID](#worker-id)
     1. [Module aware deployment](#module-aware-deployment)
     1. [SPI Binding validation](#spi-binding-validation)
+    1. [Managing Camunda 8 connectivity](#managing-camunda-8-connectivity)
 1. [Multi-instance](#multi-instance)
 1. [Message correlation IDs](#message-correlation-ids)
 1. [Transaction behavior](#transaction-behavior)
@@ -92,6 +93,47 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+```
+
+### Managing Camunda 8 connectivity
+
+The Camunda 8 adapter is based on the [spring-zeebe](https://github.com/camunda-community-hub/spring-zeebe) client.
+Therefore, all settings about Camunda 8 connectivity have to be provided as can be found in that [documentation](https://github.com/camunda-community-hub/spring-zeebe#configuring-camunda-8-connection).
+
+However, there are a couple of settings specific to tasks:
+
+1. `task-timeout`: The lock duration Zeebe will wait, after the task has been fetched by your implementation, 
+    until Zeebe assumes your execution has crashed and the task needs to be re-fetched. Zeebe`s current
+    default value is 5 minutes. Set this values in respect to the expected time to complete the task.
+1. `stream-enabled`: Whether to use polling or streaming to receive new tasks. Current default value is `false` (means polling).
+1. `stream-timeout`: The duration to refresh the stream's connection. Current default value is no timeout.
+1. `poll-interval`: Interval to poll for new tasks, if streaming of tasks is disabled. Zeebe's current default value is 100ms.
+1. `poll-request-timeout`: The request-timeout for polling Zeebe for new tasks. Zeebe`s current default value is 20 seconds.
+
+All these values can be set for specific tasks or all tasks of a workflow or all tasks
+of a workflow module. Task-specific values will override workflow's or workflow-module's values and workflow-specific
+values will override workflow-module's values:
+
+```yaml
+vanillabp:
+  workflow-modules:
+    Demo:
+      adapters:
+        camunda8:
+          # default to all workflows of the workflow-module `Demo`
+          task-timeout: PT5M
+      workflows:
+        DemoWorkflow:
+          adapters:
+            camunda8:
+              # default to all tasks of the workflow `DemoWorkflow`
+              task-timeout: P10M # overrides vanillabp.workflow-modules.Demo.adapters.camunda8.task-timeout
+          tasks:
+            logError:
+              adapters:
+                camunda8:
+                 # used only for the task 'logError' of the workflow `DemoWorkflow`
+                 task-timeout: PT3S # overrides vanillabp.workflow-modules.Demo.workflows.DemoWorkflow.adapters.camunda8.task-timeout
 ```
 
 ## Multi-instance
