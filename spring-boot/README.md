@@ -190,14 +190,50 @@ Since Camunda 8 is an external system to your services one has to deal with even
 1. Camunda 8 is not reachable / cannot process the confirmation of a completed task
 1. The task to be completed was cancelled meanwhile e.g. due to boundary events
 
-If there is an exception in your business code and you have to roll back the transaction then Camunda's task retry-mechanism should retry as configured. Additionally, the `TaskException` is used for expected business errors handled by BPMN error boundary events which must not cause a rollback. To achieve both one should mark the service bean like this:
+In order to activate this behavior one has to mark methods accessing VanillaBP-APIs as `@Transactional`, either by
+using the method-level annotation:
 
 ```java
 @Service
 @WorkflowService(workflowAggregateClass = Ride.class)
-@Transactional(noRollbackFor = TaskException.class)
 public class TaxiRide {
+   @Autowired
+   private ProcessService<Ride> processService;
+
+   @Transactional
+   public void receivePayment(...) {
+      ...
+      processService.startWorkflow(ride);
+      ...
+   }
+
+   @Transactional
+   @WorkflowTask
+   public void chargeCreditCard(final Ride ride) {
+      ...
+   }
+
+   @Transactional
+   public void paymentReceived(final Ride ride) {
+      ...
+      processService.correlateMessage(ride, 'PaymentReceived');
+      ...
+   }
+}
 ```
+
+or the class-level annotation:
+
+```java
+@Service
+@WorkflowService(workflowAggregateClass = Ride.class)
+@Transactional
+public class TaxiRide {
+   ...
+}
+```
+
+If there is an exception in your business code and you have to roll back the transaction then Camunda's task retry-mechanism should retry as configured. Additionally, the `TaskException` is used for expected business errors handled by BPMN error boundary events which must not cause a rollback. This is handled by the adapter, one does not need to take care about it.
 
 ## Workflow aggregate serialization
 
