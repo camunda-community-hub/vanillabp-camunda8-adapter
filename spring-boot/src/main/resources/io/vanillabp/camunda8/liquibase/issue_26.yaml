@@ -2,7 +2,7 @@ databaseChangeLog:
   - changeSet:
       id: issue_26.yaml#initial_setup
       author: stephanpelikan
-      dbms: oracle
+      dbms: "!h2"
       changes:
         - createTable:
             tableName: CAMUNDA8_RESOURCES
@@ -108,7 +108,7 @@ databaseChangeLog:
   - changeSet:
       id: issue_26.yaml#rename_columns
       author: stephanpelikan
-      dbms: "!oracle"
+      dbms: h2
       changes:
         - renameColumn:
             tableName: CAMUNDA8_RESOURCES

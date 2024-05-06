@@ -2,7 +2,7 @@ databaseChangeLog:
   - changeSet:
       id: initial_setup.yaml
       author: stephanpelikan
-      dbms: "!oracle"
+      dbms: "h2"
       changes:
         - createTable:
             tableName: CAMUNDA8_RESOURCES
