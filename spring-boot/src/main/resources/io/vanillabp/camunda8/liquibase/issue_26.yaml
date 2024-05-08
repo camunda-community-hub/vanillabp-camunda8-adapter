@@ -162,3 +162,11 @@ databaseChangeLog:
             tableName: CAMUNDA8_DEPLOYMENTS
             oldColumnName: BPMN_PROCESS_ID
             newColumnName: C8D_BPMN_PROCESS_ID
+  - changeSet:
+      id: issue_26.yaml#change_type_of_definition_key
+      author: stephanpelikan
+      changes:
+        -  modifyDataType:
+             columnName:  C8D_DEFINITION_KEY
+             newDataType:  bigint
+             tableName:  CAMUNDA8_DEPLOYMENTS
