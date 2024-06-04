@@ -6,7 +6,7 @@ import io.vanillabp.camunda8.deployment.DeploymentRepository;
 import io.vanillabp.camunda8.deployment.DeploymentResourceRepository;
 import io.vanillabp.camunda8.deployment.DeploymentService;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
-import io.vanillabp.camunda8.service.Camunda8TransactionInterceptor;
+import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
 import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
@@ -18,14 +18,14 @@ import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
 import io.vanillabp.springboot.parameters.MethodParameter;
 import jakarta.annotation.PostConstruct;
+import java.lang.reflect.Method;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
@@ -36,10 +36,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Scope;
 import org.springframework.data.repository.CrudRepository;
-import org.springframework.transaction.interceptor.TransactionInterceptor;
-
-import java.lang.reflect.Method;
-import java.util.List;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(CamundaAutoConfiguration.class)
@@ -80,6 +76,13 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         logger.debug("Will use SpringDataUtil class '{}'",
                 AopProxyUtils.ultimateTargetClass(springDataUtil));
         
+    }
+
+    @Bean
+    public Camunda8TransactionAspect camunda8TransactionAspect() {
+
+        return new Camunda8TransactionAspect(eventPublisher);
+
     }
 
     @Override
@@ -193,6 +196,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     /*
      * https://www.tirasa.net/en/blog/dynamic-spring-s-transactional-2020-edition
      */
+    /*
     @Bean
     public static BeanFactoryPostProcessor camunda8TransactionInterceptorInjector() {
 
@@ -207,6 +211,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         };
 
     }
+    */
 
     @Bean
     public Camunda8TransactionProcessor camunda8TransactionProcessor() {

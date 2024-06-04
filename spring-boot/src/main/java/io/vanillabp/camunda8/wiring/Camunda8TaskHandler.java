@@ -14,10 +14,6 @@ import io.vanillabp.springboot.adapter.MultiInstance;
 import io.vanillabp.springboot.adapter.TaskHandlerBase;
 import io.vanillabp.springboot.adapter.wiring.WorkflowAggregateCache;
 import io.vanillabp.springboot.parameters.MethodParameter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.repository.CrudRepository;
-
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
@@ -27,6 +23,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.repository.CrudRepository;
 
 public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, Consumer<ZeebeClient> {
 
@@ -88,11 +87,29 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
             final var taskIdRetrieved = new AtomicBoolean(false);
             final var workflowAggregateCache = new WorkflowAggregateCache();
 
+            // Any callback used in this method is executed in case of no active transaction.
+            // In case of an active transaction the callbacks are used by the Camunda8TransactionInterceptor.
             Camunda8TransactionProcessor.registerCallbacks(
-                    doTestForTaskWasCompletedOrCancelled(job),
+                    () -> {
+                        if (taskType == Type.USERTASK) {
+                            return null;
+                        }
+                        if (taskIdRetrieved.get()) { // async processing of service-task
+                            return null;
+                        }
+                        return doTestForTaskWasCompletedOrCancelled(job);
+                    },
                     doThrowError(client, job, workflowAggregateCache),
                     doFailed(client, job),
-                    doComplete(client, job, workflowAggregateCache));
+                    () -> {
+                        if (taskType == Type.USERTASK) {
+                            return null;
+                        }
+                        if (taskIdRetrieved.get()) { // async processing of service-task
+                            return null;
+                        }
+                        return doComplete(client, job, workflowAggregateCache);
+                    });
 
             final Function<String, Object> multiInstanceSupplier
                     = multiInstanceVariable -> getVariable(job, multiInstanceVariable);
@@ -140,13 +157,10 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                                 return workflowAggregateCache.workflowAggregate;
                             }, multiInstanceSupplier));
 
-            if ((taskType != Type.USERTASK)
-                    && !taskIdRetrieved.get()) {
-                final var callback = Camunda8TransactionProcessor.handlerCompletedCommandCallback();
-                if (callback != null) {
-                    jobPostAction = callback.getKey();
-                    description = callback.getValue();
-                }
+            final var callback = Camunda8TransactionProcessor.handlerCompletedCommandCallback();
+            if (callback != null) {
+                jobPostAction = callback.getKey();
+                description = callback.getValue();
             }
         } catch (TaskException bpmnError) {
             final var callback = Camunda8TransactionProcessor.bpmnErrorCommandCallback();

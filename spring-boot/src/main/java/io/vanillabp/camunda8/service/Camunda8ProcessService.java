@@ -5,6 +5,11 @@ import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
+import java.time.Duration;
+import java.util.Collection;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -12,12 +17,6 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
-import java.time.Duration;
-import java.util.Collection;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.function.Function;
 
 @Transactional(propagation = Propagation.MANDATORY)
 public class Camunda8ProcessService<DE>
@@ -36,7 +35,7 @@ public class Camunda8ProcessService<DE>
     private final ApplicationEventPublisher publisher;
 
     private AdapterAwareProcessService<DE> parent;
-    
+
     private ZeebeClient client;
 
     public Camunda8ProcessService(
@@ -132,7 +131,8 @@ public class Camunda8ProcessService<DE>
                                 + "' failed!",
                                 e);
                     }
-                });
+                },
+                "startWorkflow");
         
     }
 
@@ -151,7 +151,8 @@ public class Camunda8ProcessService<DE>
                             workflowAggregate,
                             messageName,
                             correlationId.toString());
-                });
+                },
+                "correlateMessage");
 
     }
     
@@ -177,7 +178,8 @@ public class Camunda8ProcessService<DE>
                 attachedAggregate -> doCorrelateMessage(
                         attachedAggregate,
                         messageName,
-                        correlationId));
+                        correlationId),
+                "correlateMessage-by-correlationId");
 
     }
 
@@ -239,7 +241,8 @@ public class Camunda8ProcessService<DE>
                     logger.trace("Complete task '{}' of process '{}'",
                             taskId,
                             parent.getPrimaryBpmnProcessId());
-                });
+                },
+                "completeTask");
 
     }
     
@@ -248,7 +251,21 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String taskId) {
 
-        return completeTask(workflowAggregate, taskId);
+        return runInTransaction(
+                workflowAggregate,
+                taskId,
+                attachedAggregate -> {
+                    client
+                            .newCompleteCommand(Long.parseLong(taskId, 16))
+                            .variables(attachedAggregate)
+                            .send()
+                            .join();
+
+                    logger.trace("Complete user task '{}' of process '{}'",
+                            taskId,
+                            parent.getPrimaryBpmnProcessId());
+                },
+                "completeUserTask");
         
     }
     
@@ -271,7 +288,8 @@ public class Camunda8ProcessService<DE>
                     logger.trace("Complete task '{}' of process '{}'",
                             taskId,
                             parent.getPrimaryBpmnProcessId());
-                });
+                },
+                "cancelTask");
 
     }
     
@@ -287,19 +305,22 @@ public class Camunda8ProcessService<DE>
 
     private DE runInTransaction(
             final DE workflowAggregate,
-            final Consumer<DE> runnable) {
+            final Consumer<DE> runnable,
+            final String methodSignature) {
 
         return runInTransaction(
                 workflowAggregate,
                 null,
-                runnable);
+                runnable,
+                methodSignature);
 
     }
 
     private DE runInTransaction(
             final DE workflowAggregate,
             final String taskIdToTestForAlreadyCompletedOrCancelled,
-            final Consumer<DE> runnable) {
+            final Consumer<DE> runnable,
+            final String methodSignature) {
 
         // persist to get ID in case of @Id @GeneratedValue
         // or force optimistic locking exceptions before running
@@ -311,18 +332,19 @@ public class Camunda8ProcessService<DE>
             if (taskIdToTestForAlreadyCompletedOrCancelled != null) {
                 publisher.publishEvent(
                         new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
-                                Camunda8TransactionInterceptor.class,
+                                methodSignature,
                                 () -> client
                                         .newUpdateTimeoutCommand(Long.parseUnsignedLong(taskIdToTestForAlreadyCompletedOrCancelled, 16))
                                         .timeout(Duration.ofMinutes(10))
                                         .send()
                                         .join(5, TimeUnit.MINUTES), // needs to run synchronously
-                                () -> "update timeout (BPMN: " + parent.getPrimaryBpmnProcessId() + ")"));            }
+                                () -> "aggregate: " + getWorkflowAggregateId.apply(attachedAggregate) + "; bpmn-process-id: " + parent.getPrimaryBpmnProcessId()));
+            }
             publisher.publishEvent(
                     new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
-                            Camunda8TransactionInterceptor.class,
+                            methodSignature,
                             () -> runnable.accept(attachedAggregate),
-                            () -> "complete command (BPMN: " + parent.getPrimaryBpmnProcessId() + ")"));
+                            () -> "aggregate: " + getWorkflowAggregateId.apply(attachedAggregate) + "; bpmn-process-id: " + parent.getPrimaryBpmnProcessId()));
         } else {
             runnable.accept(attachedAggregate);
         }
