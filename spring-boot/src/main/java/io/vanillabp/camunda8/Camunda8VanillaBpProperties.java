@@ -1,10 +1,9 @@
 package io.vanillabp.camunda8;
 
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
-
-import java.util.Map;
 
 @ConfigurationProperties(prefix = VanillaBpProperties.PREFIX, ignoreUnknownFields = true)
 public class Camunda8VanillaBpProperties {
@@ -37,8 +36,8 @@ public class Camunda8VanillaBpProperties {
         if (!configuration.isUseTenants()) {
             return null;
         }
-        if (StringUtils.hasText(configuration.getTenant())) {
-            return configuration.getTenant();
+        if (StringUtils.hasText(configuration.getTenantId())) {
+            return configuration.getTenantId();
         }
         return workflowModuleId;
 
@@ -48,7 +47,7 @@ public class Camunda8VanillaBpProperties {
 
         private boolean useTenants = true;
 
-        private String tenant;
+        private String tenantId;
 
         public boolean isUseTenants() {
             return useTenants;
@@ -58,12 +57,12 @@ public class Camunda8VanillaBpProperties {
             this.useTenants = useTenants;
         }
 
-        public String getTenant() {
-            return tenant;
+        public String getTenantId() {
+            return tenantId;
         }
 
-        public void setTenant(String tenant) {
-            this.tenant = tenant;
+        public void setTenantId(String tenantId) {
+            this.tenantId = tenantId;
         }
 
     }
