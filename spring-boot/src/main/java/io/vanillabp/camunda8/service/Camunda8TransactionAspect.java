@@ -84,11 +84,13 @@ public class Camunda8TransactionAspect {
                 }
             }
             if (actions.get().bpmnErrorCommand != null) {
+                final var runnable = actions.get().handlerFailedCommand.getKey();
+                final var description = actions.get().handlerFailedCommand.getValue();
                 publisher.publishEvent(
                         new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
                                 methodSignature,
-                                () -> actions.get().bpmnErrorCommand.getKey().accept(taskError),
-                                () -> actions.get().bpmnErrorCommand.getValue().apply(taskError)));
+                                () -> runnable.accept(taskError),
+                                () -> description.apply(taskError)));
             }
             return null;
 
@@ -105,11 +107,13 @@ public class Camunda8TransactionAspect {
                 }
             }
             if (actions.get().handlerFailedCommand != null) {
+                final var runnable = actions.get().handlerFailedCommand.getKey();
+                final var description = actions.get().handlerFailedCommand.getValue();
                 publisher.publishEvent(
                         new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
                                 methodSignature,
-                                () -> actions.get().handlerFailedCommand.getKey().accept(e),
-                                () -> actions.get().handlerFailedCommand.getValue().apply(e)));
+                                () -> runnable.accept(e),
+                                () -> description.apply(e)));
             }
             throw e;
 
