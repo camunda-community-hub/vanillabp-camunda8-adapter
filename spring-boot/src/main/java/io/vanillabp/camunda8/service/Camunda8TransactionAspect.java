@@ -84,8 +84,8 @@ public class Camunda8TransactionAspect {
                 }
             }
             if (actions.get().bpmnErrorCommand != null) {
-                final var runnable = actions.get().handlerFailedCommand.getKey();
-                final var description = actions.get().handlerFailedCommand.getValue();
+                final var runnable = actions.get().bpmnErrorCommand.getKey();
+                final var description = actions.get().bpmnErrorCommand.getValue();
                 publisher.publishEvent(
                         new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
                                 methodSignature,
