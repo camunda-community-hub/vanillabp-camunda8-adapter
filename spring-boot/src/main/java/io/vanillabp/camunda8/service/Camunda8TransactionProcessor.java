@@ -63,11 +63,7 @@ public class Camunda8TransactionProcessor {
 
     public static void unregisterCallbacks() {
 
-        final var actions = Camunda8TransactionAspect.actions.get();
-        actions.testForTaskAlreadyCompletedOrCancelledCommand = null;
-        actions.bpmnErrorCommand = null;
-        actions.handlerFailedCommand = null;
-        actions.handlerCompletedCommand = null;
+        Camunda8TransactionAspect.clearCallbacks();
 
     }
 

@@ -4,18 +4,23 @@ import io.camunda.zeebe.client.ZeebeClient;
 import io.camunda.zeebe.client.api.response.ActivatedJob;
 import io.camunda.zeebe.client.api.worker.JobClient;
 import io.camunda.zeebe.client.api.worker.JobHandler;
+import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
 import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MultiInstanceIndexMethodParameter;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MultiInstanceTotalMethodParameter;
+import io.vanillabp.spi.service.MultiInstanceElementResolver;
 import io.vanillabp.spi.service.TaskEvent;
 import io.vanillabp.spi.service.TaskException;
 import io.vanillabp.springboot.adapter.MultiInstance;
 import io.vanillabp.springboot.adapter.TaskHandlerBase;
 import io.vanillabp.springboot.adapter.wiring.WorkflowAggregateCache;
 import io.vanillabp.springboot.parameters.MethodParameter;
+import io.vanillabp.springboot.parameters.ResolverBasedMultiInstanceMethodParameter;
+import io.vanillabp.springboot.parameters.WorkflowAggregateMethodParameter;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -61,19 +66,17 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
     @Override
     protected Logger getLogger() {
-        
+
         return logger;
-        
+
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public void handle(
             final JobClient client,
-            final ActivatedJob job) {
+            final ActivatedJob job) throws Exception {
 
-        Runnable jobPostAction = null;
-        Supplier<String> description = null;
         try {
             final var businessKey = getVariable(job, idPropertyName);
 
@@ -87,6 +90,10 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
             final var taskIdRetrieved = new AtomicBoolean(false);
             final var workflowAggregateCache = new WorkflowAggregateCache();
 
+            Camunda8TransactionAspect.registerDeferredInTransaction(
+                    new Camunda8TransactionAspect.RunDeferredInTransactionSupplier[parameters.size()],
+                    saveAggregateAfterWorkflowTask(workflowAggregateCache));
+
             // Any callback used in this method is executed in case of no active transaction.
             // In case of an active transaction the callbacks are used by the Camunda8TransactionInterceptor.
             Camunda8TransactionProcessor.registerCallbacks(
@@ -97,7 +104,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                         if (taskIdRetrieved.get()) { // async processing of service-task
                             return null;
                         }
-                        return doTestForTaskWasCompletedOrCancelled(job);
+                        return testForTaskWasCompletedOrCancelled(job);
                     },
                     doThrowError(client, job, workflowAggregateCache),
                     doFailed(client, job),
@@ -117,7 +124,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
             super.execute(
                     workflowAggregateCache,
                     businessKey,
-                    true,
+                    false, // will be done within transaction boundaries
                     (args, param) -> processTaskParameter(
                             args,
                             param,
@@ -157,43 +164,9 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                                 return workflowAggregateCache.workflowAggregate;
                             }, multiInstanceSupplier));
 
-            final var callback = Camunda8TransactionProcessor.handlerCompletedCommandCallback();
-            if (callback != null) {
-                jobPostAction = callback.getKey();
-                description = callback.getValue();
-            }
-        } catch (TaskException bpmnError) {
-            final var callback = Camunda8TransactionProcessor.bpmnErrorCommandCallback();
-            if (callback != null) {
-                jobPostAction = () -> callback.getKey().accept(bpmnError);
-                description = () -> callback.getValue().apply(bpmnError);
-            }
-        } catch (Exception e) {
-            final var callback = Camunda8TransactionProcessor.handlerFailedCommandCallback();
-            if (callback != null) {
-                logger.error("Failed to execute job '{}'", job.getKey(), e);
-                jobPostAction = () -> callback.getKey().accept(e);
-                description = () -> callback.getValue().apply(e);
-            }
         } finally {
             Camunda8TransactionProcessor.unregisterCallbacks();
-        }
-
-        if (jobPostAction != null) {
-            try {
-                jobPostAction.run();
-            } catch (Exception e) {
-                if (description != null) {
-                    logger.error(
-                            "Could not execute '{}'! Manual action required!",
-                            description.get(),
-                            e);
-                } else {
-                    logger.error(
-                            "Manual action required due to:",
-                            e);
-                }
-            }
+            Camunda8TransactionAspect.unregisterDeferredInTransaction();
         }
 
     }
@@ -205,53 +178,64 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
         return multiInstanceSupplier
                 .apply(name);
-        
+
     }
-    
+
     @Override
     protected Integer getMultiInstanceIndex(
             final String name,
             final Function<String, Object> multiInstanceSupplier) {
-        
+
         return (Integer) multiInstanceSupplier
                 .apply(name + Camunda8MultiInstanceIndexMethodParameter.SUFFIX) - 1;
-        
+
     }
-    
+
     @Override
     protected Integer getMultiInstanceTotal(
             final String name,
             final Function<String, Object> multiInstanceSupplier) {
-        
+
         return (Integer) multiInstanceSupplier
                 .apply(name + Camunda8MultiInstanceTotalMethodParameter.SUFFIX);
-    
+
     }
-    
+
     @Override
     protected MultiInstance<Object> getMultiInstance(
             final String name,
             final Function<String, Object> multiInstanceSupplier) {
-        
+
         return new MultiInstance<Object>(
                 getMultiInstanceElement(name, multiInstanceSupplier),
                 getMultiInstanceTotal(name, multiInstanceSupplier),
                 getMultiInstanceIndex(name, multiInstanceSupplier));
-        
+
     }
-    
+
     private Object getVariable(
             final ActivatedJob job,
             final String name) {
-        
+
         return job
                 .getVariablesAsMap()
                 .get(name);
-        
+
     }
 
-    @SuppressWarnings("unchecked")
-    public Map.Entry<Runnable, Supplier<String>> doTestForTaskWasCompletedOrCancelled(
+    public Runnable saveAggregateAfterWorkflowTask(
+            final WorkflowAggregateCache aggregateCache) {
+
+        return () -> {
+                if (aggregateCache.workflowAggregate != null) {
+                    workflowAggregateRepository.save(aggregateCache.workflowAggregate);
+                }
+            };
+
+    }
+
+        @SuppressWarnings("unchecked")
+    public Map.Entry<Runnable, Supplier<String>> testForTaskWasCompletedOrCancelled(
             final ActivatedJob job) {
 
         return Map.entry(
@@ -259,7 +243,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                         .newUpdateTimeoutCommand(job)
                         .timeout(Duration.ofMinutes(10))
                         .send()
-                        .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                        .join(5, TimeUnit.MINUTES)
+                , // needs to run synchronously
                 () -> "update timeout (BPMN: " + job.getBpmnProcessId()
                         + "; Element: " + job.getElementId()
                         + "; Task-Definition: " + job.getType()
@@ -317,7 +302,9 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
                     throwErrorCommand
                             .send()
-                            .exceptionally(t -> { throw new RuntimeException("error", t); });
+                            .exceptionally(t -> {
+                                throw new RuntimeException("error", t);
+                            });
                 },
                 taskException -> "throw error command (BPMN: " + job.getBpmnProcessId()
                         + "; Element: " + job.getElementId()
@@ -326,7 +313,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                         + "; Job: " + job.getKey()
                         + ")");
     }
-    
+
     @SuppressWarnings("unchecked")
     private Map.Entry<Consumer<Exception>, Function<Exception, String>> doFailed(
             final JobClient jobClient,
@@ -349,6 +336,72 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                         + "; Process-Instance: " + job.getProcessInstanceKey()
                         + "; Job: " + job.getKey()
                         + ")");
+
+    }
+
+    protected boolean processWorkflowAggregateParameter(
+            final Object[] args,
+            final MethodParameter param,
+            final WorkflowAggregateCache workflowAggregateCache,
+            final Object workflowAggregateId) {
+
+        if (!(param instanceof WorkflowAggregateMethodParameter)) {
+            return true;
+        }
+
+        Camunda8TransactionAspect.runDeferredInTransaction.get().argsSupplier[param.getIndex()] = () -> {
+            // Using findById is required to get an object instead of a Hibernate proxy.
+            // Otherwise for e.g. Camunda8 connector JSON serialization of the
+            // workflow aggregate is not possible.
+            workflowAggregateCache.workflowAggregate = workflowAggregateRepository
+                    .findById(workflowAggregateId)
+                    .orElse(null);
+            return workflowAggregateCache.workflowAggregate;
+        };
+
+        args[param.getIndex()] = null; // will be set by deferred execution of supplier
+
+        return false;
+
+    }
+
+    protected boolean processMultiInstanceResolverParameter(
+            final Object[] args,
+            final MethodParameter param,
+            final Supplier<Object> workflowAggregate,
+            final Function<String, Object> multiInstanceSupplier) {
+
+        if (!(param instanceof ResolverBasedMultiInstanceMethodParameter)) {
+            return true;
+        }
+
+        @SuppressWarnings("unchecked")
+        final var resolver =
+                (MultiInstanceElementResolver<Object, Object>)
+                        ((ResolverBasedMultiInstanceMethodParameter) param).getResolverBean();
+
+        final var multiInstances = new HashMap<String, MultiInstanceElementResolver.MultiInstance<Object>>();
+
+        resolver
+                .getNames()
+                .forEach(name -> multiInstances.put(name, getMultiInstance(name, multiInstanceSupplier)));
+
+        Camunda8TransactionAspect.runDeferredInTransaction.get().argsSupplier[param.getIndex()] =  () -> {
+                try {
+                    return resolver.resolve(workflowAggregate.get(), multiInstances);
+                } catch (Exception e) {
+                    throw new RuntimeException(
+                            "Failed processing MultiInstanceElementResolver for parameter '"
+                                    + param.getParameter()
+                                    + "' of method '"
+                                    + method
+                                    + "'", e);
+                }
+            };
+
+        args[param.getIndex()] = null; // will be set by deferred execution of supplier
+
+        return false;
 
     }
 
