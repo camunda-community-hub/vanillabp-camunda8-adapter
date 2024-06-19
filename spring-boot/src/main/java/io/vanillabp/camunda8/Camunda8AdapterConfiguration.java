@@ -35,6 +35,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Scope;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.repository.CrudRepository;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
@@ -79,6 +81,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     }
 
     @Bean
+    @Order(Ordered.LOWEST_PRECEDENCE)
     public Camunda8TransactionAspect camunda8TransactionAspect() {
 
         return new Camunda8TransactionAspect(eventPublisher);
