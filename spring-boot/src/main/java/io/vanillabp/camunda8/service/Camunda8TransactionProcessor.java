@@ -12,8 +12,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
-import org.springframework.transaction.interceptor.TransactionAspectSupport;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 public class Camunda8TransactionProcessor {
 
@@ -109,17 +107,13 @@ public class Camunda8TransactionProcessor {
             // if the task is completed or cancelled, then the tx is rolled back
             if ((e instanceof ClientStatusException clientStatusException)
                     && (clientStatusException.getStatus().getCode() == Status.NOT_FOUND.getCode())) {
-                logger.warn(
-                        "Will rollback because job was already completed/cancelled! Tested with command '{}‘ giving status 'NOT_FOUND'",
-                        event.description.get());
+                throw new RuntimeException(
+                        "Will rollback because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
+                        + event.description.get());
             } else {
-                logger.warn(
-                        "Will rollback because testing for job '{}' failed!",
-                        event.description.get(),
-                        e);
-            }
-            if (TransactionSynchronizationManager.isActualTransactionActive()) {
-                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                throw new RuntimeException(
+                        "Will rollback because testing for job '{}' failed! Test-command:\n"
+                                + event.description.get());
             }
         }
 
