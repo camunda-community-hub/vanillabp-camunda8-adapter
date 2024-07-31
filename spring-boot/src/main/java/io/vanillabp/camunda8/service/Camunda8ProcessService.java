@@ -5,15 +5,18 @@ import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
+import java.time.Duration;
+import java.util.Collection;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Collection;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Transactional(propagation = Propagation.MANDATORY)
 public class Camunda8ProcessService<DE>
@@ -29,18 +32,22 @@ public class Camunda8ProcessService<DE>
 
     private final Camunda8VanillaBpProperties camunda8Properties;
 
+    private final ApplicationEventPublisher publisher;
+
     private AdapterAwareProcessService<DE> parent;
-    
+
     private ZeebeClient client;
-        
+
     public Camunda8ProcessService(
             final Camunda8VanillaBpProperties camunda8Properties,
+            final ApplicationEventPublisher publisher,
             final CrudRepository<DE, Object> workflowAggregateRepository,
             final Function<DE, Object> getWorkflowAggregateId,
             final Class<DE> workflowAggregateClass) {
         
         super();
         this.camunda8Properties = camunda8Properties;
+        this.publisher = publisher;
         this.workflowAggregateRepository = workflowAggregateRepository;
         this.workflowAggregateClass = workflowAggregateClass;
         this.getWorkflowAggregateId = getWorkflowAggregateId;
@@ -98,31 +105,34 @@ public class Camunda8ProcessService<DE>
     @Override
     public DE startWorkflow(
             final DE workflowAggregate) throws Exception {
-        
-        // persist to get ID in case of @Id @GeneratedValue
-        // or force optimistic locking exceptions before running
-        // the workflow if aggregate was already persisted before
-        final var attachedAggregate = workflowAggregateRepository
-                .save(workflowAggregate);
 
-        final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
-        final var command = client
-                .newCreateInstanceCommand()
-                .bpmnProcessId(parent.getPrimaryBpmnProcessId())
-                .latestVersion()
-                .variables(attachedAggregate);
+        return runInTransaction(
+                workflowAggregate,
+                attachedAggregate -> {
+                    final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
+                    final var command = client
+                            .newCreateInstanceCommand()
+                            .bpmnProcessId(parent.getPrimaryBpmnProcessId())
+                            .latestVersion()
+                            .variables(attachedAggregate);
 
-        (tenantId == null
-                ? command
-                : command.tenantId(tenantId))
-                .send()
-                .get(10, TimeUnit.SECONDS);
-
-        try {
-            return attachedAggregate;
-        } catch (RuntimeException exception) {
-            throw exception;
-        }
+                    try {
+                        (tenantId == null
+                                ? command
+                                : command.tenantId(tenantId))
+                                .send()
+                                .get(10, TimeUnit.SECONDS);
+                    } catch (Exception e) {
+                        throw new RuntimeException(
+                                "Starting workflow '"
+                                + parent.getPrimaryBpmnProcessId()
+                                + "‘ for aggregate '"
+                                + attachedAggregate
+                                + "' failed!",
+                                e);
+                    }
+                },
+                "startWorkflow");
         
     }
 
@@ -130,19 +140,20 @@ public class Camunda8ProcessService<DE>
     public DE correlateMessage(
             final DE workflowAggregate,
             final String messageName) {
-        
-        final var attachedAggregate = workflowAggregateRepository
-                .save(workflowAggregate);
-        final var correlationId = getWorkflowAggregateId
-                .apply(workflowAggregate);
-        
-        correlateMessage(
+
+        return runInTransaction(
                 workflowAggregate,
-                messageName,
-                correlationId.toString());
-        
-        return attachedAggregate;
-        
+                attachedAggregate -> {
+                    final var correlationId = getWorkflowAggregateId
+                            .apply(workflowAggregate);
+
+                    doCorrelateMessage(
+                            workflowAggregate,
+                            messageName,
+                            correlationId.toString());
+                },
+                "correlateMessage");
+
     }
     
     @Override
@@ -161,12 +172,21 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String messageName,
             final String correlationId) {
-            
-        // persist to get ID in case of @Id @GeneratedValue
-        // and force optimistic locking exceptions before running
-        // the workflow if aggregate was already persisted before
-        final var attachedAggregate = workflowAggregateRepository
-                .save(workflowAggregate);
+
+        return runInTransaction(
+                workflowAggregate,
+                attachedAggregate -> doCorrelateMessage(
+                        attachedAggregate,
+                        messageName,
+                        correlationId),
+                "correlateMessage-by-correlationId");
+
+    }
+
+    private void doCorrelateMessage(
+            final DE attachedAggregate,
+            final String messageName,
+            final String correlationId) {
 
         final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
         final var command = client
@@ -188,8 +208,6 @@ public class Camunda8ProcessService<DE>
                 parent.getPrimaryBpmnProcessId(),
                 messageKey);
         
-        return attachedAggregate;
-        
     }
     
     @Override
@@ -209,23 +227,23 @@ public class Camunda8ProcessService<DE>
     public DE completeTask(
             final DE workflowAggregate,
             final String taskId) {
-        
-        // force optimistic locking exceptions before running the workflow
-        final var attachedAggregate = workflowAggregateRepository
-                .save(workflowAggregate);
-        
-        client
-                .newCompleteCommand(Long.parseLong(taskId, 16))
-                .variables(attachedAggregate)
-                .send()
-                .join();
 
-        logger.trace("Complete usertask '{}' for process '{}'",
+        return runInTransaction(
+                workflowAggregate,
                 taskId,
-                parent.getPrimaryBpmnProcessId());
-        
-        return attachedAggregate;
-        
+                attachedAggregate -> {
+                    client
+                            .newCompleteCommand(Long.parseLong(taskId, 16))
+                            .variables(attachedAggregate)
+                            .send()
+                            .join();
+
+                    logger.trace("Complete task '{}' of process '{}'",
+                            taskId,
+                            parent.getPrimaryBpmnProcessId());
+                },
+                "completeTask");
+
     }
     
     @Override
@@ -233,7 +251,21 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String taskId) {
 
-        return completeTask(workflowAggregate, taskId);
+        return runInTransaction(
+                workflowAggregate,
+                taskId,
+                attachedAggregate -> {
+                    client
+                            .newCompleteCommand(Long.parseLong(taskId, 16))
+                            .variables(attachedAggregate)
+                            .send()
+                            .join();
+
+                    logger.trace("Complete user task '{}' of process '{}'",
+                            taskId,
+                            parent.getPrimaryBpmnProcessId());
+                },
+                "completeUserTask");
         
     }
     
@@ -243,22 +275,22 @@ public class Camunda8ProcessService<DE>
             final String taskId,
             final String errorCode) {
 
-        // force optimistic locking exceptions before running the workflow
-        final var attachedAggregate = workflowAggregateRepository
-                .save(workflowAggregate);
-        
-        client
-                .newThrowErrorCommand(Long.parseLong(taskId))
-                .errorCode(errorCode)
-                .send()
-                .join();
-
-        logger.trace("Complete usertask '{}' for process '{}'",
+        return runInTransaction(
+                workflowAggregate,
                 taskId,
-                parent.getPrimaryBpmnProcessId());
-        
-        return attachedAggregate;
-        
+                attachedAggregate -> {
+                    client
+                            .newThrowErrorCommand(Long.parseLong(taskId))
+                            .errorCode(errorCode)
+                            .send()
+                            .join();
+
+                    logger.trace("Complete task '{}' of process '{}'",
+                            taskId,
+                            parent.getPrimaryBpmnProcessId());
+                },
+                "cancelTask");
+
     }
     
     @Override
@@ -268,6 +300,56 @@ public class Camunda8ProcessService<DE>
             final String errorCode) {
 
         return cancelTask(workflowAggregate, taskId, errorCode);
+
+    }
+
+    private DE runInTransaction(
+            final DE workflowAggregate,
+            final Consumer<DE> runnable,
+            final String methodSignature) {
+
+        return runInTransaction(
+                workflowAggregate,
+                null,
+                runnable,
+                methodSignature);
+
+    }
+
+    private DE runInTransaction(
+            final DE workflowAggregate,
+            final String taskIdToTestForAlreadyCompletedOrCancelled,
+            final Consumer<DE> runnable,
+            final String methodSignature) {
+
+        // persist to get ID in case of @Id @GeneratedValue
+        // or force optimistic locking exceptions before running
+        // the workflow if aggregate was already persisted before
+        final var attachedAggregate = workflowAggregateRepository
+                .save(workflowAggregate);
+
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            if (taskIdToTestForAlreadyCompletedOrCancelled != null) {
+                publisher.publishEvent(
+                        new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
+                                methodSignature,
+                                () -> client
+                                        .newUpdateTimeoutCommand(Long.parseUnsignedLong(taskIdToTestForAlreadyCompletedOrCancelled, 16))
+                                        .timeout(Duration.ofMinutes(10))
+                                        .send()
+                                        .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                                () -> "aggregate: " + getWorkflowAggregateId.apply(attachedAggregate) + "; bpmn-process-id: " + parent.getPrimaryBpmnProcessId()));
+            }
+            publisher.publishEvent(
+                    new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
+                            methodSignature,
+                            () -> runnable.accept(attachedAggregate),
+                            () -> "aggregate: " + getWorkflowAggregateId.apply(attachedAggregate) + "; bpmn-process-id: " + parent.getPrimaryBpmnProcessId()));
+        } else {
+            runnable.accept(attachedAggregate);
+        }
+
+        return attachedAggregate;
 
     }
 
