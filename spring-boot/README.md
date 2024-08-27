@@ -17,6 +17,7 @@ To run Camunda 8 on your local computer for development purposes consider to use
     1. [Module aware deployment](#module-aware-deployment)
     1. [SPI Binding validation](#spi-binding-validation)
     1. [Managing Camunda 8 connectivity](#managing-camunda-8-connectivity)
+    1. [Logging](#logging)
 1. [Multi-instance](#multi-instance)
 1. [Message correlation IDs](#message-correlation-ids)
 1. [Transaction behavior](#transaction-behavior)
@@ -135,6 +136,13 @@ vanillabp:
                  # used only for the task 'logError' of the workflow `DemoWorkflow`
                  task-timeout: PT3S # overrides vanillabp.workflow-modules.Demo.workflows.DemoWorkflow.adapters.camunda8.task-timeout
 ```
+
+### Logging
+
+These attributes are set in addition to the [default logging context](https://github.com/vanillabp/spring-boot-support#logging)
+(defined in class `io.vanillabp.camunda8.LoggingContext`):
+
+* Tenant-ID - The tenant ID used accessing Camunda 8 cluster.
 
 ## Multi-instance
 

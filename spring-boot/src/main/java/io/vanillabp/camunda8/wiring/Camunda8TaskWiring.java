@@ -22,10 +22,6 @@ import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.TaskWiringBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
 import jakarta.persistence.Id;
-import org.camunda.bpm.model.xml.instance.ModelElementInstance;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.ApplicationContext;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -37,6 +33,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import org.camunda.bpm.model.xml.instance.ModelElementInstance;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationContext;
 
 public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camunda8ProcessService<?>, Camunda8MethodParameterFactory>
         implements Consumer<ZeebeClient> {
@@ -241,7 +240,10 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 bean,
                 method,
                 parameters,
-                idPropertyName);
+                idPropertyName,
+                tenantId,
+                workflowModuleId,
+                processService.getPrimaryBpmnProcessId());
         if (this.client != null) {
             taskHandler.accept(this.client);
         } else {

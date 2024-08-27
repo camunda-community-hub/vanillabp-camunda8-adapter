@@ -4,6 +4,8 @@ import io.camunda.zeebe.client.ZeebeClient;
 import io.camunda.zeebe.client.api.response.ActivatedJob;
 import io.camunda.zeebe.client.api.worker.JobClient;
 import io.camunda.zeebe.client.api.worker.JobHandler;
+import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
+import io.vanillabp.camunda8.LoggingContext;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
 import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
@@ -40,6 +42,12 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
     private final String idPropertyName;
 
+    private final String tenantId;
+
+    private final String workflowModuleId;
+
+    private final String bpmnProcessId;
+
     private ZeebeClient zeebeClient;
 
     public Camunda8TaskHandler(
@@ -48,11 +56,17 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
             final Object bean,
             final Method method,
             final List<MethodParameter> parameters,
-            final String idPropertyName) {
+            final String idPropertyName,
+            final String tenantId,
+            final String workflowModuleId,
+            final String bpmnProcessId) {
 
         super(workflowAggregateRepository, bean, method, parameters);
         this.taskType = taskType;
         this.idPropertyName = idPropertyName;
+        this.tenantId = tenantId;
+        this.workflowModuleId = workflowModuleId;
+        this.bpmnProcessId = bpmnProcessId;
 
     }
 
@@ -79,6 +93,18 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
         try {
             final var businessKey = getVariable(job, idPropertyName);
+            final var taskId = Long.toHexString(job.getKey());
+
+            LoggingContext.setLoggingContext(
+                    Camunda8AdapterConfiguration.ADAPTER_ID,
+                    tenantId,
+                    workflowModuleId,
+                    businessKey == null ? null : businessKey.toString(),
+                    bpmnProcessId,
+                    taskId,
+                    Long.toString(job.getProcessInstanceKey()),
+                    job.getBpmnProcessId() + "#" + job.getElementId(),
+                    Long.toString(job.getElementInstanceKey()));
 
             logger.trace("Will handle task '{}' (task-definition '{}‘) of workflow '{}' (instance-id '{}') as job '{}'",
                     job.getElementId(),
@@ -134,7 +160,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                             param,
                             () -> {
                                 taskIdRetrieved.set(true);
-                                return Long.toHexString(job.getKey());
+                                return taskId;
                             }),
                     (args, param) -> processTaskEventParameter(
                             args,
@@ -167,6 +193,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
         } finally {
             Camunda8TransactionProcessor.unregisterCallbacks();
             Camunda8TransactionAspect.unregisterDeferredInTransaction();
+            LoggingContext.clearContext();
         }
 
     }

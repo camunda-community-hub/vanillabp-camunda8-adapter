@@ -155,7 +155,10 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final Object bean,
             final Method method,
             final List<MethodParameter> parameters,
-            final String idPropertyName) {
+            final String idPropertyName,
+            final String tenantId,
+            final String workflowModuleId,
+            final String bpmnProcessId) {
         
         return new Camunda8TaskHandler(
                 taskType,
@@ -163,7 +166,10 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 bean,
                 method,
                 parameters,
-                idPropertyName);
+                idPropertyName,
+                tenantId,
+                workflowModuleId,
+                bpmnProcessId);
         
     }
     

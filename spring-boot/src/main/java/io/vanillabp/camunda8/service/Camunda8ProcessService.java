@@ -3,6 +3,7 @@ package io.vanillabp.camunda8.service;
 import io.camunda.zeebe.client.ZeebeClient;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
+import io.vanillabp.camunda8.LoggingContext;
 import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
 import java.time.Duration;
@@ -100,6 +101,11 @@ public class Camunda8ProcessService<DE>
 
         return workflowAggregateRepository;
 
+    }
+
+    @Override
+    public String getPrimaryBpmnProcessId() {
+        return parent.getPrimaryBpmnProcessId();
     }
 
     @Override
@@ -322,34 +328,53 @@ public class Camunda8ProcessService<DE>
             final Consumer<DE> runnable,
             final String methodSignature) {
 
-        // persist to get ID in case of @Id @GeneratedValue
-        // or force optimistic locking exceptions before running
-        // the workflow if aggregate was already persisted before
-        final var attachedAggregate = workflowAggregateRepository
-                .save(workflowAggregate);
+        try {
 
-        if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            if (taskIdToTestForAlreadyCompletedOrCancelled != null) {
+            // persist to get ID in case of @Id @GeneratedValue
+            // or force optimistic locking exceptions before running
+            // the workflow if aggregate was already persisted before
+            final var attachedAggregate = workflowAggregateRepository
+                    .save(workflowAggregate);
+
+            final var aggregateId = getWorkflowAggregateId.apply(attachedAggregate);
+            final var bpmnProcessId = parent.getPrimaryBpmnProcessId();
+            LoggingContext.setLoggingContext(
+                    Camunda8AdapterConfiguration.ADAPTER_ID,
+                    camunda8Properties.getTenantId(parent.getWorkflowModuleId()),
+                    parent.getWorkflowModuleId(),
+                    aggregateId == null ? null : aggregateId.toString(),
+                    bpmnProcessId,
+                    taskIdToTestForAlreadyCompletedOrCancelled,
+                    null,
+                    null,
+                    null);
+
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                if (taskIdToTestForAlreadyCompletedOrCancelled != null) {
+                    publisher.publishEvent(
+                            new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
+                                    methodSignature,
+                                    () -> client
+                                            .newUpdateTimeoutCommand(Long.parseUnsignedLong(taskIdToTestForAlreadyCompletedOrCancelled, 16))
+                                            .timeout(Duration.ofMinutes(10))
+                                            .send()
+                                            .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                                    () -> "aggregate: " + aggregateId + "; bpmn-process-id: " + bpmnProcessId));
+                }
                 publisher.publishEvent(
-                        new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
+                        new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
                                 methodSignature,
-                                () -> client
-                                        .newUpdateTimeoutCommand(Long.parseUnsignedLong(taskIdToTestForAlreadyCompletedOrCancelled, 16))
-                                        .timeout(Duration.ofMinutes(10))
-                                        .send()
-                                        .join(5, TimeUnit.MINUTES), // needs to run synchronously
-                                () -> "aggregate: " + getWorkflowAggregateId.apply(attachedAggregate) + "; bpmn-process-id: " + parent.getPrimaryBpmnProcessId()));
+                                () -> runnable.accept(attachedAggregate),
+                                () -> "aggregate: " + aggregateId + "; bpmn-process-id: " + bpmnProcessId));
+            } else {
+                runnable.accept(attachedAggregate);
             }
-            publisher.publishEvent(
-                    new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
-                            methodSignature,
-                            () -> runnable.accept(attachedAggregate),
-                            () -> "aggregate: " + getWorkflowAggregateId.apply(attachedAggregate) + "; bpmn-process-id: " + parent.getPrimaryBpmnProcessId()));
-        } else {
-            runnable.accept(attachedAggregate);
-        }
 
-        return attachedAggregate;
+            return attachedAggregate;
+
+        } finally {
+            LoggingContext.clearContext();
+        }
 
     }
 
