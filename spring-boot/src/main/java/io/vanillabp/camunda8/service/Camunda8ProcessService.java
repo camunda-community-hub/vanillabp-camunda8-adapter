@@ -342,7 +342,7 @@ public class Camunda8ProcessService<DE>
                     Camunda8AdapterConfiguration.ADAPTER_ID,
                     camunda8Properties.getTenantId(parent.getWorkflowModuleId()),
                     parent.getWorkflowModuleId(),
-                    aggregateId == null ? null : aggregateId.toString(),
+                    aggregateId.toString(),
                     bpmnProcessId,
                     taskIdToTestForAlreadyCompletedOrCancelled,
                     null,

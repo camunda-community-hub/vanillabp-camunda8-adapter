@@ -21,13 +21,6 @@ import io.vanillabp.camunda8.utils.HashCodeInputStream;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.springboot.adapter.ModuleAwareBpmnDeployment;
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
-import org.springframework.core.io.Resource;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StreamUtils;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Arrays;
@@ -36,8 +29,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.io.Resource;
+import org.springframework.util.StreamUtils;
 
-@Transactional
 public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
 
 	private static final Logger logger = LoggerFactory.getLogger(Camunda8DeploymentAdapter.class);

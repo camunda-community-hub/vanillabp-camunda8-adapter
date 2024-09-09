@@ -38,10 +38,12 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.retry.annotation.EnableRetry;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(CamundaAutoConfiguration.class)
 @EnableConfigurationProperties(Camunda8VanillaBpProperties.class)
+@EnableRetry
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8AdapterConfiguration.class);

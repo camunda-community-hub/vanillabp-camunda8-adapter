@@ -3,10 +3,15 @@ package io.vanillabp.camunda8.deployment;
 import io.camunda.zeebe.client.api.response.Process;
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
-
 import java.io.ByteArrayOutputStream;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 public class DeploymentService {
 
@@ -22,12 +27,17 @@ public class DeploymentService {
         this.deploymentResourceRepository = deploymentResourceRepository;
         
     }
-    
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Retryable(
+            retryFor = OptimisticLockingFailureException.class,
+            maxAttempts = 100,
+            backoff = @Backoff(delay = 100, maxDelay = 500))
     public DeployedBpmn addBpmn(
             final BpmnModelInstance model,
             final int fileId,
             final String resourceName) {
-        
+
         final var previous = deploymentResourceRepository.findById(fileId);
         if (previous.isPresent()) {
             return (DeployedBpmn) previous.get();
@@ -44,12 +54,31 @@ public class DeploymentService {
         return deploymentResourceRepository.save(bpmn);
         
     }
-    
+
+    @Recover
+    public DeployedBpmn recoverAddBpmn(
+            final OptimisticLockingFailureException exception,
+            final BpmnModelInstance model,
+            final int fileId,
+            final String resourceName) {
+
+        throw new RuntimeException(
+                "Could not save BPMN '"
+                + resourceName
+                + "' in local DB due to stale OptimisticLockingFailureException", exception);
+
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Retryable(
+            retryFor = OptimisticLockingFailureException.class,
+            maxAttempts = 100,
+            backoff = @Backoff(delay = 100, maxDelay = 500))
     public DeployedProcess addProcess(
             final int packageId,
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
-        
+
         final var versionedId = camunda8DeployedProcess.getProcessDefinitionKey();
         
         final var previous = deploymentRepository.findByDefinitionKey(versionedId);
@@ -69,6 +98,20 @@ public class DeploymentService {
         
         return deploymentRepository.save(deployedProcess);
         
+    }
+
+    @Recover
+    public DeployedProcess recoverAddProcess(
+            final OptimisticLockingFailureException exception,
+            final int packageId,
+            final Process camunda8DeployedProcess,
+            final DeployedBpmn bpmn) {
+
+        throw new RuntimeException(
+                "Could not save Process '"
+                        + camunda8DeployedProcess.getBpmnProcessId()
+                        + "' in local DB due to stale OptimisticLockingFailureException", exception);
+
     }
 
     public List<DeployedBpmn> getBpmnNotOfPackage(final int packageId) {
