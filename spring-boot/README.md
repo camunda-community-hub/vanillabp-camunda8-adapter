@@ -58,6 +58,23 @@ If you want a certain version of Zeebe client then you have to replace the trans
 
 *Hint:* This adapter is compatible with the configuration of the regular Zeebe Spring Boot auto-configuration. However, some additional configuration is described in the upcoming sections.
 
+### Restrictions
+
+#### Disable PostgreSQL auto-commit
+
+On using PostgreSQL one might see the error:
+
+```
+org.postgresql.util.PSQLException: Large Objects may not be used in auto-commit mode.
+```
+
+To avoid this add this `Spring Boot` properties:
+
+```properties
+spring.datasource.hikari.auto-commit=false
+spring.jpa.properties.hibernate.connection.provider_disables_autocommit=true
+```
+
 ## Features
 
 ### Worker ID
