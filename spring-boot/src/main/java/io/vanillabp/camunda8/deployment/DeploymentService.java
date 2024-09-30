@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
@@ -30,7 +31,7 @@ public class DeploymentService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Retryable(
-            retryFor = OptimisticLockingFailureException.class,
+            retryFor = { OptimisticLockingFailureException.class, ObjectOptimisticLockingFailureException.class },
             maxAttempts = 100,
             backoff = @Backoff(delay = 100, maxDelay = 500))
     public DeployedBpmn addBpmn(
@@ -62,16 +63,37 @@ public class DeploymentService {
             final int fileId,
             final String resourceName) {
 
+        return recoverAddBpmn(exception, model, fileId, resourceName);
+
+    }
+
+    @Recover
+    public DeployedBpmn recoverAddBpmn(
+            final ObjectOptimisticLockingFailureException exception,
+            final BpmnModelInstance model,
+            final int fileId,
+            final String resourceName) {
+
+        return recoverAddBpmn(exception, model, fileId, resourceName);
+
+    }
+
+    private DeployedBpmn recoverAddBpmn(
+            final Exception exception,
+            final BpmnModelInstance model,
+            final int fileId,
+            final String resourceName) {
+
         throw new RuntimeException(
                 "Could not save BPMN '"
-                + resourceName
-                + "' in local DB due to stale OptimisticLockingFailureException", exception);
+                        + resourceName
+                        + "' in local DB due to stale OptimisticLockingFailureException", exception);
 
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Retryable(
-            retryFor = OptimisticLockingFailureException.class,
+            retryFor = { OptimisticLockingFailureException.class, ObjectOptimisticLockingFailureException.class },
             maxAttempts = 100,
             backoff = @Backoff(delay = 100, maxDelay = 500))
     public DeployedProcess addProcess(
@@ -103,6 +125,27 @@ public class DeploymentService {
     @Recover
     public DeployedProcess recoverAddProcess(
             final OptimisticLockingFailureException exception,
+            final int packageId,
+            final Process camunda8DeployedProcess,
+            final DeployedBpmn bpmn) {
+
+        return recoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
+
+    }
+
+    @Recover
+    public DeployedProcess recoverAddProcess(
+            final ObjectOptimisticLockingFailureException exception,
+            final int packageId,
+            final Process camunda8DeployedProcess,
+            final DeployedBpmn bpmn) {
+
+        return recoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
+
+    }
+
+    private DeployedProcess recoverAddProcess(
+            final Exception exception,
             final int packageId,
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
