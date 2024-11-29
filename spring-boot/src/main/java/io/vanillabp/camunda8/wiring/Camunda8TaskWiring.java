@@ -114,9 +114,14 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                             .handler(userTaskHandler)
                             .timeout(Integer.MAX_VALUE) // user-tasks are not fetched more than once
                             .name(workerId);
+
+                    if (tenantId != null) {
+                        userTaskWorker.tenantId(tenantId);
+                    }
+
                     final var workerProperties = camunda8Properties.getUserTaskWorkerProperties(workflowModuleId);
                     workerProperties.applyToUserTaskWorker(userTaskWorker);
-                    return tenantId != null ? userTaskWorker.tenantId(tenantId) : userTaskWorker;
+                    return userTaskWorker;
                 })
                 .forEach(workers::add);
 
