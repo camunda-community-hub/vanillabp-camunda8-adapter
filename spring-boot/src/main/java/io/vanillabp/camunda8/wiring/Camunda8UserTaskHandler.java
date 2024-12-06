@@ -15,7 +15,11 @@ public class Camunda8UserTaskHandler implements JobHandler {
     private static final Logger logger = LoggerFactory.getLogger(Camunda8UserTaskHandler.class);
 
     private static final int MAX_ATTEMPTS_OF_ASSIGNING_USERTASKS = 1000;
-    
+
+    // default tenant identifier used by camunda 8 if multi-tenancy is disabled
+    // see https://docs.camunda.io/docs/self-managed/concepts/multi-tenancy/#the-tenant-identifier
+    private static final String DEFAULT_TENANT_ID = "<default>";
+
     private final Map<String, Camunda8TaskHandler> taskHandlers = new HashMap<>();
     
     private final String workerId;
@@ -31,8 +35,8 @@ public class Camunda8UserTaskHandler implements JobHandler {
             final String tenantId,
             final String bpmnProcessId,
             final String elementId) {
-        
-        return tenantId + "#" + bpmnProcessId + "#" + elementId;
+        final var tenantIdKey = DEFAULT_TENANT_ID.equals(tenantId) ? null : tenantId;
+        return tenantIdKey + "#" + bpmnProcessId + "#" + elementId;
         
     }
     
