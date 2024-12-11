@@ -112,7 +112,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                             .newWorker()
                             .jobType("io.camunda.zeebe:userTask")
                             .handler(userTaskHandler)
-                            .timeout(Integer.MAX_VALUE) // user-tasks are not fetched more than once
+                            .timeout(Long.MAX_VALUE) // user-tasks are not fetched more than once
                             .name(workerId);
 
                     if (tenantId != null) {
