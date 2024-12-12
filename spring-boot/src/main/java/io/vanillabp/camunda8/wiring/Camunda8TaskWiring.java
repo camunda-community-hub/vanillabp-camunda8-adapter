@@ -40,6 +40,13 @@ import org.springframework.context.ApplicationContext;
 public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camunda8ProcessService<?>, Camunda8MethodParameterFactory>
         implements Consumer<ZeebeClient> {
 
+    /*
+     * timeout can be set to Long.MAX_VALUE but this will cause a subsequent error
+     * (see https://github.com/camunda/camunda/issues/11903). Therefor the timeout
+     * is set to 100 years.
+     */
+    private static final long TIMEOUT_100YEARS = 100L * 365 * 24 * 3600 * 1000;
+
     private final String workerId;
     
     private final SpringDataUtil springDataUtil;
@@ -112,7 +119,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                             .newWorker()
                             .jobType("io.camunda.zeebe:userTask")
                             .handler(userTaskHandler)
-                            .timeout(Long.MAX_VALUE) // user-tasks are not fetched more than once
+                            .timeout(TIMEOUT_100YEARS) // user-tasks should not be fetched more than once
                             .name(workerId);
 
                     if (tenantId != null) {
