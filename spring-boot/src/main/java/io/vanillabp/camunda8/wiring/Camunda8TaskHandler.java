@@ -48,6 +48,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
     private final String bpmnProcessId;
 
+    private final boolean publishUserTaskIdAsHexString;
+
     private ZeebeClient zeebeClient;
 
     public Camunda8TaskHandler(
@@ -59,7 +61,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
             final String idPropertyName,
             final String tenantId,
             final String workflowModuleId,
-            final String bpmnProcessId) {
+            final String bpmnProcessId,
+            final boolean publishUserTaskIdAsHexString) {
 
         super(workflowAggregateRepository, bean, method, parameters);
         this.taskType = taskType;
@@ -67,6 +70,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
         this.tenantId = tenantId;
         this.workflowModuleId = workflowModuleId;
         this.bpmnProcessId = bpmnProcessId;
+        this.publishUserTaskIdAsHexString = publishUserTaskIdAsHexString;
 
     }
 
@@ -93,7 +97,9 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
         try {
             final var businessKey = getVariable(job, idPropertyName);
-            final var taskId = Long.toHexString(job.getKey());
+            final var taskId = publishUserTaskIdAsHexString
+                    ? Long.toHexString(job.getKey())
+                    : Long.toString(job.getKey());
 
             LoggingContext.setLoggingContext(
                     Camunda8AdapterConfiguration.ADAPTER_ID,
