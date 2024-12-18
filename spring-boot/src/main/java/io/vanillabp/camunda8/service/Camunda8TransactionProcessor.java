@@ -108,12 +108,17 @@ public class Camunda8TransactionProcessor {
             if ((e instanceof ClientStatusException clientStatusException)
                     && (clientStatusException.getStatus().getCode() == Status.NOT_FOUND.getCode())) {
                 throw new RuntimeException(
-                        "Will rollback because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
+                        "Will rollback '"
+                        + event.getSource()
+                        + "' because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
                         + event.description.get());
             } else {
                 throw new RuntimeException(
-                        "Will rollback because testing for job '{}' failed! Test-command:\n"
-                                + event.description.get());
+                        "Will rollback because testing for job due to '"
+                        + event.getSource()
+                        + "'! Test-command:\n"
+                        + event.description.get(),
+                        e);
             }
         }
 
@@ -133,8 +138,9 @@ public class Camunda8TransactionProcessor {
             event.runnable.run();
         } catch (Exception e) {
             logger.error(
-                    "Could not execute camunda command for '{}'! Manual action required!",
+                    "Could not execute camunda command for '{}' initiated by: {}! Manual action required!",
                     event.description.get(),
+                    event.getSource(),
                     e);
         }
 

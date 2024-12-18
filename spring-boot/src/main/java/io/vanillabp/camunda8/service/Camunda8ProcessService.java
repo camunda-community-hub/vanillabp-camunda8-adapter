@@ -368,13 +368,21 @@ public class Camunda8ProcessService<DE>
                                             .timeout(Duration.ofMinutes(10))
                                             .send()
                                             .join(5, TimeUnit.MINUTES), // needs to run synchronously
-                                    () -> "aggregate: " + aggregateId + "; bpmn-process-id: " + bpmnProcessId));
+                                    () -> "UpdateTimeout on '"
+                                            + taskIdToTestForAlreadyCompletedOrCancelled
+                                            + "' for aggregate: "
+                                            + aggregateId
+                                            + "; bpmn-process-id: "
+                                            + bpmnProcessId));
                 }
                 publisher.publishEvent(
                         new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
                                 methodSignature,
                                 () -> runnable.accept(attachedAggregate),
-                                () -> "aggregate: " + aggregateId + "; bpmn-process-id: " + bpmnProcessId));
+                                () -> "aggregate: "
+                                        + aggregateId
+                                        + "; bpmn-process-id: "
+                                        + bpmnProcessId));
             } else {
                 runnable.accept(attachedAggregate);
             }
