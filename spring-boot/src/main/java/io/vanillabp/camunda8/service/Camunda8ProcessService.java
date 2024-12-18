@@ -229,6 +229,15 @@ public class Camunda8ProcessService<DE>
         
     }
 
+    private long getTaskIdAsLong(
+            final String taskId) {
+
+        return camunda8Properties.isTaskIdAsHexString(parent.getWorkflowModuleId())
+                ? Long.parseLong(taskId, 16)
+                : Long.parseLong(taskId);
+
+    }
+
     @Override
     public DE completeTask(
             final DE workflowAggregate,
@@ -239,7 +248,7 @@ public class Camunda8ProcessService<DE>
                 taskId,
                 attachedAggregate -> {
                     client
-                            .newCompleteCommand(Long.parseLong(taskId, 16))
+                            .newCompleteCommand(getTaskIdAsLong(taskId))
                             .variables(attachedAggregate)
                             .send()
                             .join();
@@ -262,7 +271,7 @@ public class Camunda8ProcessService<DE>
                 taskId,
                 attachedAggregate -> {
                     client
-                            .newCompleteCommand(Long.parseLong(taskId, 16))
+                            .newCompleteCommand(getTaskIdAsLong(taskId))
                             .variables(attachedAggregate)
                             .send()
                             .join();
@@ -286,7 +295,7 @@ public class Camunda8ProcessService<DE>
                 taskId,
                 attachedAggregate -> {
                     client
-                            .newThrowErrorCommand(Long.parseLong(taskId))
+                            .newThrowErrorCommand(getTaskIdAsLong(taskId))
                             .errorCode(errorCode)
                             .send()
                             .join();
@@ -355,7 +364,7 @@ public class Camunda8ProcessService<DE>
                             new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
                                     methodSignature,
                                     () -> client
-                                            .newUpdateTimeoutCommand(Long.parseUnsignedLong(taskIdToTestForAlreadyCompletedOrCancelled, 16))
+                                            .newUpdateTimeoutCommand(getTaskIdAsLong(taskIdToTestForAlreadyCompletedOrCancelled))
                                             .timeout(Duration.ofMinutes(10))
                                             .send()
                                             .join(5, TimeUnit.MINUTES), // needs to run synchronously

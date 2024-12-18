@@ -171,7 +171,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 idPropertyName,
                 tenantId,
                 workflowModuleId,
-                bpmnProcessId);
+                bpmnProcessId,
+                camunda8Properties.isTaskIdAsHexString(workflowModuleId));
         
     }
     

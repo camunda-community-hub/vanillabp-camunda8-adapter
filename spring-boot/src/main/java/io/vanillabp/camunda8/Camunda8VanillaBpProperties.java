@@ -2,11 +2,10 @@ package io.vanillabp.camunda8;
 
 import io.camunda.zeebe.client.api.worker.JobWorkerBuilderStep1;
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.util.StringUtils;
-
 import java.time.Duration;
 import java.util.Map;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.StringUtils;
 
 @ConfigurationProperties(prefix = VanillaBpProperties.PREFIX, ignoreUnknownFields = true)
 public class Camunda8VanillaBpProperties {
@@ -27,7 +26,7 @@ public class Camunda8VanillaBpProperties {
     }
 
     private static final WorkflowModuleAdapterProperties defaultProperties = new WorkflowModuleAdapterProperties();
-    private static final AdapterConfiguration defaultAdapterProperties = new AdapterConfiguration();
+    private static final WorkflowModuleAdapterConfiguration defaultAdapterProperties = new WorkflowModuleAdapterConfiguration();
 
     public String getTenantId(
             final String workflowModuleId) {
@@ -43,6 +42,17 @@ public class Camunda8VanillaBpProperties {
             return configuration.getTenantId();
         }
         return workflowModuleId;
+
+    }
+
+    public boolean isTaskIdAsHexString(
+            final String workflowModuleId) {
+
+        final var configuration = workflowModules
+                .getOrDefault(workflowModuleId, defaultProperties)
+                .getAdapters()
+                .getOrDefault(Camunda8AdapterConfiguration.ADAPTER_ID, defaultAdapterProperties);
+        return configuration.isTaskIdAsHexString();
 
     }
 
@@ -97,6 +107,20 @@ public class Camunda8VanillaBpProperties {
 
     }
 
+    public static class WorkflowModuleAdapterConfiguration extends AdapterConfiguration {
+
+        private boolean taskIdAsHexString = false;
+
+        public boolean isTaskIdAsHexString() {
+            return taskIdAsHexString;
+        }
+
+        public void setTaskIdAsHexString(boolean taskIdAsHexString) {
+            this.taskIdAsHexString = taskIdAsHexString;
+        }
+
+    }
+
     public static class AdapterConfiguration extends WorkerProperties {
 
         private boolean useTenants = true;
@@ -125,15 +149,15 @@ public class Camunda8VanillaBpProperties {
 
         String workflowModuleId;
 
-        private Map<String, AdapterConfiguration> adapters = Map.of();
+        private Map<String, WorkflowModuleAdapterConfiguration> adapters = Map.of();
 
         private Map<String, WorkflowAdapterProperties> workflows = Map.of();
 
-        public Map<String, AdapterConfiguration> getAdapters() {
+        public Map<String, WorkflowModuleAdapterConfiguration> getAdapters() {
             return adapters;
         }
 
-        public void setAdapters(Map<String, AdapterConfiguration> adapters) {
+        public void setAdapters(Map<String, WorkflowModuleAdapterConfiguration> adapters) {
             this.adapters = adapters;
         }
 
