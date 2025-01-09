@@ -63,7 +63,7 @@ public class DeploymentService {
             final int fileId,
             final String resourceName) {
 
-        return recoverAddBpmn(exception, model, fileId, resourceName);
+        return staleRecoverAddBpmn(exception, model, fileId, resourceName);
 
     }
 
@@ -74,11 +74,11 @@ public class DeploymentService {
             final int fileId,
             final String resourceName) {
 
-        return recoverAddBpmn(exception, model, fileId, resourceName);
+        return staleRecoverAddBpmn(exception, model, fileId, resourceName);
 
     }
 
-    private DeployedBpmn recoverAddBpmn(
+    private DeployedBpmn staleRecoverAddBpmn(
             final Exception exception,
             final BpmnModelInstance model,
             final int fileId,
@@ -129,7 +129,7 @@ public class DeploymentService {
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
 
-        return recoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
+        return staleRecoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
 
     }
 
@@ -140,11 +140,11 @@ public class DeploymentService {
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
 
-        return recoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
+        return staleRecoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
 
     }
 
-    private DeployedProcess recoverAddProcess(
+    private DeployedProcess staleRecoverAddProcess(
             final Exception exception,
             final int packageId,
             final Process camunda8DeployedProcess,
