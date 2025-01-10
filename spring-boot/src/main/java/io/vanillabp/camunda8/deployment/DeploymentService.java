@@ -33,7 +33,7 @@ public class DeploymentService {
     @Retryable(
             retryFor = { OptimisticLockingFailureException.class, ObjectOptimisticLockingFailureException.class },
             maxAttempts = 100,
-            backoff = @Backoff(delay = 100, maxDelay = 500))
+            backoff = @Backoff(delay = 200, maxDelay = 1000, multiplier = 1.5, random = true))
     public DeployedBpmn addBpmn(
             final BpmnModelInstance model,
             final int fileId,
@@ -95,7 +95,7 @@ public class DeploymentService {
     @Retryable(
             retryFor = { OptimisticLockingFailureException.class, ObjectOptimisticLockingFailureException.class },
             maxAttempts = 100,
-            backoff = @Backoff(delay = 100, maxDelay = 500))
+            backoff = @Backoff(delay = 200, maxDelay = 1000, multiplier = 1.5, random = true))
     public DeployedProcess addProcess(
             final int packageId,
             final Process camunda8DeployedProcess,
