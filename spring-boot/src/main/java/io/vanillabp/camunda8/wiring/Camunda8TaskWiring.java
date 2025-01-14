@@ -63,7 +63,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
 
     private List<Camunda8TaskHandler> handlers = new LinkedList<>();
 
-    private Set<String> userTaskTenantIds = new HashSet<>();
+    private Set<String> userTaskWorkflowModuleIds = new HashSet<>();
     
     private final Camunda8VanillaBpProperties camunda8Properties;
     
@@ -111,7 +111,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     public void openWorkers() {
 
         // fetch all usertasks spawned
-        userTaskTenantIds
+        userTaskWorkflowModuleIds
                 .stream()
                 .map(workflowModuleId -> {
                     final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
@@ -268,7 +268,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                     connectable.getBpmnProcessId(),
                     connectable.getElementId(),
                     taskHandler);
-            userTaskTenantIds.add(workflowModuleId);
+            userTaskWorkflowModuleIds.add(workflowModuleId);
             return;
             
         }
