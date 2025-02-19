@@ -12,6 +12,7 @@ To run Camunda 8 on your local computer for development purposes consider to use
 ## Content
 
 1. [Usage](#usage)
+    1. [Task definitions](#task-definitions)
 1. [Features](#features)
     1. [Worker ID](#worker-id)
     1. [Module aware deployment](#module-aware-deployment)
@@ -20,6 +21,7 @@ To run Camunda 8 on your local computer for development purposes consider to use
     1. [Logging](#logging)
 1. [Multi-instance](#multi-instance)
 1. [Message correlation IDs](#message-correlation-ids)
+1. [Using Camunda multi-tenancy](#using-camunda-multi-tenancy) 
 1. [Transaction behavior](#transaction-behavior)
 1. [Workflow aggregate serialization](#workflow-aggregate-serialization)
 
@@ -57,6 +59,42 @@ If you want a certain version of Zeebe client then you have to replace the trans
 ```
 
 *Hint:* This adapter is compatible with the configuration of the regular Zeebe Spring Boot auto-configuration. However, some additional configuration is described in the upcoming sections.
+
+### Task definitions
+
+As mentioned in [VanillaBP SPI](https://github.com/vanillabp/spi-for-java?tab=readme-ov-file#wire-up-a-task) a task is
+wired by a task definition which is specific to the BPMS used. On using Camunda 8 this task-definition is defined
+in Camunda's modeler's property panel.
+
+For service tasks, use the input field "Job type" in section "Task definition". Keep in mind that a Camunda 8 task-definition has to be unique
+in it's Zeebe-cluster (or a tenant if enabled) and therefore maybe prefixed by a string, specific to the
+process, to avoid name clashes.
+
+![service-task](./readme/task-definition-service-task.png)
+
+For user tasks, in section "Implementation" set type to "Job worker". Currently (February of 2025),
+other implementations are not supported in VanillaBP because of missing features in Camunda 8.
+
+In section "Form", choose type "Custom form key" and enter a key identifying the user task which
+will be used as a task-definition. The value of form key is ignored by Camunda and there it is 
+not necessary to use a prefix as you may need for service task's task definition. 
+
+![user-task](./readme/task-definition-user-task.png)
+
+It is a rare case it is necessary to use one form for two different user tasks.
+In this situation you can specify the same form key and annotate the workflow service's
+method handling this user task by using the activities' ids as specified
+in the modeler instead of the task definition:
+
+```java
+    @WorkflowTask(id = "ProcessTask1")
+    @WorkflowTask(id = "ProcessTask2")
+    public void processTask(
+            final DemoAggregate demo,
+            @TaskId final String taskId) throws Exception {
+        ...
+    }
+```
 
 ### Restrictions
 
