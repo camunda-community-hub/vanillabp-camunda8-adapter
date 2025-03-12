@@ -2,8 +2,7 @@ package io.vanillabp.camunda8;
 
 import io.camunda.zeebe.spring.client.CamundaAutoConfiguration;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
-import io.vanillabp.camunda8.deployment.DeploymentRepository;
-import io.vanillabp.camunda8.deployment.DeploymentResourceRepository;
+import io.vanillabp.camunda8.deployment.DeploymentPersistence;
 import io.vanillabp.camunda8.deployment.DeploymentService;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
@@ -61,12 +60,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
 
     @Autowired
     private ApplicationContext applicationContext;
-
-    @Autowired
-    private DeploymentRepository deploymentRepository;
-
-    @Autowired
-    private DeploymentResourceRepository deploymentResourceRepository;
 
     @Autowired
     private Camunda8VanillaBpProperties camunda8Properties;
@@ -132,12 +125,11 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     }
 
     @Bean
-    public DeploymentService deploymentService(
-            final SpringDataUtil springDataUtil) {
+    public DeploymentService c8DeploymentService(
+            final DeploymentPersistence persistence) {
 
         return new DeploymentService(
-                deploymentRepository,
-                deploymentResourceRepository);
+                persistence);
 
     }
 

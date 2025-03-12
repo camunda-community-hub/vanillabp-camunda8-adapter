@@ -1,4 +1,4 @@
-package io.vanillabp.camunda8.deployment;
+package io.vanillabp.camunda8.deployment.jpa;
 
 import java.io.Serializable;
 

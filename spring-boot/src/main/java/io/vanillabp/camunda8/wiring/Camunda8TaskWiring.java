@@ -303,12 +303,14 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         
         return Arrays
                 .stream(workflowAggregateClass.getDeclaredFields())
-                .filter(field -> field.getAnnotation(Id.class) != null)
+                .filter(field -> (field.getAnnotation(Id.class) != null)
+                        || (field.getAnnotation(org.springframework.data.annotation.Id.class) != null))
                 .findFirst()
                 .map(Field::getName)
                 .orElse(Arrays
                         .stream(workflowAggregateClass.getDeclaredMethods())
-                        .filter(method -> method.getAnnotation(Id.class) != null)
+                        .filter(method -> (method.getAnnotation(Id.class) != null)
+                                || (method.getAnnotation(org.springframework.data.annotation.Id.class) != null))
                         .findFirst()
                         .map(this::propertyName)
                         .orElse(getWorkflowAggregateIdPropertyName(workflowAggregateClass.getSuperclass())));

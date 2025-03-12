@@ -16,16 +16,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class DeploymentService {
 
-    private final DeploymentRepository deploymentRepository;
-    
-    private final DeploymentResourceRepository deploymentResourceRepository;
+    private final DeploymentPersistence persistence;
 
     public DeploymentService(
-            final DeploymentRepository deploymentRepository,
-            final DeploymentResourceRepository deploymentResourceRepository) {
+            final DeploymentPersistence persistence) {
 
-        this.deploymentRepository = deploymentRepository;
-        this.deploymentResourceRepository = deploymentResourceRepository;
+        this.persistence = persistence;
         
     }
 
@@ -39,21 +35,19 @@ public class DeploymentService {
             final int fileId,
             final String resourceName) {
 
-        final var previous = deploymentResourceRepository.findById(fileId);
+        final var previous = persistence.findDeploymentResource(fileId);
         if (previous.isPresent()) {
             return (DeployedBpmn) previous.get();
         }
 
         final var outStream = new ByteArrayOutputStream();
         Bpmn.writeModelToStream(outStream, model);
-        
-        final var bpmn = new DeployedBpmn();
-        bpmn.setFileId(fileId);
-        bpmn.setResource(outStream.toByteArray());
-        bpmn.setResourceName(resourceName);
-        
-        return deploymentResourceRepository.save(bpmn);
-        
+
+        return persistence.addDeployedBpmn(
+                fileId,
+                resourceName,
+                outStream.toByteArray());
+
     }
 
     @Recover
@@ -102,24 +96,21 @@ public class DeploymentService {
             final DeployedBpmn bpmn) {
 
         final var versionedId = camunda8DeployedProcess.getProcessDefinitionKey();
-        
-        final var previous = deploymentRepository.findByDefinitionKey(versionedId);
+
+        final var previous = persistence.findDeployedProcess(versionedId);
         if ((previous.isPresent())
                 && (previous.get().getPackageId() == packageId)) {
             return (DeployedProcess) previous.get();
         }
 
-        final var deployedProcess = new DeployedProcess();
-        
-        deployedProcess.setDefinitionKey(versionedId);
-        deployedProcess.setVersion(camunda8DeployedProcess.getVersion());
-        deployedProcess.setPackageId(packageId);
-        deployedProcess.setBpmnProcessId(camunda8DeployedProcess.getBpmnProcessId());
-        deployedProcess.setDeployedResource(bpmn);
-        deployedProcess.setPublishedAt(OffsetDateTime.now());
-        
-        return deploymentRepository.save(deployedProcess);
-        
+        return persistence.addDeployedProcess(
+                versionedId,
+                camunda8DeployedProcess.getVersion(),
+                packageId,
+                camunda8DeployedProcess.getBpmnProcessId(),
+                bpmn,
+                OffsetDateTime.now());
+
     }
 
     @Recover
@@ -157,13 +148,9 @@ public class DeploymentService {
 
     }
 
-    public List<DeployedBpmn> getBpmnNotOfPackage(final int packageId) {
+    public List<? extends DeployedBpmn> getBpmnNotOfPackage(final int packageId) {
 
-        return deploymentResourceRepository
-                .findByTypeAndDeployments_packageIdNot(DeployedBpmn.TYPE, packageId)
-                .stream()
-                .distinct() // Oracle doesn't support distinct queries including blob columns, hence the job is done here
-                .toList();
+        return persistence.getBpmnNotOfPackage(packageId);
 
     }
 
