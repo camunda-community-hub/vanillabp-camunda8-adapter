@@ -13,7 +13,7 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <spring.zeebe.version>8.5.4</spring.zeebe.version>
+    <spring.zeebe.version>8.5.18</spring.zeebe.version>
   </properties>
 
   <build>
