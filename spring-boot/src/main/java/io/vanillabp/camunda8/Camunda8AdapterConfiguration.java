@@ -1,6 +1,5 @@
 package io.vanillabp.camunda8;
 
-import io.camunda.zeebe.spring.client.CamundaAutoConfiguration;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.deployment.DeploymentPersistence;
 import io.vanillabp.camunda8.deployment.DeploymentService;
@@ -40,7 +39,10 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.retry.annotation.EnableRetry;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
-@AutoConfigureBefore(CamundaAutoConfiguration.class)
+@AutoConfigureBefore(name = {
+        "io.camunda.zeebe.spring.client.CamundaAutoConfiguration", // community-hub client
+        "io.camunda.zeebe.spring.client.configuration.CamundaAutoConfiguration" // official client
+})
 @EnableConfigurationProperties(Camunda8VanillaBpProperties.class)
 @EnableRetry
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {

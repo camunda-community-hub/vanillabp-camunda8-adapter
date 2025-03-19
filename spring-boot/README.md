@@ -43,19 +43,19 @@ Just add this dependency to your project, no additional dependencies from Camund
 If you want a certain version of Zeebe client then you have to replace the transitive dependencies like this:
 
 ```xml
-<dependency>
-  <groupId>io.camunda</groupId>
-  <artifactId>spring-zeebe-starter</artifactId>
-  <version>8.1.14</version>
+<dependency> <!-- community client 8.5.4 -->
+  <groupId>io.camunda.spring</groupId>
+  <artifactId>spring-boot-starter-camunda</artifactId>
+  <version>8.5.4</version>
 </dependency>
 <dependency>
   <groupId>org.camunda.community.vanillabp</groupId>
   <artifactId>camunda7-spring-boot-adapter</artifactId>
   <version>1.0.0</version>
   <exclusions>
-    <exclusion>
+    <exclusion> <!-- official zeebe client -->
       <groupId>io.camunda</groupId>
-      <artifactId>spring-zeebe-starter</artifactId>
+      <artifactId>spring-boot-starter-camunda-sdk</artifactId>
     </exclusion>
   </exclusions>
 </dependency>
