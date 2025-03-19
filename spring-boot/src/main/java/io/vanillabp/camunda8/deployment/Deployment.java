@@ -14,6 +14,4 @@ public interface Deployment {
 
     <R extends DeploymentResource> R getDeployedResource();
 
-    String getType();
-
 }

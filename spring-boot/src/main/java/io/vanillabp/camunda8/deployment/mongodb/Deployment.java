@@ -1,49 +1,45 @@
-package io.vanillabp.camunda8.deployment.jpa;
+package io.vanillabp.camunda8.deployment.mongodb;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.DiscriminatorColumn;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.IdClass;
-import jakarta.persistence.Inheritance;
-import jakarta.persistence.InheritanceType;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
 import java.time.OffsetDateTime;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.DocumentReference;
+import org.springframework.data.mongodb.core.mapping.Field;
 
-@Entity
-@Table(name = "CAMUNDA8_DEPLOYMENTS")
-@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name = "C8D_TYPE")
-@IdClass(DeploymentId.class)
+@Document(collection = Deployment.COLLECTION_NAME)
 public abstract class Deployment
         implements io.vanillabp.camunda8.deployment.Deployment {
 
-    /** the key of the deployed process */
+    static final String COLLECTION_NAME = "CAMUNDA8_DEPLOYMENTS";
+
+    /** the key of the deployed process which is unqiue */
     @Id
-    @Column(name = "C8D_DEFINITION_KEY")
+    @Field(name = "C8D_DEFINITION_KEY")
     private long definitionKey;
 
     /** the version of the deployed process */
-    @Id
-    @Column(name = "C8D_VERSION")
+    @Field(name = "C8D_VERSION")
     private int version;
 
     @Version
-    @Column(name = "C8D_RECORD_VERSION")
+    @Field(name = "C8D_RECORD_VERSION")
     private int recordVersion;
     
-    @Column(name = "C8D_PACKAGE_ID")
+    @Field(name = "C8D_PACKAGE_ID")
     private int packageId;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "C8D_RESOURCE", nullable = false, updatable = false)
+    @DocumentReference(
+            collection = DeploymentResource.COLLECTION_NAME,
+            lazy = true)
+    @Field("C8D_RESOURCE")
     private DeploymentResource deployedResource;
 
-    @Column(name = "C8D_PUBLISHED_AT", nullable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    @Field(name = "C8D_PUBLISHED_AT")
     private OffsetDateTime publishedAt;
+    
+    @Field(name = "C8D_TYPE")
+    private String type;
 
     public long getDefinitionKey() {
         return definitionKey;

@@ -12,6 +12,4 @@ public interface DeploymentResource {
 
     byte[] getResource();
 
-    String getType();
-
 }

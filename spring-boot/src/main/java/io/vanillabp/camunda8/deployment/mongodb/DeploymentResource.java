@@ -1,41 +1,36 @@
-package io.vanillabp.camunda8.deployment.jpa;
+package io.vanillabp.camunda8.deployment.mongodb;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.DiscriminatorColumn;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Inheritance;
-import jakarta.persistence.InheritanceType;
 import jakarta.persistence.Lob;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.util.List;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.DocumentReference;
+import org.springframework.data.mongodb.core.mapping.Field;
 
-@Entity
-@Table(name = "CAMUNDA8_RESOURCES")
-@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name = "C8R_TYPE")
+@Document(collection = DeploymentResource.COLLECTION_NAME)
 public abstract class DeploymentResource
         implements io.vanillabp.camunda8.deployment.DeploymentResource {
 
-    @Id
-    @Column(name = "C8R_ID")
+    static final String COLLECTION_NAME = "CAMUNDA8_RESOURCES";
+
+    @org.springframework.data.annotation.Id
+    @Field(name = "C8D_ID")
     private int fileId;
 
     @Version
-    @Column(name = "C8R_RECORD_VERSION")
+    @Field(name = "C8R_RECORD_VERSION")
     private int recordVersion;
     
-    @Column(name = "C8R_RESOURCE_NAME")
+    @Field(name = "C8R_RESOURCE_NAME")
     private String resourceName;
 
-    @OneToMany(mappedBy = "deployedResource", fetch = FetchType.LAZY)
+    @DocumentReference(
+            collection = Deployment.COLLECTION_NAME,
+            lazy = true)
     private List<Deployment> deployments;
 
     @Lob
-    @Column(name = "C8R_RESOURCE")
+    @Field(name = "C8R_RESOURCE")
     private byte[] resource;
 
     public int getFileId() {

@@ -23,6 +23,9 @@ To run Camunda 8 on your local computer for development purposes consider to use
 1. [Message correlation IDs](#message-correlation-ids)
 1. [Using Camunda multi-tenancy](#using-camunda-multi-tenancy) 
 1. [Transaction behavior](#transaction-behavior)
+1. [Workflow aggregate persistence](#workflow-aggregate-persistence)
+   1. [JPA](#jpa)
+   1. [MongoDB](#mongodb)
 1. [Workflow aggregate serialization](#workflow-aggregate-serialization)
 
 ## Usage
@@ -297,6 +300,75 @@ public class TaxiRide {
 ```
 
 If there is an exception in your business code and you have to roll back the transaction then Camunda's task retry-mechanism should retry as configured. Additionally, the `TaskException` is used for expected business errors handled by BPMN error boundary events which must not cause a rollback. This is handled by the adapter, one does not need to take care about it.
+
+## Data persistence
+
+The Camunda 8 adapter needs information about BPMN files deployed in the past. This is currently
+not provided by the GRPC-API of Zeebe. Therefore, the adapter persists information by using
+the same persistence technology as the application itself.
+
+*Hint:* When moving to Camunda 8 REST API currently under development, it is likely to get
+rid of this BPMN persistence.
+
+### JPA
+
+JPA is the default persistence. When not using Hibernate's DDL auto-update (not recommended for production) like this 
+
+```yaml
+spring:
+  datasource:
+    jpa:
+      hibernate:
+        ddl-auto: update
+```
+
+the tables required need to be created and maintained using Liquibase:
+
+```yaml
+databaseChangeLog:
+  - include:
+      file: classpath:io/vanillabp/camunda8/liquibase/main.yaml
+```
+
+### MongoDB
+
+When using [MongoDB for persistence](https://github.com/vanillabp/spring-boot-support#mongodb)
+any kind of OffsetDateTime converters need to be configured which are used by the Camunda 8 adapter
+(and also might be used by the business application):
+
+```java
+@Configuration
+public class MongoDbSpringDataUtilConfiguration {
+    
+    // for additional bean definition required see
+    // https://github.com/vanillabp/spring-boot-support#mongodb
+
+    @Bean
+    public MongoCustomConversions mongoCustomConversions() {
+        return new MongoCustomConversions(
+                List.of(new OffsetDateTimeWriteConverter(),
+                        new OffsetDateTimeReadConverter()));
+    }
+}
+
+public class OffsetDateTimeReadConverter implements Converter<Date, OffsetDateTime> {
+    @Override
+    public OffsetDateTime convert(final Date source) {
+        // MongoDB stores times in UTC by default
+        return ZonedDateTime
+                .ofInstant(source.toInstant(), ZoneOffset.UTC)
+                .withZoneSameInstant(ZoneId.systemDefault())
+                .toOffsetDateTime();
+    }
+}
+
+public class OffsetDateTimeWriteConverter implements Converter<OffsetDateTime, Date>  {
+    @Override
+    public Date convert(final OffsetDateTime source) {
+        return Date.from(source.toInstant());
+    }
+}
+```
 
 ## Workflow aggregate serialization
 

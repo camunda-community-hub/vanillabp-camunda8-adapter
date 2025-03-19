@@ -1,5 +1,6 @@
 package io.vanillabp.camunda8.deployment.jpa;
 
+import io.vanillabp.camunda8.deployment.DeploymentPersistence;
 import io.vanillabp.springboot.utils.JpaSpringDataUtilConfiguration;
 import jakarta.persistence.EntityManager;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -56,7 +57,7 @@ public class JpaDeploymentPersistenceConfiguration {
     }
 
     @Bean
-    public JpaDeploymentPersistence c8DeploymentPersistence(
+    public DeploymentPersistence c8DeploymentPersistence(
             DeploymentResourceRepository deploymentResourceRepository,
             DeploymentRepository deploymentRepository) {
 
