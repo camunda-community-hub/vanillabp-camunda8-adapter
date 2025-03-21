@@ -26,19 +26,19 @@ import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 @ConditionalOnBean(name = JpaSpringDataUtilConfiguration.BEANNAME_SPRINGDATAUTIL)
 public class JpaDeploymentPersistenceConfiguration {
 
-    @Bean
-    @ConditionalOnMissingBean(DeployedProcessRepository.class)
-    public DeployedProcessRepository c8JpaDeployedProcessRepository(
+    @Bean(DeployedBpmnRepository.BEAN_NAME)
+    @ConditionalOnMissingBean(DeployedBpmnRepository.class)
+    public DeployedBpmnRepository camunda8JpaDeployedBpmnRepositoryRepository(
             final EntityManager entityManager) {
 
         JpaRepositoryFactory jpaRepositoryFactory = new JpaRepositoryFactory(entityManager);
-        return jpaRepositoryFactory.getRepository(DeployedProcessRepository.class);
+        return jpaRepositoryFactory.getRepository(DeployedBpmnRepository.class);
 
     }
 
-    @Bean
+    @Bean(DeploymentResourceRepository.BEAN_NAME)
     @ConditionalOnMissingBean(DeploymentResourceRepository.class)
-    public DeploymentResourceRepository c8JpaDeploymentResourceRepository(
+    public DeploymentResourceRepository camunda8JpaDeploymentResourceRepository(
             final EntityManager entityManager) {
 
         JpaRepositoryFactory jpaRepositoryFactory = new JpaRepositoryFactory(entityManager);
@@ -46,9 +46,9 @@ public class JpaDeploymentPersistenceConfiguration {
 
     }
 
-    @Bean
+    @Bean(DeploymentRepository.BEAN_NAME)
     @ConditionalOnMissingBean(DeploymentRepository.class)
-    public DeploymentRepository c8JpaDeploymentRepository(
+    public DeploymentRepository camunda8JpaDeploymentRepository(
             final EntityManager entityManager) {
 
         JpaRepositoryFactory jpaRepositoryFactory = new JpaRepositoryFactory(entityManager);
@@ -57,13 +57,15 @@ public class JpaDeploymentPersistenceConfiguration {
     }
 
     @Bean
-    public DeploymentPersistence c8DeploymentPersistence(
-            DeploymentResourceRepository deploymentResourceRepository,
-            DeploymentRepository deploymentRepository) {
+    public DeploymentPersistence camunda8DeploymentPersistence(
+            final DeploymentResourceRepository deploymentResourceRepository,
+            final DeploymentRepository deploymentRepository,
+            final DeployedBpmnRepository deployedBpmnRepository) {
 
         return new JpaDeploymentPersistence(
                 deploymentResourceRepository,
-                deploymentRepository);
+                deploymentRepository,
+                deployedBpmnRepository);
 
     }
 

@@ -1,12 +1,11 @@
 package io.vanillabp.camunda8.deployment.jpa;
 
-import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-@Repository
+@Repository(DeploymentResourceRepository.BEAN_NAME)
 public interface DeploymentResourceRepository extends JpaRepository<DeploymentResource, Integer> {
 
-    List<DeployedBpmn> findByTypeAndDeployments_packageIdNot(String type, int packageId);
-    
+    String BEAN_NAME = "Camunda8DeploymentResourceRepository";
+
 }

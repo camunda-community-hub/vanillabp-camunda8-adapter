@@ -18,22 +18,21 @@ public class MongoDbDeploymentPersistenceConfiguration {
 
     private MongoRepositoryFactory mongoRepositoryFactory;
 
-    @Bean
+    @Bean()
     @ConditionalOnMissingBean(io.vanillabp.camunda8.deployment.mongodb.DeployedBpmnRepository.class)
-    public io.vanillabp.camunda8.deployment.mongodb.DeployedBpmnRepository c8MongoDbDeployedBpmnRepository(
+    public io.vanillabp.camunda8.deployment.mongodb.DeployedBpmnRepository camunda8MongoDbDeployedBpmnRepository(
             final MongoOperations mongoOperations) {
 
         if (mongoRepositoryFactory == null) {
             mongoRepositoryFactory = new MongoRepositoryFactory(mongoOperations);
         }
-        // MongoRepositoryFactory mongoRepositoryFactory
         return mongoRepositoryFactory.getRepository(DeployedBpmnRepository.class);
 
     }
-// RepositoryFactorySupport
+
     @Bean
     @ConditionalOnMissingBean(io.vanillabp.camunda8.deployment.mongodb.DeploymentResourceRepository.class)
-    public io.vanillabp.camunda8.deployment.mongodb.DeploymentResourceRepository c8MongoDbDeploymentResourceRepository(
+    public io.vanillabp.camunda8.deployment.mongodb.DeploymentResourceRepository camunda8MongoDbDeploymentResourceRepository(
             final MongoOperations mongoOperations) {
 
         if (mongoRepositoryFactory == null) {

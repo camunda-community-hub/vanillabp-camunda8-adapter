@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.deployment.jpa;
 
 import io.vanillabp.camunda8.deployment.DeployedBpmn;
+import io.vanillabp.camunda8.deployment.DeployedProcess;
 import io.vanillabp.camunda8.deployment.Deployment;
 import io.vanillabp.camunda8.deployment.DeploymentPersistence;
 import io.vanillabp.camunda8.deployment.DeploymentResource;
@@ -14,12 +15,16 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
 
     private final DeploymentRepository deploymentRepository;
 
+    private final DeployedBpmnRepository deployedBpmnRepository;
+
     public JpaDeploymentPersistence(
             final DeploymentResourceRepository deploymentResourceRepository,
-            final DeploymentRepository deploymentRepository) {
+            final DeploymentRepository deploymentRepository,
+            final DeployedBpmnRepository deployedBpmnRepository) {
 
         this.deploymentResourceRepository = deploymentResourceRepository;
         this.deploymentRepository = deploymentRepository;
+        this.deployedBpmnRepository = deployedBpmnRepository;
 
     }
 
@@ -33,7 +38,7 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <R extends io.vanillabp.camunda8.deployment.DeployedProcess> R addDeployedProcess(
+    public <R extends DeployedProcess> R addDeployedProcess(
             final long definitionKey,
             final int version,
             final int packageId,
@@ -41,7 +46,7 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
             final DeployedBpmn bpmn,
             final OffsetDateTime publishedAt) {
 
-        final var deployedProcess = new DeployedProcess();
+        final var deployedProcess = new io.vanillabp.camunda8.deployment.jpa.DeployedProcess();
 
         final var bpmnEntity = bpmn instanceof io.vanillabp.camunda8.deployment.jpa.DeployedBpmn
                 ? (io.vanillabp.camunda8.deployment.jpa.DeployedBpmn) bpmn
@@ -68,7 +73,7 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <R extends io.vanillabp.camunda8.deployment.DeployedBpmn> R addDeployedBpmn(
+    public <R extends DeployedBpmn> R addDeployedBpmn(
             final int fileId,
             final String resourceName,
             final byte[] resource) {
@@ -87,8 +92,8 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
     public List<? extends DeployedBpmn> getBpmnNotOfPackage(
             final int packageId) {
 
-        return deploymentResourceRepository
-                .findByTypeAndDeployments_packageIdNot(io.vanillabp.camunda8.deployment.jpa.DeployedBpmn.TYPE, packageId)
+        return deployedBpmnRepository
+                .findByDeployments_packageIdNot(packageId)
                 .stream()
                 .distinct() // Oracle doesn't support distinct queries including blob columns, hence the job is done here
                 .toList();
