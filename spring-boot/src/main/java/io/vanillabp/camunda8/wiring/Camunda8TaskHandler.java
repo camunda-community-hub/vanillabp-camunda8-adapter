@@ -384,7 +384,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
         Camunda8TransactionAspect.runDeferredInTransaction.get().argsSupplier[param.getIndex()] = () -> {
             // Using findById is required to get an object instead of a Hibernate proxy.
-            // Otherwise for e.g. Camunda8 connector JSON serialization of the
+            // Otherwise, for e.g. Camunda8 connector JSON serialization of the
             // workflow aggregate is not possible.
             workflowAggregateCache.workflowAggregate = workflowAggregateRepository
                     .findById(workflowAggregateId)

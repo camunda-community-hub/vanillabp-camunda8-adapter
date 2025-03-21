@@ -104,7 +104,7 @@ public class Camunda8TransactionProcessor {
             // this runnable will test whether the task still exists
             event.runnable.run();
         } catch (Exception e) {
-            // if the task is completed or cancelled, then the tx is rolled back
+            // if the task is completed or cancelled, then the tx has to be rolled back
             if ((e instanceof ClientStatusException clientStatusException)
                     && (clientStatusException.getStatus().getCode() == Status.NOT_FOUND.getCode())) {
                 throw new RuntimeException(

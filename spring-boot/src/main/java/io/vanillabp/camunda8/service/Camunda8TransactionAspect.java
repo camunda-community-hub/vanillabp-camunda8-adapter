@@ -49,21 +49,28 @@ public class Camunda8TransactionAspect {
             final RunDeferredInTransactionSupplier[] argsSupplier,
             final Runnable saveAggregateAfterWorkflowTask) {
 
-        runDeferredInTransaction.get().argsSupplier = argsSupplier;
-        runDeferredInTransaction.get().saveAggregateAfterWorkflowTask = saveAggregateAfterWorkflowTask;
+        final var deferred = runDeferredInTransaction.get();
+        deferred.argsSupplier = argsSupplier;
+        deferred.saveAggregateAfterWorkflowTask = saveAggregateAfterWorkflowTask;
 
     }
 
     public static void unregisterDeferredInTransaction() {
 
-        runDeferredInTransaction.get().argsSupplier = null;
-        runDeferredInTransaction.get().saveAggregateAfterWorkflowTask = null;
+        final var deferred = runDeferredInTransaction.get();
+        deferred.argsSupplier = null;
+        deferred.saveAggregateAfterWorkflowTask = null;
 
     }
 
     private void saveWorkflowAggregate() {
 
-        runDeferredInTransaction.get().saveAggregateAfterWorkflowTask.run();
+        final var deferred = runDeferredInTransaction.get();
+        // sve only if activity currently executed is part of C8 and
+        // not part of other adapters like (C7)
+        if (deferred.saveAggregateAfterWorkflowTask != null) {
+            deferred.saveAggregateAfterWorkflowTask.run();
+        }
 
     }
 
@@ -224,9 +231,17 @@ public class Camunda8TransactionAspect {
             return null;
         }
 
+        final var suppliers = runDeferredInTransaction.get();
+        // if activity currently executed is not part of C8 but
+        // part of other adapters like (C7), then simply return
+        if ((suppliers == null)
+                || (suppliers.argsSupplier == null)) {
+            return originalArgs;
+        }
+
         final var newArgs = new Object[ originalArgs.length ];
         for (var i = 0; i < originalArgs.length; ++i) {
-            final var supplier = runDeferredInTransaction.get().argsSupplier[i];
+            final var supplier = suppliers.argsSupplier[i];
             if (supplier != null) {
                 newArgs[i] = supplier.get();
             } else {
