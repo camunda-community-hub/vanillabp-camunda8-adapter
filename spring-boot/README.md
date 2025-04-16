@@ -406,3 +406,6 @@ public List<String> getOthersNames() {
             .collect(Collectors.toList());
 }
 ```
+
+*Hint:* If you see an error like this `io.grpc.StatusRuntimeException: UNKNOWN: Command 'PUBLISH' rejected with code EXCEEDED_BATCH_RECORD_SIZE`
+than you know that you already hit the maximum size of data passed to Camunda 8.
