@@ -12,7 +12,7 @@
   <artifactId>camunda8-adapter</artifactId>
 
   <name>VanillaBP SPI adapter for Camunda 8.x</name>
-  <version>1.6.1</version>
+  <version>1.6.2-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <properties>
