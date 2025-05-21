@@ -98,8 +98,8 @@ public class DeploymentService {
         final var versionedId = camunda8DeployedProcess.getProcessDefinitionKey();
 
         final var previous = persistence.findDeployedProcess(versionedId);
-        if ((previous.isPresent())
-                && (previous.get().getPackageId() == packageId)) {
+        if (previous.isPresent()
+                && (previous.get().getVersion() == camunda8DeployedProcess.getVersion())) {
             return (DeployedProcess) previous.get();
         }
 
