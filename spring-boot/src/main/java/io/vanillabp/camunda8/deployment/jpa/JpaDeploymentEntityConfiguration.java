@@ -3,11 +3,11 @@ package io.vanillabp.camunda8.deployment.jpa;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
-import org.springframework.orm.jpa.persistenceunit.PersistenceUnitPostProcessor;
+import org.springframework.orm.jpa.persistenceunit.PersistenceManagedTypes;
 
 /**
  * The annotation @EntityScan cannot be used here because when
@@ -20,6 +20,7 @@ import org.springframework.orm.jpa.persistenceunit.PersistenceUnitPostProcessor;
  * this configuration.
  */
 @Configuration
+@ConditionalOnBean(PersistenceManagedTypes.class)
 @AutoConfigureBefore(HibernateJpaAutoConfiguration.class)
 public class JpaDeploymentEntityConfiguration {
 
@@ -33,29 +34,21 @@ public class JpaDeploymentEntityConfiguration {
                     final Object bean,
                     final String beanName) throws BeansException {
 
-                if (!(bean instanceof LocalContainerEntityManagerFactoryBean)) {
+                if (!(bean instanceof PersistenceManagedTypes pmt)) {
                     return bean;
                 }
 
-                ((LocalContainerEntityManagerFactoryBean) bean)
-                        .setPersistenceUnitPostProcessors(c8JpaPersistenceUnitPostProcessor());
+                final var classNames = pmt.getManagedClassNames();
+                classNames.add(DeploymentResource.class.getName());
+                classNames.add(DeployedBpmn.class.getName());
+                classNames.add(Deployment.class.getName());
+                classNames.add(DeployedProcess.class.getName());
 
                 return bean;
 
             }
 
         };
-
-    }
-
-    public PersistenceUnitPostProcessor c8JpaPersistenceUnitPostProcessor() {
-
-        return pui -> {
-                pui.addManagedClassName(DeploymentResource.class.getName());
-                pui.addManagedClassName(DeployedBpmn.class.getName());
-                pui.addManagedClassName(Deployment.class.getName());
-                pui.addManagedClassName(DeployedProcess.class.getName());
-            };
 
     }
 
