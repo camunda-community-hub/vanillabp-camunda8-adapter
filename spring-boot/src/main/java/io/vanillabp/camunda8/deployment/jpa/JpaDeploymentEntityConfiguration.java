@@ -3,7 +3,7 @@ package io.vanillabp.camunda8.deployment.jpa;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,7 +20,7 @@ import org.springframework.orm.jpa.persistenceunit.PersistenceManagedTypes;
  * this configuration.
  */
 @Configuration
-@ConditionalOnBean(PersistenceManagedTypes.class)
+@ConditionalOnClass(PersistenceManagedTypes.class)
 @AutoConfigureBefore(HibernateJpaAutoConfiguration.class)
 public class JpaDeploymentEntityConfiguration {
 
