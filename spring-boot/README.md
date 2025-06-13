@@ -27,6 +27,7 @@ To run Camunda 8 on your local computer for development purposes consider to use
    1. [JPA](#jpa)
    1. [MongoDB](#mongodb)
 1. [Workflow aggregate serialization](#workflow-aggregate-serialization)
+1. [Connector support](#connector-support)
 
 ## Usage
 
@@ -409,3 +410,16 @@ public List<String> getOthersNames() {
 
 *Hint:* If you see an error like this `io.grpc.StatusRuntimeException: UNKNOWN: Command 'PUBLISH' rejected with code EXCEEDED_BATCH_RECORD_SIZE`
 than you know that you already hit the maximum size of data passed to Camunda 8.
+
+## Connector support
+Connectors are not supported by VanillaBP's default configuration. A connector element in a bpmn file will result in an error during the application start up:
+`No public method annotated with @io.vanillabp.spi.service.WorkflowTask is matching task having task-definition 'task-definition' of process 'process-name'.`
+
+To enable connector support `allow-connectors` must be added in the application configuration. The setting can be set globally, on workflow-module or on process level:
+```yaml
+vanillabp:
+   allow-connectors: true
+   workflow-modules:
+      loan-approval:
+         allow-connectors: true
+```

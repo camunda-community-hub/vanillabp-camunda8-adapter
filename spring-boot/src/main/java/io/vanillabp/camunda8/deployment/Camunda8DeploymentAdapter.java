@@ -241,15 +241,18 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                 })
                 // wire task methods
                 .flatMap(process ->
-                        Stream.of(
-                            taskWiring.connectablesForType(process, model, ServiceTask.class),
-                            taskWiring.connectablesForType(process, model, BusinessRuleTask.class),
-                            taskWiring.connectablesForType(process, model, SendTask.class),
-                            taskWiring.connectablesForType(process, model, UserTask.class),
-                            taskWiring.connectablesForType(process, model, IntermediateThrowEvent.class),
-                            taskWiring.connectablesForType(process, model, EndEvent.class)
-                        )
-                        .flatMap(i -> i) // map stream of streams to one stream
+                        {
+                            boolean allowConnectors = camunda8Properties.areConnectorsAllowed(workflowModuleId, process.getId());
+                            return Stream.of(
+                                taskWiring.connectablesForType(process, model, ServiceTask.class, allowConnectors),
+                                taskWiring.connectablesForType(process, model, BusinessRuleTask.class, allowConnectors),
+                                taskWiring.connectablesForType(process, model, SendTask.class, allowConnectors),
+                                taskWiring.connectablesForType(process, model, UserTask.class, allowConnectors),
+                                taskWiring.connectablesForType(process, model, IntermediateThrowEvent.class, allowConnectors),
+                                taskWiring.connectablesForType(process, model, EndEvent.class, allowConnectors)
+                            )
+                            .flatMap(i -> i);
+                        } // map stream of streams to one stream
                     )
                 .forEach(connectable -> taskWiring.wireTask(workflowModuleId, processService[0], connectable));
     	

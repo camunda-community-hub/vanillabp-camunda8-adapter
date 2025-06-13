@@ -22,6 +22,10 @@ import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.TaskWiringBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
 import jakarta.persistence.Id;
+import org.camunda.bpm.model.xml.instance.ModelElementInstance;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationContext;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -31,11 +35,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
-import org.camunda.bpm.model.xml.instance.ModelElementInstance;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.ApplicationContext;
 
 public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camunda8ProcessService<?>, Camunda8MethodParameterFactory>
         implements Consumer<ZeebeClient> {
@@ -140,22 +142,24 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     public Stream<Camunda8Connectable> connectablesForType(
             final Process process,
             final BpmnModelInstanceImpl model,
-            final Class<? extends BaseElement> type) {
-        
+            final Class<? extends BaseElement> type,
+            final boolean allowConnectors) {
+
         final var kind = UserTask.class.isAssignableFrom(type) ? Type.USERTASK : Type.TASK;
-        
+
         final var stream = model
                 .getModelElementsByType(type)
                 .stream()
-                .filter(element -> getOwningProcess(element).equals(process))
+                .filter(element -> !allowConnectors || hasModelerTemplateAttributeSetForConnector(element))
+                .filter(element -> Objects.equals(getOwningProcess(element), process))
                 .map(element -> new Camunda8Connectable(
                         process,
                         element.getId(),
                         kind,
                         getTaskDefinition(kind, element),
                         element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)))
-                .filter(connectable -> connectable.isExecutableProcess());
-        
+                .filter(Camunda8Connectable::isExecutableProcess);
+
         if (kind == Type.USERTASK) {
             return stream;
         }
@@ -163,7 +167,11 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         return stream.filter(connectable -> connectable.getTaskDefinition() != null);
         
     }
-    
+
+    private boolean hasModelerTemplateAttributeSetForConnector(BaseElement element) {
+        return element.getAttributeValueNs("http://camunda.org/schema/zeebe/1.0", "modelerTemplate") == null;
+    }
+
     private String getTaskDefinition(
             final Type kind,
             final BaseElement element) {
@@ -327,7 +335,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             
             return
                     method.getName().substring(3, 4).toLowerCase()
-                    + method.getName().substring(4);
+                            + method.getName().substring(4);
         } else if (method.getName().startsWith("is")) {
             if (method.getName().length() < 3) {
                 return method.getName();
@@ -335,7 +343,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             
             return
                     method.getName().substring(2, 3).toLowerCase()
-                    + method.getName().substring(3);
+                            + method.getName().substring(3);
         } else {
             return method.getName();
         }
@@ -355,8 +363,8 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 .stream()
                 .filter(parameter -> parameter instanceof ParameterVariables)
                 .flatMap(parameter -> ((ParameterVariables) parameter).getVariables().stream())
-                .forEach(result::add); 
-        
+                .forEach(result::add);
+
         return result;
         
     }

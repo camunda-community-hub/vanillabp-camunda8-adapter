@@ -10,6 +10,8 @@ import org.springframework.util.StringUtils;
 @ConfigurationProperties(prefix = VanillaBpProperties.PREFIX, ignoreUnknownFields = true)
 public class Camunda8VanillaBpProperties {
 
+    private boolean allowConnectors = false;
+
     private Map<String, WorkflowModuleAdapterProperties> workflowModules = Map.of();
 
     public Map<String, WorkflowModuleAdapterProperties> getWorkflowModules() {
@@ -107,6 +109,41 @@ public class Camunda8VanillaBpProperties {
 
     }
 
+    public boolean areConnectorsAllowed(
+            final String workflowModuleId,
+            final String bpmnProcessId) {
+
+        boolean result = allowConnectors;
+
+        final var workflowModule = workflowModules.get(workflowModuleId);
+        if (workflowModule == null) {
+            return result;
+        }
+        final var workflowModuleAllowsConnectors = workflowModule.isAllowConnectors();
+        if (workflowModuleAllowsConnectors) {
+            result = workflowModuleAllowsConnectors;
+        }
+
+        if (bpmnProcessId == null) {
+            return result;
+        }
+        final var workflow = workflowModule.getWorkflows().get(bpmnProcessId);
+        if (workflow == null) {
+            return result;
+        }
+        final var workflowAllowConnectors = workflow.isAllowConnectors();
+        if (workflowAllowConnectors) {
+            result = workflowAllowConnectors;
+        }
+
+        return result;
+
+    }
+
+    public void setAllowConnectors(boolean allowConnectors) {
+        this.allowConnectors = allowConnectors;
+    }
+
     public static class WorkflowModuleAdapterConfiguration extends AdapterConfiguration {
 
         private boolean taskIdAsHexString = false;
@@ -149,6 +186,8 @@ public class Camunda8VanillaBpProperties {
 
         String workflowModuleId;
 
+        boolean allowConnectors;
+
         private Map<String, WorkflowModuleAdapterConfiguration> adapters = Map.of();
 
         private Map<String, WorkflowAdapterProperties> workflows = Map.of();
@@ -173,6 +212,13 @@ public class Camunda8VanillaBpProperties {
 
         }
 
+        public boolean isAllowConnectors() {
+            return allowConnectors;
+        }
+
+        public void setAllowConnectors(boolean allowConnectors) {
+            this.allowConnectors = allowConnectors;
+        }
     }
 
     public static class WorkflowAdapterProperties {
@@ -180,6 +226,8 @@ public class Camunda8VanillaBpProperties {
         String bpmnProcessId;
 
         WorkflowModuleAdapterProperties workflowModule;
+
+        boolean allowConnectors;
 
         private Map<String, WorkerProperties> adapters = Map.of();
 
@@ -209,6 +257,13 @@ public class Camunda8VanillaBpProperties {
             this.tasks = tasks;
         }
 
+        public boolean isAllowConnectors() {
+            return allowConnectors;
+        }
+
+        public void setAllowConnectors(boolean allowConnectors) {
+            this.allowConnectors = allowConnectors;
+        }
     }
 
     public static class WorkerProperties {
