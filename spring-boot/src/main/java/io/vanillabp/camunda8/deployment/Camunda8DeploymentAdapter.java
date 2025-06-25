@@ -171,6 +171,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
             deployedResources
                     .getProcesses()
                     .forEach(process -> deploymentService.addProcess(
+                            workflowModuleId,
                             deploymentHashCode[0],
                             process,
                             deployedProcesses.get(process.getBpmnProcessId())));
@@ -179,7 +180,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         
         // BPMNs which were deployed in the past need to be forced to be parsed for wiring
         deploymentService
-                .getBpmnNotOfPackage(deploymentHashCode[0])
+                .getBpmnNotOfPackage(workflowModuleId, deploymentHashCode[0])
                 .forEach(bpmn -> {
                     
                     try (var inputStream = new ByteArrayInputStream(

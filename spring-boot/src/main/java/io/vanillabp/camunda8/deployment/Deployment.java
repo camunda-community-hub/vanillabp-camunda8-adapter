@@ -8,6 +8,8 @@ public interface Deployment {
 
     int getVersion();
 
+    String getWorkflowModuleId();
+
     int getPackageId();
 
     OffsetDateTime getPublishedAt();

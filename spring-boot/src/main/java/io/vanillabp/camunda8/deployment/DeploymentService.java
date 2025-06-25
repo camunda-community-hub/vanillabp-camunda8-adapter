@@ -91,6 +91,7 @@ public class DeploymentService {
             maxAttempts = 100,
             backoff = @Backoff(delay = 200, maxDelay = 1000, multiplier = 1.5, random = true))
     public DeployedProcess addProcess(
+            final String workflowModuleId,
             final int packageId,
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
@@ -100,13 +101,18 @@ public class DeploymentService {
         final var previous = persistence.findDeployedProcess(versionedId);
         if (previous.isPresent()
                 && (previous.get().getVersion() == camunda8DeployedProcess.getVersion())) {
-            return (DeployedProcess) previous.get();
+            var result = (DeployedProcess) previous.get();
+            if (result.getWorkflowModuleId() == null) {
+                result = persistence.updateMissingWorkflowModuleIdOfDeployedProcess(result, workflowModuleId);
+            }
+            return result;
         }
 
         return persistence.addDeployedProcess(
                 versionedId,
                 camunda8DeployedProcess.getVersion(),
                 packageId,
+                workflowModuleId,
                 camunda8DeployedProcess.getBpmnProcessId(),
                 bpmn,
                 OffsetDateTime.now());
@@ -116,27 +122,30 @@ public class DeploymentService {
     @Recover
     public DeployedProcess recoverAddProcess(
             final OptimisticLockingFailureException exception,
+            final String workflowModuleId,
             final int packageId,
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
 
-        return staleRecoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
+        return staleRecoverAddProcess(exception, workflowModuleId, packageId, camunda8DeployedProcess, bpmn);
 
     }
 
     @Recover
     public DeployedProcess recoverAddProcess(
             final ObjectOptimisticLockingFailureException exception,
+            final String workflowModuleId,
             final int packageId,
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
 
-        return staleRecoverAddProcess(exception, packageId, camunda8DeployedProcess, bpmn);
+        return staleRecoverAddProcess(exception, workflowModuleId, packageId, camunda8DeployedProcess, bpmn);
 
     }
 
     private DeployedProcess staleRecoverAddProcess(
             final Exception exception,
+            final String workflowModuleId,
             final int packageId,
             final Process camunda8DeployedProcess,
             final DeployedBpmn bpmn) {
@@ -144,13 +153,17 @@ public class DeploymentService {
         throw new RuntimeException(
                 "Could not save Process '"
                         + camunda8DeployedProcess.getBpmnProcessId()
+                        + "' of workflow module '"
+                        + workflowModuleId
                         + "' in local DB due to stale OptimisticLockingFailureException", exception);
 
     }
 
-    public List<? extends DeployedBpmn> getBpmnNotOfPackage(final int packageId) {
+    public List<? extends DeployedBpmn> getBpmnNotOfPackage(
+            final String workflowModuleId,
+            final int packageId) {
 
-        return persistence.getBpmnNotOfPackage(packageId);
+        return persistence.getBpmnNotOfPackage(workflowModuleId, packageId);
 
     }
 
