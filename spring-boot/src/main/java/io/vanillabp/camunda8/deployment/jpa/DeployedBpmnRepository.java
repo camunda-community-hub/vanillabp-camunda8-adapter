@@ -9,6 +9,6 @@ public interface DeployedBpmnRepository extends JpaRepository<DeployedBpmn, Inte
 
     String BEAN_NAME = "Camunda8DeployedBpmnRepository";
 
-    List<DeployedBpmn> findByDeployments_packageIdNot(int packageId);
+    List<DeployedBpmn> findByDeployments_workflowModuleIdAndDeployments_PackageIdNot(String workflowModuleId, int packageId);
 
 }

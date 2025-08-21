@@ -38,10 +38,23 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
 
     @Override
     @SuppressWarnings("unchecked")
+    public <R extends DeployedProcess> R updateMissingWorkflowModuleIdOfDeployedProcess(
+            final R deployedProcess,
+            final String workflowModuleId) {
+
+        final var jpaDeployedProcess = (io.vanillabp.camunda8.deployment.jpa.DeployedProcess) deployedProcess;
+        jpaDeployedProcess.setWorkflowModuleId(workflowModuleId);
+        return (R) deploymentRepository.save(jpaDeployedProcess);
+
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
     public <R extends DeployedProcess> R addDeployedProcess(
             final long definitionKey,
             final int version,
             final int packageId,
+            final String workflowModuleId,
             final String bpmnProcessId,
             final DeployedBpmn bpmn,
             final OffsetDateTime publishedAt) {
@@ -55,6 +68,7 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
         deployedProcess.setDefinitionKey(definitionKey);
         deployedProcess.setVersion(version);
         deployedProcess.setPackageId(packageId);
+        deployedProcess.setWorkflowModuleId(workflowModuleId);
         deployedProcess.setBpmnProcessId(bpmnProcessId);
         deployedProcess.setDeployedResource(bpmnEntity);
         deployedProcess.setPublishedAt(OffsetDateTime.now());
@@ -90,10 +104,11 @@ public class JpaDeploymentPersistence implements DeploymentPersistence {
 
     @Override
     public List<? extends DeployedBpmn> getBpmnNotOfPackage(
+            final String workflowModuleId,
             final int packageId) {
 
         return deployedBpmnRepository
-                .findByDeployments_packageIdNot(packageId)
+                .findByDeployments_workflowModuleIdAndDeployments_PackageIdNot(workflowModuleId, packageId)
                 .stream()
                 .distinct() // Oracle doesn't support distinct queries including blob columns, hence the job is done here
                 .toList();

@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: add-workflow-module-id
+      author: stephanpelikan
+      changes:
+        - addColumn:
+            tableName: CAMUNDA8_DEPLOYMENTS
+            columns:
+              - column:
+                  name: C8D_WORKFLOWMODULE_ID
+                  type: varchar(255)

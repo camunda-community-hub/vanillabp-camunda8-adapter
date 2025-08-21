@@ -29,6 +29,9 @@ public abstract class Deployment
     @Field(name = "C8D_PACKAGE_ID")
     private int packageId;
 
+    @Field(name = "C8D_WORKFLOWMODULE_ID")
+    private String workflowModuleId;
+
     @DocumentReference(
             collection = DeploymentResource.COLLECTION_NAME,
             lazy = true)
@@ -87,6 +90,15 @@ public abstract class Deployment
     
     public void setRecordVersion(int recordVersion) {
         this.recordVersion = recordVersion;
+    }
+
+    @Override
+    public String getWorkflowModuleId() {
+        return workflowModuleId;
+    }
+
+    public void setWorkflowModuleId(String workflowModuleId) {
+        this.workflowModuleId = workflowModuleId;
     }
 
     @Override

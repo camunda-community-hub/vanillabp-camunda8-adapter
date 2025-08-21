@@ -38,10 +38,23 @@ public class MongoDbDeploymentPersistence implements DeploymentPersistence {
 
     @Override
     @SuppressWarnings("unchecked")
+    public <R extends io.vanillabp.camunda8.deployment.DeployedProcess> R updateMissingWorkflowModuleIdOfDeployedProcess(
+            final R deployedProcess,
+            final String workflowModuleId) {
+
+        final var mongoDeployedProcess = (io.vanillabp.camunda8.deployment.mongodb.DeployedProcess) deployedProcess;
+        mongoDeployedProcess.setWorkflowModuleId(workflowModuleId);
+        return (R) deploymentRepository.save(mongoDeployedProcess);
+
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
     public <R extends io.vanillabp.camunda8.deployment.DeployedProcess> R addDeployedProcess(
             final long definitionKey,
             final int version,
             final int packageId,
+            final String workflowModuleId,
             final String bpmnProcessId,
             final DeployedBpmn bpmn,
             final OffsetDateTime publishedAt) {
@@ -56,6 +69,7 @@ public class MongoDbDeploymentPersistence implements DeploymentPersistence {
         deployedProcess.setDefinitionKey(definitionKey);
         deployedProcess.setVersion(version);
         deployedProcess.setPackageId(packageId);
+        deployedProcess.setWorkflowModuleId(workflowModuleId);
         deployedProcess.setBpmnProcessId(bpmnProcessId);
         deployedProcess.setDeployedResource(bpmnEntity);
         deployedProcess.setPublishedAt(OffsetDateTime.now());
@@ -97,12 +111,16 @@ public class MongoDbDeploymentPersistence implements DeploymentPersistence {
 
     @Override
     public List<? extends DeployedBpmn> getBpmnNotOfPackage(
+            final String workflowModuleId,
             final int packageId) {
 
         return deployedBpmnRepository
                 .findAll()
                 .stream()
-                .filter(deployedBpmn -> deployedBpmn.getDeployments().stream().anyMatch(deployment -> deployment.getPackageId() != packageId))
+                .filter(deployedBpmn -> deployedBpmn.getDeployments().stream().anyMatch(deployment ->
+                        deployment.getWorkflowModuleId() != null
+                        && workflowModuleId.equals(deployment.getWorkflowModuleId())
+                        && deployment.getPackageId() != packageId))
                 .distinct()
                 .toList();
 

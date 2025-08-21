@@ -9,10 +9,15 @@ public interface DeploymentPersistence {
     Optional<? extends Deployment> findDeployedProcess(
             long definitionKey);
 
+    <R extends DeployedProcess> R updateMissingWorkflowModuleIdOfDeployedProcess(
+            R deployedProcess,
+            String workflowModuleId);
+
     <R extends DeployedProcess> R addDeployedProcess(
             long definitionKey,
             int version,
             int packageId,
+            String workflowModuleId,
             String bpmnProcessId,
             final DeployedBpmn bpmn,
             OffsetDateTime publishedAt);
@@ -26,6 +31,7 @@ public interface DeploymentPersistence {
             byte[] resource);
 
     List<? extends DeployedBpmn> getBpmnNotOfPackage(
-            final int packageId);
+            String workflowModuleId,
+            int packageId);
 
 }

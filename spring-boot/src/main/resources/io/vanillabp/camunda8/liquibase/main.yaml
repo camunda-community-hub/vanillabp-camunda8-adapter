@@ -5,3 +5,6 @@ databaseChangeLog:
   - include:
       relativeToChangelogFile: true
       file: issue_26.yaml # https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/issues/26
+  - include:
+      relativeToChangelogFile: true
+      file: add_wfm_id.yaml

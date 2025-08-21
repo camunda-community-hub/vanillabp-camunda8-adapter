@@ -38,6 +38,9 @@ public abstract class Deployment
     @Column(name = "C8D_PACKAGE_ID")
     private int packageId;
 
+    @Column(name = "C8D_WORKFLOWMODULE_ID")
+    private String workflowModuleId;
+
     @ManyToOne(optional = false)
     @JoinColumn(name = "C8D_RESOURCE", nullable = false, updatable = false)
     private DeploymentResource deployedResource;
@@ -91,6 +94,14 @@ public abstract class Deployment
     
     public void setRecordVersion(int recordVersion) {
         this.recordVersion = recordVersion;
+    }
+
+    public String getWorkflowModuleId() {
+        return workflowModuleId;
+    }
+
+    public void setWorkflowModuleId(String workflowModuleId) {
+        this.workflowModuleId = workflowModuleId;
     }
 
     @Override
