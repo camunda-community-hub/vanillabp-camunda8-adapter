@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.deployment;
 
-import io.camunda.zeebe.client.ZeebeClient;
+import io.camunda.client.CamundaClient;
+import io.camunda.spring.client.event.CamundaClientCreatedEvent;
 import io.camunda.zeebe.model.bpmn.impl.BpmnModelInstanceImpl;
 import io.camunda.zeebe.model.bpmn.impl.BpmnParser;
 import io.camunda.zeebe.model.bpmn.instance.BusinessRuleTask;
@@ -13,7 +14,6 @@ import io.camunda.zeebe.model.bpmn.instance.ServiceTask;
 import io.camunda.zeebe.model.bpmn.instance.SignalEventDefinition;
 import io.camunda.zeebe.model.bpmn.instance.StartEvent;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
-import io.camunda.zeebe.spring.client.event.ZeebeClientCreatedEvent;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
@@ -47,7 +47,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
 
     private final Camunda8VanillaBpProperties camunda8Properties;
     
-    private ZeebeClient client;
+    private CamundaClient client;
 
     public Camunda8DeploymentAdapter(
             final String applicationName,
@@ -78,8 +78,8 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     }
 
     @EventListener
-    public void zeebeClientCreated(
-            final ZeebeClientCreatedEvent event) {
+    public void camundaClientCreated(
+            final CamundaClientCreatedEvent event) {
 
         this.client = event.getClient();
 
@@ -245,9 +245,11 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                         {
                             boolean allowConnectors = camunda8Properties.areConnectorsAllowed(workflowModuleId, process.getId());
                             return Stream.of(
+                                //taskWiring.connectablesForType(process, model, ZeebeExecutionListener.class, allowConnectors),
                                 taskWiring.connectablesForType(process, model, ServiceTask.class, allowConnectors),
                                 taskWiring.connectablesForType(process, model, BusinessRuleTask.class, allowConnectors),
                                 taskWiring.connectablesForType(process, model, SendTask.class, allowConnectors),
+                                //taskWiring.connectablesForType(process, model, ZeebeTaskListener.class, allowConnectors),
                                 taskWiring.connectablesForType(process, model, UserTask.class, allowConnectors),
                                 taskWiring.connectablesForType(process, model, IntermediateThrowEvent.class, allowConnectors),
                                 taskWiring.connectablesForType(process, model, EndEvent.class, allowConnectors)

@@ -1,6 +1,6 @@
 package io.vanillabp.camunda8.deployment;
 
-import io.camunda.zeebe.client.api.response.Process;
+import io.camunda.client.api.response.Process;
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
 import java.io.ByteArrayOutputStream;

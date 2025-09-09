@@ -1,14 +1,13 @@
 package io.vanillabp.camunda8.wiring;
 
-import io.camunda.zeebe.client.api.response.ActivatedJob;
-import io.camunda.zeebe.client.api.worker.JobClient;
-import io.camunda.zeebe.client.api.worker.JobHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import io.camunda.client.api.response.ActivatedJob;
+import io.camunda.client.api.worker.JobClient;
+import io.camunda.client.api.worker.JobHandler;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Camunda8UserTaskHandler implements JobHandler {
 

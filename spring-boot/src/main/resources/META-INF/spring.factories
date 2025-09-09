@@ -1,0 +1,1 @@
+org.springframework.boot.autoconfigure.AutoConfigurationImportFilter=io.vanillabp.camunda8.config.DisableCamundaSpringAutoConfigurationImportFilter

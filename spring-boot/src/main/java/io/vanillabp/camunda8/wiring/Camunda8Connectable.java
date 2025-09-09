@@ -7,7 +7,7 @@ import io.vanillabp.springboot.adapter.Connectable;
 public class Camunda8Connectable implements Connectable {
     
     public static enum Type {
-        TASK, USERTASK
+        TASK, USERTASK, ZEEBE_USERTASK
     };
 
     private Process process;
