@@ -1,7 +1,7 @@
 package io.vanillabp.camunda8.wiring;
 
-import io.camunda.zeebe.client.ZeebeClient;
-import io.camunda.zeebe.client.api.worker.JobWorkerBuilderStep1.JobWorkerBuilderStep3;
+import io.camunda.client.CamundaClient;
+import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 import io.camunda.zeebe.model.bpmn.impl.BpmnModelInstanceImpl;
 import io.camunda.zeebe.model.bpmn.instance.BaseElement;
 import io.camunda.zeebe.model.bpmn.instance.Process;
@@ -9,6 +9,7 @@ import io.camunda.zeebe.model.bpmn.instance.UserTask;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeFormDefinition;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeLoopCharacteristics;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeUserTask;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.deployment.DeployedBpmn;
@@ -22,10 +23,6 @@ import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.TaskWiringBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
 import jakarta.persistence.Id;
-import org.camunda.bpm.model.xml.instance.ModelElementInstance;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.ApplicationContext;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -34,13 +31,16 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import org.camunda.bpm.model.xml.instance.ModelElementInstance;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationContext;
 
 public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camunda8ProcessService<?>, Camunda8MethodParameterFactory>
-        implements Consumer<ZeebeClient> {
+        implements Consumer<CamundaClient> {
 
     /*
      * timeout can be set to Long.MAX_VALUE but this will cause a subsequent error
@@ -59,9 +59,9 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     
     private final Camunda8UserTaskHandler userTaskHandler;
 
-    private ZeebeClient client;
+    private CamundaClient client;
     
-    private List<JobWorkerBuilderStep3> workers = new LinkedList<>();
+    private List<JobWorkerBuilderStep1.JobWorkerBuilderStep3> workers = new LinkedList<>();
 
     private List<Camunda8TaskHandler> handlers = new LinkedList<>();
 
@@ -103,7 +103,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
      */
     @Override
     public void accept(
-            final ZeebeClient client) {
+            final CamundaClient client) {
         
         this.client = client;
         handlers.forEach(handler -> handler.accept(client));
@@ -135,7 +135,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 .forEach(workers::add);
 
         workers
-                .forEach(JobWorkerBuilderStep3::open);
+                .forEach(JobWorkerBuilderStep1.JobWorkerBuilderStep3::open);
         
     }
 
@@ -145,27 +145,34 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             final Class<? extends BaseElement> type,
             final boolean allowConnectors) {
 
-        final var kind = UserTask.class.isAssignableFrom(type) ? Type.USERTASK : Type.TASK;
+        if (!process.isExecutable()) {
+            return Stream.empty();
+        }
 
-        final var stream = model
+        return model
                 .getModelElementsByType(type)
                 .stream()
                 .filter(element -> !allowConnectors || hasModelerTemplateAttributeSetForConnector(element))
                 .filter(element -> Objects.equals(getOwningProcess(element), process))
-                .map(element -> new Camunda8Connectable(
-                        process,
-                        element.getId(),
-                        kind,
-                        getTaskDefinition(kind, element),
-                        element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)))
-                .filter(Camunda8Connectable::isExecutableProcess);
+                .map(element -> {
+                    final var kind = !UserTask.class.isAssignableFrom(type)
+                            ? Type.TASK
+                            : element.getSingleExtensionElement(ZeebeUserTask.class) == null
+                            ? Type.USERTASK
+                            : Type.ZEEBE_USERTASK;
+                    final var taskDefinition = getTaskDefinition(kind, element);
+                    if (taskDefinition == null) {
+                        return null;
+                    }
+                    return new Camunda8Connectable(
+                            process,
+                            element.getId(),
+                            kind,
+                            taskDefinition,
+                            element.getSingleExtensionElement(ZeebeLoopCharacteristics.class));
+                })
+                .filter(Objects::nonNull);
 
-        if (kind == Type.USERTASK) {
-            return stream;
-        }
-        
-        return stream.filter(connectable -> connectable.getTaskDefinition() != null);
-        
     }
 
     private boolean hasModelerTemplateAttributeSetForConnector(BaseElement element) {
@@ -184,6 +191,12 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             }
             return formDefinition.getFormKey();
             
+        }
+
+        if (kind == Type.ZEEBE_USERTASK) {
+
+
+
         }
         
         final var taskDefinition = element.getSingleExtensionElement(ZeebeTaskDefinition.class);

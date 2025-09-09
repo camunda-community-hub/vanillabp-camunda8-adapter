@@ -1,9 +1,9 @@
 package io.vanillabp.camunda8.wiring;
 
-import io.camunda.zeebe.client.ZeebeClient;
-import io.camunda.zeebe.client.api.response.ActivatedJob;
-import io.camunda.zeebe.client.api.worker.JobClient;
-import io.camunda.zeebe.client.api.worker.JobHandler;
+import io.camunda.client.CamundaClient;
+import io.camunda.client.api.response.ActivatedJob;
+import io.camunda.client.api.worker.JobClient;
+import io.camunda.client.api.worker.JobHandler;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.LoggingContext;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
@@ -34,7 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
 
-public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, Consumer<ZeebeClient> {
+public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, Consumer<CamundaClient> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8TaskHandler.class);
 
@@ -50,7 +50,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
     private final boolean publishUserTaskIdAsHexString;
 
-    private ZeebeClient zeebeClient;
+    private CamundaClient camundaClient;
 
     public Camunda8TaskHandler(
             final Type taskType,
@@ -76,9 +76,9 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
     @Override
     public void accept(
-            final ZeebeClient zeebeClient) {
+            final CamundaClient camundaClient) {
 
-        this.zeebeClient = zeebeClient;
+        this.camundaClient = camundaClient;
 
     }
 
@@ -272,7 +272,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
             final ActivatedJob job) {
 
         return Map.entry(
-                () -> zeebeClient
+                () -> camundaClient
                         .newUpdateTimeoutCommand(job)
                         .timeout(Duration.ofMinutes(10))
                         .send()

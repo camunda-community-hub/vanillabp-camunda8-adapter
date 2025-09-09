@@ -1,6 +1,6 @@
 package io.vanillabp.camunda8.service;
 
-import io.camunda.zeebe.client.ZeebeClient;
+import io.camunda.client.CamundaClient;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.LoggingContext;
@@ -37,7 +37,7 @@ public class Camunda8ProcessService<DE>
 
     private AdapterAwareProcessService<DE> parent;
 
-    private ZeebeClient client;
+    private CamundaClient client;
 
     public Camunda8ProcessService(
             final Camunda8VanillaBpProperties camunda8Properties,
@@ -64,7 +64,7 @@ public class Camunda8ProcessService<DE>
     }
     
     public void wire(
-            final ZeebeClient client,
+            final CamundaClient client,
             final String workflowModuleId,
             final String bpmnProcessId,
             final boolean isPrimary,
@@ -300,7 +300,7 @@ public class Camunda8ProcessService<DE>
                             .send()
                             .join();
 
-                    logger.trace("Complete task '{}' of process '{}'",
+                    logger.trace("Canceled task '{}' of process '{}'",
                             taskId,
                             parent.getPrimaryBpmnProcessId());
                 },
