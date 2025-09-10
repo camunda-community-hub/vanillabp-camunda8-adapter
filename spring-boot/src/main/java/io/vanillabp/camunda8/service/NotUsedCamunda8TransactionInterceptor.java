@@ -1,19 +1,9 @@
 package io.vanillabp.camunda8.service;
 
-import io.vanillabp.spi.service.TaskException;
-import java.lang.reflect.Method;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.transaction.TransactionManager;
-import org.springframework.transaction.interceptor.TransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 public class NotUsedCamunda8TransactionInterceptor extends TransactionInterceptor {
-
+/*
     private final ApplicationEventPublisher publisher;
 
     public static final ThreadLocal<TaskHandlerActions> actions = ThreadLocal.withInitial(TaskHandlerActions::new);
@@ -51,7 +41,7 @@ public class NotUsedCamunda8TransactionInterceptor extends TransactionIntercepto
                     publisher.publishEvent(
                             new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
                                     NotUsedCamunda8TransactionInterceptor.class,
-                                    actions.get().testForTaskAlreadyCompletedOrCancelledCommand.getKey(),
+                                    actions.get().testForTaskAlreadyCompletedOrCancelledCommand.
                                     actions.get().testForTaskAlreadyCompletedOrCancelledCommand.getValue()));
                 }
                 if (actions.get().handlerCompletedCommand != null) {
@@ -106,5 +96,5 @@ public class NotUsedCamunda8TransactionInterceptor extends TransactionIntercepto
         });
 
     }
-
+*/
 }
