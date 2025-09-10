@@ -12,6 +12,8 @@ public class Camunda8Connectable implements Connectable {
 
     private Process process;
 
+    private String versionInfo;
+
     private String elementId;
     
     private Type type;
@@ -20,18 +22,27 @@ public class Camunda8Connectable implements Connectable {
     
     public Camunda8Connectable(
             final Process process,
+            final String versionInfo,
             final String elementId,
             final Type type,
             final String taskDefinition,
             final ZeebeLoopCharacteristics loopCharacteristics) {
 
         this.process = process;
+        this.versionInfo = versionInfo;
         this.elementId = elementId;
         this.taskDefinition = taskDefinition;
         this.type = type;
 
     }
-    
+
+    @Override
+    public String getVersionInfo() {
+
+        return versionInfo;
+
+    }
+
     @Override
     public String getElementId() {
 

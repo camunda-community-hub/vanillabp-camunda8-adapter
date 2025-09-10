@@ -8,3 +8,6 @@ databaseChangeLog:
   - include:
       relativeToChangelogFile: true
       file: add_wfm_id.yaml
+  - include:
+    relativeToChangelogFile: true
+    file: drop-persistence.yaml

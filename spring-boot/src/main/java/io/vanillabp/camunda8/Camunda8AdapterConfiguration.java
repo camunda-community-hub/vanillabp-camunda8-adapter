@@ -2,8 +2,6 @@ package io.vanillabp.camunda8;
 
 import io.vanillabp.camunda8.config.CamundaAutoConfiguration;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
-import io.vanillabp.camunda8.deployment.DeploymentPersistence;
-import io.vanillabp.camunda8.deployment.DeploymentService;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
 import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
@@ -97,14 +95,12 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Bean
     public Camunda8DeploymentAdapter camunda8Adapter(
             final VanillaBpProperties properties,
-            final DeploymentService deploymentService,
             final Camunda8TaskWiring camunda8TaskWiring) {
 
         return new Camunda8DeploymentAdapter(
                 applicationName,
                 properties,
                 camunda8Properties,
-                deploymentService,
                 camunda8TaskWiring);
 
     }
@@ -125,15 +121,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 userTaskHandler,
                 taskHandlers,
                 getConnectableServices());
-
-    }
-
-    @Bean
-    public DeploymentService c8DeploymentService(
-            final DeploymentPersistence persistence) {
-
-        return new DeploymentService(
-                persistence);
 
     }
 
