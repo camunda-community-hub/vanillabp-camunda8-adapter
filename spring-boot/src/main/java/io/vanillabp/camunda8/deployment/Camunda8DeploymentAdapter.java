@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.camunda.bpm.model.xml.impl.util.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -148,6 +149,10 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
 
                         hasDeployables[0] = true;
 
+                        if (logger.isTraceEnabled()) {
+                            logger.warn("Generated BPMN:\n{}", IoUtil.convertXmlDocumentToString(model.getDocument()));
+                        }
+
                     	return deployResourceCommand.addProcessModel(model, resource.getFilename());
                     	
                     } catch (IOException e) {
@@ -245,14 +250,12 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                         {
                             boolean allowConnectors = camunda8Properties.areConnectorsAllowed(workflowModuleId, process.getId());
                             return Stream.of(
-                                //taskWiring.connectablesForType(process, model, ZeebeExecutionListener.class, allowConnectors),
-                                taskWiring.connectablesForType(process, model, ServiceTask.class, allowConnectors),
-                                taskWiring.connectablesForType(process, model, BusinessRuleTask.class, allowConnectors),
-                                taskWiring.connectablesForType(process, model, SendTask.class, allowConnectors),
-                                //taskWiring.connectablesForType(process, model, ZeebeTaskListener.class, allowConnectors),
-                                taskWiring.connectablesForType(process, model, UserTask.class, allowConnectors),
-                                taskWiring.connectablesForType(process, model, IntermediateThrowEvent.class, allowConnectors),
-                                taskWiring.connectablesForType(process, model, EndEvent.class, allowConnectors)
+                                taskWiring.connectablesForType(process, model, ServiceTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(process, model, BusinessRuleTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(process, model, SendTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(process, model, UserTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(process, model, IntermediateThrowEvent.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(process, model, EndEvent.class, allowConnectors, !oldVersionBpmn)
                             )
                             .flatMap(i -> i);
                         } // map stream of streams to one stream

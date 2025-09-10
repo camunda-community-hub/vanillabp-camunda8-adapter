@@ -1,5 +1,6 @@
 package io.vanillabp.camunda8.service;
 
+import io.camunda.client.api.command.ProblemException;
 import io.camunda.zeebe.client.api.command.ClientStatusException;
 import io.grpc.Status;
 import io.vanillabp.spi.service.TaskException;
@@ -18,10 +19,10 @@ public class Camunda8TransactionProcessor {
     private static final Logger logger = LoggerFactory.getLogger(Camunda8TransactionProcessor.class);
 
     public static void registerCallbacks(
-            final Supplier<Map.Entry<Runnable, Supplier<String>>> testForTaskAlreadyCompletedOrCancelledCommand,
+            final Supplier<Camunda8TransactionAspect.CommandWithFallback> testForTaskAlreadyCompletedOrCancelledCommand,
             final Map.Entry<Consumer<TaskException>, Function<TaskException, String>> bpmnErrorCommand,
             final Map.Entry<Consumer<Exception>, Function<Exception, String>> handlerFailedCommand,
-            final Supplier<Map.Entry<Runnable, Supplier<String>>> handlerCompletedCommand) {
+            final Supplier<Camunda8TransactionAspect.CommandWithFallback> handlerCompletedCommand) {
 
         final var actions = Camunda8TransactionAspect.actions.get();
         actions.testForTaskAlreadyCompletedOrCancelledCommand = testForTaskAlreadyCompletedOrCancelledCommand;
@@ -49,7 +50,7 @@ public class Camunda8TransactionProcessor {
 
     }
 
-    public static Map.Entry<Runnable, Supplier<String>> handlerCompletedCommandCallback() {
+    public static Camunda8TransactionAspect.CommandWithFallback handlerCompletedCommandCallback() {
 
         return Camunda8TransactionAspect
                 .actions
@@ -68,12 +69,15 @@ public class Camunda8TransactionProcessor {
     public static class Camunda8CommandAfterTx extends ApplicationEvent {
         final Supplier<String> description;
         final Runnable runnable;
+        final Runnable fallback;
         public Camunda8CommandAfterTx(
                 final Object source,
                 final Runnable runnable,
+                final Runnable fallback,
                 final Supplier<String> description) {
             super(source);
             this.runnable = runnable;
+            this.fallback = fallback;
             this.description = description;
         }
     }
@@ -81,12 +85,15 @@ public class Camunda8TransactionProcessor {
     public static class Camunda8TestForTaskAlreadyCompletedOrCancelled extends ApplicationEvent {
         final Supplier<String> description;
         final Runnable runnable;
+        final Runnable fallback;
         public Camunda8TestForTaskAlreadyCompletedOrCancelled(
                 final Object source,
                 final Runnable runnable,
+                final Runnable fallback,
                 final Supplier<String> description) {
             super(source);
             this.runnable = runnable;
+            this.fallback = fallback;
             this.description = description;
         }
     }
@@ -105,13 +112,26 @@ public class Camunda8TransactionProcessor {
             event.runnable.run();
         } catch (Exception e) {
             // if the task is completed or cancelled, then the tx has to be rolled back
-            if ((e instanceof ClientStatusException clientStatusException)
+            if ((e instanceof ProblemException problemException)
+                    && (problemException.code() == 404)) {
+                if (event.fallback == null) {
+                    throw new RuntimeException(
+                            "Will rollback '"
+                                    + event.getSource()
+                                    + "' because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
+                                    + event.description.get());
+                }
+                event.fallback.run();
+            } else if ((e instanceof ClientStatusException clientStatusException)
                     && (clientStatusException.getStatus().getCode() == Status.NOT_FOUND.getCode())) {
-                throw new RuntimeException(
-                        "Will rollback '"
-                        + event.getSource()
-                        + "' because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
-                        + event.description.get());
+                if (event.fallback == null) {
+                    throw new RuntimeException(
+                            "Will rollback '"
+                                    + event.getSource()
+                                    + "' because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
+                                    + event.description.get());
+                }
+                event.fallback.run();
             } else {
                 throw new RuntimeException(
                         "Will rollback because testing for job due to '"
@@ -137,11 +157,34 @@ public class Camunda8TransactionProcessor {
             // this runnable will instruct Zeebe
             event.runnable.run();
         } catch (Exception e) {
-            logger.error(
-                    "Could not execute camunda command for '{}' initiated by: {}! Manual action required!",
-                    event.description.get(),
-                    event.getSource(),
-                    e);
+            Exception toRethrow = e;
+            if ((e instanceof ProblemException problemException)
+                    && (problemException.code() == 404)) {
+                if (event.fallback != null) {
+                    logger.info(
+                            "Could not execute camunda command for '{}' initiated by: {}! Will retry fallback!",
+                            event.description.get(),
+                            event.getSource(),
+                            e);
+                    try {
+                        event.fallback.run();
+                        logger.info(
+                                "Fallback for camunda command '{}' initiated by {} succeeded!",
+                                event.description.get(),
+                                event.getSource());
+                        toRethrow = null;
+                    } catch (Exception ie) {
+                        toRethrow = ie;
+                    }
+                }
+            }
+            if (toRethrow != null) {
+                throw new RuntimeException("Could not execute camunda command for '" +
+                        event.description.get() +
+                        "' initiated by: " +
+                        event.getSource() +
+                        "! Manual action required!", e);
+            }
         }
 
     }

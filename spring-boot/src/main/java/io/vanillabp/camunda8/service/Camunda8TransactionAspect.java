@@ -18,11 +18,16 @@ public class Camunda8TransactionAspect {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8TransactionAspect.class);
 
+    public static class CommandWithFallback {
+        public Runnable command;
+        public Runnable fallback;
+        public Supplier<String> descriptor;
+    }
     public static class TaskHandlerActions {
-        public Supplier<Map.Entry<Runnable, Supplier<String>>> testForTaskAlreadyCompletedOrCancelledCommand;
+        public Supplier<CommandWithFallback> testForTaskAlreadyCompletedOrCancelledCommand;
         public Map.Entry<Consumer<TaskException>, Function<TaskException, String>> bpmnErrorCommand;
         public Map.Entry<Consumer<Exception>, Function<Exception, String>> handlerFailedCommand;
-        public Supplier<Map.Entry<Runnable, Supplier<String>>> handlerCompletedCommand;
+        public Supplier<CommandWithFallback> handlerCompletedCommand;
     }
 
     public static class RunDeferredInTransaction {
@@ -95,35 +100,23 @@ public class Camunda8TransactionAspect {
                     publisher.publishEvent(
                             new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
                                     methodSignature,
-                                    handlerTestCommand.getKey(),
-                                    handlerTestCommand.getValue()));
+                                    handlerTestCommand.command,
+                                    handlerTestCommand.fallback,
+                                    handlerTestCommand.descriptor));
                 }
             }
             if (actions.get().handlerCompletedCommand != null) {
                 final var handlerCompletedCommand = actions.get().handlerCompletedCommand.get();
                 if (handlerCompletedCommand != null) {
+                    final var postCommitEvent = new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
+                            methodSignature,
+                            handlerCompletedCommand.command,
+                            handlerCompletedCommand.fallback,
+                            handlerCompletedCommand.descriptor);
                     if (isTxActive) {
-                        publisher.publishEvent(
-                                new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
-                                        methodSignature,
-                                        handlerCompletedCommand.getKey(),
-                                        handlerCompletedCommand.getValue()));
+                        publisher.publishEvent(postCommitEvent);
                     } else {
-                        try {
-                            handlerCompletedCommand.getKey().run();
-                        } catch (Exception e) {
-                            final var description = handlerCompletedCommand.getValue();
-                            if (description != null) {
-                                logger.error(
-                                        "Could not execute '{}'! Manual action required!",
-                                        description.get(),
-                                        e);
-                            } else {
-                                logger.error(
-                                        "Manual action required due to:",
-                                        e);
-                            }
-                        }
+                        new Camunda8TransactionProcessor().processPostCommit(postCommitEvent);
                     }
                 }
             }
@@ -138,34 +131,23 @@ public class Camunda8TransactionAspect {
                     publisher.publishEvent(
                             new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
                                     methodSignature,
-                                    handlerTestCommand.getKey(),
-                                    handlerTestCommand.getValue()));
+                                    handlerTestCommand.command,
+                                    handlerTestCommand.fallback,
+                                    handlerTestCommand.descriptor));
                 }
             }
             if (actions.get().bpmnErrorCommand != null) {
                 final var runnable = actions.get().bpmnErrorCommand.getKey();
                 final var description = actions.get().bpmnErrorCommand.getValue();
+                final var postCommitEvent = new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
+                        methodSignature,
+                        () -> runnable.accept(taskError),
+                        null,
+                        () -> description.apply(taskError));
                 if (isTxActive) {
-                    publisher.publishEvent(
-                            new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
-                                    methodSignature,
-                                    () -> runnable.accept(taskError),
-                                    () -> description.apply(taskError)));
+                    publisher.publishEvent(postCommitEvent);
                 } else {
-                    try {
-                        runnable.accept(taskError);
-                    } catch (Exception e) {
-                        if (description != null) {
-                            logger.error(
-                                    "Could not execute '{}'! Manual action required!",
-                                    description.apply(taskError),
-                                    e);
-                        } else {
-                            logger.error(
-                                    "Manual action required due to:",
-                                    e);
-                        }
-                    }
+                    new Camunda8TransactionProcessor().processPostCommit(postCommitEvent);
                 }
             }
             return null;
@@ -179,34 +161,23 @@ public class Camunda8TransactionAspect {
                     publisher.publishEvent(
                             new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
                                     methodSignature,
-                                    handlerTestCommand.getKey(),
-                                    handlerTestCommand.getValue()));
+                                    handlerTestCommand.command,
+                                    handlerTestCommand.fallback,
+                                    handlerTestCommand.descriptor));
                 }
             }
             if (actions.get().handlerFailedCommand != null) {
                 final var runnable = actions.get().handlerFailedCommand.getKey();
                 final var description = actions.get().handlerFailedCommand.getValue();
+                final var postCommitEvent = new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
+                        methodSignature,
+                        () -> runnable.accept(e),
+                        null,
+                        () -> description.apply(e));
                 if (isTxActive) {
-                    publisher.publishEvent(
-                            new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
-                                    methodSignature,
-                                    () -> runnable.accept(e),
-                                    () -> description.apply(e)));
+                    publisher.publishEvent(postCommitEvent);
                 } else {
-                    try {
-                        runnable.accept(e);
-                    } catch (Exception ie) {
-                        if (description != null) {
-                            logger.error(
-                                    "Could not execute '{}'! Manual action required!",
-                                    description.apply(e),
-                                    ie);
-                        } else {
-                            logger.error(
-                                    "Manual action required due to:",
-                                    ie);
-                        }
-                    }
+                   new Camunda8TransactionProcessor().processPostCommit(postCommitEvent);
                 }
             }
             throw e;
