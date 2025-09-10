@@ -1,4 +1,1 @@
-io.vanillabp.camunda8.deployment.jpa.JpaDeploymentEntityConfiguration
-io.vanillabp.camunda8.deployment.jpa.JpaDeploymentPersistenceConfiguration
-io.vanillabp.camunda8.deployment.mongodb.MongoDbDeploymentPersistenceConfiguration
 io.vanillabp.camunda8.Camunda8AdapterConfiguration

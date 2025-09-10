@@ -14,8 +14,6 @@ import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListenerEventType;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListeners;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeUserTask;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
-import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
-import io.vanillabp.camunda8.deployment.DeployedBpmn;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MethodParameterFactory;
@@ -33,7 +31,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -107,8 +104,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     }
     
     /**
-     * Called by
-     * {@link Camunda8DeploymentAdapter#processBpmnModel(String, Map, DeployedBpmn, BpmnModelInstanceImpl, boolean)} to
+     * Called by <i>Camunda8DeploymentAdapter#processBpmnModel(String, BpmnModelInstanceImpl, boolean)</i> to
      * ensure client is available before using wire-methods.
      */
     @Override
@@ -153,6 +149,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
 
     public Stream<Camunda8Connectable> connectablesForType(
             final Process process,
+            final String versionInfo,
             final BpmnModelInstanceImpl model,
             final Class<? extends BaseElement> type,
             final boolean allowConnectors,
@@ -176,9 +173,10 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                 .stream()
                                 .map(jobType ->new Camunda8Connectable(
                                         process,
+                                        versionInfo,
                                         element.getId(),
                                         jobType.startsWith(TASKDEFINITION_USERTASK_ZEEBE) ? Type.USERTASK_ZEEBE : Type.TASK,
-                                        jobType,
+                                        jobType.startsWith(TASKDEFINITION_USERTASK_ZEEBE) ? jobType.substring(TASKDEFINITION_USERTASK_ZEEBE.length()) : jobType,
                                         element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)))
                                 .forEach(result::add);
                         if (isNewProcess) {
@@ -190,6 +188,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                             result
                                                         .add(new Camunda8Connectable(
                                                                 process,
+                                                                versionInfo,
                                                                 element.getId(),
                                                                 Type.USERTASK_ZEEBE,
                                                                 externalFormReference,
@@ -211,6 +210,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                 .ifPresentOrElse(formKey -> result
                                         .add(new Camunda8Connectable(
                                                 process,
+                                                versionInfo,
                                                 element.getId(),
                                                 Type.USERTASK,
                                                 formKey,
@@ -230,6 +230,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                 .ifPresent(taskDefinition -> result
                                         .add(new Camunda8Connectable(
                                                 process,
+                                                versionInfo,
                                                 element.getId(),
                                                 Type.TASK,
                                                 taskDefinition,
