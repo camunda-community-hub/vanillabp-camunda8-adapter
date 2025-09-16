@@ -4,6 +4,7 @@ import io.camunda.client.CamundaClient;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.LoggingContext;
+import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
 import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
 import java.time.Duration;
@@ -127,7 +128,7 @@ public class Camunda8ProcessService<DE>
                                 ? command
                                 : command.tenantId(tenantId))
                                 .send()
-                                .get(10, TimeUnit.SECONDS);
+                                .get();
                     } catch (Exception e) {
                         throw new RuntimeException(
                                 "Starting workflow '"
@@ -268,7 +269,8 @@ public class Camunda8ProcessService<DE>
         final var result = completeUserTaskAfterTransaction(
                 workflowAggregate,
                 taskId,
-                "completeUserTask");
+                "completeUserTask",
+                null);
 
         logger.trace("Completed user task '{}' of process '{}'",
                 taskId,
@@ -306,7 +308,41 @@ public class Camunda8ProcessService<DE>
             final String taskId,
             final String errorCode) {
 
-        return cancelTask(workflowAggregate, taskId, errorCode);
+        final var zeebeUserTask = client
+                .newUserTaskGetRequest(getTaskIdAsLong(taskId))
+                .send()
+                .join();
+
+        if (zeebeUserTask != null) {
+
+            final var result = completeUserTaskAfterTransaction(
+                    workflowAggregate,
+                    taskId,
+                    "cancelZeebeUserTask",
+                    errorCode);
+
+            logger.trace("Canceled user task '{}' of process '{}'",
+                    taskId,
+                    parent.getPrimaryBpmnProcessId());
+
+            return result;
+
+        }
+
+        return processTaskAfterTransaction(
+                workflowAggregate,
+                taskId,
+                attachedAggregate -> {
+                    client
+                            .newThrowErrorCommand(getTaskIdAsLong(taskId))
+                            .errorCode(errorCode)
+                            .send()
+                            .join();
+                    logger.trace("Canceled user task '{}' of process '{}'",
+                            taskId,
+                            parent.getPrimaryBpmnProcessId());
+                },
+                "cancelUserTask");
 
     }
 
@@ -355,7 +391,8 @@ public class Camunda8ProcessService<DE>
     private DE completeUserTaskAfterTransaction(
             final DE workflowAggregate,
             final String taskId,
-            final String methodSignature) {
+            final String methodSignature,
+            final String errorCode) {
 
         final var taskIdAsLong = getTaskIdAsLong(taskId);
         return run(
@@ -364,11 +401,18 @@ public class Camunda8ProcessService<DE>
                 (bpmnProcessId, attachedAggregate, aggregateId) -> {
                     final var postCommitEvent = new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
                             methodSignature,
-                            () -> client
-                                    .newCompleteUserTaskCommand(taskIdAsLong)
-                                    .variables(attachedAggregate)
-                                    .send()
-                                    .join(),
+                            () -> {
+                                var command = client
+                                        .newCompleteUserTaskCommand(taskIdAsLong)
+                                        .variables(attachedAggregate);
+                                if (errorCode != null) {
+                                    command = command.variable(Camunda8TaskHandler.BPMN_ERROR_VARIABLE, errorCode);
+                                } else {
+                                    // TODO: cannot set both, aggregate and error variable since client does not accept this
+                                    // command = command.variable(Camunda8TaskHandler.BPMN_ERROR_VARIABLE, "");
+                                }
+                                command.send().join();
+                            },
                             () -> client
                                     .newCompleteCommand(taskIdAsLong)
                                     .variables(attachedAggregate)

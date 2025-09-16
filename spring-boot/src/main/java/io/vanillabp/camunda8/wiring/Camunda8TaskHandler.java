@@ -35,8 +35,11 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.util.StringUtils;
 
-public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, Consumer<CamundaClient> {
+public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
+
+    public static final String BPMN_ERROR_VARIABLE = "io.vanillabp:bpmnError";
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8TaskHandler.class);
 
@@ -52,7 +55,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
     private final boolean publishUserTaskIdAsHexString;
 
-    private CamundaClient camundaClient;
+    private final CamundaClient camundaClient;
 
     public Camunda8TaskHandler(
             final Type taskType,
@@ -64,7 +67,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
             final String tenantId,
             final String workflowModuleId,
             final String bpmnProcessId,
-            final boolean publishUserTaskIdAsHexString) {
+            final boolean publishUserTaskIdAsHexString,
+            final CamundaClient camundaClient) {
 
         super(workflowAggregateRepository, bean, method, parameters);
         this.taskType = taskType;
@@ -73,13 +77,6 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
         this.workflowModuleId = workflowModuleId;
         this.bpmnProcessId = bpmnProcessId;
         this.publishUserTaskIdAsHexString = publishUserTaskIdAsHexString;
-
-    }
-
-    @Override
-    public void accept(
-            final CamundaClient camundaClient) {
-
         this.camundaClient = camundaClient;
 
     }
@@ -91,11 +88,43 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
 
     }
 
+    private void handleUserTaskBpmnError(
+            final JobClient client,
+            final ActivatedJob job) {
+
+        final var bpmnError = job.getVariablesAsMap().get(BPMN_ERROR_VARIABLE);
+        // if user task isn't completed by BPMN error?
+        if ((bpmnError == null) || !StringUtils.hasText(bpmnError.toString())) {
+            client
+                    .newCompleteCommand(job)
+                    .send()
+                    .join();
+            return;
+        }
+
+        client
+                .newThrowErrorCommand(job)
+                .errorCode(bpmnError.toString())
+                //.variable(BPMN_ERROR_VARIABLE, null) // not allowed; instead it has to be unset on every successful user task completion
+                .send()
+                .join();
+
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     public void handle(
             final JobClient client,
             final ActivatedJob job) throws Exception {
+
+        if ((taskType == Type.USERTASK_ZEEBE)
+                && (job.getKind() == JobKind.EXECUTION_LISTENER)
+                && (job.getListenerEventType() == ListenerEventType.END)) {
+                //&& (job.getKind() == JobKind.TASK_LISTENER)
+                //&& (job.getListenerEventType() == ListenerEventType.COMPLETING)) {
+            handleUserTaskBpmnError(client, job);
+            return;
+        }
 
         try {
             final var isListener = (job.getKind() == JobKind.TASK_LISTENER);
@@ -148,7 +177,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                         if (taskType == Type.USERTASK) { // user tasks are always async
                             return null;
                         }
-                        if (taskType != Type.USERTASK_ZEEBE) { // zeebe user tasks are always auto-completed
+                        if (!isListener && (taskType != Type.USERTASK_ZEEBE)) { // zeebe user tasks and listeners are always auto-completed
                             if (taskIdRetrieved.get()) { // async processing of service-task
                                 return null;
                             }
@@ -161,7 +190,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler, 
                         if (taskType == Type.USERTASK) { // user tasks are always async
                             return null;
                         }
-                        if (taskType != Type.USERTASK_ZEEBE) { // zeebe user tasks are always auto-completed
+                        if (!isListener && (taskType != Type.USERTASK_ZEEBE)) { // zeebe user tasks and listeners are always auto-completed
                             if (taskIdRetrieved.get()) { // async processing of service-task
                                 return null;
                             }

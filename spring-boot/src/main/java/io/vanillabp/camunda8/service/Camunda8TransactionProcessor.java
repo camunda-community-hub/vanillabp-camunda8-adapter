@@ -110,6 +110,9 @@ public class Camunda8TransactionProcessor {
                     event.getSource());
             // this runnable will test whether the task still exists
             event.runnable.run();
+            logger.trace("Test for existence of task '{}' initiated by: {} completed",
+                    event.description.get(),
+                    event.getSource());
         } catch (Exception e) {
             // if the task is completed or cancelled, then the tx has to be rolled back
             if ((e instanceof ProblemException problemException)
@@ -121,7 +124,13 @@ public class Camunda8TransactionProcessor {
                                     + "' because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
                                     + event.description.get());
                 }
+                logger.trace("Running fallback for test for existence of task '{}' initiated by: {}",
+                        event.description.get(),
+                        event.getSource());
                 event.fallback.run();
+                logger.trace("Running fallback for test for existence of task '{}' initiated by: {} completed",
+                        event.description.get(),
+                        event.getSource());
             } else if ((e instanceof ClientStatusException clientStatusException)
                     && (clientStatusException.getStatus().getCode() == Status.NOT_FOUND.getCode())) {
                 if (event.fallback == null) {
@@ -131,7 +140,13 @@ public class Camunda8TransactionProcessor {
                                     + "' because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
                                     + event.description.get());
                 }
+                logger.trace("Running fallback for test for existence of task '{}' initiated by: {}",
+                        event.description.get(),
+                        event.getSource());
                 event.fallback.run();
+                logger.trace("Running fallback for test for existence of task '{}' initiated by: {} completed",
+                        event.description.get(),
+                        event.getSource());
             } else {
                 throw new RuntimeException(
                         "Will rollback because testing for job due to '"
@@ -156,6 +171,9 @@ public class Camunda8TransactionProcessor {
                     event.getSource());
             // this runnable will instruct Zeebe
             event.runnable.run();
+            logger.trace("Camunda command completed '{}' initiated by: {}",
+                    event.description.get(),
+                    event.getSource());
         } catch (Exception e) {
             Exception toRethrow = e;
             if ((e instanceof ProblemException problemException)
@@ -167,9 +185,11 @@ public class Camunda8TransactionProcessor {
                             event.getSource(),
                             e);
                     try {
+                        logger.trace("Running fallback for Camunda Command for '{}' initiated by: {}",
+                                event.description.get(),
+                                event.getSource());
                         event.fallback.run();
-                        logger.info(
-                                "Fallback for camunda command '{}' initiated by {} succeeded!",
+                        logger.trace("Running fallback for Camunda Command for '{}' initiated by: {} completed",
                                 event.description.get(),
                                 event.getSource());
                         toRethrow = null;

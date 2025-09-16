@@ -5,22 +5,25 @@ import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeLoopCharacteristics;
 import io.vanillabp.springboot.adapter.Connectable;
 
 public class Camunda8Connectable implements Connectable {
-    
-    public static enum Type {
+
+    public enum Type {
         TASK, USERTASK, USERTASK_ZEEBE
     };
 
-    private Process process;
+    private final String workflowModuleId;
+
+    private final Process process;
 
     private String versionInfo;
 
-    private String elementId;
+    private final String elementId;
     
-    private Type type;
+    private final Type type;
 
-    private String taskDefinition;
+    private final String taskDefinition;
     
     public Camunda8Connectable(
+            final String workflowModuleId,
             final Process process,
             final String versionInfo,
             final String elementId,
@@ -28,6 +31,7 @@ public class Camunda8Connectable implements Connectable {
             final String taskDefinition,
             final ZeebeLoopCharacteristics loopCharacteristics) {
 
+        this.workflowModuleId = workflowModuleId;
         this.process = process;
         this.versionInfo = versionInfo;
         this.elementId = elementId;
@@ -40,6 +44,19 @@ public class Camunda8Connectable implements Connectable {
     public String getVersionInfo() {
 
         return versionInfo;
+
+    }
+
+    public void updateVersionInfo(
+            final String versionInfo) {
+
+        this.versionInfo = versionInfo;
+
+    }
+
+    public String getWorkflowModuleId() {
+
+        return workflowModuleId;
 
     }
 

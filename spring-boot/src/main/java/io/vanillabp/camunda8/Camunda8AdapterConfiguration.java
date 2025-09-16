@@ -1,5 +1,6 @@
 package io.vanillabp.camunda8;
 
+import io.camunda.client.CamundaClient;
 import io.vanillabp.camunda8.config.CamundaAutoConfiguration;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
@@ -48,7 +49,11 @@ import org.springframework.retry.annotation.EnableRetry;
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8AdapterConfiguration.class);
-    
+
+    static {
+        Camunda8DeploymentAdapter.initializeCrossCuttingProperties();
+    }
+
     public static final String ADAPTER_ID = "camunda8";
 
     @Value("${workerId}")
@@ -95,13 +100,15 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Bean
     public Camunda8DeploymentAdapter camunda8Adapter(
             final VanillaBpProperties properties,
-            final Camunda8TaskWiring camunda8TaskWiring) {
+            final Camunda8TaskWiring camunda8TaskWiring,
+            final ApplicationEventPublisher applicationEventPublisher) {
 
         return new Camunda8DeploymentAdapter(
                 applicationName,
                 properties,
                 camunda8Properties,
-                camunda8TaskWiring);
+                camunda8TaskWiring,
+                applicationEventPublisher);
 
     }
 
@@ -143,7 +150,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final String idPropertyName,
             final String tenantId,
             final String workflowModuleId,
-            final String bpmnProcessId) {
+            final String bpmnProcessId,
+            final CamundaClient client) {
         
         return new Camunda8TaskHandler(
                 taskType,
@@ -155,7 +163,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 tenantId,
                 workflowModuleId,
                 bpmnProcessId,
-                camunda8Properties.isTaskIdAsHexString(workflowModuleId));
+                camunda8Properties.isTaskIdAsHexString(workflowModuleId),
+                client);
         
     }
     

@@ -14,6 +14,7 @@ import io.camunda.zeebe.model.bpmn.instance.ServiceTask;
 import io.camunda.zeebe.model.bpmn.instance.SignalEventDefinition;
 import io.camunda.zeebe.model.bpmn.instance.StartEvent;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeVersionTag;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
@@ -24,38 +25,77 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.camunda.bpm.model.xml.impl.util.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.Resource;
 
 public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
 
 	private static final Logger logger = LoggerFactory.getLogger(Camunda8DeploymentAdapter.class);
-	
-	private final BpmnParser bpmnParser = new BpmnParser();
+
+    public static final String VERSIONINFO_CURRENT = "current";
+    public static final String ADAPTER_PACKAGE = "io.vanillabp.camunda8";
+    public static final String PROPERTY_DEPLOYMENT_PRIORITY = "io.vanillabp.deployment.priority";
+
+    public static final String PROPERTY_TASKLISTENER_PREFIXES = "io.vanillabp.tasklistener.prefixes";
+
+    public static final Pattern PROPERTY_TASKLISTENER_PREFIXES_REGEX = Pattern.compile("io\\.vanillabp.+tasklistener\\.prefixes");
+
+    public static final Pattern PROPERTY_EXECUTIONLISTENER_PREFIXES_REGEX = Pattern.compile("io\\.vanillabp.+executionlistener\\.prefixes");
+
+    private final BpmnParser bpmnParser = new BpmnParser();
 
     private final Camunda8TaskWiring taskWiring;
 
     private final Camunda8VanillaBpProperties camunda8Properties;
+
+    private final ApplicationEventPublisher applicationEventPublisher;
     
     private CamundaClient client;
+
+    @SuppressWarnings("unchecked")
+    public static void initializeCrossCuttingProperties() {
+        ModuleAwareBpmnDeployment.adapterProperties.put(
+                PROPERTY_TASKLISTENER_PREFIXES,
+                List.of(Camunda8TaskWiring.TASKDEFINITION_USERTASK_ZEEBE));
+
+        final var existingPriorities = (List<String>) ModuleAwareBpmnDeployment.adapterProperties
+                .get(PROPERTY_DEPLOYMENT_PRIORITY);
+        if (existingPriorities == null) {
+            final var priorities = new LinkedList<String>();
+            priorities.add(ADAPTER_PACKAGE);
+            ModuleAwareBpmnDeployment.adapterProperties.put(PROPERTY_DEPLOYMENT_PRIORITY, priorities);
+        } else {
+            // set priority of business cockpit adapter to highest, to enforce task-listeners are added after other adapters
+            existingPriorities.add(0, ADAPTER_PACKAGE);
+        }
+    }
 
     public Camunda8DeploymentAdapter(
             final String applicationName,
             final VanillaBpProperties properties,
             final Camunda8VanillaBpProperties camunda8Properties,
-            final Camunda8TaskWiring taskWiring) {
+            final Camunda8TaskWiring taskWiring,
+            final ApplicationEventPublisher applicationEventPublisher) {
         
         super(properties, applicationName);
         this.camunda8Properties = camunda8Properties;
         this.taskWiring = taskWiring;
+        this.applicationEventPublisher = applicationEventPublisher;
 
     }
 
@@ -74,55 +114,108 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
     }
 
     @EventListener
+    @SuppressWarnings("unchecked")
     public void camundaClientCreated(
             final CamundaClientCreatedEvent event) {
 
+        final var existingPriorities = (List<String>) ModuleAwareBpmnDeployment.adapterProperties
+                .get(PROPERTY_DEPLOYMENT_PRIORITY);
+        if (existingPriorities.isEmpty()) {
+            return;
+        }
+        if (!existingPriorities.get(0).equals(ADAPTER_PACKAGE)) {
+            return;
+        }
+        existingPriorities.remove(0);
+
         this.client = event.getClient();
+        taskWiring.accept(client);
 
         deployAllWorkflowModules();
 
-        taskWiring.openWorkers();
+        // next adapter
+        applicationEventPublisher.publishEvent(event);
+
+    }
+
+    private void examineProcessVersionTags(
+            final BpmnModelInstanceImpl model,
+            final BiConsumer<String, String> versionTagConsumer) {
+
+        model
+                .getModelElementsByType(Process.class)
+                .stream()
+                .filter(Process::isExecutable)
+                .filter(process -> process.getSingleExtensionElement(ZeebeVersionTag.class) != null)
+                .forEach(process -> versionTagConsumer.accept(process.getId(), process.getSingleExtensionElement(ZeebeVersionTag.class).getValue()));
 
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void deployBpmnModels() {
 
-        if (ModuleAwareBpmnDeployment.bpmnModelCache.isEmpty()) {
-            return;
-        }
+        synchronized (ModuleAwareBpmnDeployment.bpmnModelCache) {
 
-        ModuleAwareBpmnDeployment.bpmnModelCache
-                .entrySet()
-                .stream()
-                .collect(Collectors.groupingBy(
-                        entry -> entry.getValue().getKey(),  // grouping by workflow module id
-                        Collectors.mapping(entry -> Map.entry(entry.getKey(), entry.getValue().getValue()), // preserve resource and model
-                        Collectors.toSet())))
-                // for each workflow module
-                .forEach((workflowModuleId, resources) -> {
-                    final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
-                    final var deployResourceCommand = client.newDeployResourceCommand();
-                    // deploy all bpmns at once
-                    resources
-                            .stream()
-                            .peek(resource -> {
-                                if (logger.isTraceEnabled()) {
-                                    logger.warn("Generated BPMN:\n{}", IoUtil.convertXmlDocumentToString(
-                                            ((BpmnModelInstanceImpl) resource.getValue()).getDocument()));
-                                }
-                            })
-                            .map(resource -> deployResourceCommand.addProcessModel(
-                                    (BpmnModelInstanceImpl) resource.getValue(), resource.getKey()))
-                            .reduce((first, second) -> second)
-                            .map(command -> tenantId == null ? command : command.tenantId(tenantId))
-                            .map(command -> {
-                                logger.info("About to deploy BPMNs of workflow-module '{}'", workflowModuleId);
-                                return command.send().join();
-                            })
-                            .ifPresent(result -> logger.info("Deployed {} BPMNs of workflow-module '{}'",
-                                    result.getProcesses().size(), workflowModuleId));
-                });
+            if (ModuleAwareBpmnDeployment.bpmnModelCache.isEmpty()) {
+                return;
+            }
+
+            final var resourcesDeployed = new HashSet<String>();
+
+            ModuleAwareBpmnDeployment.bpmnModelCache
+                        .entrySet()
+                        .stream()
+                        .collect(Collectors.groupingBy(
+                                entry -> entry.getValue().getKey(),  // grouping by workflow module id
+                                Collectors.mapping(entry -> Map.entry(entry.getKey(), entry.getValue().getValue()), // preserve resource and model
+                                        Collectors.toSet())))
+                        // for each workflow module
+                        .forEach((workflowModuleId, resources) -> {
+                            final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
+                            final var deployResourceCommand = client.newDeployResourceCommand();
+                            final var processVersionTags = new HashMap<String, String>();
+                            // deploy all bpmns at once
+                            resources
+                                    .stream()
+                                    .peek(resource -> {
+                                        if (logger.isTraceEnabled()) {
+                                            logger.warn("Generated BPMN:\n{}", IoUtil.convertXmlDocumentToString(
+                                                    ((BpmnModelInstanceImpl) resource.getValue()).getDocument()));
+                                        }
+                                    })
+                                    .map(resource -> {
+                                        final var model = (BpmnModelInstanceImpl) resource.getValue();
+                                        examineProcessVersionTags(model, processVersionTags::put);
+                                        resourcesDeployed.add(resource.getKey());
+                                        return deployResourceCommand.addProcessModel(model, resource.getKey());
+                                    })
+                                    .reduce((first, second) -> second)
+                                    .map(command -> tenantId == null ? command : command.tenantId(tenantId))
+                                    .map(command -> {
+                                        logger.info("About to deploy BPMNs of workflow-module '{}'", workflowModuleId);
+                                        return command.send().join();
+                                    })
+                                    .ifPresent(result -> {
+                                        logger.info("Deployed {} BPMNs of workflow-module '{}'",
+                                                result.getProcesses().size(), workflowModuleId);
+                                        applicationEventPublisher.publishEvent(new BpmnModelCacheProcessed(
+                                                this.getClass().getName(),
+                                                workflowModuleId,
+                                                result
+                                                        .getProcesses()
+                                                        .stream()
+                                                        .map(process -> Map.entry(
+                                                                process.getBpmnProcessId(),
+                                                                processVersionTags.containsKey(process.getBpmnProcessId())
+                                                                        ? "%s:%d".formatted(processVersionTags.get(process.getBpmnProcessId()), process.getVersion())
+                                                                        : "%d".formatted(process.getVersion())))
+                                                        .toList()));
+                                    });
+                        });
+
+            resourcesDeployed.forEach(ModuleAwareBpmnDeployment.bpmnModelCache::remove);
+
+        }
 
     }
 
@@ -160,7 +253,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                 .ifPresent(result -> logger.info("Deployed {} DMNs of workflow-module '{}'",
                         result.getDecisions().size(), workflowModuleId));
 
-        // Add all BPMNs to deploy-command: on one hand to deploy them and on the
+        // Add all BPMNs to model cache: on one hand to deploy them and on the
         // other hand to wire them to the using project beans according to the SPI
         Arrays
                 .stream(bpmns)
@@ -180,7 +273,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                                 })
                                 .map(Map.Entry::getValue)
                                 .ifPresent(model -> processBpmnModel(
-                                        workflowModuleId, "current", (BpmnModelInstanceImpl) model, false));
+                                        workflowModuleId, VERSIONINFO_CURRENT, (BpmnModelInstanceImpl) model, false));
 
                     } catch (IOException e) {
                         throw new RuntimeException(e.getMessage());
@@ -212,9 +305,9 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                         final var versionTag = bpmnModel.getKey().getVersionTag();
                         final String versionInfo;
                         if (versionTag != null) {
-                            versionInfo = "%s (%d)".formatted(versionTag, bpmnModel.getKey().getVersion());
+                            versionInfo = "%s:%d".formatted(versionTag, bpmnModel.getKey().getVersion());
                         } else {
-                            versionInfo = "%s".formatted(bpmnModel.getKey().getVersion());
+                            versionInfo = "%d".formatted(bpmnModel.getKey().getVersion());
                         }
                         return Map.entry(versionInfo, bpmnModel.getValue());
                     })
@@ -231,8 +324,6 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
             final String versionInfo,
     		final BpmnModelInstanceImpl model,
     		final boolean oldVersionBpmn) {
-
-        taskWiring.accept(client);
 
         final var processService = new Camunda8ProcessService[] { null };
 
@@ -268,12 +359,18 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                         {
                             boolean allowConnectors = camunda8Properties.areConnectorsAllowed(workflowModuleId, process.getId());
                             return Stream.of(
-                                taskWiring.connectablesForType(process, versionInfo, model, ServiceTask.class, allowConnectors, !oldVersionBpmn),
-                                taskWiring.connectablesForType(process, versionInfo, model, BusinessRuleTask.class, allowConnectors, !oldVersionBpmn),
-                                taskWiring.connectablesForType(process, versionInfo, model, SendTask.class, allowConnectors, !oldVersionBpmn),
-                                taskWiring.connectablesForType(process, versionInfo, model, UserTask.class, allowConnectors, !oldVersionBpmn),
-                                taskWiring.connectablesForType(process, versionInfo, model, IntermediateThrowEvent.class, allowConnectors, !oldVersionBpmn),
-                                taskWiring.connectablesForType(process, versionInfo, model, EndEvent.class, allowConnectors, !oldVersionBpmn)
+                                taskWiring.connectablesForType(workflowModuleId, ModuleAwareBpmnDeployment.adapterProperties,
+                                        process, versionInfo, model, ServiceTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(workflowModuleId, ModuleAwareBpmnDeployment.adapterProperties,
+                                        process, versionInfo, model, BusinessRuleTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(workflowModuleId, ModuleAwareBpmnDeployment.adapterProperties,
+                                        process, versionInfo, model, SendTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(workflowModuleId, ModuleAwareBpmnDeployment.adapterProperties,
+                                        process, versionInfo, model, UserTask.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(workflowModuleId, ModuleAwareBpmnDeployment.adapterProperties,
+                                        process, versionInfo, model, IntermediateThrowEvent.class, allowConnectors, !oldVersionBpmn),
+                                taskWiring.connectablesForType(workflowModuleId, ModuleAwareBpmnDeployment.adapterProperties,
+                                        process, versionInfo, model, EndEvent.class, allowConnectors, !oldVersionBpmn)
                             )
                             .flatMap(i -> i);
                         } // map stream of streams to one stream
