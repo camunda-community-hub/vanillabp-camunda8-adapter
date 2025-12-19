@@ -1,7 +1,7 @@
 package io.vanillabp.camunda8.deployment;
 
 import io.camunda.client.CamundaClient;
-import io.camunda.spring.client.event.CamundaClientCreatedEvent;
+import io.camunda.client.event.CamundaClientCreatedEvent;
 import io.camunda.zeebe.model.bpmn.impl.BpmnModelInstanceImpl;
 import io.camunda.zeebe.model.bpmn.impl.BpmnParser;
 import io.camunda.zeebe.model.bpmn.instance.BusinessRuleTask;
@@ -47,6 +47,7 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
 
 	private static final Logger logger = LoggerFactory.getLogger(Camunda8DeploymentAdapter.class);
 
+    public static final String MODELCACHE_PREFIX = "C8_";
     public static final String VERSIONINFO_CURRENT = "current";
     public static final String ADAPTER_PACKAGE = "io.vanillabp.camunda8";
     public static final String PROPERTY_DEPLOYMENT_PRIORITY = "io.vanillabp.deployment.priority";
@@ -165,6 +166,8 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
             ModuleAwareBpmnDeployment.bpmnModelCache
                         .entrySet()
                         .stream()
+                        .filter(entry -> entry.getKey().startsWith(MODELCACHE_PREFIX))
+                        .map(entry -> Map.entry(entry.getKey().substring(MODELCACHE_PREFIX.length()), entry.getValue()))
                         .collect(Collectors.groupingBy(
                                 entry -> entry.getValue().getKey(),  // grouping by workflow module id
                                 Collectors.mapping(entry -> Map.entry(entry.getKey(), entry.getValue().getValue()), // preserve resource and model
@@ -179,14 +182,14 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                                     .stream()
                                     .peek(resource -> {
                                         if (logger.isTraceEnabled()) {
-                                            logger.warn("Generated BPMN:\n{}", IoUtil.convertXmlDocumentToString(
+                                            logger.trace("Generated BPMN:\n{}", IoUtil.convertXmlDocumentToString(
                                                     ((BpmnModelInstanceImpl) resource.getValue()).getDocument()));
                                         }
                                     })
                                     .map(resource -> {
                                         final var model = (BpmnModelInstanceImpl) resource.getValue();
                                         examineProcessVersionTags(model, processVersionTags::put);
-                                        resourcesDeployed.add(resource.getKey());
+                                        resourcesDeployed.add(MODELCACHE_PREFIX + resource.getKey());
                                         return deployResourceCommand.addProcessModel(model, resource.getKey());
                                     })
                                     .reduce((first, second) -> second)
@@ -264,11 +267,11 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                                 filename,
                                 cachableWorkflowModuleId);
                     	Optional
-                                .ofNullable(ModuleAwareBpmnDeployment.bpmnModelCache.get(filename))
+                                .ofNullable(ModuleAwareBpmnDeployment.bpmnModelCache.get(MODELCACHE_PREFIX + filename))
                                 .or(() -> {
                                     final var uncachedModel = bpmnParser.parseModelFromStream(inputStream);
                                     final var entry = Map.<String, Object>entry(cachableWorkflowModuleId, uncachedModel);
-                                    ModuleAwareBpmnDeployment.bpmnModelCache.put(filename, entry);
+                                    ModuleAwareBpmnDeployment.bpmnModelCache.put(MODELCACHE_PREFIX + filename, entry);
                                     return Optional.of(entry);
                                 })
                                 .map(Map.Entry::getValue)

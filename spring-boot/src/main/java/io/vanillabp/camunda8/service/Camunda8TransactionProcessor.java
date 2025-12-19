@@ -179,7 +179,7 @@ public class Camunda8TransactionProcessor {
             if ((e instanceof ProblemException problemException)
                     && (problemException.code() == 404)) {
                 if (event.fallback != null) {
-                    logger.info(
+                    logger.trace(
                             "Could not execute camunda command for '{}' initiated by: {}! Will retry fallback!",
                             event.description.get(),
                             event.getSource(),

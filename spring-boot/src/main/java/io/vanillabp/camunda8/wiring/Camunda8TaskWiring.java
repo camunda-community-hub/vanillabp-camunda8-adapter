@@ -348,33 +348,6 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             taskListeners.insertElementAfter(cancelListener, previousListeners.isEmpty() ? createListener : previousListeners.getLast());
         }
 
-        /*
-        final var completeListener = element.getModelInstance().newInstance(ZeebeTaskListener.class);
-        completeListener.setEventType(ZeebeTaskListenerEventType.completing);
-        completeListener.setType(TASKDEFINITION_USERTASK_ZEEBE + externalFormReference);
-        completeListener.setRetries("0");
-
-        // used for throwing BPMN error
-        if (isNew) {
-            taskListeners.insertElementAfter(completeListener, createListener);
-        } else {
-
-            ModelElementInstance firstCompletingListener = null;
-            ModelElementInstance lastListener = null;
-            for (final var iter = taskListeners.getTaskListeners().iterator(); iter.hasNext() && firstCompletingListener == null;) {
-                final var listener = iter.next();
-                if (listener.getEventType() == ZeebeTaskListenerEventType.completing) {
-                    firstCompletingListener = lastListener;
-                }
-                lastListener = listener;
-            }
-            if ((firstCompletingListener == null) && !taskListeners.getTaskListeners().isEmpty()) {
-                firstCompletingListener = new LinkedList<>(taskListeners.getTaskListeners()).getLast();
-            }
-            taskListeners.insertElementAfter(completeListener, firstCompletingListener);
-        }
-         */
-
     }
 
     private boolean hasModelerTemplateAttributeSetForConnector(BaseElement element) {

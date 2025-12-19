@@ -117,7 +117,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             final JobClient client,
             final ActivatedJob job) throws Exception {
 
-        if ((taskType == Type.USERTASK_ZEEBE)
+        if ((taskType == Type.USERTASK_ZEEBE) // BPMN-Error processing currently not working
                 && (job.getKind() == JobKind.EXECUTION_LISTENER)
                 && (job.getListenerEventType() == ListenerEventType.END)) {
                 //&& (job.getKind() == JobKind.TASK_LISTENER)
@@ -128,13 +128,12 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
         try {
             final var isListener = (job.getKind() == JobKind.TASK_LISTENER);
-                    // || (job.getKind() == JobKind.EXECUTION_LISTENER);
-            final var eventType = switch (job.getKind()) {
-                case TASK_LISTENER /*, EXECUTION_LISTENER */ -> job.getListenerEventType() == ListenerEventType.CANCELING
-                        ? TaskEvent.Event.CANCELED
-                        : TaskEvent.Event.CREATED;
-                default -> TaskEvent.Event.CREATED;
-            };
+                    // || (job.getKind() == JobKind.EXECUTION_LISTENER);   // BPMN-Error processing currently not working
+            final var eventType = job.getKind() == JobKind.TASK_LISTENER
+                    ? job.getListenerEventType() == ListenerEventType.CANCELING
+                            ? TaskEvent.Event.CANCELED
+                            : TaskEvent.Event.CREATED
+                    : TaskEvent.Event.CREATED;
             final var taskKey = job.getUserTask() != null
                     ? job.getUserTask().getUserTaskKey()
                     : job.getKey();

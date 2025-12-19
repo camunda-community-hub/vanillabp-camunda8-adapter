@@ -1,7 +1,6 @@
 package io.vanillabp.camunda8;
 
 import io.camunda.client.CamundaClient;
-import io.vanillabp.camunda8.config.CamundaAutoConfiguration;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
@@ -32,7 +31,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Scope;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -41,11 +39,11 @@ import org.springframework.retry.annotation.EnableRetry;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(name = {
-        "io.camunda.spring.client.configuration.CamundaAutoConfiguration" // official client
+        "io.camunda.client.spring.configuration.CamundaAutoConfiguration" // official client
+        // see also io.vanillabp.camunda8.config.DisableCamundaSpringAutoConfigurationImportFilter
 })
 @EnableConfigurationProperties(Camunda8VanillaBpProperties.class)
 @EnableRetry
-@Import(CamundaAutoConfiguration.class)
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8AdapterConfiguration.class);
@@ -135,6 +133,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     public Camunda8UserTaskHandler userTaskHandler() {
 
         return new Camunda8UserTaskHandler(workerId);
+
     }
 
     @Bean

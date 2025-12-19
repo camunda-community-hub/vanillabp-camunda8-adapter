@@ -5,13 +5,13 @@ import org.springframework.boot.autoconfigure.AutoConfigurationImportFilter;
 import org.springframework.boot.autoconfigure.AutoConfigurationMetadata;
 
 /**
- * Disable all of Camunda autoconfiguration regarding {@link io.camunda.spring.client.annotation.JobWorker}
- * and {@link io.camunda.spring.client.annotation.Deployment} processing.
+ * Disable all of Camunda autoconfiguration regarding {@link io.camunda.client.annotation.JobWorker}
+ * and {@link io.camunda.client.annotation.Deployment} processing.
  */
 public class DisableCamundaSpringAutoConfigurationImportFilter implements AutoConfigurationImportFilter {
 
     private static final List<String> SHOULD_SKIP = List.of(
-            "io.camunda.spring.client.configuration.CamundaAutoConfiguration");
+            "io.camunda.client.spring.configuration.AnnotationProcessorConfiguration");
 
     @Override
     public boolean[] match(String[] classNames, AutoConfigurationMetadata metadata) {
