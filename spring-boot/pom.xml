@@ -44,8 +44,8 @@
     </dependency>
     <dependency>
       <groupId>io.camunda</groupId>
-      <artifactId>spring-boot-starter-camunda-sdk</artifactId>
-      <version>8.6.26</version>
+      <artifactId>camunda-spring-boot-starter</artifactId>
+      <version>8.8.9</version>
     </dependency>
     <dependency>
       <groupId>org.springframework</groupId>
