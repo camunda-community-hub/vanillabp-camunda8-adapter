@@ -1,8 +1,7 @@
 package io.vanillabp.camunda8;
 
+import io.camunda.client.CamundaClient;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
-import io.vanillabp.camunda8.deployment.DeploymentPersistence;
-import io.vanillabp.camunda8.deployment.DeploymentService;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
 import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
@@ -40,15 +39,19 @@ import org.springframework.retry.annotation.EnableRetry;
 
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(name = {
-        "io.camunda.zeebe.spring.client.CamundaAutoConfiguration", // community-hub client
-        "io.camunda.zeebe.spring.client.configuration.CamundaAutoConfiguration" // official client
+        "io.camunda.client.spring.configuration.CamundaAutoConfiguration" // official client
+        // see also io.vanillabp.camunda8.config.DisableCamundaSpringAutoConfigurationImportFilter
 })
 @EnableConfigurationProperties(Camunda8VanillaBpProperties.class)
 @EnableRetry
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8AdapterConfiguration.class);
-    
+
+    static {
+        Camunda8DeploymentAdapter.initializeCrossCuttingProperties();
+    }
+
     public static final String ADAPTER_ID = "camunda8";
 
     @Value("${workerId}")
@@ -95,15 +98,15 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Bean
     public Camunda8DeploymentAdapter camunda8Adapter(
             final VanillaBpProperties properties,
-            final DeploymentService deploymentService,
-            final Camunda8TaskWiring camunda8TaskWiring) {
+            final Camunda8TaskWiring camunda8TaskWiring,
+            final ApplicationEventPublisher applicationEventPublisher) {
 
         return new Camunda8DeploymentAdapter(
                 applicationName,
                 properties,
                 camunda8Properties,
-                deploymentService,
-                camunda8TaskWiring);
+                camunda8TaskWiring,
+                applicationEventPublisher);
 
     }
 
@@ -127,25 +130,17 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     }
 
     @Bean
-    public DeploymentService c8DeploymentService(
-            final DeploymentPersistence persistence) {
-
-        return new DeploymentService(
-                persistence);
-
-    }
-
-    @Bean
     public Camunda8UserTaskHandler userTaskHandler() {
 
         return new Camunda8UserTaskHandler(workerId);
+
     }
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
     public Camunda8TaskHandler camunda8TaskHandler(
             final SpringDataUtil springDataUtil,
-            final CrudRepository<Object, Object> repository,
+            final CrudRepository<Object, Object> repository, // validate when actually called not during startup
             final Type taskType,
             final String taskDefinition,
             final Object bean,
@@ -154,7 +149,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final String idPropertyName,
             final String tenantId,
             final String workflowModuleId,
-            final String bpmnProcessId) {
+            final String bpmnProcessId,
+            final CamundaClient client) {
         
         return new Camunda8TaskHandler(
                 taskType,
@@ -166,7 +162,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 tenantId,
                 workflowModuleId,
                 bpmnProcessId,
-                camunda8Properties.isTaskIdAsHexString(workflowModuleId));
+                camunda8Properties.isTaskIdAsHexString(workflowModuleId),
+                client);
         
     }
     

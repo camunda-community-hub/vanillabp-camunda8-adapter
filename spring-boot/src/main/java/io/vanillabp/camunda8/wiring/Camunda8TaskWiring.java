@@ -1,7 +1,7 @@
 package io.vanillabp.camunda8.wiring;
 
-import io.camunda.zeebe.client.ZeebeClient;
-import io.camunda.zeebe.client.api.worker.JobWorkerBuilderStep1.JobWorkerBuilderStep3;
+import io.camunda.client.CamundaClient;
+import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 import io.camunda.zeebe.model.bpmn.impl.BpmnModelInstanceImpl;
 import io.camunda.zeebe.model.bpmn.instance.BaseElement;
 import io.camunda.zeebe.model.bpmn.instance.Process;
@@ -9,38 +9,53 @@ import io.camunda.zeebe.model.bpmn.instance.UserTask;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeFormDefinition;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeLoopCharacteristics;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListener;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListenerEventType;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListeners;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeUserTask;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
-import io.vanillabp.camunda8.deployment.DeployedBpmn;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.parameters.Camunda8MethodParameterFactory;
 import io.vanillabp.camunda8.wiring.parameters.ParameterVariables;
 import io.vanillabp.spi.service.WorkflowTask;
+import io.vanillabp.springboot.adapter.ModuleAwareBpmnDeployment;
 import io.vanillabp.springboot.adapter.SpringBeanUtil;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.TaskWiringBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
 import jakarta.persistence.Id;
-import org.camunda.bpm.model.xml.instance.ModelElementInstance;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.ApplicationContext;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import org.camunda.bpm.model.xml.instance.ModelElementInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.event.EventListener;
+
+import static io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter.PROPERTY_TASKLISTENER_PREFIXES;
+import static io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter.PROPERTY_TASKLISTENER_PREFIXES_REGEX;
 
 public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camunda8ProcessService<?>, Camunda8MethodParameterFactory>
-        implements Consumer<ZeebeClient> {
+        implements Consumer<CamundaClient> {
+
+    private static final Logger logger = LoggerFactory.getLogger(Camunda8TaskWiring.class);
+    private static final String TASKDEFINITION_USERTASK_WORKER = "io.camunda.zeebe:userTask";
+    public static final String TASKDEFINITION_USERTASK_ZEEBE = "io.vanillabp.userTask:";
 
     /*
      * timeout can be set to Long.MAX_VALUE but this will cause a subsequent error
@@ -53,19 +68,19 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     
     private final SpringDataUtil springDataUtil;
     
-    private final ObjectProvider<Camunda8TaskHandler> taskHandlers;
+    private final ObjectProvider<Camunda8TaskHandler> taskHandlerBuilder;
 
     private final Collection<Camunda8ProcessService<?>> connectableServices;
     
     private final Camunda8UserTaskHandler userTaskHandler;
 
-    private ZeebeClient client;
+    private CamundaClient client;
     
-    private List<JobWorkerBuilderStep3> workers = new LinkedList<>();
+    private final Map<String, JobWorkerBuilderStep1.JobWorkerBuilderStep3> workers = new HashMap<>();
 
-    private List<Camunda8TaskHandler> handlers = new LinkedList<>();
+    private final Map<Camunda8Connectable, Camunda8TaskHandler> taskHandlers = new HashMap<>();
 
-    private Set<String> userTaskWorkflowModuleIds = new HashSet<>();
+    private final Set<String> userTaskWorkflowModuleIds = new HashSet<>();
     
     private final Camunda8VanillaBpProperties camunda8Properties;
     
@@ -76,13 +91,13 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             final String workerId,
             final Camunda8VanillaBpProperties camunda8Properties,
             final Camunda8UserTaskHandler userTaskHandler,
-            final ObjectProvider<Camunda8TaskHandler> taskHandlers,
+            final ObjectProvider<Camunda8TaskHandler> taskHandlerBuilder,
             final Collection<Camunda8ProcessService<?>> connectableServices) {
         
         super(applicationContext, springBeanUtil, new Camunda8MethodParameterFactory());
         this.workerId = workerId;
         this.springDataUtil = springDataUtil;
-        this.taskHandlers = taskHandlers;
+        this.taskHandlerBuilder = taskHandlerBuilder;
         this.userTaskHandler = userTaskHandler;
         this.connectableServices = connectableServices;
         this.camunda8Properties = camunda8Properties;
@@ -95,105 +110,250 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         return WorkflowTask.class;
         
     }
-    
-    /**
-     * Called by
-     * {@link Camunda8DeploymentAdapter#processBpmnModel(String, Map, DeployedBpmn, BpmnModelInstanceImpl, boolean)} to
-     * ensure client is available before using wire-methods.
-     */
+
     @Override
     public void accept(
-            final ZeebeClient client) {
+            final CamundaClient client) {
         
         this.client = client;
-        handlers.forEach(handler -> handler.accept(client));
 
     }
-    
-    public void openWorkers() {
+
+    public void updateVersionInfos(
+            final ModuleAwareBpmnDeployment.BpmnModelCacheProcessed event) {
+
+        final var taskHandlersOfWorkflowModule = taskHandlers
+                .entrySet()
+                .stream()
+                .filter(entry -> entry.getKey().getWorkflowModuleId().equals(event.getWorkflowModuleId()))
+                .toList();
+        event
+                .getProcessedDeployed()
+                .stream()
+                .flatMap(process -> taskHandlersOfWorkflowModule
+                        .stream()
+                        .filter(entry -> entry.getKey().getBpmnProcessId().equals(process.getKey()))
+                        .map(entry -> Map.entry(entry, process)))
+                .filter(ref -> ref.getKey().getKey().getVersionInfo().equals(
+                        Camunda8DeploymentAdapter.VERSIONINFO_CURRENT))
+                .forEach(ref -> {
+                    final var connectable = ref.getKey().getKey();
+                    connectable.updateVersionInfo(ref.getValue().getValue());
+                });
+
+    }
+
+    @EventListener
+    public void openWorkers(
+            final ModuleAwareBpmnDeployment.BpmnModelCacheProcessed event) {
+
+        updateVersionInfos(event);
 
         // fetch all usertasks spawned
         userTaskWorkflowModuleIds
                 .stream()
                 .map(workflowModuleId -> {
                     final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
-                    final var userTaskWorker = client
+
+                    // old user tasks
+                    final var oldUserTaskWorker = client
                             .newWorker()
-                            .jobType("io.camunda.zeebe:userTask")
+                            .jobType(TASKDEFINITION_USERTASK_WORKER)
                             .handler(userTaskHandler)
                             .timeout(TIMEOUT_100YEARS) // user-tasks should not be fetched more than once
                             .name(workerId);
-
                     if (tenantId != null) {
-                        userTaskWorker.tenantId(tenantId);
+                        oldUserTaskWorker.tenantId(tenantId);
                     }
 
                     final var workerProperties = camunda8Properties.getUserTaskWorkerProperties(workflowModuleId);
-                    workerProperties.applyToUserTaskWorker(userTaskWorker);
-                    return userTaskWorker;
+                    workerProperties.applyToUserTaskWorker(oldUserTaskWorker);
+
+                    return Map.entry(TASKDEFINITION_USERTASK_WORKER, oldUserTaskWorker);
                 })
-                .forEach(workers::add);
+                .forEach(entry -> workers.put(entry.getKey(), entry.getValue()));
 
         workers
-                .forEach(JobWorkerBuilderStep3::open);
+                .values()
+                .forEach(JobWorkerBuilderStep1.JobWorkerBuilderStep3::open);
         
     }
 
+    @SuppressWarnings("unchecked")
     public Stream<Camunda8Connectable> connectablesForType(
+            final String workerModuleId,
+            final Map<String, Object> adapterProperties,
             final Process process,
+            final String versionInfo,
             final BpmnModelInstanceImpl model,
             final Class<? extends BaseElement> type,
-            final boolean allowConnectors) {
+            final boolean allowConnectors,
+            final boolean isNewProcess) {
 
-        final var kind = UserTask.class.isAssignableFrom(type) ? Type.USERTASK : Type.TASK;
+        if (!process.isExecutable()) {
+            return Stream.empty();
+        }
 
-        final var stream = model
+        final var taskListenerPrefixesOfOtherAdaptersToBeIgnored = adapterProperties
+                .entrySet()
+                .stream()
+                .filter(entry -> !entry.getKey().equals(PROPERTY_TASKLISTENER_PREFIXES))
+                .filter(entry -> PROPERTY_TASKLISTENER_PREFIXES_REGEX.matcher(entry.getKey()).matches())
+                .flatMap(entry -> ((Collection<String>) entry.getValue()).stream())
+                .toList();
+
+        return model
                 .getModelElementsByType(type)
                 .stream()
                 .filter(element -> !allowConnectors || hasModelerTemplateAttributeSetForConnector(element))
                 .filter(element -> Objects.equals(getOwningProcess(element), process))
-                .map(element -> new Camunda8Connectable(
-                        process,
-                        element.getId(),
-                        kind,
-                        getTaskDefinition(kind, element),
-                        element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)))
-                .filter(Camunda8Connectable::isExecutableProcess);
+                .flatMap(element -> {
+                    final List<Camunda8Connectable> result = new LinkedList<>();
 
-        if (kind == Type.USERTASK) {
-            return stream;
+                    final var isZeebeUserTask = element.getSingleExtensionElement(ZeebeUserTask.class) != null;
+                    if (isZeebeUserTask) { // Camunda user task
+                        getExistingTaskListenersJobTypes(taskListenerPrefixesOfOtherAdaptersToBeIgnored, element)
+                                .stream()
+                                .map(jobType ->new Camunda8Connectable(
+                                        workerModuleId,
+                                        process,
+                                        versionInfo,
+                                        element.getId(),
+                                        jobType.startsWith(TASKDEFINITION_USERTASK_ZEEBE) ? Type.USERTASK_ZEEBE : Type.TASK,
+                                        jobType.startsWith(TASKDEFINITION_USERTASK_ZEEBE) ? jobType.substring(TASKDEFINITION_USERTASK_ZEEBE.length()) : jobType,
+                                        element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)))
+                                .forEach(result::add);
+                        if (isNewProcess) {
+                            Optional
+                                    .ofNullable(element.getSingleExtensionElement(ZeebeFormDefinition.class))
+                                    .map(ZeebeFormDefinition::getExternalReference)
+                                    .ifPresentOrElse(externalFormReference -> {
+                                            addTaskListenersToBpmnModel(externalFormReference, element);
+                                            result.add(new Camunda8Connectable(
+                                                        workerModuleId,
+                                                        process,
+                                                        versionInfo,
+                                                        element.getId(),
+                                                        Type.USERTASK_ZEEBE,
+                                                        externalFormReference,
+                                                        element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)));
+                                        },
+                                        () -> {
+                                            throw new RuntimeException(
+                                                        "Found user task '"
+                                                        + element.getId()
+                                                        + "' of process '"
+                                                        + process.getId()
+                                                        + "' having no external reference set!");
+                                        });
+                        }
+                    } else if (UserTask.class.isAssignableFrom(type)) { // worker-based user task
+                        Optional
+                                .ofNullable(element.getSingleExtensionElement(ZeebeFormDefinition.class))
+                                .map(ZeebeFormDefinition::getFormKey)
+                                .ifPresentOrElse(formKey -> result
+                                        .add(new Camunda8Connectable(
+                                                workerModuleId,
+                                                process,
+                                                versionInfo,
+                                                element.getId(),
+                                                Type.USERTASK,
+                                                formKey,
+                                                element.getSingleExtensionElement(ZeebeLoopCharacteristics.class))),
+                                        () -> {
+                                            throw new RuntimeException(
+                                                    "Found user task '"
+                                                    + element.getId()
+                                                    + "' of process '"
+                                                    + process.getId()
+                                                    + "' having no form key set!");
+                                        });
+                    } else {
+                        Optional
+                                .ofNullable(element.getSingleExtensionElement(ZeebeTaskDefinition.class))
+                                .map(ZeebeTaskDefinition::getType)
+                                .ifPresent(taskDefinition -> result
+                                        .add(new Camunda8Connectable(
+                                                workerModuleId,
+                                                process,
+                                                versionInfo,
+                                                element.getId(),
+                                                Type.TASK,
+                                                taskDefinition,
+                                                element.getSingleExtensionElement(ZeebeLoopCharacteristics.class))));
+                    }
+
+                    return result.stream();
+                })
+                .filter(Objects::nonNull);
+
+    }
+
+    private List<String> getExistingTaskListenersJobTypes(
+            final List<String> taskListenerPrefixesOfOtherAdaptersToBeIgnored,
+            final BaseElement element) {
+
+        return Optional
+                .ofNullable(element.getSingleExtensionElement(ZeebeTaskListeners.class))
+                .stream()
+                .flatMap(zeebeTaskListeners -> zeebeTaskListeners.getTaskListeners().stream())
+                .map(ZeebeTaskListener::getType)
+                .filter(jobType -> taskListenerPrefixesOfOtherAdaptersToBeIgnored.stream().noneMatch(jobType::startsWith))
+                .distinct()
+                .toList();
+
+    }
+
+    /**
+     * Order of listeners:
+     *
+     * <ul>
+     *     <li>VanillaBP "creating"</li>
+     *     <li>any custom listener</li>
+     *     <li>VanillaBP "canceling"</li>
+     * </ul>
+     * *
+     * @param externalFormReference
+     * @param element
+     */
+    private void addTaskListenersToBpmnModel(
+            final String externalFormReference,
+            final BaseElement element) {
+
+        final ZeebeTaskListeners taskListeners;
+        final boolean isNew;
+        if (element.getSingleExtensionElement(ZeebeTaskListeners.class) != null) {
+            taskListeners = element.getSingleExtensionElement(ZeebeTaskListeners.class);
+            isNew = false;
+        } else {
+            taskListeners = element.getExtensionElements().addExtensionElement(ZeebeTaskListeners.class);
+            isNew = true;
         }
-        
-        return stream.filter(connectable -> connectable.getTaskDefinition() != null);
-        
+
+        final var createListener = element.getModelInstance().newInstance(ZeebeTaskListener.class);
+        createListener.setEventType(ZeebeTaskListenerEventType.creating);
+        createListener.setType(TASKDEFINITION_USERTASK_ZEEBE + externalFormReference);
+        createListener.setRetries("0");
+        taskListeners.insertElementAfter(createListener, null); // insert as first listener
+
+        final var cancelListener = element.getModelInstance().newInstance(ZeebeTaskListener.class);
+        cancelListener.setEventType(ZeebeTaskListenerEventType.canceling);
+        cancelListener.setType(TASKDEFINITION_USERTASK_ZEEBE + externalFormReference);
+        cancelListener.setRetries("0");
+
+        if (isNew) {
+            taskListeners.insertElementAfter(cancelListener, createListener);
+        } else {
+            final var previousListeners = new LinkedList<>(taskListeners.getTaskListeners());
+            taskListeners.insertElementAfter(cancelListener, previousListeners.isEmpty() ? createListener : previousListeners.getLast());
+        }
+
     }
 
     private boolean hasModelerTemplateAttributeSetForConnector(BaseElement element) {
         return element.getAttributeValueNs("http://camunda.org/schema/zeebe/1.0", "modelerTemplate") == null;
     }
 
-    private String getTaskDefinition(
-            final Type kind,
-            final BaseElement element) {
-        
-        if (kind == Type.USERTASK) {
-            
-            final var formDefinition = element.getSingleExtensionElement(ZeebeFormDefinition.class);
-            if (formDefinition == null) {
-                return null;
-            }
-            return formDefinition.getFormKey();
-            
-        }
-        
-        final var taskDefinition = element.getSingleExtensionElement(ZeebeTaskDefinition.class);
-        if (taskDefinition == null) {
-            return null;
-        }
-        return taskDefinition.getType();
-        
-    }
-    
     static Process getOwningProcess(
             final ModelElementInstance element) {
 
@@ -251,7 +411,14 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 processService.getWorkflowAggregateClass());
         final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
 
-        final var taskHandler = taskHandlers.getObject(
+        final var jobType = connectable.getType() == Type.USERTASK_ZEEBE
+                ? TASKDEFINITION_USERTASK_ZEEBE + connectable.getTaskDefinition()
+                : connectable.getTaskDefinition();
+        if (workers.containsKey(jobType)) {
+            return;
+        }
+
+        final var taskHandler = taskHandlerBuilder.getObject(
                 springDataUtil,
                 repository,
                 connectable.getType(),
@@ -262,12 +429,8 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 idPropertyName,
                 tenantId,
                 workflowModuleId,
-                processService.getPrimaryBpmnProcessId());
-        if (this.client != null) {
-            taskHandler.accept(this.client);
-        } else {
-            handlers.add(taskHandler);
-        }
+                processService.getPrimaryBpmnProcessId(),
+                client);
 
         if (connectable.getType() == Type.USERTASK) {
 
@@ -281,10 +444,12 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             
         }
 
-        final var variablesToFetch = getVariablesToFetch(idPropertyName, parameters);
+        taskHandlers.put(connectable, taskHandler);
+
+        final var variablesToFetch = getVariablesToFetch(idPropertyName, parameters, Camunda8TaskHandler.BPMN_ERROR_VARIABLE);
         final var worker = client
                 .newWorker()
-                .jobType(connectable.getTaskDefinition())
+                .jobType(jobType)
                 .handler(taskHandler)
                 .name(workerId)
                 .fetchVariables(variablesToFetch);
@@ -295,7 +460,8 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 connectable.getTaskDefinition());
         workerProperties.applyToWorker(worker);
 
-        workers.add(
+        workers.put(
+                jobType,
                 tenantId != null
                         ? worker.tenantId(tenantId)
                         : worker);
@@ -352,7 +518,8 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     
     private List<String> getVariablesToFetch(
             final String idPropertyName,
-            final List<MethodParameter> parameters) {
+            final List<MethodParameter> parameters,
+            final String ...additionalVariablesToFetch) {
         
         final var result = new LinkedList<String>();
         
@@ -364,6 +531,8 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 .filter(parameter -> parameter instanceof ParameterVariables)
                 .flatMap(parameter -> ((ParameterVariables) parameter).getVariables().stream())
                 .forEach(result::add);
+
+        result.addAll(Arrays.asList(additionalVariablesToFetch));
 
         return result;
         

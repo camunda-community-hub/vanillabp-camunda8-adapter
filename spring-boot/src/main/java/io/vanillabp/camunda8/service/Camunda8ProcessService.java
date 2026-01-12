@@ -1,9 +1,10 @@
 package io.vanillabp.camunda8.service;
 
-import io.camunda.zeebe.client.ZeebeClient;
+import io.camunda.client.CamundaClient;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.LoggingContext;
+import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
 import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
 import java.time.Duration;
@@ -24,7 +25,7 @@ public class Camunda8ProcessService<DE>
         implements ProcessServiceImplementation<DE> {
 
     private static final Logger logger = LoggerFactory.getLogger(Camunda8ProcessService.class);
-    
+
     private final CrudRepository<DE, Object> workflowAggregateRepository;
 
     private final Class<DE> workflowAggregateClass;
@@ -37,7 +38,7 @@ public class Camunda8ProcessService<DE>
 
     private AdapterAwareProcessService<DE> parent;
 
-    private ZeebeClient client;
+    private CamundaClient client;
 
     public Camunda8ProcessService(
             final Camunda8VanillaBpProperties camunda8Properties,
@@ -64,7 +65,7 @@ public class Camunda8ProcessService<DE>
     }
     
     public void wire(
-            final ZeebeClient client,
+            final CamundaClient client,
             final String workflowModuleId,
             final String bpmnProcessId,
             final boolean isPrimary,
@@ -112,7 +113,7 @@ public class Camunda8ProcessService<DE>
     public DE startWorkflow(
             final DE workflowAggregate) throws Exception {
 
-        return runInTransaction(
+        return completeAfterTransaction(
                 workflowAggregate,
                 attachedAggregate -> {
                     final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
@@ -127,7 +128,7 @@ public class Camunda8ProcessService<DE>
                                 ? command
                                 : command.tenantId(tenantId))
                                 .send()
-                                .get(10, TimeUnit.SECONDS);
+                                .get();
                     } catch (Exception e) {
                         throw new RuntimeException(
                                 "Starting workflow '"
@@ -147,7 +148,7 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String messageName) {
 
-        return runInTransaction(
+        return completeAfterTransaction(
                 workflowAggregate,
                 attachedAggregate -> {
                     final var correlationId = getWorkflowAggregateId
@@ -179,7 +180,7 @@ public class Camunda8ProcessService<DE>
             final String messageName,
             final String correlationId) {
 
-        return runInTransaction(
+        return completeAfterTransaction(
                 workflowAggregate,
                 attachedAggregate -> doCorrelateMessage(
                         attachedAggregate,
@@ -243,7 +244,7 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String taskId) {
 
-        return runInTransaction(
+        return processTaskAfterTransaction(
                 workflowAggregate,
                 taskId,
                 attachedAggregate -> {
@@ -252,7 +253,6 @@ public class Camunda8ProcessService<DE>
                             .variables(attachedAggregate)
                             .send()
                             .join();
-
                     logger.trace("Complete task '{}' of process '{}'",
                             taskId,
                             parent.getPrimaryBpmnProcessId());
@@ -266,21 +266,16 @@ public class Camunda8ProcessService<DE>
             final DE workflowAggregate,
             final String taskId) {
 
-        return runInTransaction(
+        final var result = completeUserTaskAfterTransaction(
                 workflowAggregate,
                 taskId,
-                attachedAggregate -> {
-                    client
-                            .newCompleteCommand(getTaskIdAsLong(taskId))
-                            .variables(attachedAggregate)
-                            .send()
-                            .join();
+                "completeUserTask",
+                null);
 
-                    logger.trace("Complete user task '{}' of process '{}'",
-                            taskId,
-                            parent.getPrimaryBpmnProcessId());
-                },
-                "completeUserTask");
+        logger.trace("Completed user task '{}' of process '{}'",
+                taskId,
+                parent.getPrimaryBpmnProcessId());
+        return result;
         
     }
     
@@ -290,7 +285,7 @@ public class Camunda8ProcessService<DE>
             final String taskId,
             final String errorCode) {
 
-        return runInTransaction(
+        return processTaskAfterTransaction(
                 workflowAggregate,
                 taskId,
                 attachedAggregate -> {
@@ -299,8 +294,7 @@ public class Camunda8ProcessService<DE>
                             .errorCode(errorCode)
                             .send()
                             .join();
-
-                    logger.trace("Complete task '{}' of process '{}'",
+                    logger.trace("Canceled task '{}' of process '{}'",
                             taskId,
                             parent.getPrimaryBpmnProcessId());
                 },
@@ -314,27 +308,53 @@ public class Camunda8ProcessService<DE>
             final String taskId,
             final String errorCode) {
 
-        return cancelTask(workflowAggregate, taskId, errorCode);
+        final var zeebeUserTask = client
+                .newUserTaskGetRequest(getTaskIdAsLong(taskId))
+                .send()
+                .join();
 
-    }
+        if (zeebeUserTask != null) {
 
-    private DE runInTransaction(
-            final DE workflowAggregate,
-            final Consumer<DE> runnable,
-            final String methodSignature) {
+            final var result = completeUserTaskAfterTransaction(
+                    workflowAggregate,
+                    taskId,
+                    "cancelZeebeUserTask",
+                    errorCode);
 
-        return runInTransaction(
+            logger.trace("Canceled user task '{}' of process '{}'",
+                    taskId,
+                    parent.getPrimaryBpmnProcessId());
+
+            return result;
+
+        }
+
+        return processTaskAfterTransaction(
                 workflowAggregate,
-                null,
-                runnable,
-                methodSignature);
+                taskId,
+                attachedAggregate -> {
+                    client
+                            .newThrowErrorCommand(getTaskIdAsLong(taskId))
+                            .errorCode(errorCode)
+                            .send()
+                            .join();
+                    logger.trace("Canceled user task '{}' of process '{}'",
+                            taskId,
+                            parent.getPrimaryBpmnProcessId());
+                },
+                "cancelUserTask");
 
     }
 
-    private DE runInTransaction(
+    @FunctionalInterface
+    private interface RunConsumer<DE> {
+        void accept(String bpmnProcessId, DE attachedAggregate, Object aggregateId);
+    }
+
+    private DE run(
             final DE workflowAggregate,
             final String taskIdToTestForAlreadyCompletedOrCancelled,
-            final Consumer<DE> runnable,
+            final RunConsumer<DE> runnable,
             final String methodSignature) {
 
         try {
@@ -358,40 +378,150 @@ public class Camunda8ProcessService<DE>
                     null,
                     null);
 
-            if (TransactionSynchronizationManager.isActualTransactionActive()) {
-                if (taskIdToTestForAlreadyCompletedOrCancelled != null) {
-                    publisher.publishEvent(
-                            new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
-                                    methodSignature,
-                                    () -> client
-                                            .newUpdateTimeoutCommand(getTaskIdAsLong(taskIdToTestForAlreadyCompletedOrCancelled))
-                                            .timeout(Duration.ofMinutes(10))
-                                            .send()
-                                            .join(5, TimeUnit.MINUTES), // needs to run synchronously
-                                    () -> "UpdateTimeout on '"
-                                            + taskIdToTestForAlreadyCompletedOrCancelled
-                                            + "' for aggregate: "
-                                            + aggregateId
-                                            + "; bpmn-process-id: "
-                                            + bpmnProcessId));
-                }
-                publisher.publishEvent(
-                        new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
-                                methodSignature,
-                                () -> runnable.accept(attachedAggregate),
-                                () -> "aggregate: "
-                                        + aggregateId
-                                        + "; bpmn-process-id: "
-                                        + bpmnProcessId));
-            } else {
-                runnable.accept(attachedAggregate);
-            }
+            runnable.accept(bpmnProcessId, attachedAggregate, aggregateId);
 
             return attachedAggregate;
 
         } finally {
-            LoggingContext.clearContext();
+                LoggingContext.clearContext();
         }
+
+    }
+
+    private DE completeUserTaskAfterTransaction(
+            final DE workflowAggregate,
+            final String taskId,
+            final String methodSignature,
+            final String errorCode) {
+
+        final var taskIdAsLong = getTaskIdAsLong(taskId);
+        return run(
+                workflowAggregate,
+                taskId,
+                (bpmnProcessId, attachedAggregate, aggregateId) -> {
+                    final var postCommitEvent = new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
+                            methodSignature,
+                            () -> {
+                                var command = client
+                                        .newCompleteUserTaskCommand(taskIdAsLong)
+                                        .variables(attachedAggregate);
+                                if (errorCode != null) {
+                                    command = command.variable(Camunda8TaskHandler.BPMN_ERROR_VARIABLE, errorCode);
+                                } else {
+                                    // TODO: cannot set both, aggregate and error variable since client does not accept this
+                                    // command = command.variable(Camunda8TaskHandler.BPMN_ERROR_VARIABLE, "");
+                                }
+                                command.send().join();
+                            },
+                            () -> client
+                                    .newCompleteCommand(taskIdAsLong)
+                                    .variables(attachedAggregate)
+                                    .send()
+                                    .join(),
+                            () -> "aggregate: "
+                                    + aggregateId
+                                    + "; bpmn-process-id: "
+                                    + bpmnProcessId);
+                    if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                        publisher.publishEvent(
+                                new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
+                                        methodSignature,
+                                        () -> client
+                                                .newUserTaskGetRequest(taskIdAsLong)
+                                                .send()
+                                                .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                                        () -> client
+                                                .newUpdateTimeoutCommand(taskIdAsLong)
+                                                .timeout(Duration.ofMinutes(10))
+                                                .send()
+                                                .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                                        () -> "UserTaskGet on '"
+                                                + taskId
+                                                + "' for aggregate: "
+                                                + aggregateId
+                                                + "; bpmn-process-id: "
+                                                + bpmnProcessId));
+                        publisher.publishEvent(postCommitEvent);
+                    } else {
+                        new Camunda8TransactionProcessor().processPostCommit(postCommitEvent);
+                    }
+                },
+                methodSignature);
+
+    }
+
+    private DE processTaskAfterTransaction(
+            final DE workflowAggregate,
+            final String taskId,
+            final Consumer<DE> runnable,
+            final String methodSignature) {
+
+        final var taskIdAsLong = getTaskIdAsLong(taskId);
+        return run(
+                workflowAggregate,
+                taskId,
+                (bpmnProcessId, attachedAggregate, aggregateId) -> {
+                    if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                        publisher.publishEvent(
+                                new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
+                                        methodSignature,
+                                        () -> client
+                                                .newUpdateTimeoutCommand(taskIdAsLong)
+                                                .timeout(Duration.ofMinutes(10))
+                                                .send()
+                                                .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                                        null,
+                                        () -> "UpdateTimeout on '"
+                                                + taskId
+                                                + "' for aggregate: "
+                                                + aggregateId
+                                                + "; bpmn-process-id: "
+                                                + bpmnProcessId));
+                        publisher.publishEvent(
+                                new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
+                                        methodSignature,
+                                        () -> runnable.accept(attachedAggregate),
+                                        null,
+                                        () -> "aggregate: "
+                                                + aggregateId
+                                                + "; bpmn-process-id: "
+                                                + bpmnProcessId));
+                    } else {
+                        client
+                                .newCompleteCommand(taskIdAsLong)
+                                .variables(attachedAggregate)
+                                .send()
+                                .join();
+                    }
+                },
+                methodSignature);
+
+    }
+
+    private DE completeAfterTransaction(
+            final DE workflowAggregate,
+            final Consumer<DE> runnable,
+            final String methodSignature) {
+
+        return run(
+                workflowAggregate,
+                null,
+                (bpmnProcessId, attachedAggregate, aggregateId) -> {
+                    if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                        publisher.publishEvent(
+                                new Camunda8TransactionProcessor.Camunda8CommandAfterTx(
+                                        methodSignature,
+                                        () -> runnable.accept(attachedAggregate),
+                                        null,
+                                        () -> "aggregate: "
+                                                + aggregateId
+                                                + "; bpmn-process-id: "
+                                                + bpmnProcessId));
+                    } else {
+                        runnable.accept(attachedAggregate);
+                    }
+                },
+                methodSignature);
 
     }
 

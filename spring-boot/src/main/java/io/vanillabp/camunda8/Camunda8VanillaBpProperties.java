@@ -1,6 +1,6 @@
 package io.vanillabp.camunda8;
 
-import io.camunda.zeebe.client.api.worker.JobWorkerBuilderStep1;
+import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 import io.vanillabp.springboot.adapter.VanillaBpProperties;
 import java.time.Duration;
 import java.util.Map;
