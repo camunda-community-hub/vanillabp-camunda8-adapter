@@ -1,7 +1,7 @@
 package io.vanillabp.camunda8.service;
 
+import io.camunda.client.api.command.ClientStatusException;
 import io.camunda.client.api.command.ProblemException;
-import io.camunda.zeebe.client.api.command.ClientStatusException;
 import io.grpc.Status;
 import io.vanillabp.spi.service.TaskException;
 import java.util.Map;

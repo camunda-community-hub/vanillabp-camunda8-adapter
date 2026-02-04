@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8;
 
 import io.camunda.client.CamundaClient;
+import io.camunda.client.api.JsonMapper;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
@@ -33,12 +34,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.retry.annotation.EnableRetry;
 
+@Configuration
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
 @AutoConfigureBefore(name = {
         "io.camunda.client.spring.configuration.CamundaAutoConfiguration" // official client
@@ -73,6 +76,9 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    private JsonMapper camundaJsonMapper;
 
     @PostConstruct
     public void init() {
@@ -181,9 +187,11 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         final var result = new Camunda8ProcessService<DE>(
                 camunda8Properties,
                 eventPublisher,
+                camundaJsonMapper,
                 workflowAggregateRepository,
                 springDataUtil::getId,
-                workflowAggregateClass);
+                workflowAggregateClass,
+                springDataUtil.getIdName(workflowAggregateClass));
 
         putConnectableService(workflowAggregateClass, result);
         
