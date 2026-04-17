@@ -185,6 +185,24 @@ public class Camunda8ProcessService<DE>
     }
 
     @Override
+    public DE startWorkflowByMessage(
+            final DE workflowAggregate,
+            final String messageName) {
+
+        return correlateMessage(workflowAggregate, messageName);
+
+    }
+
+    @Override
+    public DE startWorkflowByMessage(
+            final DE workflowAggregate,
+            final Object message) {
+
+        return correlateMessage(workflowAggregate, message);
+
+    }
+
+    @Override
     public DE correlateMessage(
             final DE workflowAggregate,
             final String messageName) {
