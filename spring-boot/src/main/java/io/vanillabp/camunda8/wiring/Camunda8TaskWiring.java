@@ -9,7 +9,9 @@ import io.camunda.zeebe.model.bpmn.instance.BaseElement;
 import io.camunda.zeebe.model.bpmn.instance.Process;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeFormDefinition;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeHeader;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskHeaders;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListener;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListenerEventType;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListeners;
@@ -29,6 +31,8 @@ import io.vanillabp.springboot.parameters.MethodParameter;
 import jakarta.persistence.Id;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.time.Duration;
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -57,6 +61,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
     private static final Logger logger = LoggerFactory.getLogger(Camunda8TaskWiring.class);
     private static final String TASKDEFINITION_USERTASK_WORKER = "io.camunda.zeebe:userTask";
     public static final String TASKDEFINITION_USERTASK_ZEEBE = "io.vanillabp.userTask:";
+    private static final String TASKHEADER_RETRY_BACKOFF = "retryBackoff";
 
     /*
      * timeout can be set to Long.MAX_VALUE but this will cause a subsequent error
@@ -273,15 +278,21 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                         Optional
                                 .ofNullable(element.getSingleExtensionElement(ZeebeTaskDefinition.class))
                                 .map(ZeebeTaskDefinition::getType)
-                                .ifPresent(taskDefinition -> result
-                                        .add(new Camunda8Connectable(
-                                                workerModuleId,
-                                                process,
-                                                versionInfo,
-                                                element.getId(),
-                                                Type.TASK,
-                                                taskDefinition,
-                                                getRetries(element))));
+                                .ifPresent(taskDefinition -> {
+                                    var workerProperties = camunda8Properties.getWorkerProperties(
+                                            workerModuleId,
+                                            process.getId(),
+                                            taskDefinition);
+                                    result
+                                            .add(new Camunda8Connectable(
+                                                    workerModuleId,
+                                                    process,
+                                                    versionInfo,
+                                                    element.getId(),
+                                                    Type.TASK,
+                                                    taskDefinition,
+                                                    getRetries(element, workerProperties)));
+                                });
                     }
 
                     return result.stream();
@@ -355,28 +366,54 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         return element.getAttributeValueNs("http://camunda.org/schema/zeebe/1.0", "modelerTemplate") == null;
     }
 
-    private Retries getRetries(BaseElement element) {
+    private Retries getRetries(
+            BaseElement element,
+            Camunda8VanillaBpProperties.WorkerProperties workerProperties) {
         var taskDefinition = element.getSingleExtensionElement(ZeebeTaskDefinition.class);
         if (taskDefinition == null || !hasRetryAttributeSet(taskDefinition)) {
             return null;
         }
         var enableRetries = true;
-        return new Retries(enableRetries);
+        var retryBackoff = getBackoff(element, taskDefinition, workerProperties.getRetryBackoff());
+        return new Retries(enableRetries, retryBackoff);
     }
 
-    private boolean hasRetryAttributeSet(ModelElementInstance element) {
-        String value = element.getAttributeValue(ZeebeConstants.ATTRIBUTE_RETRIES);
+    private boolean hasRetryAttributeSet(ZeebeTaskDefinition taskDefinition) {
+        String value = taskDefinition.getAttributeValue(ZeebeConstants.ATTRIBUTE_RETRIES);
         if (value != null) {
             return true;
         }
         // Taken from implementation of AttributeImpl#getValue to consider namespace aliases.
-        Set<String> alternativeNamespaces = element.getModelInstance().getModel().getAlternativeNamespaces(BpmnModelConstants.ZEEBE_NS);
+        Set<String> alternativeNamespaces = taskDefinition.getModelInstance()
+                .getModel()
+                .getAlternativeNamespaces(BpmnModelConstants.ZEEBE_NS);
         return Stream.concat(
                         Stream.of(BpmnModelConstants.ZEEBE_NS),
                         alternativeNamespaces == null ? Stream.empty() : alternativeNamespaces.stream()
                 )
-                .map(namespace -> element.getAttributeValueNs(namespace, ZeebeConstants.ATTRIBUTE_RETRIES))
+                .map(namespace -> taskDefinition.getAttributeValueNs(namespace, ZeebeConstants.ATTRIBUTE_RETRIES))
                 .anyMatch(Objects::nonNull);
+    }
+
+    private Duration getBackoff(BaseElement element, ZeebeTaskDefinition taskDefinition, Duration defaultBackoff) {
+        var taskHeaders = element.getSingleExtensionElement(ZeebeTaskHeaders.class);
+        if (taskHeaders == null) {
+            return defaultBackoff;
+        }
+        var retryBackoff = taskHeaders.getHeaders().stream()
+                .filter(header -> TASKHEADER_RETRY_BACKOFF.equals(header.getKey()))
+                .map(ZeebeHeader::getValue)
+                .findFirst();
+        try {
+            return retryBackoff.map(Duration::parse).orElse(defaultBackoff);
+        } catch (DateTimeParseException exception) {
+            logger.warn(
+                    "Invalid retryBackoff value, must be ISO-8601 duration: \"{}\" in task {}",
+                    retryBackoff.orElse(""),
+                    taskDefinition.getType(), exception
+            );
+            return null;
+        }
     }
 
     static Process getOwningProcess(

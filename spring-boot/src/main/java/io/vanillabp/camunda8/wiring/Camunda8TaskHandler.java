@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
@@ -419,7 +420,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                     jobClient
                             .newFailCommand(job)
                             .retries(getRemainingRetries(job))
-                            .errorMessage(exception.getMessage())
+                            .retryBackoff(getBackoff())
+                            .errorMessage(getErrorMessage(exception))
                             .send()
                             .exceptionally(t -> {
                                 throw new RuntimeException("error", t);
@@ -443,6 +445,20 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
         } else {
             return job.getRetries() - 1;
         }
+    }
+
+    private Duration getBackoff() {
+        if (this.retries == null || !this.retries.areRetriesEnabled() || this.retries.getBackoff() == null) {
+            return Duration.ZERO;
+        }
+        return this.retries.getBackoff();
+    }
+
+    private String getErrorMessage(Exception exception) {
+        if (exception.getMessage() == null) {
+            return exception.getClass().getSimpleName();
+        }
+        return exception.getMessage();
     }
 
     protected boolean processWorkflowAggregateParameter(
