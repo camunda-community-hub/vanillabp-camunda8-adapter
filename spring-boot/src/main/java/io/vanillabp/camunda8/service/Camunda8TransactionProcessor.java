@@ -98,6 +98,22 @@ public class Camunda8TransactionProcessor {
         }
     }
 
+    public static class Camunda8CommandAfterRollback extends ApplicationEvent {
+        final Supplier<String> description;
+        final Runnable runnable;
+        final Runnable fallback;
+        public Camunda8CommandAfterRollback(
+            final Object source,
+            final Runnable runnable,
+            final Runnable fallback,
+            final Supplier<String> description) {
+            super(source);
+            this.runnable = runnable;
+            this.fallback = fallback;
+            this.description = description;
+        }
+    }
+
     @TransactionalEventListener(
             phase = TransactionPhase.BEFORE_COMMIT,
             fallbackExecution = true)
@@ -207,6 +223,15 @@ public class Camunda8TransactionProcessor {
             }
         }
 
+    }
+
+    @TransactionalEventListener(
+        phase = TransactionPhase.AFTER_ROLLBACK,
+        fallbackExecution = true)
+    public void processPostRollback(final Camunda8CommandAfterRollback event) {
+        processPostCommit(
+            new Camunda8CommandAfterTx(event.getSource(), event.runnable, event.fallback, event.description)
+        );
     }
 
 }

@@ -247,6 +247,11 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                                 return workflowAggregateCache.workflowAggregate;
                             }, multiInstanceSupplier));
 
+        } catch (Exception e) {
+            // Exception will be ignored, as the necessary reports to Camunda are made in the transaction logic.
+            // If the error is rethrown here, the Camunda Client will report it to Camunda again,
+            // leading to an incorrect state if e.g. a retry occurs.
+            logger.warn("Error occurred during handling of task {} of type {} in process {}", job.getKey(), job.getType(), job.getBpmnProcessId(), e);
         } finally {
             Camunda8TransactionProcessor.unregisterCallbacks();
             Camunda8TransactionAspect.unregisterDeferredInTransaction();
@@ -409,7 +414,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                 exception -> {
                     jobClient
                             .newFailCommand(job)
-                            .retries(0)
+                            .retries(job.getRetries() - 1)
                             .errorMessage(exception.getMessage())
                             .send()
                             .exceptionally(t -> {
