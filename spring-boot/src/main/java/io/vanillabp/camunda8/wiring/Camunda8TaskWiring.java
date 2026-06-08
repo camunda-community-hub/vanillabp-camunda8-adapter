@@ -2,12 +2,13 @@ package io.vanillabp.camunda8.wiring;
 
 import io.camunda.client.CamundaClient;
 import io.camunda.client.api.worker.JobWorkerBuilderStep1;
+import io.camunda.zeebe.model.bpmn.impl.BpmnModelConstants;
 import io.camunda.zeebe.model.bpmn.impl.BpmnModelInstanceImpl;
+import io.camunda.zeebe.model.bpmn.impl.ZeebeConstants;
 import io.camunda.zeebe.model.bpmn.instance.BaseElement;
 import io.camunda.zeebe.model.bpmn.instance.Process;
 import io.camunda.zeebe.model.bpmn.instance.UserTask;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeFormDefinition;
-import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeLoopCharacteristics;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListener;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListenerEventType;
@@ -221,7 +222,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                         element.getId(),
                                         jobType.startsWith(TASKDEFINITION_USERTASK_ZEEBE) ? Type.USERTASK_ZEEBE : Type.TASK,
                                         jobType.startsWith(TASKDEFINITION_USERTASK_ZEEBE) ? jobType.substring(TASKDEFINITION_USERTASK_ZEEBE.length()) : jobType,
-                                        element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)))
+                                        null))
                                 .forEach(result::add);
                         if (isNewProcess) {
                             Optional
@@ -236,7 +237,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                         element.getId(),
                                                         Type.USERTASK_ZEEBE,
                                                         externalFormReference,
-                                                        element.getSingleExtensionElement(ZeebeLoopCharacteristics.class)));
+                                                        null));
                                         },
                                         () -> {
                                             throw new RuntimeException(
@@ -259,7 +260,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                 element.getId(),
                                                 Type.USERTASK,
                                                 formKey,
-                                                element.getSingleExtensionElement(ZeebeLoopCharacteristics.class))),
+                                                null)),
                                         () -> {
                                             throw new RuntimeException(
                                                     "Found user task '"
@@ -280,7 +281,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                 element.getId(),
                                                 Type.TASK,
                                                 taskDefinition,
-                                                element.getSingleExtensionElement(ZeebeLoopCharacteristics.class))));
+                                                getRetries(element))));
                     }
 
                     return result.stream();
@@ -352,6 +353,30 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
 
     private boolean hasModelerTemplateAttributeSetForConnector(BaseElement element) {
         return element.getAttributeValueNs("http://camunda.org/schema/zeebe/1.0", "modelerTemplate") == null;
+    }
+
+    private Retries getRetries(BaseElement element) {
+        var taskDefinition = element.getSingleExtensionElement(ZeebeTaskDefinition.class);
+        if (taskDefinition == null || !hasRetryAttributeSet(taskDefinition)) {
+            return null;
+        }
+        var enableRetries = true;
+        return new Retries(enableRetries);
+    }
+
+    private boolean hasRetryAttributeSet(ModelElementInstance element) {
+        String value = element.getAttributeValue(ZeebeConstants.ATTRIBUTE_RETRIES);
+        if (value != null) {
+            return true;
+        }
+        // Taken from implementation of AttributeImpl#getValue to consider namespace aliases.
+        Set<String> alternativeNamespaces = element.getModelInstance().getModel().getAlternativeNamespaces(BpmnModelConstants.ZEEBE_NS);
+        return Stream.concat(
+                        Stream.of(BpmnModelConstants.ZEEBE_NS),
+                        alternativeNamespaces == null ? Stream.empty() : alternativeNamespaces.stream()
+                )
+                .map(namespace -> element.getAttributeValueNs(namespace, ZeebeConstants.ATTRIBUTE_RETRIES))
+                .anyMatch(Objects::nonNull);
     }
 
     static Process getOwningProcess(
@@ -430,6 +455,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 tenantId,
                 workflowModuleId,
                 processService.getPrimaryBpmnProcessId(),
+                connectable.getRetries(),
                 client);
 
         if (connectable.getType() == Type.USERTASK) {

@@ -1,14 +1,13 @@
 package io.vanillabp.camunda8.wiring;
 
 import io.camunda.zeebe.model.bpmn.instance.Process;
-import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeLoopCharacteristics;
 import io.vanillabp.springboot.adapter.Connectable;
 
 public class Camunda8Connectable implements Connectable {
 
     public enum Type {
         TASK, USERTASK, USERTASK_ZEEBE
-    };
+    }
 
     private final String workflowModuleId;
 
@@ -21,6 +20,8 @@ public class Camunda8Connectable implements Connectable {
     private final Type type;
 
     private final String taskDefinition;
+
+    private final Retries retries;
     
     public Camunda8Connectable(
             final String workflowModuleId,
@@ -29,7 +30,7 @@ public class Camunda8Connectable implements Connectable {
             final String elementId,
             final Type type,
             final String taskDefinition,
-            final ZeebeLoopCharacteristics loopCharacteristics) {
+            final Retries retries) {
 
         this.workflowModuleId = workflowModuleId;
         this.process = process;
@@ -37,7 +38,7 @@ public class Camunda8Connectable implements Connectable {
         this.elementId = elementId;
         this.taskDefinition = taskDefinition;
         this.type = type;
-
+        this.retries = retries;
     }
 
     @Override
@@ -93,5 +94,8 @@ public class Camunda8Connectable implements Connectable {
         return taskDefinition;
 
     }
-    
+
+    public Retries getRetries() {
+        return retries;
+    }
 }

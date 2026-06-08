@@ -53,6 +53,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
     private final String bpmnProcessId;
 
+    private final Retries retries;
+
     private final boolean publishUserTaskIdAsHexString;
 
     private final CamundaClient camundaClient;
@@ -67,6 +69,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             final String tenantId,
             final String workflowModuleId,
             final String bpmnProcessId,
+            final Retries retries,
             final boolean publishUserTaskIdAsHexString,
             final CamundaClient camundaClient) {
 
@@ -76,6 +79,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
         this.tenantId = tenantId;
         this.workflowModuleId = workflowModuleId;
         this.bpmnProcessId = bpmnProcessId;
+        this.retries = retries;
         this.publishUserTaskIdAsHexString = publishUserTaskIdAsHexString;
         this.camundaClient = camundaClient;
 
@@ -414,7 +418,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                 exception -> {
                     jobClient
                             .newFailCommand(job)
-                            .retries(job.getRetries() - 1)
+                            .retries(getRemainingRetries(job))
                             .errorMessage(exception.getMessage())
                             .send()
                             .exceptionally(t -> {
@@ -428,6 +432,17 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                         + "; Job: " + job.getKey()
                         + ")");
 
+    }
+
+    private int getRemainingRetries(ActivatedJob job) {
+        if (this.retries == null || !this.retries.areRetriesEnabled()) {
+            // Only allow job to be retried if explicitly configured in the BPMN.
+            // This is a departure from Camunda 8 defaults, which would retry any job 3 times by default,
+            // to ensure only safe (idempotent) jobs are retried.
+            return 0;
+        } else {
+            return job.getRetries() - 1;
+        }
     }
 
     protected boolean processWorkflowAggregateParameter(
