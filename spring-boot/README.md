@@ -423,3 +423,43 @@ vanillabp:
       loan-approval:
          allow-connectors: true
 ```
+
+## Retries
+To enable retries in service tasks, simply specify the corresponding Zeebe BPMN attribute:
+```xml
+<bpmn:serviceTask id="ExampleActivity" name="Transfer money">
+  <bpmn:extensionElements>
+    <zeebe:taskDefinition type="transferMoney" retries="3" />
+  </bpmn:extensionElements>
+</bpmn:serviceTask>
+```
+
+> [!IMPORTANT]  
+> VanillaBP overrides the Camunda 8 default of `3` retries. 
+> Unless explicitly configured in the BPMN, service tasks are **not** retried.
+> This is to ensure only safe (idempotent) tasks are retried.
+
+To specify a retry backoff duration, either specify a default duration in the properties, or define the backoff
+for each task in a task header called `retryBackoff`:
+
+```yaml
+vanillabp:
+   workflow-modules:
+      loan-approval:
+         adapters:
+            camunda8:
+               retryBackoff: PT5S # Can be defined on module, adapter, and task level
+```
+
+```xml
+<bpmn:serviceTask id="ExampleActivity" name="Transfer money">
+  <bpmn:extensionElements>
+    <zeebe:taskDefinition type="transferMoney" retries="3" />
+     <zeebe:taskHeaders>
+        <zeebe:header key="retryBackoff" value="PT5S" />
+     </zeebe:taskHeaders>
+  </bpmn:extensionElements>
+</bpmn:serviceTask>
+```
+
+The format of the backoff duration is an ISO-8601 duration that is parseable as `java.time.Duration`.
