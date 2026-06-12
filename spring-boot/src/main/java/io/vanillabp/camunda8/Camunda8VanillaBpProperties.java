@@ -288,7 +288,9 @@ public class Camunda8VanillaBpProperties {
             if (original.streamTimeout != null) {
                 this.streamTimeout = original.streamTimeout;
             }
-
+            if (original.retryBackoff != null) {
+                this.retryBackoff = original.retryBackoff;
+            }
         }
 
         public void applyToWorker(
@@ -329,6 +331,8 @@ public class Camunda8VanillaBpProperties {
 
         private Duration streamTimeout = null;
 
+        private Duration retryBackoff = null;
+
         public Duration getTaskTimeout() {
             return taskTimeout;
         }
@@ -347,6 +351,10 @@ public class Camunda8VanillaBpProperties {
 
         public Duration getStreamTimeout() {
             return streamTimeout;
+        }
+
+        public Duration getRetryBackoff() {
+            return retryBackoff;
         }
 
         public void setTaskTimeout(Duration taskTimeout) {
@@ -369,6 +377,9 @@ public class Camunda8VanillaBpProperties {
             this.streamTimeout = streamTimeout;
         }
 
+        public void setRetryBackoff(Duration retryBackoff) {
+            this.retryBackoff = retryBackoff;
+        }
     }
 
     public static class TaskProperties {

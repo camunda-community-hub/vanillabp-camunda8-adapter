@@ -9,6 +9,7 @@ import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.camunda8.wiring.Camunda8UserTaskHandler;
+import io.vanillabp.camunda8.wiring.Retries;
 import io.vanillabp.springboot.adapter.AdapterConfigurationBase;
 import io.vanillabp.springboot.adapter.SpringBeanUtil;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
@@ -17,6 +18,7 @@ import io.vanillabp.springboot.parameters.MethodParameter;
 import jakarta.annotation.PostConstruct;
 import java.lang.reflect.Method;
 import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.AopProxyUtils;
@@ -150,6 +152,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
             final String tenantId,
             final String workflowModuleId,
             final String bpmnProcessId,
+            final Retries retries,
             final CamundaClient client) {
         
         return new Camunda8TaskHandler(
@@ -162,6 +165,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 tenantId,
                 workflowModuleId,
                 bpmnProcessId,
+                retries,
                 camunda8Properties.isTaskIdAsHexString(workflowModuleId),
                 client);
         

@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.repository.CrudRepository;
@@ -53,6 +54,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
     private final String bpmnProcessId;
 
+    private final Retries retries;
+
     private final boolean publishUserTaskIdAsHexString;
 
     private final CamundaClient camundaClient;
@@ -67,6 +70,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             final String tenantId,
             final String workflowModuleId,
             final String bpmnProcessId,
+            final Retries retries,
             final boolean publishUserTaskIdAsHexString,
             final CamundaClient camundaClient) {
 
@@ -76,6 +80,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
         this.tenantId = tenantId;
         this.workflowModuleId = workflowModuleId;
         this.bpmnProcessId = bpmnProcessId;
+        this.retries = retries;
         this.publishUserTaskIdAsHexString = publishUserTaskIdAsHexString;
         this.camundaClient = camundaClient;
 
@@ -247,6 +252,11 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                                 return workflowAggregateCache.workflowAggregate;
                             }, multiInstanceSupplier));
 
+        } catch (Exception e) {
+            // Exception will be ignored, as the necessary reports to Camunda are made in the transaction logic.
+            // If the error is rethrown here, the Camunda Client will report it to Camunda again,
+            // leading to an incorrect state if e.g. a retry occurs.
+            logger.warn("Error occurred during handling of task {} of type {} in process {}", job.getKey(), job.getType(), job.getBpmnProcessId(), e);
         } finally {
             Camunda8TransactionProcessor.unregisterCallbacks();
             Camunda8TransactionAspect.unregisterDeferredInTransaction();
@@ -409,8 +419,9 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                 exception -> {
                     jobClient
                             .newFailCommand(job)
-                            .retries(0)
-                            .errorMessage(exception.getMessage())
+                            .retries(getRemainingRetries(job))
+                            .retryBackoff(getBackoff())
+                            .errorMessage(getErrorMessage(exception))
                             .send()
                             .exceptionally(t -> {
                                 throw new RuntimeException("error", t);
@@ -423,6 +434,31 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                         + "; Job: " + job.getKey()
                         + ")");
 
+    }
+
+    private int getRemainingRetries(ActivatedJob job) {
+        if (this.retries == null || !this.retries.areRetriesEnabled()) {
+            // Only allow job to be retried if explicitly configured in the BPMN.
+            // This is a departure from Camunda 8 defaults, which would retry any job 3 times by default,
+            // to do retries only if it is explicitly requested.
+            return 0;
+        } else {
+            return job.getRetries() - 1;
+        }
+    }
+
+    private Duration getBackoff() {
+        if (this.retries == null || !this.retries.areRetriesEnabled() || this.retries.getBackoff() == null) {
+            return Duration.ZERO;
+        }
+        return this.retries.getBackoff();
+    }
+
+    private String getErrorMessage(Exception exception) {
+        if (exception.getMessage() == null) {
+            return exception.getClass().getSimpleName();
+        }
+        return exception.getMessage();
     }
 
     protected boolean processWorkflowAggregateParameter(

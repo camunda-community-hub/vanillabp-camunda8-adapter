@@ -174,8 +174,14 @@ public class Camunda8TransactionAspect {
                         () -> runnable.accept(e),
                         null,
                         () -> description.apply(e));
+                final var postRollbackEvent = new Camunda8TransactionProcessor.Camunda8CommandAfterRollback(
+                    methodSignature,
+                    () -> runnable.accept(e),
+                    null,
+                    () -> description.apply(e));
                 if (isTxActive) {
                     publisher.publishEvent(postCommitEvent);
+                    publisher.publishEvent(postRollbackEvent);
                 } else {
                    new Camunda8TransactionProcessor().processPostCommit(postCommitEvent);
                 }
