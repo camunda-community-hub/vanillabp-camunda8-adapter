@@ -440,7 +440,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
         if (this.retries == null || !this.retries.areRetriesEnabled()) {
             // Only allow job to be retried if explicitly configured in the BPMN.
             // This is a departure from Camunda 8 defaults, which would retry any job 3 times by default,
-            // to ensure only safe (idempotent) jobs are retried.
+            // to do retries only if it is explicitly requested.
             return 0;
         } else {
             return job.getRetries() - 1;

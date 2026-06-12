@@ -437,7 +437,10 @@ To enable retries in service tasks, simply specify the corresponding Zeebe BPMN 
 > [!IMPORTANT]  
 > VanillaBP overrides the Camunda 8 default of `3` retries. 
 > Unless explicitly configured in the BPMN, service tasks are **not** retried.
-> This is to ensure only safe (idempotent) tasks are retried.
+> This is to avoid retries for tasks doing modifications of business data 
+> and to do retries only if this is explicitly requested. 
+> However, keep in mind to make your workflow task idempotent regardless,
+> since Camunda 8 only guarantees at-least-once semantics.
 
 To specify a retry backoff duration, either specify a default duration in the properties, or define the backoff
 for each task in a task header called `retryBackoff`:
@@ -448,7 +451,7 @@ vanillabp:
       loan-approval:
          adapters:
             camunda8:
-               retryBackoff: PT5S # Can be defined on module, adapter, and task level
+               retry-backoff: PT5S # Can be defined on module, adapter, and task level
 ```
 
 ```xml
