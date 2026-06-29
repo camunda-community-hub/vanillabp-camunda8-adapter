@@ -1,14 +1,27 @@
 package io.vanillabp.camunda8.service;
 
 import io.camunda.client.CamundaClient;
+import io.camunda.client.api.JsonMapper;
+import io.camunda.client.api.search.response.ProcessInstance;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.LoggingContext;
+import io.vanillabp.camunda8.service.bpmn.ProcessDefinitionCollector;
+import io.vanillabp.camunda8.service.bpmn.ProcessExecutionHistoryCollector;
 import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
+import io.vanillabp.spi.process.ProcessDefinition;
+import io.vanillabp.spi.process.ProcessDefinitionNotFoundException;
+import io.vanillabp.spi.process.WorkflowHistory;
+import io.vanillabp.spi.process.WorkflowNotFoundException;
 import io.vanillabp.springboot.adapter.AdapterAwareProcessService;
 import io.vanillabp.springboot.adapter.ProcessServiceImplementation;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -32,9 +45,17 @@ public class Camunda8ProcessService<DE>
 
     private final Function<DE, Object> getWorkflowAggregateId;
 
+    private final String workflowAggregateIdAttributeName;
+
     private final Camunda8VanillaBpProperties camunda8Properties;
 
     private final ApplicationEventPublisher publisher;
+
+    private final JsonMapper camundaJsonMapper;
+
+    private ProcessDefinitionCollector processDefinitionCollector;
+
+    private ProcessExecutionHistoryCollector processExecutionHistoryCollector;
 
     private AdapterAwareProcessService<DE> parent;
 
@@ -43,27 +64,38 @@ public class Camunda8ProcessService<DE>
     public Camunda8ProcessService(
             final Camunda8VanillaBpProperties camunda8Properties,
             final ApplicationEventPublisher publisher,
+            final JsonMapper camundaJsonMapper,
             final CrudRepository<DE, Object> workflowAggregateRepository,
             final Function<DE, Object> getWorkflowAggregateId,
-            final Class<DE> workflowAggregateClass) {
-        
+            final Class<DE> workflowAggregateClass,
+            final String workflowAggregateIdAttributeName) {
+
         super();
         this.camunda8Properties = camunda8Properties;
         this.publisher = publisher;
+        this.camundaJsonMapper = camundaJsonMapper;
         this.workflowAggregateRepository = workflowAggregateRepository;
         this.workflowAggregateClass = workflowAggregateClass;
         this.getWorkflowAggregateId = getWorkflowAggregateId;
-                
+        this.workflowAggregateIdAttributeName = workflowAggregateIdAttributeName;
+
     }
-    
+
     @Override
     public void setParent(
             final AdapterAwareProcessService<DE> parent) {
-        
+
         this.parent = parent;
-        
+
     }
-    
+
+    @Override
+    public String getWorkflowModuleId() {
+
+        return parent.getWorkflowModuleId();
+
+    }
+
     public void wire(
             final CamundaClient client,
             final String workflowModuleId,
@@ -76,10 +108,13 @@ public class Camunda8ProcessService<DE>
             throw new RuntimeException("Not yet wired! If this occurs dependency of either "
                     + "VanillaBP Spring Boot support or Camunda8 adapter was changed introducing this "
                     + "lack of wiring. Please report a Github issue!");
-            
+
         }
 
         this.client = client;
+        this.processDefinitionCollector = new ProcessDefinitionCollector(client);
+        this.processExecutionHistoryCollector = new ProcessExecutionHistoryCollector(client);
+
         parent.wire(
                 Camunda8AdapterConfiguration.ADAPTER_ID,
                 workflowModuleId,
@@ -87,7 +122,7 @@ public class Camunda8ProcessService<DE>
                 isPrimary,
                 messageBasedStartEventsMessageNames,
                 signalBasedStartEventsSignalNames);
-        
+
     }
 
     @Override
@@ -96,7 +131,13 @@ public class Camunda8ProcessService<DE>
         return workflowAggregateClass;
 
     }
-    
+
+    public String getWorkflowAggregateIdAttributeName() {
+
+        return workflowAggregateIdAttributeName;
+
+    }
+
     @Override
     public CrudRepository<DE, Object> getWorkflowAggregateRepository() {
 
@@ -111,7 +152,7 @@ public class Camunda8ProcessService<DE>
 
     @Override
     public DE startWorkflow(
-            final DE workflowAggregate) throws Exception {
+            final DE workflowAggregate) {
 
         return completeAfterTransaction(
                 workflowAggregate,
@@ -140,7 +181,25 @@ public class Camunda8ProcessService<DE>
                     }
                 },
                 "startWorkflow");
-        
+
+    }
+
+    @Override
+    public DE startWorkflowByMessage(
+            final DE workflowAggregate,
+            final String messageName) {
+
+        return correlateMessage(workflowAggregate, messageName);
+
+    }
+
+    @Override
+    public DE startWorkflowByMessage(
+            final DE workflowAggregate,
+            final Object message) {
+
+        return correlateMessage(workflowAggregate, message);
+
     }
 
     @Override
@@ -162,16 +221,16 @@ public class Camunda8ProcessService<DE>
                 "correlateMessage");
 
     }
-    
+
     @Override
     public DE correlateMessage(
             final DE workflowAggregate,
             final Object message) {
-        
+
         return correlateMessage(
                 workflowAggregate,
                 message.getClass().getSimpleName());
-        
+
     }
 
     @Override
@@ -208,26 +267,26 @@ public class Camunda8ProcessService<DE>
                 .send()
                 .join()
                 .getMessageKey();
-        
+
         logger.trace("Correlated message '{}' using correlation-id '{}' for process '{}' as '{}'",
                 messageName,
                 correlationId,
                 parent.getPrimaryBpmnProcessId(),
                 messageKey);
-        
+
     }
-    
+
     @Override
     public DE correlateMessage(
             final DE workflowAggregate,
             final Object message,
             final String correlationId) {
-        
+
         return correlateMessage(
                 workflowAggregate,
                 message.getClass().getSimpleName(),
                 correlationId);
-        
+
     }
 
     private long getTaskIdAsLong(
@@ -260,7 +319,7 @@ public class Camunda8ProcessService<DE>
                 "completeTask");
 
     }
-    
+
     @Override
     public DE completeUserTask(
             final DE workflowAggregate,
@@ -276,9 +335,9 @@ public class Camunda8ProcessService<DE>
                 taskId,
                 parent.getPrimaryBpmnProcessId());
         return result;
-        
+
     }
-    
+
     @Override
     public DE cancelTask(
             final DE workflowAggregate,
@@ -301,7 +360,7 @@ public class Camunda8ProcessService<DE>
                 "cancelTask");
 
     }
-    
+
     @Override
     public DE cancelUserTask(
             final DE workflowAggregate,
@@ -525,4 +584,100 @@ public class Camunda8ProcessService<DE>
 
     }
 
+    @Override
+    public List<ProcessDefinition> getProcessDefinitions(
+            final DE workflowAggregate,
+            final String historyContext) throws WorkflowNotFoundException {
+
+        final var aggregateId = getWorkflowAggregateId.apply(workflowAggregate).toString();
+        final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
+
+        try {
+            ProcessInstance processInstance;
+
+            if (historyContext == null) {
+                processInstance = findRootProcessInstance(aggregateId, tenantId);
+            } else {
+                processInstance = client
+                        .newProcessInstanceGetRequest(Long.parseLong(historyContext))
+                        .send()
+                        .join();
+            }
+
+            if (processInstance == null) {
+                throw new WorkflowNotFoundException(aggregateId);
+            }
+
+            return processDefinitionCollector.collectAllDefinitions(
+                    processInstance, tenantId);
+
+        } catch (WorkflowNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Error collecting process definitions", e);
+        }
+    }
+
+    public InputStream getBpmnXml(
+            final String processDefinitionId) throws ProcessDefinitionNotFoundException {
+
+        try {
+            final var xml = processDefinitionCollector.loadBpmnXml(Long.parseLong(processDefinitionId));
+            return new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new ProcessDefinitionNotFoundException(processDefinitionId, e);
+        }
+
+    }
+
+    public WorkflowHistory getWorkflowHistory(
+            final DE workflowAggregate,
+            final String historyContext) throws WorkflowNotFoundException {
+
+        final var aggregateId = getWorkflowAggregateId.apply(workflowAggregate);
+        final var tenantId = camunda8Properties.getTenantId(parent.getWorkflowModuleId());
+
+        try {
+            ProcessInstance processInstance = findRootProcessInstance(aggregateId, tenantId);
+
+            if (processInstance == null) {
+                throw new WorkflowNotFoundException(aggregateId.toString());
+            }
+
+            String processInstanceId = historyContext == null
+                    ? String.valueOf(processInstance.getProcessInstanceKey())
+                    : historyContext;
+
+            return processExecutionHistoryCollector.collectHistory(
+                    processInstanceId, tenantId);
+
+        } catch (WorkflowNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Error collecting workflow history", e);
+        }
+    }
+
+    private ProcessInstance findRootProcessInstance(
+            final Object aggregateId,
+            final String tenantId) {
+
+        final var result = client
+                .newProcessInstanceSearchRequest()
+                .filter(filter -> filter
+                        //.tenantId(tenantId)
+                        .processDefinitionId(parent.getPrimaryBpmnProcessId())
+                        .variables(Map.of(workflowAggregateIdAttributeName,
+                                camundaJsonMapper.toJson(aggregateId))))
+                .send()
+                .join();
+
+        return result
+                .items()
+                .stream()
+                .findFirst()
+                .orElse(null);
+
+    }
+    
 }

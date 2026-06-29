@@ -28,8 +28,6 @@ import io.vanillabp.springboot.adapter.SpringBeanUtil;
 import io.vanillabp.springboot.adapter.SpringDataUtil;
 import io.vanillabp.springboot.adapter.TaskWiringBase;
 import io.vanillabp.springboot.parameters.MethodParameter;
-import jakarta.persistence.Id;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
@@ -469,8 +467,7 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
             final List<MethodParameter> parameters) {
         
         final var repository = processService.getWorkflowAggregateRepository();
-        final var idPropertyName = getWorkflowAggregateIdPropertyName(
-                processService.getWorkflowAggregateClass());
+        final var idPropertyName = processService.getWorkflowAggregateIdAttributeName();
         final var tenantId = camunda8Properties.getTenantId(workflowModuleId);
 
         final var jobType = connectable.getType() == Type.USERTASK_ZEEBE
@@ -528,54 +525,6 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                 tenantId != null
                         ? worker.tenantId(tenantId)
                         : worker);
-        
-    }
-
-    private String getWorkflowAggregateIdPropertyName(
-            final Class<?> workflowAggregateClass) {
-        
-        if (workflowAggregateClass == null) {
-            return null;
-        }
-        
-        return Arrays
-                .stream(workflowAggregateClass.getDeclaredFields())
-                .filter(field -> (field.getAnnotation(Id.class) != null)
-                        || (field.getAnnotation(org.springframework.data.annotation.Id.class) != null))
-                .findFirst()
-                .map(Field::getName)
-                .orElse(Arrays
-                        .stream(workflowAggregateClass.getDeclaredMethods())
-                        .filter(method -> (method.getAnnotation(Id.class) != null)
-                                || (method.getAnnotation(org.springframework.data.annotation.Id.class) != null))
-                        .findFirst()
-                        .map(this::propertyName)
-                        .orElse(getWorkflowAggregateIdPropertyName(workflowAggregateClass.getSuperclass())));
-        
-    }
-    
-    private String propertyName(
-            final Method method) {
-        
-        if (method.getName().startsWith("get")) {
-            if (method.getName().length() < 4) {
-                return method.getName();
-            }
-            
-            return
-                    method.getName().substring(3, 4).toLowerCase()
-                            + method.getName().substring(4);
-        } else if (method.getName().startsWith("is")) {
-            if (method.getName().length() < 3) {
-                return method.getName();
-            }
-            
-            return
-                    method.getName().substring(2, 3).toLowerCase()
-                            + method.getName().substring(3);
-        } else {
-            return method.getName();
-        }
         
     }
     
