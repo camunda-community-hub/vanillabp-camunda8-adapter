@@ -183,6 +183,11 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         
     }
 
+    public void doCleanup() {
+        taskHandlers.clear();
+        workers.clear();
+    }
+
     @SuppressWarnings("unchecked")
     public Stream<Camunda8Connectable> connectablesForType(
             final String workerModuleId,

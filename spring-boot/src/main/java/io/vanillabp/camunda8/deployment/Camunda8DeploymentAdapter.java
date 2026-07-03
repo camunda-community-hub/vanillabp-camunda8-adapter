@@ -381,5 +381,12 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
                 .forEach(connectable -> taskWiring.wireTask(workflowModuleId, processService[0], connectable));
     	
     }
-    
+
+    /**
+     * Only necessary for Spring Boot tests / @CamundaSpringProcessTest.
+     * After one test has completed, we need to reinitialize the deployment priority list.
+     */
+    public void doCleanup() {
+        initializeCrossCuttingProperties();
+    }
 }

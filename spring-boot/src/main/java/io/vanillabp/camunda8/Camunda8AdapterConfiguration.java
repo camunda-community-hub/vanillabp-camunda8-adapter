@@ -6,6 +6,7 @@ import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
 import io.vanillabp.camunda8.service.Camunda8TransactionProcessor;
+import io.vanillabp.camunda8.service.ClientCleanupService;
 import io.vanillabp.camunda8.wiring.Camunda8Connectable.Type;
 import io.vanillabp.camunda8.wiring.Camunda8TaskHandler;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
@@ -235,4 +236,9 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
 
     }
 
+    @Bean
+    public ClientCleanupService clientCleanupService(Camunda8DeploymentAdapter deploymentAdapter,
+                                                     Camunda8TaskWiring taskWiring) {
+        return new ClientCleanupService(springDataUtil, deploymentAdapter, taskWiring);
+    }
 }
