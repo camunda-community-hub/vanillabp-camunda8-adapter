@@ -42,7 +42,7 @@ Just add this dependency to your project, no additional dependencies from Camund
 ```
 
 > [!IMPORTANT]
-> The Camunda 8 Spring Boot Starter depends on Apache HTTPClient >= 5.6.1.  
+> Since Camunda 8.9, the Camunda Spring Boot Starter depends on Apache HTTPClient >= 5.6.1.  
 > If you use the Spring Boot Dependency Management, it will instead pin the version to 5.5.  
 > Possible workarounds:
 > 
