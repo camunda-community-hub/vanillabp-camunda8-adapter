@@ -37,17 +37,34 @@ Just add this dependency to your project, no additional dependencies from Camund
 <dependency>
   <groupId>org.camunda.community.vanillabp</groupId>
   <artifactId>camunda8-spring-boot-adapter</artifactId>
-  <version>1.0.0</version>
+  <version>1.9.0</version>
 </dependency>
 ```
+
+> [!IMPORTANT]
+> Since Camunda 8.9, the Camunda Spring Boot Starter depends on Apache HTTPClient >= 5.6.1.  
+> If you use the Spring Boot Dependency Management, it will instead pin the version to 5.5.  
+> Possible workarounds:
+> 
+> * Set the config property `<httpclient5.version>5.6.1</httpclient5.version>`
+> * Bring in your own dependency
+>   ```xml
+>   <dependency>
+>       <groupId>org.apache.httpcomponents.client5</groupId>
+>       <artifactId>httpclient5</artifactId>
+>       <version>5.6.1</version>
+>   </dependency>
+>   ```
+> 
+> Make sure to verify correctness via `mvn dependency:tree -Dincludes=org.apache.httpcomponents.client5:httpclient5`
 
 If you want a certain version of Zeebe client then you have to replace the transitive dependencies like this:
 
 ```xml
-<dependency> <!-- community client 8.5.4 -->
+<dependency> <!-- community client 8.8.8 -->
   <groupId>io.camunda.spring</groupId>
-  <artifactId>spring-boot-starter-camunda</artifactId>
-  <version>8.5.4</version>
+  <artifactId>spring-boot-3-starter-camunda</artifactId>
+  <version>8.8.8</version>
 </dependency>
 <dependency>
   <groupId>org.camunda.community.vanillabp</groupId>
