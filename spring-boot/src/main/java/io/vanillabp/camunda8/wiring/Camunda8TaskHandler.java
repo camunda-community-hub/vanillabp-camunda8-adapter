@@ -22,6 +22,9 @@ import io.vanillabp.springboot.adapter.wiring.WorkflowAggregateCache;
 import io.vanillabp.springboot.parameters.MethodParameter;
 import io.vanillabp.springboot.parameters.ResolverBasedMultiInstanceMethodParameter;
 import io.vanillabp.springboot.parameters.WorkflowAggregateMethodParameter;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.HashMap;
@@ -58,6 +61,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
     private final boolean publishUserTaskIdAsHexString;
 
+    private final boolean reportErrorsAsStackTrace;
+
     private final CamundaClient camundaClient;
 
     public Camunda8TaskHandler(
@@ -72,6 +77,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
             final String bpmnProcessId,
             final Retries retries,
             final boolean publishUserTaskIdAsHexString,
+            final boolean reportErrorsAsStackTrace,
             final CamundaClient camundaClient) {
 
         super(workflowAggregateRepository, bean, method, parameters);
@@ -82,6 +88,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
         this.bpmnProcessId = bpmnProcessId;
         this.retries = retries;
         this.publishUserTaskIdAsHexString = publishUserTaskIdAsHexString;
+        this.reportErrorsAsStackTrace = reportErrorsAsStackTrace;
         this.camundaClient = camundaClient;
 
     }
@@ -455,12 +462,18 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
     }
 
     private String getErrorMessage(Exception exception) {
+        if (reportErrorsAsStackTrace) {
+            StringWriter sw = new StringWriter();
+            exception.printStackTrace(new PrintWriter(sw));
+            return sw.toString();
+        }
         if (exception.getMessage() == null) {
             return exception.getClass().getSimpleName();
         }
         return exception.getMessage();
     }
 
+    @Override
     protected boolean processWorkflowAggregateParameter(
             final Object[] args,
             final MethodParameter param,
@@ -487,6 +500,7 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
 
     }
 
+    @Override
     protected boolean processMultiInstanceResolverParameter(
             final Object[] args,
             final MethodParameter param,

@@ -58,6 +58,17 @@ public class Camunda8VanillaBpProperties {
 
     }
 
+    public boolean isReportErrorsAsStackTrace(
+            final String workflowModuleId) {
+
+        final var configuration = workflowModules
+                .getOrDefault(workflowModuleId, defaultProperties)
+                .getAdapters()
+                .getOrDefault(Camunda8AdapterConfiguration.ADAPTER_ID, defaultAdapterProperties);
+        return configuration.isReportErrorsAsStackTrace();
+
+    }
+
     public WorkerProperties getUserTaskWorkerProperties(
             final String workflowModuleId) {
 
@@ -147,6 +158,7 @@ public class Camunda8VanillaBpProperties {
     public static class WorkflowModuleAdapterConfiguration extends AdapterConfiguration {
 
         private boolean taskIdAsHexString = false;
+        private boolean reportErrorsAsStackTrace = false;
 
         public boolean isTaskIdAsHexString() {
             return taskIdAsHexString;
@@ -156,6 +168,13 @@ public class Camunda8VanillaBpProperties {
             this.taskIdAsHexString = taskIdAsHexString;
         }
 
+        public boolean isReportErrorsAsStackTrace() {
+            return reportErrorsAsStackTrace;
+        }
+
+        public void setReportErrorsAsStackTrace(boolean reportErrorsAsStackTrace) {
+            this.reportErrorsAsStackTrace = reportErrorsAsStackTrace;
+        }
     }
 
     public static class AdapterConfiguration extends WorkerProperties {
