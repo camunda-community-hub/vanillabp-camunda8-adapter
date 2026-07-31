@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 
 /**
@@ -19,25 +21,56 @@ import org.springframework.retry.annotation.Retryable;
  * combination is untested by its vendor. This test measures whether it still works instead of assuming
  * it does.
  *
- * <p>Note that the adapter itself declares no {@code @Retryable} anywhere - the retry infrastructure is
- * enabled but never consumed by this library. It only has an effect on consumers that annotate their own
- * beans. Should this test fail on a future Spring version, the cheapest fix is to drop
- * {@code @EnableRetry} and the Spring Retry dependency altogether; the more thorough one is to move to
- * the retry support built into Spring Framework 7 ({@code org.springframework.resilience.annotation.Retryable}
- * plus {@code org.springframework.core.retry}).
+ * <p>This is load-bearing, not decoration. The Business Cockpit's Camunda 8 adapter annotates more than
+ * half a dozen methods with {@code @Retryable} plus {@code @Recover} - among them
+ * {@code DeploymentService.addBpmn(..)} with {@code maxAttempts = 100} against optimistic locking
+ * failures, and the user-task and workflow handlers. Those retries are what keeps concurrent deployments
+ * and task updates from failing, so {@code @EnableRetry} cannot simply be dropped.
+ *
+ * <p>The test therefore covers the pattern that is actually used: {@code @Retryable} with
+ * {@code @Backoff}, exception filtering via {@code retryFor}, and a {@code @Recover} method that takes
+ * over once the attempts are exhausted.
+ *
+ * <p>Should this fail on a future Spring version, dropping Spring Retry is not an option. The path is
+ * then a migration to the retry support built into Spring Framework 7
+ * ({@code org.springframework.resilience.annotation.Retryable} plus {@code org.springframework.core.retry}) -
+ * and it has to be checked whether that offers an equivalent of {@code @Recover}, which the cockpit
+ * relies on.
  */
 class SpringRetryUnderFramework7Test {
 
     static final AtomicInteger ATTEMPTS = new AtomicInteger();
 
+    static final AtomicInteger RECOVERED = new AtomicInteger();
+
     public static class FlakyBean {
 
-        @Retryable(maxAttempts = 3)
+        /** Succeeds on the third attempt - mirrors the retry-until-it-works case. */
+        @Retryable(
+                retryFor = IllegalStateException.class,
+                maxAttempts = 3,
+                backoff = @Backoff(delay = 1))
         public String work() {
             if (ATTEMPTS.incrementAndGet() < 3) {
                 throw new IllegalStateException("not yet");
             }
             return "done";
+        }
+
+        /** Never succeeds - exercises the @Recover path the cockpit depends on. */
+        @Retryable(
+                retryFor = IllegalStateException.class,
+                maxAttempts = 2,
+                backoff = @Backoff(delay = 1))
+        public String alwaysFails() {
+            ATTEMPTS.incrementAndGet();
+            throw new IllegalStateException("always");
+        }
+
+        @Recover
+        public String recover(final IllegalStateException exception) {
+            RECOVERED.incrementAndGet();
+            return "recovered";
         }
 
     }
@@ -57,6 +90,7 @@ class SpringRetryUnderFramework7Test {
     void enableRetryStillBootstrapsUnderSpringFramework7() {
 
         ATTEMPTS.set(0);
+        RECOVERED.set(0);
 
         new ApplicationContextRunner()
                 .withUserConfiguration(RetryEnabledConfiguration.class)
@@ -69,6 +103,26 @@ class SpringRetryUnderFramework7Test {
                     // proves the interceptor is actually wired, not just that the context came up
                     assertThat(context.getBean(FlakyBean.class).work()).isEqualTo("done");
                     assertThat(ATTEMPTS.get()).isEqualTo(3);
+                });
+
+    }
+
+    @Test
+    void theRecoverMethodTakesOverWhenAttemptsAreExhausted() {
+
+        ATTEMPTS.set(0);
+        RECOVERED.set(0);
+
+        new ApplicationContextRunner()
+                .withUserConfiguration(RetryEnabledConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+
+                    // the cockpit's DeploymentService and task handlers rely on @Recover being invoked
+                    // instead of the exception escaping
+                    assertThat(context.getBean(FlakyBean.class).alwaysFails()).isEqualTo("recovered");
+                    assertThat(ATTEMPTS.get()).isEqualTo(2);
+                    assertThat(RECOVERED.get()).isEqualTo(1);
                 });
 
     }
