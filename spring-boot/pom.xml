@@ -44,8 +44,19 @@
     </dependency>
     <dependency>
       <groupId>io.camunda</groupId>
-      <artifactId>camunda-spring-boot-starter</artifactId>
-      <version>8.9.13</version>
+      <!--
+        Deliberately kept on the 8.8 line, and deliberately the -4-starter rather than the default one:
+        in 8.8.x the default starter targets Spring Boot 3 and only camunda-spring-boot-4-starter targets
+        Spring Boot 4. Note the naming is inverted in 8.9.x, where the default starter is the Boot 4 one.
+
+        Why 8.8 and not 8.9: Camunda only guarantees compatibility between a client and a cluster of the
+        same version, and the supported upgrade order is cluster first, then client. A newer client may
+        call APIs an older cluster does not offer yet. Cluster upgrades take time in enterprises, so this
+        adapter must not force one. Upgrading the Camunda line is a separate step, independent of the
+        Spring Boot migration.
+      -->
+      <artifactId>camunda-spring-boot-4-starter</artifactId>
+      <version>8.8.33</version>
     </dependency>
     <dependency>
       <groupId>org.springframework</groupId>
