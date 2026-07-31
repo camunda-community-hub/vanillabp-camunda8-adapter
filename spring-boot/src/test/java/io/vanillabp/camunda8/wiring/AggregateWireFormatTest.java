@@ -19,30 +19,22 @@ import org.springframework.boot.test.context.SpringBootTest;
  * that is the one production uses. {@code Camunda8AdapterConfiguration} injects it and hands it to
  * {@code Camunda8ProcessService}, which serializes both workflow aggregates and aggregate ids with it.
  *
- * <p><b>Which mapper is selected depends on the application, not on this library.</b> Camunda offers
- * three configurations, and the conditions were read from the byte code of
- * {@code camunda-spring-boot-starter:8.9.13}:
+ * <p>Both VanillaBP auto-configurations are excluded below, so what is measured here is <b>Camunda's</b>
+ * choice of mapper, not the adapter's. With {@code camunda-spring-boot-4-starter:8.8.33} that is always the
+ * module-less {@code CamundaObjectMapper}: Camunda's {@code JsonMapperConfiguration} only knows how to take
+ * a <b>Jackson 2</b> {@code ObjectMapper} bean, and Spring Boot 4 auto-configures Jackson <b>3</b>. The
+ * reasoning is in {@link JsonMapperSelectionDiagnosticTest}.
  *
- * <ol>
- * <li>{@code Jackson3JsonMapperConfiguration} - {@code @ConditionalOnClass} and
- * {@code @ConditionalOnBean} of {@code tools.jackson.databind.ObjectMapper}. Wraps the application's
- * Jackson 3 mapper in a {@code CamundaJackson3ObjectMapper}. This is what applications on Spring Boot 4
- * with a web or JSON starter get, and Jackson 3 has the Java 8 date/time types built in.</li>
- * <li>{@code JsonMapperConfiguration} - takes the Spring-provided Jackson 2
- * {@code com.fasterxml.jackson.databind.ObjectMapper} bean and {@code copy()}s it, so it inherits
- * whatever modules Spring registered. Boot 4 still offers such a bean through its
- * {@code spring-boot-jackson2} compatibility module.</li>
- * <li>{@code DefaultJsonMapperConfiguration} - {@code @ConditionalOnMissingBean} fallback: a bare
- * {@code CamundaObjectMapper} with a plain Jackson 2 {@code ObjectMapper} and <b>no</b> modules.</li>
- * </ol>
+ * <p>Note that Jackson 3 <i>is</i> on this module's classpath - it arrives with the starter, together with
+ * Boot's {@code spring-boot-jackson} auto-configuration - it is simply unreachable for Camunda. What is
+ * absent is {@code jackson-datatype-jsr310}, the Jackson 2 module for the Java 8 date and time types, which
+ * is why the fallback mapper cannot serialize them.
  *
- * <p>This library module is not an application: it has neither Jackson 3 nor a Jackson 2
- * {@code ObjectMapper} bean nor {@code jackson-datatype-jsr310} on its classpath, so case 3 applies here.
- * The tests below therefore pin down what that fallback produces - which is exactly the configuration an
- * application without any Jackson setup would get, so it is worth knowing.
- *
- * <p>The end-to-end wire format of a date-bearing aggregate can only be pinned down at application level,
- * where Jackson 3 is present. That belongs to T20/T21 together with the running Zeebe.
+ * <p>Since {@code Camunda8AdapterConfiguration} now contributes a
+ * {@link io.vanillabp.camunda8.Camunda8Jackson3JsonMapper}, an application using this adapter gets the
+ * application's Jackson 3 setup instead. The samples below still matter: they are the format the bridge
+ * deliberately reproduces, so that only date handling changes. Its counterpart is
+ * {@code io.vanillabp.camunda8.Camunda8Jackson3JsonMapperTest}, which asserts the same strings.
  */
 /*
  * Both VanillaBP auto-configurations are excluded: they would be applied to any application on the

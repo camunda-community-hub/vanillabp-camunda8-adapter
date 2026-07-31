@@ -10,35 +10,34 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
 /**
- * Pins down which of Camunda's three {@code JsonMapper} configurations actually wins, and it is not the
- * one the conditions suggest.
+ * Which {@code JsonMapper} Camunda selects when this adapter does <b>not</b> provide one - the adapter's own
+ * auto-configuration is excluded below. Since {@code Camunda8AdapterConfiguration} contributes a
+ * {@link io.vanillabp.camunda8.Camunda8Jackson3JsonMapper}, production no longer runs into what this test
+ * describes; it is kept because it pins down Camunda's behaviour, which is what the bridge has to keep
+ * compensating for.
  *
- * <p>Measured against {@code camunda-spring-boot-4-starter:8.8.33} on Spring Boot 4.1: that starter pulls
- * in Jackson 3 ({@code tools.jackson.core:jackson-databind}) <b>and</b> Boot's {@code spring-boot-jackson}
- * auto-configuration transitively, so a Jackson 3 {@code ObjectMapper} bean named
- * {@code jacksonJsonMapper} is present. {@code Jackson3JsonMapperConfiguration} is
- * {@code @ConditionalOnClass} plus {@code @ConditionalOnBean} of exactly that type, so one would expect a
- * {@code CamundaJackson3ObjectMapper}.
+ * <p>Measured against {@code camunda-spring-boot-4-starter:8.8.33} on Spring Boot 4.1. That starter ships a
+ * single {@code io.camunda.client.spring.configuration.JsonMapperConfiguration}, read from its byte code:
+ * its constructor takes a <b>Jackson 2</b> {@code com.fasterxml.jackson.databind.ObjectMapper} with
+ * {@code @Autowired(required = false)}, and its {@code jsonMapper()} bean method is
+ * {@code @ConditionalOnMissingBean}. It creates {@code new CamundaObjectMapper(objectMapper)} when that
+ * parameter is set and {@code new CamundaObjectMapper()} otherwise.
  *
- * <p>What happens instead: the module-less {@code CamundaObjectMapper} from
- * {@code DefaultJsonMapperConfiguration} wins. The likely cause is ordering.
- * {@code DefaultJsonMapperConfiguration} is reached through a plain {@code @Import} from
- * {@code CamundaClientAllAutoConfiguration} and {@code CamundaClientProdAutoConfiguration}, so it is
- * processed as a regular configuration, before auto-configurations are evaluated. Its
- * {@code @ConditionalOnMissingBean} therefore sees no {@code JsonMapper} yet and creates the fallback;
- * {@code Jackson3JsonMapperConfiguration}, a real auto-configuration evaluated later, then backs off.
+ * <p>On Spring Boot 4 the parameter is always {@code null}: Boot auto-configures Jackson <b>3</b>, and a
+ * Jackson 2 {@code ObjectMapper} bean would require the separate {@code spring-boot-jackson2} module. So the
+ * module-less fallback wins - and it wins regardless of ordering or of the fact that a perfectly good
+ * Jackson 3 mapper is sitting in the same context. This starter has no Jackson 3 code path at all; the
+ * three-configuration selection (Jackson 3 / Jackson 2 / fallback) only exists from 8.9 on.
  *
- * <p><b>Consequence, and it is a functional gap rather than a curiosity:</b> on Spring Boot 4 the
- * application's Jackson 3 setup is ignored for Zeebe variables, and the mapper that is used registers no
- * modules at all - so workflow aggregates carrying {@code OffsetDateTime}, {@code Instant} or
+ * <p><b>Consequence, and it is a functional gap rather than a curiosity:</b> the mapper that is used
+ * registers no modules, so workflow aggregates carrying {@code OffsetDateTime}, {@code Instant} or
  * {@code LocalDate} cannot be serialized. See
- * {@code AggregateWireFormatTest#withoutAnyJacksonSetupJavaTimeTypesCannotBeSerialised}.
+ * {@link AggregateWireFormatTest#withoutAnyJacksonSetupJavaTimeTypesCannotBeSerialised()} for the failure
+ * and {@link JsonMapperPrecedenceTest} for the bridge that closes it.
  *
- * <p>The same effective result holds with {@code camunda-spring-boot-starter:8.9.13}, for a different
- * reason: that one does not bring Jackson 3 at all, so the fallback is the only candidate.
- *
- * <p>This test is a tripwire in the useful direction: should Camunda fix the ordering, it goes red and we
- * find out, instead of a mapper change slipping in unnoticed.
+ * <p>This test is a tripwire in the useful direction: should Camunda start honouring Jackson 3 - by
+ * upgrading to 8.9 or by backporting - it goes red and we find out, instead of a mapper change slipping in
+ * unnoticed.
  */
 @SpringBootTest(
         classes = JsonMapperSelectionDiagnosticTest.PlainApplication.class,
