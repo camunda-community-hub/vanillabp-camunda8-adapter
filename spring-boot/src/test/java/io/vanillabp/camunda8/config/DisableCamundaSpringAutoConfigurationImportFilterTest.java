@@ -94,16 +94,16 @@ class DisableCamundaSpringAutoConfigurationImportFilterTest {
         assertThat(imports.lines().filter(line -> !line.isBlank()).toList())
                 .containsExactly("io.vanillabp.camunda8.Camunda8AdapterConfiguration");
 
-        // Documented current state: spring.factories additionally carries an EnableAutoConfiguration
-        // key, which has been ignored by Spring Boot since 3.0. It duplicates the line above and is
-        // removed in T10. This assertion is here so the removal is a deliberate, visible step.
+        // spring.factories used to carry an EnableAutoConfiguration key as well, which Spring Boot has
+        // ignored since 3.0 and which merely duplicated the line above. It was removed in T10, so the
+        // file now has exactly one purpose: registering the import filter. Asserted so that nobody
+        // reintroduces the dead key by copying an old example.
         final var properties = new Properties();
         try (final var in = new ClassPathResource("META-INF/spring.factories").getInputStream()) {
             properties.load(in);
         }
-        assertThat(properties.getProperty("org.springframework.boot.autoconfigure.EnableAutoConfiguration"))
-                .as("dead spring.factories key, to be removed in T10")
-                .isEqualTo("io.vanillabp.camunda8.Camunda8AdapterConfiguration");
+        assertThat(properties.stringPropertyNames())
+                .containsExactly("org.springframework.boot.autoconfigure.AutoConfigurationImportFilter");
 
     }
 

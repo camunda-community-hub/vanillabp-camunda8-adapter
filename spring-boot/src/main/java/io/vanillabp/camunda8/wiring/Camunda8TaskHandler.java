@@ -175,7 +175,8 @@ public class Camunda8TaskHandler extends TaskHandlerBase implements JobHandler {
                     saveAggregateAfterWorkflowTask(workflowAggregateCache));
 
             // Any callback used in this method is executed in case of no active transaction.
-            // In case of an active transaction the callbacks are used by the Camunda8TransactionInterceptor.
+            // In case of an active transaction the callbacks are deferred by Camunda8TransactionAspect
+            // and executed by Camunda8TransactionProcessor's TransactionalEventListeners.
             Camunda8TransactionProcessor.registerCallbacks(
                     () -> {
                         if (taskType == Type.USERTASK) { // user tasks are always async

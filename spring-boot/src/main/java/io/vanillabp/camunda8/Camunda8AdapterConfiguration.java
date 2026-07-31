@@ -28,26 +28,31 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import io.camunda.client.spring.configuration.CamundaAutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
-import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.retry.annotation.EnableRetry;
 
-@Configuration
+/*
+ * The reference to Camunda's own auto-configuration is a class literal rather than a name: a string
+ * silently stops matching when the target moves, and Camunda did move things around when it split the
+ * starter into camunda-spring-boot-3-starter and camunda-spring-boot-starter. Ordering metadata is read
+ * from the byte code, so a class literal is safe even if the class were absent at runtime.
+ *
+ * See also io.vanillabp.camunda8.config.DisableCamundaSpringAutoConfigurationImportFilter, which
+ * suppresses Camunda's job-worker annotation processing so this adapter can do the wiring itself.
+ */
+@AutoConfiguration(before = CamundaAutoConfiguration.class)
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
-@AutoConfigureBefore(name = {
-        "io.camunda.client.spring.configuration.CamundaAutoConfiguration" // official client
-        // see also io.vanillabp.camunda8.config.DisableCamundaSpringAutoConfigurationImportFilter
-})
 @EnableConfigurationProperties(Camunda8VanillaBpProperties.class)
 @EnableRetry
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
@@ -208,26 +213,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         return new SpringBeanUtil(applicationContext);
 
     }
-
-    /*
-     * https://www.tirasa.net/en/blog/dynamic-spring-s-transactional-2020-edition
-     */
-    /*
-    @Bean
-    public static BeanFactoryPostProcessor camunda8TransactionInterceptorInjector() {
-
-        return beanFactory -> {
-            String[] names = beanFactory.getBeanNamesForType(TransactionInterceptor.class);
-            for (String name : names) {
-                BeanDefinition bd = beanFactory.getBeanDefinition(name);
-                bd.setBeanClassName(Camunda8TransactionInterceptor.class.getName());
-                bd.setFactoryBeanName(null);
-                bd.setFactoryMethodName(null);
-            }
-        };
-
-    }
-    */
 
     @Bean
     public Camunda8TransactionProcessor camunda8TransactionProcessor() {
