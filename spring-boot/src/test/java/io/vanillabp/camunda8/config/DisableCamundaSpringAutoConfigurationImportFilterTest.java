@@ -24,6 +24,7 @@ import org.springframework.core.io.ClassPathResource;
  * no longer offered, and the real one passes through unfiltered.</li>
  * </ol>
  */
+@SuppressWarnings("removal") // the class under test is deprecated for removal on purpose
 class DisableCamundaSpringAutoConfigurationImportFilterTest {
 
     private static final String FILTERED_CLASS =
