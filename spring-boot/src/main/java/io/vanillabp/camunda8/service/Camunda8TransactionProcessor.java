@@ -98,6 +98,25 @@ public class Camunda8TransactionProcessor {
         }
     }
 
+    /**
+     * To be thrown by a test-command which found the task it was testing for, but in a state the
+     * pending command can no longer be applied to - e.g. a user task already cancelled by a process
+     * instance modification.
+     * <p>
+     * This is deliberately not a NOT_FOUND: the task <i>was</i> found, so there is nothing to fall
+     * back to. The only correct reaction is to roll the transaction back.
+     */
+    public static class TaskAlreadyCompletedOrCancelledException extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        public TaskAlreadyCompletedOrCancelledException(
+                final String message) {
+            super(message);
+        }
+
+    }
+
     public static class Camunda8CommandAfterRollback extends ApplicationEvent {
         final Supplier<String> description;
         final Runnable runnable;
@@ -131,7 +150,16 @@ public class Camunda8TransactionProcessor {
                     event.getSource());
         } catch (Exception e) {
             // if the task is completed or cancelled, then the tx has to be rolled back
-            if ((e instanceof ProblemException problemException)
+            if (e instanceof TaskAlreadyCompletedOrCancelledException) {
+                // the task was found, it just cannot be acted on any more: running the fallback
+                // would be pointless, so roll back right away
+                throw new RuntimeException(
+                        "Will rollback '"
+                                + event.getSource()
+                                + "' because task was already completed/cancelled! Test-command:\n"
+                                + event.description.get(),
+                        e);
+            } else if ((e instanceof ProblemException problemException)
                     && (problemException.code() == 404)) {
                 if (event.fallback == null) {
                     throw new RuntimeException(
@@ -215,11 +243,17 @@ public class Camunda8TransactionProcessor {
                 }
             }
             if (toRethrow != null) {
-                throw new RuntimeException("Could not execute camunda command for '" +
+                final var toReport = new RuntimeException("Could not execute camunda command for '" +
                         event.description.get() +
                         "' initiated by: " +
                         event.getSource() +
-                        "! Manual action required!", e);
+                        "! Manual action required!", toRethrow);
+                if (toRethrow != e) {
+                    // the fallback failed as well, so it is its exception which is reported as the
+                    // cause - keep the original one which made the fallback run in the first place
+                    toReport.addSuppressed(e);
+                }
+                throw toReport;
             }
         }
 
