@@ -85,9 +85,12 @@
       <version>3.1.0</version>
     </dependency>
     <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter-engine</artifactId>
-        <version>5.9.2</version>
+        <!-- brings JUnit, AssertJ and Mockito in versions matching each other. Replaces a pinned
+             junit-jupiter-engine: combining that pin with this starter would have mixed a 5.9
+             engine with a 1.10 platform. Test scope only, so nothing of this reaches consumers. -->
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <version>3.2.5</version><!-- see spring-boot-starter-aop above -->
         <scope>test</scope>
     </dependency>
   </dependencies>
