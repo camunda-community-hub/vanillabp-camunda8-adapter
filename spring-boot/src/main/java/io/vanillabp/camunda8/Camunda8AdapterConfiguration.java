@@ -228,6 +228,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
                 bpmnProcessId,
                 retries,
                 camunda8Properties.isTaskIdAsHexString(workflowModuleId),
+                camunda8Properties.isReportErrorsAsStackTrace(workflowModuleId),
                 client);
         
     }
