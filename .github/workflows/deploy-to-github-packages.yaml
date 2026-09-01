@@ -14,8 +14,8 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           java-version: 21
-          distribution: 'adopt'
-          cache: 'maven'
+          distribution: temurin
+          cache: maven
       - name: Publish package
         run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml --batch-mode deploy
         env:
