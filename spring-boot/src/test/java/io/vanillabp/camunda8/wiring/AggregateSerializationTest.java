@@ -7,14 +7,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.camunda.zeebe.client.api.JsonMapper;
-import io.camunda.zeebe.client.impl.ZeebeObjectMapper;
+import io.camunda.client.api.JsonMapper;
+import io.camunda.client.impl.CamundaObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
  * Test to ensure JSON serialization of aggregates applies to documentation
  * (see section &quot;Workflow aggregate serialization&quot;).
+ * <p>
+ * Uses {@code io.camunda.client.impl.CamundaObjectMapper}, the implementation behind the
+ * {@code io.camunda.client.api.JsonMapper} that {@code Camunda8ProcessService} actually receives. It used
+ * to use the legacy {@code io.camunda.zeebe.client.impl.ZeebeObjectMapper}, which production no longer
+ * uses - so the documented behaviour was being verified against the wrong mapper. Switching it produced
+ * no change in results, so the documentation holds for both.
+ * <p>
+ * See {@code AggregateWireFormatTest} for exact literals of the value types and for which of Camunda's
+ * three mapper configurations an application ends up with.
  */
 public class AggregateSerializationTest {
     
@@ -23,7 +32,7 @@ public class AggregateSerializationTest {
     @BeforeEach
     public void buildJsonMapper() {
         
-        jsonMapper = new ZeebeObjectMapper(new ObjectMapper());
+        jsonMapper = new CamundaObjectMapper(new ObjectMapper());
         
     }
     

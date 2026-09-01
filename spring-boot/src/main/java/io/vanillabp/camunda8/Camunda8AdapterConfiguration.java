@@ -2,6 +2,7 @@ package io.vanillabp.camunda8;
 
 import io.camunda.client.CamundaClient;
 import io.camunda.client.api.JsonMapper;
+import io.camunda.client.impl.CamundaObjectMapper;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentAdapter;
 import io.vanillabp.camunda8.service.Camunda8ProcessService;
 import io.vanillabp.camunda8.service.Camunda8TransactionAspect;
@@ -28,26 +29,32 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import io.camunda.client.spring.configuration.CamundaAutoConfiguration;
+import io.camunda.client.spring.configuration.JsonMapperConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
-import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.retry.annotation.EnableRetry;
 
-@Configuration
+/*
+ * The reference to Camunda's own auto-configuration is a class literal rather than a name: a string
+ * silently stops matching when the target moves, and Camunda did move things around when it split the
+ * starter into camunda-spring-boot-3-starter and camunda-spring-boot-starter. Ordering metadata is read
+ * from the byte code, so a class literal is safe even if the class were absent at runtime.
+ *
+ * See also io.vanillabp.camunda8.config.DisableCamundaSpringAutoConfigurationImportFilter, which
+ * suppresses Camunda's job-worker annotation processing so this adapter can do the wiring itself.
+ */
+@AutoConfiguration(before = { CamundaAutoConfiguration.class, JsonMapperConfiguration.class })
 @AutoConfigurationPackage(basePackageClasses = Camunda8AdapterConfiguration.class)
-@AutoConfigureBefore(name = {
-        "io.camunda.client.spring.configuration.CamundaAutoConfiguration" // official client
-        // see also io.vanillabp.camunda8.config.DisableCamundaSpringAutoConfigurationImportFilter
-})
 @EnableConfigurationProperties(Camunda8VanillaBpProperties.class)
 @EnableRetry
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camunda8ProcessService<?>> {
@@ -78,8 +85,14 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
+    /*
+     * An ObjectProvider rather than the bean itself: this class contributes the JsonMapper bean below, so a
+     * direct injection would make the configuration depend on a bean of its own - Spring reports that as
+     * BeanCurrentlyInCreationException and no application using this adapter would start. The provider is
+     * only a handle, it resolves when newProcessServiceImplementation(..) asks for the mapper.
+     */
     @Autowired
-    private JsonMapper camundaJsonMapper;
+    private ObjectProvider<JsonMapper> camundaJsonMapper;
 
     @PostConstruct
     public void init() {
@@ -87,6 +100,47 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         logger.debug("Will use SpringDataUtil class '{}'",
                 AopProxyUtils.ultimateTargetClass(springDataUtil));
         
+    }
+
+    /**
+     * Camunda's own {@code JsonMapperConfiguration} cannot see the application's Jackson setup on Spring
+     * Boot 4: it injects a <b>Jackson 2</b> {@code ObjectMapper} with {@code @Autowired(required = false)},
+     * and Boot 4 auto-configures Jackson 3. Its {@code @ConditionalOnMissingBean} fallback is a
+     * {@code CamundaObjectMapper} with no modules registered, which cannot serialize
+     * {@code OffsetDateTime}, {@code Instant} or {@code LocalDate} at all.
+     * <p>
+     * Providing the bean here closes that gap. Camunda's {@code JsonMapperConfiguration} is reached through
+     * {@code @ImportAutoConfiguration} on {@code CamundaAutoConfiguration}, which makes it an
+     * auto-configuration in its own right - being ordered before {@code CamundaAutoConfiguration} therefore
+     * says nothing about it. Hence {@code JsonMapperConfiguration} is named in this class'
+     * {@code @AutoConfiguration(before = ..)} as well: that is what puts our bean definition in the context
+     * first, so Camunda's {@code @ConditionalOnMissingBean} backs off.
+     * {@code io.vanillabp.camunda8.wiring.JsonMapperPrecedenceTest} verifies it rather than assuming it.
+     * <p>
+     * If the application has no Jackson 3 mapper - possible for a module without any web or JSON starter -
+     * the behaviour is unchanged: the same module-less {@code CamundaObjectMapper} Camunda would have
+     * built. {@code ObjectProvider} is used rather than {@code @ConditionalOnBean} on purpose: the lookup
+     * happens when the bean is created, so it does not depend on auto-configuration ordering relative to
+     * Boot's Jackson auto-configuration.
+     * <p>
+     * {@code @ConditionalOnMissingBean} keeps an application's own {@link JsonMapper} bean in charge -
+     * regular {@code @Configuration} classes are processed before any auto-configuration.
+     */
+    @Bean
+    @ConditionalOnMissingBean(JsonMapper.class)
+    public JsonMapper camunda8JsonMapper(
+            final ObjectProvider<tools.jackson.databind.json.JsonMapper> applicationJsonMapper) {
+
+        final var jackson3 = applicationJsonMapper.getIfAvailable();
+        if (jackson3 == null) {
+            logger.info(
+                    "No Jackson 3 mapper found, Zeebe variables will be serialized by a mapper without any "
+                    + "modules registered. Java 8 date and time types cannot be used in workflow "
+                    + "aggregates in that case - add a JSON or web starter to change this.");
+            return new CamundaObjectMapper();
+        }
+        return new Camunda8Jackson3JsonMapper(jackson3);
+
     }
 
     @Bean
@@ -189,7 +243,7 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         final var result = new Camunda8ProcessService<DE>(
                 camunda8Properties,
                 eventPublisher,
-                camundaJsonMapper,
+                camundaJsonMapper.getObject(),
                 workflowAggregateRepository,
                 springDataUtil::getId,
                 workflowAggregateClass,
@@ -209,26 +263,6 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase<Camun
         return new SpringBeanUtil(applicationContext);
 
     }
-
-    /*
-     * https://www.tirasa.net/en/blog/dynamic-spring-s-transactional-2020-edition
-     */
-    /*
-    @Bean
-    public static BeanFactoryPostProcessor camunda8TransactionInterceptorInjector() {
-
-        return beanFactory -> {
-            String[] names = beanFactory.getBeanNamesForType(TransactionInterceptor.class);
-            for (String name : names) {
-                BeanDefinition bd = beanFactory.getBeanDefinition(name);
-                bd.setBeanClassName(Camunda8TransactionInterceptor.class.getName());
-                bd.setFactoryBeanName(null);
-                bd.setFactoryMethodName(null);
-            }
-        };
-
-    }
-    */
 
     @Bean
     public Camunda8TransactionProcessor camunda8TransactionProcessor() {

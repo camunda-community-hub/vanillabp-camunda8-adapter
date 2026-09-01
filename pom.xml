@@ -12,13 +12,25 @@
   <artifactId>camunda8-adapter</artifactId>
 
   <name>VanillaBP SPI adapter for Camunda 8.x</name>
-  <version>1.9.2-SNAPSHOT</version>
+  <version>1.10.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <version.java>17</version.java>
+    <version.java>21</version.java>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>4.1.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <build>
     <pluginManagement>

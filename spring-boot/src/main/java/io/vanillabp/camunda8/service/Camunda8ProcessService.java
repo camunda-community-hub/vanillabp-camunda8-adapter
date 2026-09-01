@@ -2,7 +2,9 @@ package io.vanillabp.camunda8.service;
 
 import io.camunda.client.CamundaClient;
 import io.camunda.client.api.JsonMapper;
+import io.camunda.client.api.search.enums.UserTaskState;
 import io.camunda.client.api.search.response.ProcessInstance;
+import io.camunda.client.api.search.response.UserTask;
 import io.vanillabp.camunda8.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.Camunda8VanillaBpProperties;
 import io.vanillabp.camunda8.LoggingContext;
@@ -20,8 +22,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -447,6 +451,55 @@ public class Camunda8ProcessService<DE>
 
     }
 
+    /**
+     * States a Zeebe user task can be in without any command still being applicable to it.
+     * <p>
+     * "CANCELING" and "COMPLETING" are included on purpose: the engine already started to end the
+     * task, so a command sent afterwards will be rejected just like for the terminal states.
+     */
+    private static final Set<UserTaskState> ENDED_ZEEBE_USER_TASK_STATES = EnumSet.of(
+            UserTaskState.CANCELING,
+            UserTaskState.CANCELED,
+            UserTaskState.COMPLETING,
+            UserTaskState.COMPLETED);
+
+    /**
+     * Tests whether a Zeebe user task read from the engine's search API can still be acted on.
+     * <p>
+     * "GET /v2/user-tasks/&lt;key&gt;" is served by the secondary storage, which keeps user tasks
+     * after they ended: one cancelled by e.g. a process instance modification is still returned,
+     * only its state has changed. Testing for a NOT_FOUND alone would therefore succeed, the
+     * transaction would be committed and the completion sent afterwards would be rejected by the
+     * engine - at a point in time where the caller can no longer be told about it.
+     * <p>
+     * Mind that the secondary storage is eventually consistent, so a task cancelled a moment ago may
+     * still be reported as active. This test narrows the window, it does not close it.
+     *
+     * @param userTask the task as returned by the search API
+     * @param taskId   the task's id, for the error message
+     * @throws Camunda8TransactionProcessor.TaskAlreadyCompletedOrCancelledException if the task ended
+     */
+    static void testZeebeUserTaskCanStillBeActedOn( // package-private for testing
+            final UserTask userTask,
+            final String taskId) {
+
+        if (userTask == null) {
+            return;
+        }
+        final var state = userTask.getState();
+        if (!ENDED_ZEEBE_USER_TASK_STATES.contains(state)) {
+            return;
+        }
+
+        throw new Camunda8TransactionProcessor.TaskAlreadyCompletedOrCancelledException(
+                "User task '"
+                        + taskId
+                        + "' is in state '"
+                        + state
+                        + "' and cannot be completed any more");
+
+    }
+
     private DE completeUserTaskAfterTransaction(
             final DE workflowAggregate,
             final String taskId,
@@ -485,10 +538,12 @@ public class Camunda8ProcessService<DE>
                         publisher.publishEvent(
                                 new Camunda8TransactionProcessor.Camunda8TestForTaskAlreadyCompletedOrCancelled(
                                         methodSignature,
-                                        () -> client
-                                                .newUserTaskGetRequest(taskIdAsLong)
-                                                .send()
-                                                .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                                        () -> testZeebeUserTaskCanStillBeActedOn(
+                                                client
+                                                        .newUserTaskGetRequest(taskIdAsLong)
+                                                        .send()
+                                                        .join(5, TimeUnit.MINUTES), // needs to run synchronously
+                                                taskId),
                                         () -> client
                                                 .newUpdateTimeoutCommand(taskIdAsLong)
                                                 .timeout(Duration.ofMinutes(10))

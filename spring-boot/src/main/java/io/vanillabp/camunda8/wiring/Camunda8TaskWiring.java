@@ -253,7 +253,9 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                         + element.getId()
                                                         + "' of process '"
                                                         + process.getId()
-                                                        + "' having no external reference set!");
+                                                        + "' (version '"
+                                                        + versionInfo
+                                                        + "') having no external reference set!");
                                         });
                         }
                     } else if (UserTask.class.isAssignableFrom(type)) { // worker-based user task
@@ -275,7 +277,9 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                     + element.getId()
                                                     + "' of process '"
                                                     + process.getId()
-                                                    + "' having no form key set!");
+                                                    + "' (version '"
+                                                    + versionInfo
+                                                    + "') having no form key set!");
                                         });
                     } else {
                         Optional

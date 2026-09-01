@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.deployment;
 
 import io.camunda.client.CamundaClient;
+import io.camunda.client.api.search.enums.ProcessDefinitionState;
 import io.camunda.client.event.CamundaClientCreatedEvent;
 import io.camunda.zeebe.model.bpmn.impl.BpmnModelInstanceImpl;
 import io.camunda.zeebe.model.bpmn.impl.BpmnParser;
@@ -287,13 +288,18 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
         int currentPage = 0;
         while (currentPage != -1) {
             final var finalPage = currentPage;
-            var request = client
+            // Mind: a subsequent call of filter() replaces the previous filter instead of
+            // extending it. Therefore all criteria have to be set within one single call.
+            final var request = client
                     .newProcessDefinitionSearchRequest()
+                    .filter(filter -> {
+                        filter.state(ProcessDefinitionState.ACTIVE);
+                        if (tenantId != null) {
+                            filter.tenantId(tenantId);
+                        }
+                    })
                     .sort(sort -> sort.name().version())
                     .page(page -> page.from(finalPage).limit(1));
-            if (tenantId != null) {
-                request = request.filter(filter -> filter.tenantId(tenantId));
-            }
             var processDefinitions = request.send().join();
             currentPage = processDefinitions.page().hasMoreTotalItems() ? currentPage + 1 : -1;
 

@@ -13,6 +13,12 @@ This is an adapter which implements the binding of the [VanillaBP SPI](https://g
 
 If you are interested in migrating from [Camunda 7](https://docs.camunda.org) then checkout the [drop-in replacement adapter for Camunda 7](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter) as well as the [documentation of migration scenarios](https://github.com/vanillabp/spring-boot-support#migrating-from-one-bpm-system-to-another).
 
+## Spring Boot version
+
+Starting with the version documented here, this adapter requires **Spring Boot 4.1** and **Java 21**. There is
+no dual build: the Spring Boot 3 code paths are gone. Applications still on Spring Boot 3.5 stay on
+1.9.x, which remains functional but will not receive further development.
+
 ## Runtime environments
 
 Currently, only Spring Boot is supported by including this Maven dependency:
