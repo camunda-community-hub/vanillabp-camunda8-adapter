@@ -306,6 +306,14 @@ public class Camunda8DeploymentAdapter extends ModuleAwareBpmnDeployment {
             processDefinitions
                     .items()
                     .stream()
+                    .map(pd -> "loading %d: %s %s %d %s %s %s".formatted(
+                            pd.getProcessDefinitionKey(), pd.getProcessDefinitionId(), pd.getVersionTag(), pd.getVersion(),
+                            pd.getTenantId(), pd.getState() == null ? null : pd.getState().name(), pd.getResourceName()))
+                    .forEach(logger::trace);
+
+            processDefinitions
+                    .items()
+                    .stream()
                     .map(processDefinition -> Map.entry(processDefinition, client.newProcessDefinitionGetXmlRequest(processDefinition.getProcessDefinitionKey())))
                     .map(bpmnRequest -> Map.entry(bpmnRequest.getKey(), bpmnRequest.getValue().send().join()))
                     .map(bpmn -> Map.entry(bpmn.getKey(), new ByteArrayInputStream(bpmn.getValue().getBytes(StandardCharsets.UTF_8))))
