@@ -166,7 +166,8 @@ public class Camunda8TransactionProcessor {
                             "Will rollback '"
                                     + event.getSource()
                                     + "' because job was already completed/cancelled! Test-command giving status 'NOT_FOUND':\n"
-                                    + event.description.get());
+                                    + event.description.get(),
+                            problemException);
                 }
                 logger.trace("Running fallback for test for existence of task '{}' initiated by: {}",
                         event.description.get(),
