@@ -13,9 +13,10 @@ import io.camunda.client.CamundaClient;
  * it ends, so a key it does not hold says nothing about whether the workflow completed or
  * never existed.
  * <p>
- * A process instance modification is the only one of the two candidates this line has. The
- * business id of an instance arrived with 8.10, and so did the command which assigns one, so
- * a caller of this line never asks for it, see decision 35 in the repository's DECISIONS.md.
+ * A process instance modification is the only one of the two candidates this line has. An
+ * instance carries no business id before 8.9, and the command which assigns one to an instance
+ * already running arrived with 8.10, so a caller of this line never asks for it, see
+ * decision 35 in the repository's DECISIONS.md.
  * <p>
  * Public because the process service which asks lives in another package of this module. It
  * is not on the list of what an extension of the pipeline is told, so it stays the adapter's
