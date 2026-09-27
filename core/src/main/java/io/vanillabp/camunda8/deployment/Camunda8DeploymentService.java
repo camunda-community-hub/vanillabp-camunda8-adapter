@@ -330,6 +330,22 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * Where the findings of this adapter id go.
+   * <p>
+   * Readable because the wiring of both platforms is what hands it over, and a wiring which
+   * broke writes the findings into the log instead of the block. Both are one line, so
+   * nobody would notice; a test of a booting application asks this instead.
+   *
+   * @return The collection point this service reports into, or <code>null</code> where it
+   *         writes its findings to the log
+   */
+  public StartupReport getStartupReport() {
+
+    return startupReport;
+
+  }
+
+  /**
    * Says a finding about this adapter id, into the collected block where the platform
    * published one.
    *

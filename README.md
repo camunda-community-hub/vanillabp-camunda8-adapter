@@ -153,6 +153,11 @@ names both numbers and the key which raises the limit. The application starts ei
 the adapter raises nobody's pool on its own: how many connections an application opens against
 its cluster is a decision about its own resources.
 
+The warning goes into the block the platform writes at the end of a start, and both platforms
+hand the adapter that block while the application boots. `Camunda8StartupReportBootTest` and
+`Camunda8StartupReportTest` hold them to it. A wiring which broke would put the finding into the
+log instead, where it is one line among the others and reads like nothing happened.
+
 Snapshots have no suffix yet. Until the first release they are `2.0.0-SNAPSHOT` of the
 current GA line, which is what a build without a profile produces.
 
