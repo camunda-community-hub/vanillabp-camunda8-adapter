@@ -63,8 +63,7 @@ public class Camunda8StartEventsOfHeldVersionsTest {
   private final CamundaClient client = mock(CamundaClient.class);
 
   /**
-   * A model starting on a daily timer and on a signal, next to the start event the
-   * application triggers itself.
+   * A model starting on a daily timer and on a signal, next to the plain start event.
    */
   private static final String STARTS_THE_CLUSTER_FIRES = """
           <bpmn:startEvent id="DailyTimer">
@@ -79,7 +78,7 @@ public class Camunda8StartEventsOfHeldVersionsTest {
       """;
 
   /**
-   * A model nothing but the application starts.
+   * A model with nothing but a plain start event.
    */
   private static final String NO_START_THE_CLUSTER_FIRES = """
           <bpmn:startEvent id="StartedByTheApplication" />
@@ -102,7 +101,7 @@ public class Camunda8StartEventsOfHeldVersionsTest {
   }
 
   @Test
-  @DisplayName("The start events of a held version are read from the model the cluster runs")
+  @DisplayName("Every start event of a held version is read from the model the cluster runs")
   public void theStartEventsOfAHeldVersionAreRead() {
 
     final var catalog = aClusterHolding(
@@ -115,23 +114,24 @@ public class Camunda8StartEventsOfHeldVersionsTest {
             .of(
                 BpmsInitiatedStartSpec.of("DailyTimer", BpmsStartTrigger.Kind.TIMER),
                 new BpmsInitiatedStartSpec(
-                    "ApprovalRequested", BpmsStartTrigger.Kind.SIGNAL, "approval-requested")),
+                    "ApprovalRequested", BpmsStartTrigger.Kind.SIGNAL, "approval-requested"),
+                BpmsInitiatedStartSpec.of("StartedByTheApplication", BpmsStartTrigger.Kind.NONE)),
         List.copyOf(catalog.startEventsOfVersion(MODULE, OLD_ID, "2")),
-        "the timer and the signal the old model still starts on, the signal by its plain name");
+        "every start event of the old model, the signal by its plain name");
 
   }
 
   @Test
-  @DisplayName("A held version starting on nothing the cluster fires answers an empty collection")
+  @DisplayName("A held version with one plain start event answers exactly that one")
   public void aVersionWithoutSuchAStartEventAnswersEmpty() {
 
     final var catalog = aClusterHolding(Map.of(1, xmlOf(NO_START_THE_CLUSTER_FIRES)));
 
     assertEquals(
-        List.of(),
+        List.of(BpmsInitiatedStartSpec.of("StartedByTheApplication", BpmsStartTrigger.Kind.NONE)),
         List.copyOf(catalog.startEventsOfVersion(MODULE, OLD_ID, "1")),
-        "the model was read and says the cluster starts nothing here, which is not the same "
-            + "as an adapter which cannot say");
+        "the model was read and says which start events it has, which is not the same as an "
+            + "adapter which cannot say");
 
   }
 
@@ -158,7 +158,7 @@ public class Camunda8StartEventsOfHeldVersionsTest {
 
     final var read = Camunda8TaskWiring.bpmsInitiatedStartsOfHeldModel(model, OLD_ID, signalName -> signalName);
 
-    assertEquals(2, read.size(), "both start events the cluster fires are reported");
+    assertEquals(3, read.size(), "every start event of the model is reported");
     assertFalse(
         Bpmn.convertToString(model).contains("executionListeners"),
         "a model the cluster already runs carries the listener of the deployment which brought "

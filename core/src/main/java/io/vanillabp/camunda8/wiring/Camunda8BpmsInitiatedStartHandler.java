@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.wiring;
 
-import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import io.camunda.client.api.response.ActivatedJob;
@@ -17,10 +18,16 @@ import io.vanillabp.spi.service.BpmsStartTrigger;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Consumes the START execution-listener jobs of start events the cluster fires on
- * its own. The listener gates the workflow: nothing of the process runs
- * before this job is completed, which is exactly the window VanillaBP needs to build
- * the workflow aggregate and to write its ID into the instance.
+ * Consumes the execution-listener jobs of the start events of a process - of EVERY start
+ * event, the plain one included. The listener gates the workflow: nothing of the
+ * process runs before this job is completed, which is exactly the window VanillaBP needs to
+ * decide what this start is and, where nobody started the workflow through VanillaBP, to
+ * build its workflow aggregate and write its id into the instance.
+ * <p>
+ * The name the cluster holds for a workflow is the process variable called after the
+ * workflow aggregate's id attribute, which is where every other part of this adapter reads
+ * it as well. The job fetches every variable, so the core finds that name without the
+ * handler having to know the attribute - see {@code DECISIONS.pending/653.md}.
  * <p>
  * The job is completed with the aggregate's ID (named after the aggregate's ID
  * attribute - how this adapter addresses workflows) plus the values shared per
@@ -130,16 +137,16 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
 
       log
           .debug(
-              "Camunda8[{}]: the cluster started '{}' of workflow module '{}' by start event '{}' - "
-                  + "workflow aggregate '{}' {}",
+              "Camunda8[{}]: '{}' of workflow module '{}' started at start event '{}' - workflow "
+                  + "aggregate '{}' {}",
               adapterId,
               bpmnProcessId,
               workflowModuleId,
               startEventId,
               result.workflowAggregateId(),
               result.created()
-                  ? "created"
-                  : "existed already");
+                  ? "built by the application, which named the workflow"
+                  : "exists already, so this workflow is already ours");
 
       final var variables = result.variables();
       Camunda8CommandRetry.send(
@@ -204,7 +211,12 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
 
     // whatever the model set before the start event completed - an input mapping of
     // the start event, or the payload a broadcast signal carried
-    final Map<String, Object> variables = Map.copyOf(job.getVariablesAsMap());
+    //
+    // not Map.copyOf: the cluster holds a variable set to null as a value like any other,
+    // and Map.copyOf throws on it. The native image test met exactly that and the start
+    // died with a NullPointerException nobody could read.
+    final Map<String, Object> variables = Collections
+        .unmodifiableMap(new LinkedHashMap<>(job.getVariablesAsMap()));
 
     return new BpmsInitiatedStartContext() {
 
@@ -221,23 +233,6 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
       @Override
       public BpmsStartTrigger.Kind getKind() {
         return kind;
-      }
-
-      @Override
-      public Instant getStartInstant() {
-        // the cluster does not report a timer's scheduled time to the listener job,
-        // so this is the moment the job is processed - it is not what identifies the
-        // start here, see getNaturalIdentity
-        return Instant.now();
-      }
-
-      @Override
-      public String getNaturalIdentity() {
-        // the process instance exists before this job is activated and its key
-        // survives every retry of the job: deriving the aggregate's ID from it is
-        // what keeps a redelivered listener job from building a second aggregate
-        // after the first attempt failed on its way back to the cluster
-        return String.valueOf(job.getProcessInstanceKey());
       }
 
       @Override

@@ -1207,9 +1207,12 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     context.getTasksToWire().addAll(tasks);
     context.getUserTasksToWire().addAll(userTasks);
 
-    // start events the cluster fires on its own: the start execution
-    // listener building the workflow aggregate is ADDED TO THE MODEL here as well
-    if (bpmsInitiatedStartInvoker != null) {
+    // the start of a workflow: the execution listener deciding what a start means is
+    // ADDED TO THE MODEL here as well, on every start event the process itself holds.
+    // Only for a process this application serves, though - the listener holds the
+    // instance until its job is answered, and for an unclaimed process the core has no
+    // workflow service to answer for
+    if ((bpmsInitiatedStartInvoker != null) && (aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null)) {
       final var bpmsInitiatedStarts = Camunda8TaskWiring
           .bpmsInitiatedStartsOf(
               model,

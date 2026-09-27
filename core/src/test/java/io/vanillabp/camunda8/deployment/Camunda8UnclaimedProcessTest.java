@@ -491,4 +491,29 @@ public class Camunda8UnclaimedProcessTest {
 
   }
 
+
+  @Test
+  @DisplayName("An unclaimed process gets no start listener either")
+  public void anUnclaimedProcessGetsNoStartListener() {
+
+    final var deploymentService = deploymentService(bpmnProcessId -> null);
+
+    final var wired = wire(deploymentService, UNCLAIMED_WITHOUT_A_MESSAGE);
+
+    final var startEvent = wired.model()
+        .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.StartEvent.class)
+        .stream()
+        .filter(candidate -> "CardStart".equals(candidate.getId()))
+        .findFirst()
+        .orElseThrow();
+    assertNull(
+        startEvent.getSingleExtensionElement(ZeebeExecutionListeners.class),
+        "the listener holds the instance until its job is answered, and the core has no workflow "
+            + "service to answer for a process nothing claims");
+    assertTrue(
+        wired.context().getBpmsInitiatedStartsToWire().isEmpty(),
+        "so the start event is kept out of the list the workers are opened from");
+
+  }
+
 }

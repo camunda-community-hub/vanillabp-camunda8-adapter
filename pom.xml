@@ -79,10 +79,13 @@
          85, the same number in every VanillaBP repository, because a threshold marks the
          point where somebody has to look and not the goal to aim at. It is never raised to whatever a
          suite happens to reach, and never lowered to make a build pass. Every release line
-         is judged by this one number, and line 8.10 is why it is not the rule itself: that
-         line excludes the tests of a cluster bug it cannot pass (see the line-8.10 profile),
-         which costs it about a point and a quarter on either platform, and a gate set to 90
-         turned that into a red matrix every night over coverage nobody was able to write. -->
+         is judged by this one number. Line 8.10 is where the distance to the rule was paid
+         for: while that line could not pass the tests of an alpha's cluster bug it excluded
+         them, which cost it about a point and a quarter on either platform, and a gate set
+         to 90 turned that into a red matrix every night over coverage nobody was able to
+         write. The exclusions went with the move to 8.10.0-rc1 and no line excludes anything
+         today, but the gate is not raised on the strength of what a suite happens to
+         reach. -->
     <coverage.threshold.spring-boot>85</coverage.threshold.spring-boot>
     <coverage.threshold.quarkus>85</coverage.threshold.quarkus>
     <!-- the rule, as a number the gate can print: it reports every run against both, so

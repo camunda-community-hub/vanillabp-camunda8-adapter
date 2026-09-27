@@ -32,7 +32,11 @@ public class TimerStartDockerWorkflowService {
       final BpmsStartTrigger trigger) {
 
     final var aggregate = new TimerStartDockerAggregate();
-    aggregate.setId(trigger.time().toString());
+    // the name of the workflow is the application's choice, and the cluster keeps it in
+    // the process variable named after this aggregate's id attribute
+    aggregate.setId("timer-"
+        + java.util.UUID.randomUUID());
+    aggregate.setStartedBy(trigger.kind().name());
     return aggregate;
 
   }
