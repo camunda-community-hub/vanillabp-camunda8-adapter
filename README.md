@@ -143,8 +143,13 @@ The same line with the 92 workers the module opened before the start-event liste
 653 answers in 184 ms, and 8.10 held to the 85 workers of the GA lines drains cleanly. So the
 number of workers against the size of the pool is what decides, not the version of the client.
 The test module therefore configures `max-http-connections`, and an application which grows
-past a hundred workers has to do the same. Sizing or checking that pool for the developer is
-adapter work which has not been done yet.
+past a hundred workers has to do the same.
+
+The adapter now says so at startup. It counts the workers it opened for an adapter id against
+the pool its client resolved, and warns where those workers take the whole pool. The warning
+names both numbers and the key which raises the limit. The application starts either way, and
+the adapter raises nobody's pool on its own: how many connections an application opens against
+its cluster is a decision about its own resources.
 
 Snapshots have no suffix yet. Until the first release they are `2.0.0-SNAPSHOT` of the
 current GA line, which is what a build without a profile produces.
