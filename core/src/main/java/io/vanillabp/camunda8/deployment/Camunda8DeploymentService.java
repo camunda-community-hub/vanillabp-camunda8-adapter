@@ -720,8 +720,22 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       final String bpmnProcessId,
       final BpmnModelInstance model) {
 
-    return Camunda8TaskWiring
-        .concurrentTokenElementIdsOf(model, scopedProcessId(workflowModuleId, bpmnProcessId));
+    final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
+    final var elementIds = new java.util.LinkedHashSet<>(
+        Camunda8TaskWiring.concurrentTokenElementIdsOf(model, scopedBpmnProcessId));
+    // a version the cluster still holds carries its compensation flat, as element ids among
+    // the others. The shaped report belongs to the model this boot deploys, which is the one
+    // a developer can still redraw; for an older version the fact that its workflows can hold
+    // two tokens is what there is to say
+    Camunda8TaskWiring
+        .compensationOf(model, scopedBpmnProcessId)
+        .stream()
+        .filter(compensation -> compensation.handlerIds().size() > 1)
+        .forEach(compensation -> {
+          elementIds.add(compensation.throwEventId());
+          elementIds.addAll(compensation.handlerIds());
+        });
+    return List.copyOf(elementIds);
 
   }
 
@@ -1276,6 +1290,15 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             workflowModuleId,
             bpmnProcessId,
             Camunda8TaskWiring.concurrentTokenElementIdsOf(model, scopedBpmnProcessId));
+
+    // compensation is the same second token drawn differently, and it needs its shape: a
+    // throw event which compensates two finished activities starts both handlers, and the
+    // developer has to read WHICH event starts WHICH handlers
+    workflowTaskWiring
+        .reportCompensation(
+            workflowModuleId,
+            bpmnProcessId,
+            Camunda8TaskWiring.compensationOf(model, scopedBpmnProcessId));
 
     // the user tasks version 1 modelled up to its release 1.6.3 are served by
     // nothing here and would be silent - so they are counted and named

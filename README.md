@@ -1672,6 +1672,15 @@ and `Camunda8AdHocSubProcessIT` runs the served flavour against a cluster: two o
 are named by the aggregate, the two run, the third does not, and the workflow leaves the element
 with no completion condition modelled.
 
+Compensation reaches the core through a report of its own. `Camunda8TaskWiring#compensationOf`
+reads every compensation throw event of a process together with the handlers it starts, and the
+adapter reports the ones which start more than one: this cluster hands out both handler jobs at
+the same moment, so from that event the workflow holds a token per handler, and a reader has to
+see which event starts which handlers rather than a flat list of ids. A throw event which undoes a
+single activity is left out, and a version the cluster still holds carries its compensation as
+plain element ids among the others, because the shaped message belongs to the model somebody can
+still redraw. `Camunda8ConcurrentTokensTest` holds the reading.
+
 ### What a worker fetches
 
 A Camunda 8 worker which names no variables receives the complete variable scope of the
