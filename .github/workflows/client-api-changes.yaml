@@ -60,8 +60,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # the base commit is read for the version the pin had before
-          fetch-depth: 0
+          # The base commit is read for the version the pin had before. A pull request is
+          # checked out as the merge commit, so its first parent is the base branch and
+          # 'HEAD^1:pom.xml' is the POM the pin moved away from. Two commits are all that
+          # needs to arrive for that. This cloned every commit the repository has to read
+          # one file, and it did so once per caller as well.
+          fetch-depth: 2
       - name: The scripts and the release lines of the adapter repository
         # they live in the adapter repository. A pull request THERE brings its own copy,
         # and that copy is the one which runs: a change to a script may not be checked by
@@ -84,6 +88,16 @@ jobs:
         # request which moves the line 8.9 pin says nothing about 8.8.
         run: |
           set -euo pipefail
+          # The base is the first parent of the merge commit, and only a pull request is
+          # checked out that way. A caller reaches this through 'workflow_call', which
+          # keeps the event of the run it was called from, and the one caller there is
+          # calls it on a pull request. A run started any other way has no base to hold
+          # the pins against, so it says that and ends.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "A run which is not a pull request has no base commit, so nobody can be"
+            echo "told here which pin moved."
+            exit 0
+          fi
           script=bin/client-api-changes.sh
           [ -x "$script" ] || script=.camunda8-adapter/bin/client-api-changes.sh
           # Which line is the preview one is read from the POM the script came with, see
@@ -99,7 +113,7 @@ jobs:
           pins() {
             sed -n 's|.*<\(camunda8\.version\.line-[^>]*\)>\([^<]*\)</.*|\1 \2|p' "$1"
           }
-          git show "origin/${{ github.base_ref }}:pom.xml" > "${RUNNER_TEMP}/base-pom.xml"
+          git show "HEAD^1:pom.xml" > "${RUNNER_TEMP}/base-pom.xml"
           pins "${RUNNER_TEMP}/base-pom.xml" | sort > "${RUNNER_TEMP}/base-pins"
           pins pom.xml | sort > "${RUNNER_TEMP}/head-pins"
 
