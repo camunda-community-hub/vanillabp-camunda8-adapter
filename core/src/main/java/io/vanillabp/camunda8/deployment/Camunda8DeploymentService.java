@@ -20,6 +20,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.camunda.client.CamundaClient;
+import io.camunda.client.CamundaClientConfiguration;
 import io.camunda.client.api.command.DeployResourceCommandStep1;
 import io.camunda.client.api.command.DeployResourceCommandStep1.DeployResourceCommandStep2;
 import io.camunda.client.api.worker.JobWorker;
@@ -36,6 +37,7 @@ import io.vanillabp.camunda8.client.Camunda8Drain;
 import io.vanillabp.camunda8.client.Camunda8InstanceIdentity;
 import io.vanillabp.camunda8.client.Camunda8SearchableClusterCheck;
 import io.vanillabp.camunda8.client.Camunda8TenantCheck;
+import io.vanillabp.camunda8.client.Camunda8WorkerConnections;
 import io.vanillabp.camunda8.client.Camunda8Workers;
 import io.vanillabp.camunda8.health.Camunda8Health;
 import io.vanillabp.camunda8.observability.Camunda8Metrics;
@@ -71,6 +73,8 @@ import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring;
 import io.vanillabp.integration.spi.parts.VanillaBpParts;
+import io.vanillabp.integration.spi.startup.StartupReport;
+import io.vanillabp.integration.spi.startup.StartupTopic;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -301,6 +305,111 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   public AdapterHealth checkHealth() {
 
     return Camunda8Health.check(adapterId, clientFactory);
+
+  }
+
+  /**
+   * Where a finding of this adapter goes, or <code>null</code> where the adapter runs
+   * without a platform integration, which is the case in a test building this service by
+   * hand. Then a finding is written to the log the way every finding was written before
+   * the collected block existed.
+   */
+  private StartupReport startupReport;
+
+  /**
+   * Hands over where the findings of this adapter id go.
+   *
+   * @param startupReport The collection point both platform integrations publish, or
+   *          <code>null</code> to write the findings to the log directly
+   */
+  public void setStartupReport(
+      final StartupReport startupReport) {
+
+    this.startupReport = startupReport;
+
+  }
+
+  /**
+   * Says a finding about this adapter id, into the collected block where the platform
+   * published one.
+   *
+   * @param topic The artifact the fix lies in
+   * @param message The whole message, ending with what to do. It never carries the adapter
+   *          id, because the scope does, and two adapter ids finding the same thing are
+   *          then one entry naming both
+   */
+  private void warnAboutThisAdapter(
+      final StartupTopic topic,
+      final String message) {
+
+    final var scope = "camunda8 adapter '%s'".formatted(adapterId);
+    if (startupReport != null) {
+      startupReport.warn(topic, scope, message);
+      return;
+    }
+    log.warn("{}: {}", scope, message);
+
+  }
+
+  /**
+   * How many workers each workflow module of this adapter id has open. Kept per module
+   * rather than as one sum, so a module which is stopped and started again is counted once.
+   */
+  private final Map<String, Integer> workersPerWorkflowModule = new ConcurrentHashMap<>();
+
+  /**
+   * Whether this start was already told that the workers outgrew the connection pool. The
+   * number grows with every workflow module, and a start which says it once per module
+   * would fill the block with the same sentence carrying different numbers. What the
+   * developer does about it is the same either way, and a start after they raised the pool
+   * says the number it is then short of, if any.
+   */
+  private boolean saidThatTheWorkersOutgrewThePool = false;
+
+  /**
+   * Holds the workers a workflow module just opened against the connection pool of the
+   * client they poll with, and says so where they do not fit.
+   * <p>
+   * The pool belongs to the client and the client belongs to the adapter id, so the number
+   * which counts is the one over all workflow modules of this service. It is known as soon
+   * as a module opened its workers, which is why this is a startup check and not something
+   * a running application finds out the hard way, one <code>request-timeout</code> at a
+   * time (see {@link Camunda8WorkerConnections}).
+   * <p>
+   * A client which prefers gRPC activates its jobs over that transport, where this pool is
+   * not what limits the workers, so nothing is said for it.
+   *
+   * @param workflowModuleId The module which just opened its workers
+   * @param workers How many workers it opened
+   * @param clientConfiguration The configuration of the client of this adapter id, as the
+   *          CLIENT resolved it, so the pool is the configured one or the client's default
+   */
+  void holdTheWorkersAgainstTheConnectionPool(
+      final String workflowModuleId,
+      final int workers,
+      final CamundaClientConfiguration clientConfiguration) {
+
+    workersPerWorkflowModule.put(workflowModuleId, workers);
+    if (!clientConfiguration.preferRestOverGrpc()) {
+      return;
+    }
+    if (saidThatTheWorkersOutgrewThePool) {
+      return;
+    }
+    final var workersOfThisAdapter = workersPerWorkflowModule
+        .values()
+        .stream()
+        .mapToInt(Integer::intValue)
+        .sum();
+    final var message = Camunda8WorkerConnections.moreWorkersThanConnections(
+        workersOfThisAdapter,
+        clientConfiguration.getMaxHttpConnections(),
+        clientConfiguration.getDefaultRequestTimeout());
+    if (message == null) {
+      return;
+    }
+    saidThatTheWorkersOutgrewThePool = true;
+    warnAboutThisAdapter(StartupTopic.CONFIGURATION, message);
 
   }
 
@@ -3211,6 +3320,14 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         jobTypesAWorkerIsAlreadyOpenFor(servedByJobType.keySet(), bpmsProcessingContext),
         openTaskProbe);
 
+    // every worker of this module is open now, so this is the first moment the number of
+    // workers of this adapter id is known and the last one before the block of the start
+    // is written
+    holdTheWorkersAgainstTheConnectionPool(
+        workflowModuleId,
+        bpmsProcessingContext.getOpenWorkers().size(),
+        client.getConfiguration());
+
   }
 
   /**
@@ -3679,6 +3796,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     drain.report(grace, outcome);
 
     workers.clear();
+    // and the connections they held are free again, so a module which starts once more
+    // is not counted twice against the pool
+    workersPerWorkflowModule.remove(workflowModuleId);
     final var registration = shutdownRegistrations.remove(workflowModuleId);
     if (registration != null) {
       registration.close();

@@ -20,6 +20,7 @@ import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
 import io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker;
 import io.vanillabp.integration.adapter.spi.workflowstart.BpmsInitiatedStartInvoker;
 import io.vanillabp.integration.runtime.support.AdapterCollaboratorsSupport;
+import io.vanillabp.integration.spi.startup.StartupReport;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Instance;
@@ -72,6 +73,7 @@ public class Camunda8DeploymentServiceProducer {
    *          own
    * @param metrics Where this adapter's own numbers go, absent where the application brings no
    *          Micrometer
+   * @param startupReport Where a finding of this adapter goes while the application starts
    * @return One service per configured adapter id of this type
    */
   @Produces
@@ -88,7 +90,8 @@ public class Camunda8DeploymentServiceProducer {
       final PreCommitRegistrar preCommitRegistrar,
       @Any final Instance<WorkflowEndedInvoker> workflowEndedInvoker,
       @Any final Instance<BpmsInitiatedStartInvoker> bpmsInitiatedStartInvoker,
-      final Instance<Camunda8Metrics> metrics) {
+      final Instance<Camunda8Metrics> metrics,
+      final Instance<StartupReport> startupReport) {
 
     final var overlay = ConfigProvider
         .getConfig()
@@ -152,6 +155,12 @@ public class Camunda8DeploymentServiceProducer {
           deploymentService.setAllowListenersResolver((
               workflowModuleId,
               bpmnProcessId) -> overlay.allowListenersFor(workflowModuleId, bpmnProcessId, adapterId));
+          // Where this adapter says what it found while the application starts:
+          // the block both platform integrations write at the end of a start
+          deploymentService.setStartupReport(
+              startupReport.isResolvable()
+                  ? startupReport.get()
+                  : null);
           // The client's job counters and this adapter's execution slots,
           // where the application uses the Micrometer extension
           deploymentService.setMetrics(

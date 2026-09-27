@@ -16,6 +16,7 @@ import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.adapter.spi.PreCommitRegistrar;
 import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
+import io.vanillabp.integration.spi.startup.StartupReport;
 
 /**
  * Registers the Camunda 8 adapter's per-adapter-id beans: for EACH configured adapter
@@ -136,6 +137,12 @@ public class Camunda8AdapterBeanRegistrar implements BeanRegistrar {
                     workflowModuleId,
                     bpmnProcessId) -> overlay
                         .allowListenersFor(workflowModuleId, bpmnProcessId, adapterId));
+                // Where this adapter says what it found while the application starts:
+                // the block both platform integrations write at the end of a start
+                deploymentService.setStartupReport(
+                    supplierContext
+                        .beanProvider(StartupReport.class)
+                        .getIfAvailable());
                 // The client's job counters and this adapter's execution slots,
                 // where the application brings Micrometer
                 deploymentService.setMetrics(
