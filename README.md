@@ -145,8 +145,10 @@ number of workers against the size of the pool is what decides, not the version 
 The test module therefore configures `max-http-connections`, and an application which grows
 past a hundred workers has to do the same.
 
-The adapter now says so at startup. It counts the workers it opened for an adapter id against
-the pool its client resolved, and warns where those workers take the whole pool. The warning
+The adapter now says so at startup. It counts the workers open on the client of an adapter id
+against the pool that client resolved, and warns where those workers take the whole pool. A
+worker is counted where it is OPENED, so the workers an extension opens on the same client are
+in the number as well, and one opened after the start makes the check run again. The warning
 names both numbers and the key which raises the limit. The application starts either way, and
 the adapter raises nobody's pool on its own: how many connections an application opens against
 its cluster is a decision about its own resources.

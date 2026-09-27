@@ -14,9 +14,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.camunda.client.CamundaClientConfiguration;
+import io.camunda.client.api.worker.JobWorker;
+import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 import io.vanillabp.camunda8.TestCollaborators;
 import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactory;
+import io.vanillabp.camunda8.client.Camunda8Workers;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.integration.spi.startup.StartupReport;
 import io.vanillabp.integration.spi.startup.StartupTopic;
@@ -25,7 +28,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * What an application learns when it opens more workers than its Camunda client has HTTP
- * connections.
+ * connections, and which workers are in that number.
  * <p>
  * The numbers this is built around were measured on 2026-09-26 and are written down in
  * {@code Camunda8WorkerConnections}: 115 workers against the client's 100 connections took
@@ -103,19 +106,67 @@ public class Camunda8WorkerConnectionsTest {
 
   }
 
-  private Camunda8DeploymentService deploymentService() {
+  /**
+   * The factory of the adapter id under test, which is where the workers open on its
+   * client are counted. Built with an address nothing listens on: the client is built,
+   * which is all a worker count needs, and no test here sends a command.
+   */
+  private Camunda8ClientFactory clientFactory() {
 
     final var configuration = new Camunda8AdapterConfiguration();
     configuration.setRestAddress("http://localhost:65535");
+    return new Camunda8ClientFactory("c8", configuration);
+
+  }
+
+  private Camunda8DeploymentService deploymentService() {
+
+    return deploymentService(clientFactory());
+
+  }
+
+  private Camunda8DeploymentService deploymentService(
+      final Camunda8ClientFactory clientFactory) {
+
     return DeploymentServiceUnderTest.of(
-        "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators
+        "c8", clientFactory, TestCollaborators
             .of(new Camunda8DeploymentServiceTest.NoOpInvoker()),
         (
             module,
             process,
             task) -> Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT,
         Duration.ofHours(1),
-        adapterId -> configuration);
+        adapterId -> clientFactory.getConfiguration());
+
+  }
+
+  /**
+   * A worker builder which opens the given worker, which is what a test opens instead of
+   * subscribing to a cluster.
+   */
+  private JobWorkerBuilderStep1.JobWorkerBuilderStep3 builderOpening(
+      final JobWorker worker) {
+
+    final var builder = mock(JobWorkerBuilderStep1.JobWorkerBuilderStep3.class);
+    when(builder.open()).thenReturn(worker);
+    return builder;
+
+  }
+
+  /**
+   * Opens as many workers on this client as asked for, the way an extension opens one.
+   *
+   * @return The workers, so a test can close them again
+   */
+  private List<JobWorker> openWorkers(
+      final Camunda8ClientFactory clientFactory,
+      final int howMany) {
+
+    final var workers = new ArrayList<JobWorker>();
+    for (var i = 0; i < howMany; ++i) {
+      workers.add(Camunda8Workers.open(builderOpening(mock(JobWorker.class)), clientFactory));
+    }
+    return workers;
 
   }
 
@@ -153,7 +204,6 @@ public class Camunda8WorkerConnectionsTest {
 
     service
         .holdTheWorkersAgainstTheConnectionPool(
-            "test-app",
             MORE_WORKERS_THAN_THE_POOL,
             clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
 
@@ -191,7 +241,6 @@ public class Camunda8WorkerConnectionsTest {
 
     service
         .holdTheWorkersAgainstTheConnectionPool(
-            "test-app",
             FEWER_WORKERS_THAN_THE_POOL,
             clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
 
@@ -210,7 +259,6 @@ public class Camunda8WorkerConnectionsTest {
 
     service
         .holdTheWorkersAgainstTheConnectionPool(
-            "test-app",
             MORE_WORKERS_THAN_THE_POOL,
             clientWithAPoolOf(256));
 
@@ -220,25 +268,55 @@ public class Camunda8WorkerConnectionsTest {
   }
 
   @Test
-  @DisplayName("It is the workers of ALL workflow modules which share the pool")
-  public void theWorkersOfEveryWorkflowModuleCountAgainstOnePool() {
+  @DisplayName("Every worker open on the client is in the count, whoever opened it")
+  public void everyWorkerOpenedOnThisClientIsCounted() {
 
-    final var service = deploymentService();
+    final var clientFactory = clientFactory();
+
+    // the workers of one workflow module, the workers of a second one and the worker an
+    // extension opened: they reach the count on the same path, because the count happens
+    // where a worker is OPENED and not where it was ordered
+    final var firstModule = openWorkers(clientFactory, 60);
+    final var secondModule = openWorkers(clientFactory, 59);
+    final var anExtensions = openWorkers(clientFactory, 1);
+    assertEquals(120, clientFactory.countTheOpenWorkers(), "all of them hold a connection");
+
+    // and a worker which is closed gave its connection back
+    when(firstModule.get(0).isClosed()).thenReturn(true);
+    when(secondModule.get(0).isClosed()).thenReturn(true);
+    when(anExtensions.get(0).isClosed()).thenReturn(true);
+
+    assertEquals(117, clientFactory.countTheOpenWorkers(), "a closed worker leaves the count");
+
+  }
+
+  @Test
+  @DisplayName("A worker an extension opens after the start is held against the pool as well")
+  public void aWorkerAnExtensionOpensCountsAgainstThePoolToo() {
+
+    final var clientFactory = clientFactory();
+    final var service = deploymentService(clientFactory);
     final var reported = new WhatWasReported();
     service.setStartupReport(reported);
 
-    service.holdTheWorkersAgainstTheConnectionPool("first", 60, clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
-    assertTrue(reported.findings.isEmpty(), "60 of them fit: "
+    // the adapter's own workers, one below the pool of the client it built: the start of
+    // the workflow modules said nothing, because nothing was wrong yet
+    openWorkers(clientFactory, THE_CLIENTS_OWN_POOL - 1);
+    assertTrue(reported.findings.isEmpty(), "99 workers fit into the 100 connections the client keeps: "
         + reported.findings);
 
-    service.holdTheWorkersAgainstTheConnectionPool("second", 60, clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
+    // and now an extension opens one of its own on the same client
+    openWorkers(clientFactory, 1);
 
-    assertEquals(1, reported.findings.size(), "120 of them do not: "
+    assertEquals(1, reported.findings.size(), "which is the worker that takes the pool: "
         + reported.findings);
+    final var message = reported.findings.get(0).message();
+    assertTrue(message.contains("100 job workers"), "the number is the one over all of them: "
+        + message);
     assertTrue(
-        reported.findings.get(0).message().contains("120 job workers"),
-        "and the number is the one over both modules: "
-            + reported.findings.get(0).message());
+        message.contains("100 HTTP connections"),
+        "and it is held against the pool the client really keeps, which is 100 on every line: "
+            + message);
 
   }
 
@@ -252,7 +330,6 @@ public class Camunda8WorkerConnectionsTest {
 
     service
         .holdTheWorkersAgainstTheConnectionPool(
-            "test-app",
             MORE_WORKERS_THAN_THE_POOL,
             clientWithAPoolOf(THE_CLIENTS_OWN_POOL, false));
 
@@ -270,7 +347,6 @@ public class Camunda8WorkerConnectionsTest {
 
     service
         .holdTheWorkersAgainstTheConnectionPool(
-            "test-app",
             MORE_WORKERS_THAN_THE_POOL,
             clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
 

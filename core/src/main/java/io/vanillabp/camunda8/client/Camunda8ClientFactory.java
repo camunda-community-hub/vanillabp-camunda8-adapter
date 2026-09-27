@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.camunda.client.CamundaClient;
 import io.camunda.client.CamundaClientBuilder;
+import io.camunda.client.api.worker.JobWorker;
 import io.vanillabp.camunda8.deployment.Camunda8DeployedProcesses;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import lombok.Getter;
@@ -582,6 +583,82 @@ public class Camunda8ClientFactory implements AutoCloseable {
   public synchronized Set<String> getOpenWorkflowModules() {
 
     return Set.copyOf(openWorkflowModules.keySet());
+
+  }
+
+  /**
+   * The workers which are open on the client of this adapter id, whoever opened them.
+   * <p>
+   * They live here for the reason the deployed processes and the drains do: the factory is
+   * the one object per adapter id which the deployment service, the process service and an
+   * EXTENSION all already hold. Every one of these workers holds a connection of the same
+   * pool while it waits for work, so the number which counts is the number over all of them
+   * and not the number one workflow module opened (see {@link Camunda8WorkerConnections}).
+   * <p>
+   * A worker which is CLOSED gave its connection back, so it leaves the count again. It is
+   * dropped while the workers are counted rather than by a hook of its own, because a
+   * worker is closed on more paths than it is opened on: the module which stops, the
+   * backstop below, and an extension closing its own.
+   */
+  private final List<JobWorker> openWorkers = new LinkedList<>();
+
+  /**
+   * Takes a worker which just opened on this client into that count, and lets the check
+   * which reads it run.
+   * <p>
+   * Called by {@link Camunda8Workers#open(io.camunda.client.api.worker.JobWorkerBuilderStep1.JobWorkerBuilderStep3, Camunda8ClientFactory)},
+   * which is how every worker of the adapter and of an extension reaches this client.
+   *
+   * @param worker The worker which just opened
+   */
+  void aWorkerWasOpened(
+      final JobWorker worker) {
+
+    synchronized (openWorkers) {
+      openWorkers.add(worker);
+    }
+    openWorkerCheck.run();
+
+  }
+
+  /**
+   * How many workers are open on the client of this adapter id right now, the adapter's own
+   * and an extension's alike.
+   *
+   * @return The number of workers which have not been closed again
+   */
+  public int countTheOpenWorkers() {
+
+    synchronized (openWorkers) {
+      openWorkers.removeIf(JobWorker::isClosed);
+      return openWorkers.size();
+    }
+
+  }
+
+  /**
+   * What is asked after a worker opened on this client. Provided by the deployment service
+   * of this adapter id, which holds the check and the place its finding goes to; until it
+   * does, and in a test building a factory of its own, a worker which opens is counted and
+   * nothing else happens.
+   */
+  private volatile Runnable openWorkerCheck = () -> {
+  };
+
+  /**
+   * Hands over what runs after a worker opened, called by the deployment service while it
+   * is created.
+   * <p>
+   * This is how a worker an EXTENSION opens long after the start is held against the
+   * connection pool as well: it opens through {@link Camunda8Workers}, which brings it
+   * here, and here is where the check of the adapter hangs.
+   *
+   * @param openWorkerCheck What to run once a worker opened
+   */
+  public void provideTheOpenWorkerCheck(
+      final Runnable openWorkerCheck) {
+
+    this.openWorkerCheck = openWorkerCheck;
 
   }
 
