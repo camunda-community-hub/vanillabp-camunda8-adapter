@@ -404,7 +404,7 @@ public final class Camunda8MultiInstance {
   /**
    * Prepares a process for multi-instance: injects the input mappings which make the
    * values of every iteration unambiguous and records which elements are enclosed by
-   * which iterations.
+   * which iterations. For a model which is only read see {@link #chainsOf}.
    *
    * @param model The BPMN model, about to be deployed
    * @param bpmnProcessId The process to prepare, as the cluster will know it
@@ -414,6 +414,49 @@ public final class Camunda8MultiInstance {
       final BpmnModelInstance model,
       final String bpmnProcessId,
       final Registry registry) {
+
+    collectChains(model, bpmnProcessId, registry, true);
+
+  }
+
+  /**
+   * The chains of a model which is only being READ, without touching it: a model a BPMS
+   * still holds is not deployed again, and injecting mappings into it would change what the
+   * check judges.
+   * <p>
+   * A model whose element ids cannot be told apart by their variable names is refused while
+   * it is DEPLOYED. Here it is not: nobody can change a version the cluster already holds, so
+   * the answer is that this adapter cannot read the shape of that version, and the core asks
+   * nothing about it.
+   *
+   * @param model The BPMN model of a version the cluster holds
+   * @param bpmnProcessId The process to read, as the cluster knows it
+   * @return The chains of that model, or <code>null</code> where it cannot be read
+   */
+  public static Registry chainsOf(
+      final BpmnModelInstance model,
+      final String bpmnProcessId) {
+
+    final var registry = new Registry();
+    try {
+      collectChains(model, bpmnProcessId, registry, false);
+    } catch (final RuntimeException e) {
+      return null;
+    }
+    return registry;
+
+  }
+
+  /**
+   * Records which elements are enclosed by which iterations, and - for a model about to be
+   * deployed - injects the input mappings which make the values of every iteration
+   * unambiguous.
+   */
+  private static void collectChains(
+      final BpmnModelInstance model,
+      final String bpmnProcessId,
+      final Registry registry,
+      final boolean inject) {
 
     final var process = model
         .getModelElementsByType(Process.class)
@@ -428,7 +471,7 @@ public final class Camunda8MultiInstance {
     final var elements = new LinkedHashMap<String, MultiInstanceElement>();
     final var variableNames = new LinkedHashMap<String, String>();
     for (final var activity : process.getChildElementsByType(Activity.class)) {
-      collect(activity, elements, variableNames, bpmnProcessId);
+      collect(activity, elements, variableNames, bpmnProcessId, inject);
     }
     // no multi-instance in this process - nothing to inject and nothing to remember
     if (elements.isEmpty()) {
@@ -543,23 +586,26 @@ public final class Camunda8MultiInstance {
   }
 
   /**
-   * Walks an activity and everything below it, injecting the input mappings of every
-   * multi-instance element found.
+   * Walks an activity and everything below it, remembering every multi-instance element
+   * found and, where the model is about to be deployed, injecting its input mappings.
    */
   private static void collect(
       final Activity activity,
       final Map<String, MultiInstanceElement> elements,
       final Map<String, String> variableNames,
-      final String bpmnProcessId) {
+      final String bpmnProcessId,
+      final boolean inject) {
 
     if (activity.getLoopCharacteristics() instanceof MultiInstanceLoopCharacteristics loopCharacteristics) {
       final var element = describe(activity, loopCharacteristics, variableNames, bpmnProcessId);
       elements.put(activity.getId(), element);
-      inject(activity, element, loopCharacteristics);
+      if (inject) {
+        inject(activity, element, loopCharacteristics);
+      }
     }
     activity
         .getChildElementsByType(Activity.class)
-        .forEach(child -> collect(child, elements, variableNames, bpmnProcessId));
+        .forEach(child -> collect(child, elements, variableNames, bpmnProcessId, inject));
 
   }
 

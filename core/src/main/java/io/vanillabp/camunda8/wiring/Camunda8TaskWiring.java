@@ -13,13 +13,17 @@ import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
 import io.camunda.zeebe.model.bpmn.instance.Activity;
 import io.camunda.zeebe.model.bpmn.instance.AdHocSubProcess;
+import io.camunda.zeebe.model.bpmn.instance.Association;
 import io.camunda.zeebe.model.bpmn.instance.BoundaryEvent;
 import io.camunda.zeebe.model.bpmn.instance.BusinessRuleTask;
 import io.camunda.zeebe.model.bpmn.instance.CatchEvent;
+import io.camunda.zeebe.model.bpmn.instance.CompensateEventDefinition;
 import io.camunda.zeebe.model.bpmn.instance.ConditionalEventDefinition;
+import io.camunda.zeebe.model.bpmn.instance.EndEvent;
 import io.camunda.zeebe.model.bpmn.instance.ExtensionElements;
 import io.camunda.zeebe.model.bpmn.instance.FlowElement;
 import io.camunda.zeebe.model.bpmn.instance.InclusiveGateway;
+import io.camunda.zeebe.model.bpmn.instance.IntermediateThrowEvent;
 import io.camunda.zeebe.model.bpmn.instance.Message;
 import io.camunda.zeebe.model.bpmn.instance.MessageEventDefinition;
 import io.camunda.zeebe.model.bpmn.instance.MultiInstanceLoopCharacteristics;
@@ -47,6 +51,7 @@ import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListeners;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeUserTask;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeVersionTag;
 import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
+import io.vanillabp.integration.adapter.spi.workflowtask.CompensationSpec;
 import io.vanillabp.spi.service.BpmsStartTrigger;
 
 /**
@@ -1129,6 +1134,159 @@ public final class Camunda8TaskWiring {
         .map(FlowElement::getId)
         .distinct()
         .toList();
+
+  }
+
+  /**
+   * The compensation throw events of a BPMN process which start MORE THAN ONE handler,
+   * each with the handlers it starts.
+   * <p>
+   * Compensation is a second token drawn differently: from the throw event the workflow
+   * holds a token per handler, and every one of those handlers is an ordinary workflow task
+   * writing the same workflow aggregate. Measured against a cluster on 2026-09-26, Camunda 8
+   * hands out both handler jobs at the same moment.
+   * <p>
+   * A throw event which names ONE activity compensates that activity's handler and nothing
+   * else, so it leaves the workflow with the one token it already had. Such an event is read
+   * here and dropped by the caller, which is where the rule that one handler is no finding
+   * lives.
+   *
+   * @param model The BPMN model
+   * @param bpmnProcessId The process' ID as the CLUSTER will know it (the SCOPED ID)
+   * @return The throw events with their handlers, in model order, possibly empty
+   */
+  public static List<CompensationSpec> compensationOf(
+      final BpmnModelInstance model,
+      final String bpmnProcessId) {
+
+    final var handlerOfActivity = new java.util.LinkedHashMap<String, Activity>();
+    final var compensatedActivities = new java.util.LinkedHashMap<String, Activity>();
+    elementsOf(model, bpmnProcessId, BoundaryEvent.class)
+        .filter(boundaryEvent -> !boundaryEvent
+            .getEventDefinitions()
+            .stream()
+            .filter(CompensateEventDefinition.class::isInstance)
+            .toList()
+            .isEmpty())
+        .forEach(boundaryEvent -> {
+          final var compensated = boundaryEvent.getAttachedTo();
+          final var handler = handlerAttachedTo(model, boundaryEvent);
+          if ((compensated == null) || (handler == null)) {
+            return;
+          }
+          handlerOfActivity.put(compensated.getId(), handler);
+          compensatedActivities.put(compensated.getId(), compensated);
+        });
+    if (handlerOfActivity.isEmpty()) {
+      return List.of();
+    }
+
+    final var compensations = new LinkedList<CompensationSpec>();
+    Stream
+        .of(
+            elementsOf(model, bpmnProcessId, IntermediateThrowEvent.class),
+            elementsOf(model, bpmnProcessId, EndEvent.class))
+        .flatMap(events -> events)
+        .forEach(throwEvent -> {
+          final var thrown = throwEvent
+              .getEventDefinitions()
+              .stream()
+              .filter(CompensateEventDefinition.class::isInstance)
+              .map(CompensateEventDefinition.class::cast)
+              .findFirst()
+              .orElse(null);
+          if (thrown == null) {
+            return;
+          }
+          final var named = thrown.getActivity();
+          final List<String> handlers;
+          if (named != null) {
+            final var handler = handlerOfActivity.get(named.getId());
+            handlers = handler == null
+                ? List.of()
+                : List.of(handler.getId());
+          } else {
+            // no activity is named, so everything of the throw event's scope which was
+            // compensated is compensated at once
+            final var scope = compensationScopeOf(throwEvent);
+            handlers = compensatedActivities
+                .entrySet()
+                .stream()
+                .filter(compensated -> liesWithin(compensated.getValue(), scope))
+                .map(compensated -> handlerOfActivity.get(compensated.getKey()).getId())
+                .toList();
+          }
+          compensations.add(new CompensationSpec(throwEvent.getId(), handlers));
+        });
+    return compensations;
+
+  }
+
+  /**
+   * The compensation handler an association points at, starting from the compensation
+   * boundary event. Only an activity marked as one which compensates counts: an association
+   * may reach a text annotation as well, and that is documentation rather than a handler.
+   */
+  private static Activity handlerAttachedTo(
+      final BpmnModelInstance model,
+      final BoundaryEvent boundaryEvent) {
+
+    return model
+        .getModelElementsByType(Association.class)
+        .stream()
+        .filter(association -> boundaryEvent.equals(association.getSource()))
+        .map(Association::getTarget)
+        .filter(Activity.class::isInstance)
+        .map(Activity.class::cast)
+        .filter(Activity::isForCompensation)
+        .findFirst()
+        .orElse(null);
+
+  }
+
+  /**
+   * The scope a compensation throw event which names no activity compensates: the subprocess
+   * around it, or the process.
+   * <p>
+   * An EVENT subprocess is walked through rather than taken as the scope. Such a subprocess
+   * handles what happened in the scope AROUND it, so a throw event inside it undoes the
+   * activities of that scope and not the ones of the handler it sits in.
+   */
+  private static ModelElementInstance compensationScopeOf(
+      final FlowElement throwEvent) {
+
+    ModelElementInstance current = throwEvent.getParentElement();
+    while (current != null) {
+      if ((current instanceof SubProcess subProcess) && !subProcess.triggeredByEvent()) {
+        return current;
+      }
+      if (current instanceof Process) {
+        return current;
+      }
+      current = current.getParentElement();
+    }
+    return null;
+
+  }
+
+  /**
+   * Whether an activity sits inside the given scope, at any depth.
+   */
+  private static boolean liesWithin(
+      final Activity activity,
+      final ModelElementInstance scope) {
+
+    if (scope == null) {
+      return false;
+    }
+    ModelElementInstance current = activity;
+    while (current != null) {
+      if (scope.equals(current)) {
+        return true;
+      }
+      current = current.getParentElement();
+    }
+    return false;
 
   }
 

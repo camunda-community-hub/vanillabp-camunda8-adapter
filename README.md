@@ -1736,6 +1736,15 @@ and `Camunda8AdHocSubProcessIT` runs the served flavour against a cluster: two o
 are named by the aggregate, the two run, the third does not, and the workflow leaves the element
 with no completion condition modelled.
 
+Compensation reaches the core through a report of its own. `Camunda8TaskWiring#compensationOf`
+reads every compensation throw event of a process together with the handlers it starts, and the
+adapter reports the ones which start more than one: this cluster hands out both handler jobs at
+the same moment, so from that event the workflow holds a token per handler, and a reader has to
+see which event starts which handlers rather than a flat list of ids. A throw event which undoes a
+single activity is left out, and a version the cluster still holds carries its compensation as
+plain element ids among the others, because the shaped message belongs to the model somebody can
+still redraw. `Camunda8ConcurrentTokensTest` holds the reading.
+
 ### What a worker fetches
 
 A Camunda 8 worker which names no variables receives the complete variable scope of the
@@ -2323,6 +2332,16 @@ job arrived and nothing said why.
 Only the elements of the process being wired are judged. A level a CALLER contributes is linked
 once the whole workflow module is wired, and it belongs to the model of that caller, where the same
 question is asked about it.
+
+The same question is asked about a version the cluster still HOLDS, and there the answer travels
+instead of ending anything. Nobody can redraw such a model, so `taskSpecsOf` puts the elements
+without an item into `BpmnTaskSpec#multiInstanceElementsWithoutAnItem` of every task it reads, and
+the core holds them against the methods which still serve that version. The chains come from
+`Camunda8MultiInstance#chainsOf`, which walks the held model without injecting anything into it:
+the chains this boot recorded belong to the model just deployed, and a model a check only reads
+must not be changed by the reading. A held model whose element ids cannot be told apart by their
+variable names answers `null` rather than ending a boot over a version nobody can change;
+`Camunda8ItemsOfHeldVersionsTest` reads a held version with an item and one without.
 
 Those names cannot be shadowed, so a job of a nested task carries one set per iteration it
 runs in. Which iterations enclose which element is model knowledge and is remembered while
