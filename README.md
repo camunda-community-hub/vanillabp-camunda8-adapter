@@ -360,6 +360,14 @@ one issue per red line, labelled `release-lines` and titled after the line, and 
 issue while the line stays red. A line which is green again gets a comment and the issue stays
 open, because a green night is not a fix. Whoever merges the fix closes it. See decision 31.
 
+The night is also how this repository measures the platform. Every line resolves the platform with
+`--update-snapshots`, so a snapshot published during the day is built against within a night, and
+the other adapter repositories run a nightly of their own for the same reason. Each line writes
+down which platform snapshot it resolved, with the timestamp and the build number, into the job
+summary and into the issue of a red line. `2.0.0-SNAPSHOT` does not say it: the platform publishes
+under that string several times a day, and the reader of a red line has to be able to tell a break
+of the platform from a break of this adapter.
+
 A preview line which breaks on a pull request gets an issue as well, and a separate one.
 `checks.yaml` calls `preview-line-issue.yaml` after the matrix, which opens it under the label
 `preview-line` and a title naming the line, and writes a comment instead while such an issue is

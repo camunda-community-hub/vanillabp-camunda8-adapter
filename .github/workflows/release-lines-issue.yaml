@@ -174,6 +174,19 @@ jobs:
                   echo "to the run as \`test-reports-${subject#line }\`, and GitHub keeps"
                   echo "them for seven days. The log of the job above is kept longer."
                 fi
+                # What that line was built against, written down by the matrix. The version
+                # in the POM does not say it: the platform publishes under the same
+                # '2.0.0-SNAPSHOT' several times a day, and the reader of this issue has to
+                # be able to tell a break of the platform from a break of this adapter.
+                snapshot="$work/snapshot-${subject// /-}"
+                if gh run download "$RUN_ID" --name "platform-snapshot-${subject#line }" \
+                     --dir "$snapshot" >/dev/null 2>&1 \
+                   && [ -s "$snapshot/platform-snapshot.md" ]; then
+                  echo
+                  echo "It was built against:"
+                  echo
+                  cat "$snapshot/platform-snapshot.md"
+                fi
                 echo
                 echo "<!-- release-lines-state: red -->"
               } > "$work/body.md"

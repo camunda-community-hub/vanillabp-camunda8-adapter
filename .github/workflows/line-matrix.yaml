@@ -8,6 +8,13 @@ name: Release lines
 # must not stop a fix for a released line, and that is decision 42 in the repository's
 # DECISIONS.md. A release waits for it all the same, because the gate of a release is the call
 # of this whole workflow, and a red line fails that call whichever line it is.
+#
+# This matrix is also the nightly build against the platform snapshot. It resolves the platform
+# with '--update-snapshots' every night and it reports a red line as an issue, so a second
+# nightly building the same modules against the same registry would only say the same thing
+# twice under another name. What it needed for that second job is the name of the snapshot it
+# resolved, and the step 'Which platform snapshot this line built against' prints it: without
+# that, a red line does not tell a break of the platform from a break of this adapter.
 "on":
   schedule:
     # Early enough to be green or red before anybody starts working. GitHub queues a
@@ -78,6 +85,11 @@ jobs:
           java-version: 25.0.4+101.0.LTS
           distribution: temurin
           cache: maven
+      # The Maven cache of this runner can hold a platform jar from a day this build never
+      # asks for again. The step which names the snapshot reads what is newer than this
+      # marker, so it names what Maven fetched tonight.
+      - name: Mark the moment the build starts
+        run: touch "${RUNNER_TEMP}/platform-snapshot-marker"
       - name: "Build and test line ${{ matrix.line }}"
         # 'clean', because classes compiled against another client are binary compatible
         # with nothing, and the revision is the version string this line would publish,
@@ -120,6 +132,83 @@ jobs:
             | xargs -r docker rm -f \
             || echo "Some containers were already going away, which is Ryuk doing the same work."
           exit 0
+      # Which platform this line was built against. The step below says which cluster and
+      # which client it ran with, and this one says the other half. '2.0.0-SNAPSHOT' does not
+      # say it: the platform publishes under that same string several times a day, and a
+      # reader of a red line has to be able to tell a break of the platform from a break of
+      # this adapter. It runs whatever the build did, because the red lines are the ones
+      # which need it.
+      - name: Which platform snapshot this line built against
+        if: always()
+        run: |
+          set -uo pipefail
+          out="${RUNNER_TEMP}/platform-snapshot.md"
+          marker="${RUNNER_TEMP}/platform-snapshot-marker"
+          snapshots="${HOME}/.m2/repository/io/vanillabp"
+          # Maven writes one maven-metadata-<repository id>.xml per remote repository a
+          # snapshot came from, next to the jar it resolved. The ids of the VanillaBP
+          # repositories all begin with 'vanillabp-', see github-packages-settings.xml, so
+          # this reads what came from the platform and skips what this build installed
+          # itself, which carries no such file.
+          mapfile -t metadata < <(find "$snapshots" \
+            -path '*-SNAPSHOT/maven-metadata-vanillabp-*.xml' -newer "$marker" \
+            2>/dev/null | sort)
+          stale=""
+          if [ "${#metadata[@]}" -eq 0 ]; then
+            mapfile -t metadata < <(find "$snapshots" \
+              -path '*-SNAPSHOT/maven-metadata-vanillabp-*.xml' 2>/dev/null | sort)
+            stale="Maven refreshed none of these while this run was going, so they are what
+          the cache of the runner held and not necessarily what was built against."
+          fi
+          : > "$out"
+          for meta in "${metadata[@]}"; do
+            directory=$(dirname "$meta")
+            version=$(basename "$directory")
+            # the path under the local repository is the group and the artifact, and the
+            # artifact alone is not enough: 'core' is the name of several of them
+            coordinates=$(dirname "${directory#"${HOME}/.m2/repository/"}")
+            group=$(dirname "$coordinates" | tr / .)
+            artifact=$(basename "$coordinates")
+            timestamp=$(sed -n 's|.*<timestamp>\(.*\)</timestamp>.*|\1|p' "$meta" | head -1)
+            build=$(sed -n 's|.*<buildNumber>\(.*\)</buildNumber>.*|\1|p' "$meta" | head -1)
+            if [ -n "$timestamp" ] && [ -n "$build" ]; then
+              resolved="${version%-SNAPSHOT}-${timestamp}-${build}"
+            else
+              # a repository which answers without a timestamp still says which version was
+              # asked for, and that is better than leaving the artifact out
+              resolved="${version}, and $(basename "$meta") holds no timestamp"
+            fi
+            printf -- '- `%s:%s` %s\n' "$group" "$artifact" "$resolved" >> "$out"
+          done
+          # Every VanillaBP repository serves every VanillaBP package, so one artifact is
+          # answered by several of the repositories in the settings and written down once per
+          # repository. The same line several times says nothing twice.
+          sort -u -o "$out" "$out"
+          if [ -n "$stale" ]; then
+            printf '\n%s\n' "$stale" >> "$out"
+          fi
+          if [ ! -s "$out" ]; then
+            {
+              echo "No platform snapshot was resolved in this run. Either the build did not"
+              echo "reach its dependencies, or it could not reach the registry."
+            } > "$out"
+          fi
+          {
+            echo "### The platform line ${{ matrix.line }} was built against"
+            echo
+            cat "$out"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$out"
+      # so the issue of a red line can name it too, without reading the log
+      - name: Hand that to the workflow which writes the issue
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          # one name per line, like the test reports above
+          name: platform-snapshot-${{ matrix.line }}
+          path: "${{ runner.temp }}/platform-snapshot.md"
+          retention-days: 30
+          if-no-files-found: ignore
       - name: The cluster and the client this line was tested against
         # The properties file moved into 'test-support' when that module was split out, so
         # this step read a path which no longer exists and failed a line whose build and
