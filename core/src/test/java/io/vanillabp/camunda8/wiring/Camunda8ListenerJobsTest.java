@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.wiring;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -21,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import io.camunda.client.api.response.ActivatedJob;
 import io.camunda.client.api.worker.JobClient;
 import io.vanillabp.camunda8.client.Camunda8Drain;
+import io.vanillabp.integration.adapter.spi.workflowtask.DeliveryOfAnUnknownWorkflowException;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -110,6 +112,36 @@ public class Camunda8ListenerJobsTest {
         message.getValue().contains("could not archive the order"),
         () -> "the incident an operator reads names what went wrong: "
             + message.getValue());
+
+  }
+
+  @Test
+  @DisplayName("A job about a workflow this application does not own raises an incident which explains that")
+  public void aJobOfAWorkflowWeDoNotOwnExplainsItselfInTheIncident() {
+
+    run(
+        Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT,
+        () -> {
+          throw new DeliveryOfAnUnknownWorkflowException(
+              "c8", "test-module", "TestProcess", "theExtensionsListener", "com.example.TheOrder", "42", "2251799813685249");
+        });
+
+    final var message = ArgumentCaptor.forClass(String.class);
+    verify(jobClient.newFailCommand(4711L).retries(0)).errorMessage(message.capture());
+    final var incident = message.getValue();
+
+    // the reader is told what happened and where to look, and is not told that they deleted
+    // a workflow aggregate - which nobody can know here
+    assertTrue(
+        incident.contains("This application was given a task of a workflow it does not own"),
+        incident);
+    assertTrue(incident.contains("workflow '2251799813685249'"), incident);
+    assertTrue(incident.contains("Another application shares this BPMS and owns this workflow"), incident);
+    assertFalse(incident.contains("must not be deleted while the workflow is active"), incident);
+
+    // the type is part of the incident text, which is what tells this refusal from a defect
+    // of the application at a glance
+    assertTrue(incident.startsWith(DeliveryOfAnUnknownWorkflowException.class.getName()), incident);
 
   }
 

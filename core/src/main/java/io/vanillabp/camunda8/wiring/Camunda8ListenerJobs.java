@@ -10,6 +10,7 @@ import io.vanillabp.camunda8.client.Camunda8CommandRetry;
 import io.vanillabp.camunda8.client.Camunda8Drain;
 import io.vanillabp.camunda8.client.Camunda8Errors;
 import io.vanillabp.camunda8.client.Camunda8JobLease;
+import io.vanillabp.integration.adapter.spi.workflowtask.DeliveryOfAnUnknownWorkflowException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -44,6 +45,15 @@ import lombok.extern.slf4j.Slf4j;
  * instance of the application gets it when the lock expires, and no incident is raised for
  * it. A listener which answers the cluster itself, without this protocol, buys an incident
  * on every rolling restart which catches a job in flight.
+ * <p>
+ * <b>A job which belongs to another application.</b> A worker subscribes to a job type
+ * cluster-wide, so where two applications on one cluster deploy a BPMN process of the same name,
+ * each of them is served the other's listener jobs. The core answers such a delivery with
+ * {@link DeliveryOfAnUnknownWorkflowException}, and this class fails the job with it like any
+ * other failure: the incident is the point. Raising the retries so the delivery costs the owning
+ * application nothing would hide the fact that two applications share a cluster and take each
+ * other's work, and nobody would ever find out. What the incident carries is the core's message,
+ * which explains the situation instead of blaming whoever reads it.
  * <p>
  * <b>What this protocol does not cover.</b> Only what happens after a handler calls in. An
  * exception thrown by the handler BEFORE that call never reaches this class: the Camunda
@@ -243,19 +253,7 @@ public final class Camunda8ListenerJobs {
         return false;
       }
       final var howToFail = failure.get();
-      log
-          .warn(
-              "Camunda8[{}]: processing the {} job '{}' (type '{}') failed - failing the job with {} "
-                  + "retries left{}",
-              adapterId,
-              kind,
-              job.getKey(),
-              job.getType(),
-              howToFail.retriesLeft(),
-              howToFail.retriesLeft() == 0
-                  ? " (an incident is raised for the operator)"
-                  : "",
-              e);
+      reportTheFailure(adapterId, kind, job, howToFail, e);
       Camunda8CommandRetry
           .send(
               adapterId,
@@ -282,6 +280,62 @@ public final class Camunda8ListenerJobs {
               });
       return false;
     }
+
+  }
+
+  /**
+   * Says in the log what the incident is about to say at the cluster.
+   * <p>
+   * One failure is reported differently from all the others.
+   * {@link DeliveryOfAnUnknownWorkflowException} means the core found no workflow aggregate of
+   * the id this job named, which where two applications share a cluster usually means the job
+   * belongs to the other one. Nothing of that is a defect of the code which ran, so the line
+   * says what it is and leaves the stack trace out: the message names the workflow, both
+   * situations it can be and what to do about each, and a trace would only add which line of
+   * the core read the database. Every other failure keeps its trace, because there the trace
+   * is where the cause is.
+   *
+   * @param adapterId The adapter id whose worker delivered the job
+   * @param kind What kind of listener this is
+   * @param job The listener job
+   * @param howToFail How the failure is about to be reported to the cluster
+   * @param e What the listener failed with
+   */
+  private static void reportTheFailure(
+      final String adapterId,
+      final String kind,
+      final ActivatedJob job,
+      final Failure howToFail,
+      final Exception e) {
+
+    final var incidentIsRaised = howToFail.retriesLeft() == 0
+        ? " (an incident is raised for the operator)"
+        : "";
+    if (e instanceof DeliveryOfAnUnknownWorkflowException) {
+      log
+          .warn(
+              "Camunda8[{}]: the {} job '{}' (type '{}') is about a workflow this application does "
+                  + "not own - failing the job with {} retries left{}. The incident reads: {}",
+              adapterId,
+              kind,
+              job.getKey(),
+              job.getType(),
+              howToFail.retriesLeft(),
+              incidentIsRaised,
+              e.getMessage());
+      return;
+    }
+    log
+        .warn(
+            "Camunda8[{}]: processing the {} job '{}' (type '{}') failed - failing the job with {} "
+                + "retries left{}",
+            adapterId,
+            kind,
+            job.getKey(),
+            job.getType(),
+            howToFail.retriesLeft(),
+            incidentIsRaised,
+            e);
 
   }
 
