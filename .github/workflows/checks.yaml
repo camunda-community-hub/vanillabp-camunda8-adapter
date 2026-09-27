@@ -151,6 +151,39 @@ jobs:
             </profiles>
           </project>
           POM
+          # a profile written on one line, with the preview line right after it. A reading
+          # which looks for the end of a profile in the lines BELOW its id runs into the
+          # next profile here and answers 'true' for the GA line, without a word. That was
+          # the state until this fixture was written.
+          cat > "$fixture/oneline.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile><id>line-8.9</id><properties><camunda8.line>8.9</camunda8.line></properties></profile>
+              <profile><id>line-8.10</id><properties><camunda8.line.preview>true</camunda8.line.preview></properties></profile>
+            </profiles>
+          </project>
+          POM
+          # a POM which defines no line at all: whoever calls this has the wrong POM, and
+          # picking an answer for them is the one thing the script may not do
+          cat > "$fixture/nolines.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile>
+                <id>release</id>
+              </profile>
+            </profiles>
+          </project>
+          POM
+          # two profiles claiming the same line: which of them decides is not this
+          # script's to pick either
+          cat > "$fixture/twice.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile><id>line-8.9</id><properties><camunda8.line.preview>true</camunda8.line.preview></properties></profile>
+              <profile><id>line-8.9</id><properties></properties></profile>
+            </profiles>
+          </project>
+          POM
           says() {
             got="$(bin/line-preview.sh "$1" "$2")"
             [ "$got" = "$3" ] || {
@@ -161,6 +194,8 @@ jobs:
           says 8.10 "$fixture/pom.xml" true
           says 8.9 "$fixture/pom.xml" false
           says 8.8 "$fixture/pom.xml" false
+          says 8.9 "$fixture/oneline.xml" false
+          says 8.10 "$fixture/oneline.xml" true
           refuses() {
             status=0
             bin/line-preview.sh "$1" "$2" || status=$?
@@ -169,10 +204,12 @@ jobs:
               exit 1
             }
           }
-          echo "The three readings below have to fail. Their messages are the point:"
+          echo "The five readings below have to fail. Their messages are the point:"
           refuses 8.11 "$fixture/pom.xml"
           refuses 8.9 "$fixture/broken.xml"
           refuses 8.9 "$fixture/gone.xml"
+          refuses 8.9 "$fixture/nolines.xml"
+          refuses 8.9 "$fixture/twice.xml"
       - name: Every line of this POM is readable
         # the fixtures say the reading works, this says the POM is still written the way
         # the reading expects, whatever the lines are called today
