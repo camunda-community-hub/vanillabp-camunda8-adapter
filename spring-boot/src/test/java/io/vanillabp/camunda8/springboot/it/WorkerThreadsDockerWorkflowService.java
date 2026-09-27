@@ -69,6 +69,16 @@ public class WorkerThreadsDockerWorkflowService {
   public static volatile CountDownLatch QUICK_SERVED = new CountDownLatch(1);
 
   /**
+   * Counted down when the blocking task was delivered a SECOND time while the first
+   * delivery is still inside its slot.
+   * <p>
+   * That is the one property of the Camunda client this adapter relies on and cannot see
+   * from the outside: a worker has to keep asking the cluster while a job of its own is in
+   * a handler. See {@code Camunda8KeepsAskingWhileAHandlerRunsIT}.
+   */
+  public static volatile CountDownLatch BLOCKING_TASK_SERVED_AGAIN_WHILE_BLOCKED = new CountDownLatch(1);
+
+  /**
    * Whether the blocking handler was still inside when the other one ran - a quick
    * handler served only AFTER the block would prove nothing.
    */
@@ -97,6 +107,7 @@ public class WorkerThreadsDockerWorkflowService {
     RELEASE_THE_SLOT = new CountDownLatch(1);
     BLOCKING_ENTERED = new CountDownLatch(1);
     QUICK_SERVED = new CountDownLatch(1);
+    BLOCKING_TASK_SERVED_AGAIN_WHILE_BLOCKED = new CountDownLatch(1);
     QUICK_SERVED_WHILE_BLOCKED.set(false);
     QUICK_SERVED_ON_VIRTUAL_THREAD.set(false);
     BLOCKING.set(false);
@@ -132,6 +143,11 @@ public class WorkerThreadsDockerWorkflowService {
       } finally {
         BLOCKING.set(false);
       }
+    } else if (BLOCKING.get()) {
+      // a second job of THIS worker, delivered while the first one still holds its slot.
+      // Only a client which kept asking while a handler of that worker was running can
+      // have brought it here
+      BLOCKING_TASK_SERVED_AGAIN_WHILE_BLOCKED.countDown();
     }
 
   }
