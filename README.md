@@ -2269,6 +2269,16 @@ Only the elements of the process being wired are judged. A level a CALLER contri
 once the whole workflow module is wired, and it belongs to the model of that caller, where the same
 question is asked about it.
 
+The same question is asked about a version the cluster still HOLDS, and there the answer travels
+instead of ending anything. Nobody can redraw such a model, so `taskSpecsOf` puts the elements
+without an item into `BpmnTaskSpec#multiInstanceElementsWithoutAnItem` of every task it reads, and
+the core holds them against the methods which still serve that version. The chains come from
+`Camunda8MultiInstance#chainsOf`, which walks the held model without injecting anything into it:
+the chains this boot recorded belong to the model just deployed, and a model a check only reads
+must not be changed by the reading. A held model whose element ids cannot be told apart by their
+variable names answers `null` rather than ending a boot over a version nobody can change;
+`Camunda8ItemsOfHeldVersionsTest` reads a held version with an item and one without.
+
 Those names cannot be shadowed, so a job of a nested task carries one set per iteration it
 runs in. Which iterations enclose which element is model knowledge and is remembered while
 wiring, since a job reports the id of its own element only. The mappings are added once and

@@ -605,6 +605,11 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // than while a process is wired, because the questions it serves are asked about ids
     // this application wires nothing for
     processVersions.setHeldModelOfVersion(this::heldModelOfVersion);
+    // the same extraction the wiring runs over the model this boot brings serves the models
+    // of OLDER versions, so both directions see a model the same way. Handed over here
+    // rather than while a process is wired, for the reason above: the check reads versions
+    // of an id this application may bring no model for at all
+    processVersions.setTasksOfModel(this::taskSpecsOf);
     processVersions.setStartEventsOfModel(this::startEventSpecsOf);
     processVersions.setConcurrentTokenElementsOfModel(this::concurrentTokenElementIdsOf);
     processVersions.setIdentifiersOfModel(this::identifiersOfModel);
@@ -1273,10 +1278,6 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // @TaskId would wait for a completion nobody can send. Asked of the core here, where a
     // modeller can still change the model, rather than at the first job
     refuseAsynchronousListenerMethods(workflowModuleId, bpmnProcessId, listenersOfThisProcess);
-    // The same extraction serves the models of OLDER versions the cluster
-    // still holds, so both directions see a model the same way
-    processVersions.setTasksOfModel(this::taskSpecsOf);
-
     // The cluster can be asked which versions of this process it has, which
     // is what a version specification naming a version TAG needs
     workflowTaskWiring
@@ -2352,18 +2353,26 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
     final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
     final var specs = new ArrayList<BpmnTaskSpec>();
+    // which rounds a task of THIS model iterates in without being handed their value. Read
+    // off the held model rather than off the chains this boot recorded: those belong to the
+    // model just deployed, and the question is about the one the cluster still holds. A model
+    // whose shape cannot be read answers null, and the core then asks nothing about it
+    final var heldChains = Camunda8MultiInstance.chainsOf(model, scopedBpmnProcessId);
     Camunda8TaskWiring
         .tasksOf(model, scopedBpmnProcessId, connectorsAllowedFor(workflowModuleId, bpmnProcessId).allowed())
         .stream()
         .map(task -> new BpmnTaskSpec(
-            task.activityId(), plainTaskDefinition(workflowModuleId, bpmnProcessId, task.taskDefinition())))
+            task.activityId(), plainTaskDefinition(workflowModuleId, bpmnProcessId,
+                task.taskDefinition()), false, null, itemsTheHeldModelNeverNames(heldChains, scopedBpmnProcessId,
+                    task.activityId())))
         .forEach(specs::add);
     Camunda8TaskWiring
         .userTasksOfHeldModel(model, scopedBpmnProcessId)
         .stream()
-        .map(userTask -> BpmnTaskSpec.userTask(
-            userTask.activityId(),
-            plainTaskDefinition(workflowModuleId, bpmnProcessId, userTask.externalFormReference())))
+        .map(userTask -> new BpmnTaskSpec(
+            userTask.activityId(), plainTaskDefinition(workflowModuleId, bpmnProcessId,
+                userTask.externalFormReference()), true, null, itemsTheHeldModelNeverNames(heldChains,
+                    scopedBpmnProcessId, userTask.activityId())))
         .forEach(specs::add);
     // the listeners of a version the cluster still holds are tasks here as well, so a method
     // serving one of them is not reported as unwired while workflows still run on that version.
@@ -2383,6 +2392,29 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           .forEach(specs::add);
     }
     return specs;
+
+  }
+
+  /**
+   * The multi-instance elements enclosing one element of a HELD model which name no
+   * <code>inputElement</code>, outermost first.
+   *
+   * @param heldChains The chains of that model, or <code>null</code> where it cannot be read
+   * @param scopedBpmnProcessId The process id the cluster knows
+   * @param elementId The element a method serves
+   * @return The element ids, or <code>null</code> where the shape was not read
+   */
+  private static List<String> itemsTheHeldModelNeverNames(
+      final Camunda8MultiInstance.Registry heldChains,
+      final String scopedBpmnProcessId,
+      final String elementId) {
+
+    if (heldChains == null) {
+      return null;
+    }
+    return List
+        .copyOf(
+            Camunda8MultiInstanceItems.elementsWithoutAnItem(heldChains, scopedBpmnProcessId, elementId));
 
   }
 

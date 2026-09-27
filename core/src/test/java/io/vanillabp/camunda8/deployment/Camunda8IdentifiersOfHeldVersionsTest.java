@@ -3,34 +3,14 @@ package io.vanillabp.camunda8.deployment;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.RETURNS_SELF;
-import static org.mockito.Mockito.mock;
 
-import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
 
-import io.camunda.client.CamundaClient;
-import io.camunda.client.api.CamundaFuture;
-import io.camunda.client.api.fetch.ProcessDefinitionGetXmlRequest;
-import io.camunda.client.api.search.filter.ProcessDefinitionFilter;
-import io.camunda.client.api.search.request.ProcessDefinitionSearchRequest;
-import io.camunda.client.api.search.response.ProcessDefinition;
-import io.camunda.client.api.search.response.SearchResponse;
-import io.camunda.client.api.search.response.SearchResponsePage;
-import io.vanillabp.camunda8.TestCollaborators;
-import io.vanillabp.camunda8.TestScoping;
-import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
-import io.vanillabp.camunda8.client.Camunda8ClientFactory;
-import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
-import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ScopedIdentifierKind;
 import io.vanillabp.integration.adapter.spi.version.ProcessVersionCatalog;
@@ -57,12 +37,10 @@ public class Camunda8IdentifiersOfHeldVersionsTest {
 
   private static final String PROCESS = "LoanApproval";
 
-  private final CamundaClient client = mock(CamundaClient.class);
-
   /**
-   * Which definition keys the XML was asked for, which is one request per fetch.
+   * The cluster the last question was put to - it counts how often a model was fetched.
    */
-  private final List<Long> xmlRequests = new ArrayList<>();
+  private AClusterHolding cluster;
 
   /**
    * A model as the cluster runs it: every name carries the prefix the deployment wrote into
@@ -155,120 +133,21 @@ public class Camunda8IdentifiersOfHeldVersionsTest {
 
     assertEquals(
         1,
-        xmlRequests.size(),
+        cluster.xmlRequests().size(),
         () -> "fetching the XML twice for one version is what the model in turn is held for: "
-            + xmlRequests);
+            + cluster.xmlRequests());
 
   }
 
   /**
-   * A cluster holding the given versions of the process, each with the model it runs, and an
-   * adapter which prefixes its identifiers - the mode a held model's names have to be
-   * stripped under.
+   * The catalog of a cluster holding the given versions - the boundary to the migration SPI,
+   * with the fetches of the models counted by {@link AClusterHolding}.
    */
   private ProcessVersionCatalog aClusterHolding(
       final Map<Integer, String> modelsPerVersion) {
 
-    final var search = mock(ProcessDefinitionSearchRequest.class, RETURNS_SELF);
-    // which version the filter named, 0 for a search asking for every version this cluster
-    // holds - a search for a version it does not hold answers nothing, which is what makes
-    // the question about a version nobody holds any more answerable at all
-    final var askedFor = new int[]{
-        0
-    };
-    Mockito
-        .lenient()
-        .when(search.filter(Mockito.<Consumer<ProcessDefinitionFilter>>any()))
-        .thenAnswer(invocation -> {
-          askedFor[0] = 0;
-          final Consumer<ProcessDefinitionFilter> filter = invocation.getArgument(0);
-          final var recording = mock(ProcessDefinitionFilter.class, RETURNS_SELF);
-          Mockito.lenient().when(recording.version(Mockito.anyInt())).thenAnswer(call -> {
-            askedFor[0] = call.getArgument(0);
-            return recording;
-          });
-          filter.accept(recording);
-          return search;
-        });
-    Mockito
-        .lenient()
-        .when(search.send())
-        .thenAnswer(invocation -> future(response(modelsPerVersion
-            .keySet()
-            .stream()
-            .sorted()
-            .filter(version -> (askedFor[0] == 0) || (askedFor[0] == version.intValue()))
-            .map(Camunda8IdentifiersOfHeldVersionsTest::definition)
-            .toList())));
-    Mockito.lenient().when(client.newProcessDefinitionSearchRequest()).thenReturn(search);
-    Mockito
-        .lenient()
-        .when(client.newProcessDefinitionGetXmlRequest(Mockito.anyLong()))
-        .thenAnswer(invocation -> {
-          final var definitionKey = (Long) invocation.getArgument(0);
-          xmlRequests.add(definitionKey);
-          final var xml = mock(ProcessDefinitionGetXmlRequest.class, RETURNS_SELF);
-          Mockito
-              .lenient()
-              .when(xml.send())
-              .thenAnswer(request -> future(modelsPerVersion.get(Integer.valueOf(definitionKey.intValue() - 1000))));
-          return xml;
-        });
-
-    final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing contacts: every request of this test meets the mock above
-    configuration.setRestAddress("http://localhost:1");
-    final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
-
-      @Override
-      public CamundaClient getClient() {
-        return client;
-      }
-
-    };
-    final var scoping = TestScoping.of(NameClashAvoidance.USE_PREFIX);
-    final var deploymentService = DeploymentServiceUnderTest.of(
-        "c8", clientFactory, TestCollaborators.of(new Camunda8DeploymentServiceTest.NoOpInvoker(), scoping), (
-            workflowModuleId,
-            bpmnProcessId,
-            taskDefinition) -> Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT,
-        Duration
-            .ofDays(14),
-        adapterId -> configuration, scoping);
-    return deploymentService.processVersionCatalogOf(MODULE, PROCESS);
-
-  }
-
-  private static ProcessDefinition definition(
-      final int version) {
-
-    final var definition = mock(ProcessDefinition.class);
-    Mockito.lenient().when(definition.getProcessDefinitionKey()).thenReturn(Long.valueOf(1000 + version));
-    Mockito.lenient().when(definition.getVersion()).thenReturn(version);
-    return definition;
-
-  }
-
-  private static <T> SearchResponse<T> response(
-      final List<T> items) {
-
-    @SuppressWarnings("unchecked")
-    final SearchResponse<T> response = mock(SearchResponse.class);
-    final var page = mock(SearchResponsePage.class);
-    Mockito.lenient().when(page.totalItems()).thenReturn(Long.valueOf(items.size()));
-    Mockito.lenient().when(response.items()).thenReturn(items);
-    Mockito.lenient().when(response.page()).thenReturn(page);
-    return response;
-
-  }
-
-  private static <T> CamundaFuture<T> future(
-      final T value) {
-
-    @SuppressWarnings("unchecked")
-    final CamundaFuture<T> future = mock(CamundaFuture.class);
-    Mockito.lenient().when(future.join()).thenReturn(value);
-    return future;
+    cluster = AClusterHolding.theseModels(modelsPerVersion);
+    return cluster.catalogOf(MODULE, PROCESS);
 
   }
 
