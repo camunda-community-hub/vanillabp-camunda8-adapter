@@ -7,9 +7,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import lombok.Getter;
-import lombok.Setter;
-
 /**
  * How one Camunda 8 adapter instance proves who it is - the block
  * <code>vanillabp.adapters.&lt;id&gt;.auth.*</code>.
@@ -37,8 +34,6 @@ import lombok.Setter;
  * Why these keys exist only at adapter level, and why there is no mtls among them, is decision 10
  * in the repository's DECISIONS.md.
  */
-@Getter
-@Setter
 public class Camunda8AuthConfiguration {
 
   /**
@@ -80,19 +75,224 @@ public class Camunda8AuthConfiguration {
    */
   private Method method;
 
+  /**
+   * The method named by the application, or nothing where the keys decide it.
+   *
+   * @return The named method, or <code>null</code> for auto-detection
+   */
+  public Method getMethod() {
+
+    return method;
+
+  }
+
+  /**
+   * The method named by the application, or nothing where the keys decide it.
+   *
+   * @param method The named method, or <code>null</code> for auto-detection
+   */
+  public void setMethod(
+      final Method method) {
+
+    this.method = method;
+
+  }
+
+  /**
+   * The user the basic method sends.
+   */
   private String username;
 
+  /**
+   * The user the basic method sends.
+   *
+   * @return The user name, or <code>null</code> where none is configured
+   */
+  public String getUsername() {
+
+    return username;
+
+  }
+
+  /**
+   * The user the basic method sends.
+   *
+   * @param username The user name, or <code>null</code> where none is configured
+   */
+  public void setUsername(
+      final String username) {
+
+    this.username = username;
+
+  }
+
+  /**
+   * The password the basic method sends beside the user.
+   */
   private String password;
 
+  /**
+   * The password the basic method sends beside the user.
+   *
+   * @return The password, or <code>null</code> where none is configured
+   */
+  public String getPassword() {
+
+    return password;
+
+  }
+
+  /**
+   * The password the basic method sends beside the user.
+   *
+   * @param password The password, or <code>null</code> where none is configured
+   */
+  public void setPassword(
+      final String password) {
+
+    this.password = password;
+
+  }
+
+  /**
+   * The client the OIDC method fetches its token as.
+   */
   private String clientId;
 
+  /**
+   * The client the OIDC method fetches its token as.
+   *
+   * @return The client id, or <code>null</code> where none is configured
+   */
+  public String getClientId() {
+
+    return clientId;
+
+  }
+
+  /**
+   * The client the OIDC method fetches its token as.
+   *
+   * @param clientId The client id, or <code>null</code> where none is configured
+   */
+  public void setClientId(
+      final String clientId) {
+
+    this.clientId = clientId;
+
+  }
+
+  /**
+   * The secret that OIDC client proves itself with.
+   */
   private String clientSecret;
 
+  /**
+   * The secret that OIDC client proves itself with.
+   *
+   * @return The client secret, or <code>null</code> where none is configured
+   */
+  public String getClientSecret() {
+
+    return clientSecret;
+
+  }
+
+  /**
+   * The secret that OIDC client proves itself with.
+   *
+   * @param clientSecret The client secret, or <code>null</code> where none is configured
+   */
+  public void setClientSecret(
+      final String clientSecret) {
+
+    this.clientSecret = clientSecret;
+
+  }
+
+  /**
+   * The token endpoint the OIDC method asks for a token.
+   */
   private String authorizationServerUrl;
 
+  /**
+   * The token endpoint the OIDC method asks for a token.
+   *
+   * @return The URL, or <code>null</code> where none is configured
+   */
+  public String getAuthorizationServerUrl() {
+
+    return authorizationServerUrl;
+
+  }
+
+  /**
+   * The token endpoint the OIDC method asks for a token.
+   *
+   * @param authorizationServerUrl The URL, or <code>null</code> where none is configured
+   */
+  public void setAuthorizationServerUrl(
+      final String authorizationServerUrl) {
+
+    this.authorizationServerUrl = authorizationServerUrl;
+
+  }
+
+  /**
+   * What the cluster expects to read as the audience of the token.
+   */
   private String audience;
 
+  /**
+   * What the cluster expects to read as the audience of the token.
+   *
+   * @return The audience, or <code>null</code> where none is configured
+   */
+  public String getAudience() {
+
+    return audience;
+
+  }
+
+  /**
+   * What the cluster expects to read as the audience of the token.
+   *
+   * @param audience The audience, or <code>null</code> where none is configured
+   */
+  public void setAudience(
+      final String audience) {
+
+    this.audience = audience;
+
+  }
+
+  /**
+   * The scope the token is asked for, where the authorization server wants one.
+   */
   private String scope;
+
+  /**
+   * The scope the token is asked for, where the authorization server wants one.
+   *
+   * @return The scope, or <code>null</code> where none is configured
+   */
+  public String getScope() {
+
+    return scope;
+
+  }
+
+  /**
+   * The scope the token is asked for, where the authorization server wants one.
+   *
+   * @param scope The scope, or <code>null</code> where none is configured
+   */
+  public void setScope(
+      final String scope) {
+
+    this.scope = scope;
+
+  }
 
   /**
    * Where the client keeps the tokens it fetched, so a restart does not fetch a new one
@@ -102,10 +302,56 @@ public class Camunda8AuthConfiguration {
   private String credentialsCachePath;
 
   /**
+   * Where the client keeps the tokens it fetched.
+   *
+   * @return The path, or <code>null</code> to leave the client's own default alone
+   */
+  public String getCredentialsCachePath() {
+
+    return credentialsCachePath;
+
+  }
+
+  /**
+   * Where the client keeps the tokens it fetched.
+   *
+   * @param credentialsCachePath The path, or <code>null</code> to leave the client's own default alone
+   */
+  public void setCredentialsCachePath(
+      final String credentialsCachePath) {
+
+    this.credentialsCachePath = credentialsCachePath;
+
+  }
+
+  /**
    * How long connecting to the authorization server may take. Default: the client's 5
    * seconds.
    */
   private Duration connectTimeout;
+
+  /**
+   * How long connecting to the authorization server may take.
+   *
+   * @return The timeout, or <code>null</code> to leave the client's own default alone
+   */
+  public Duration getConnectTimeout() {
+
+    return connectTimeout;
+
+  }
+
+  /**
+   * How long connecting to the authorization server may take.
+   *
+   * @param connectTimeout The timeout, or <code>null</code> to leave the client's own default alone
+   */
+  public void setConnectTimeout(
+      final Duration connectTimeout) {
+
+    this.connectTimeout = connectTimeout;
+
+  }
 
   /**
    * How long reading the token response may take. Default: the client's 5 seconds.
@@ -113,14 +359,112 @@ public class Camunda8AuthConfiguration {
   private Duration readTimeout;
 
   /**
+   * How long reading the token response may take.
+   *
+   * @return The timeout, or <code>null</code> to leave the client's own default alone
+   */
+  public Duration getReadTimeout() {
+
+    return readTimeout;
+
+  }
+
+  /**
+   * How long reading the token response may take.
+   *
+   * @param readTimeout The timeout, or <code>null</code> to leave the client's own default alone
+   */
+  public void setReadTimeout(
+      final Duration readTimeout) {
+
+    this.readTimeout = readTimeout;
+
+  }
+
+  /**
    * The keystore holding the client certificate the AUTHORIZATION SERVER asks for (not
    * the cluster - see the class comment).
    */
   private String keystorePath;
 
+  /**
+   * The keystore holding the client certificate the authorization server asks for.
+   *
+   * @return The path, or <code>null</code> where none is configured
+   */
+  public String getKeystorePath() {
+
+    return keystorePath;
+
+  }
+
+  /**
+   * The keystore holding the client certificate the authorization server asks for.
+   *
+   * @param keystorePath The path, or <code>null</code> where none is configured
+   */
+  public void setKeystorePath(
+      final String keystorePath) {
+
+    this.keystorePath = keystorePath;
+
+  }
+
+  /**
+   * The password that keystore is opened with.
+   */
   private String keystorePassword;
 
+  /**
+   * The password that keystore is opened with.
+   *
+   * @return The password, or <code>null</code> where none is configured
+   */
+  public String getKeystorePassword() {
+
+    return keystorePassword;
+
+  }
+
+  /**
+   * The password that keystore is opened with.
+   *
+   * @param keystorePassword The password, or <code>null</code> where none is configured
+   */
+  public void setKeystorePassword(
+      final String keystorePassword) {
+
+    this.keystorePassword = keystorePassword;
+
+  }
+
+  /**
+   * The password of the private key inside that keystore.
+   */
   private String keystoreKeyPassword;
+
+  /**
+   * The password of the private key inside that keystore.
+   *
+   * @return The password, or <code>null</code> where none is configured
+   */
+  public String getKeystoreKeyPassword() {
+
+    return keystoreKeyPassword;
+
+  }
+
+  /**
+   * The password of the private key inside that keystore.
+   *
+   * @param keystoreKeyPassword The password, or <code>null</code> where none is configured
+   */
+  public void setKeystoreKeyPassword(
+      final String keystoreKeyPassword) {
+
+    this.keystoreKeyPassword = keystoreKeyPassword;
+
+  }
 
   /**
    * The truststore the AUTHORIZATION SERVER's certificate is verified against (not the
@@ -128,7 +472,56 @@ public class Camunda8AuthConfiguration {
    */
   private String truststorePath;
 
+  /**
+   * The truststore the certificate of the authorization server is verified against.
+   *
+   * @return The path, or <code>null</code> where none is configured
+   */
+  public String getTruststorePath() {
+
+    return truststorePath;
+
+  }
+
+  /**
+   * The truststore the certificate of the authorization server is verified against.
+   *
+   * @param truststorePath The path, or <code>null</code> where none is configured
+   */
+  public void setTruststorePath(
+      final String truststorePath) {
+
+    this.truststorePath = truststorePath;
+
+  }
+
+  /**
+   * The password that truststore is opened with.
+   */
   private String truststorePassword;
+
+  /**
+   * The password that truststore is opened with.
+   *
+   * @return The password, or <code>null</code> where none is configured
+   */
+  public String getTruststorePassword() {
+
+    return truststorePassword;
+
+  }
+
+  /**
+   * The password that truststore is opened with.
+   *
+   * @param truststorePassword The password, or <code>null</code> where none is configured
+   */
+  public void setTruststorePassword(
+      final String truststorePassword) {
+
+    this.truststorePassword = truststorePassword;
+
+  }
 
   /**
    * The certificate authority the CLUSTER's TLS certificate is verified against, for a
@@ -136,6 +529,29 @@ public class Camunda8AuthConfiguration {
    * method: a cluster may want TLS without wanting credentials, and the other way round.
    */
   private String caCertificatePath;
+
+  /**
+   * The certificate authority the TLS certificate of the cluster is verified against.
+   *
+   * @return The path, or <code>null</code> where none is configured
+   */
+  public String getCaCertificatePath() {
+
+    return caCertificatePath;
+
+  }
+
+  /**
+   * The certificate authority the TLS certificate of the cluster is verified against.
+   *
+   * @param caCertificatePath The path, or <code>null</code> where none is configured
+   */
+  public void setCaCertificatePath(
+      final String caCertificatePath) {
+
+    this.caCertificatePath = caCertificatePath;
+
+  }
 
   /**
    * Whether NO authentication key is set at all - an adapter configured before this
