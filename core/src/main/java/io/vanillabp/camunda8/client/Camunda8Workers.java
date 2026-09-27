@@ -1,5 +1,6 @@
 package io.vanillabp.camunda8.client;
 
+import io.camunda.client.api.worker.JobWorker;
 import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 import io.vanillabp.camunda8.observability.Camunda8Metrics;
 
@@ -19,6 +20,10 @@ import io.vanillabp.camunda8.observability.Camunda8Metrics;
  * see how much work is queued in front of the execution slots, and a worker which does not
  * report them is not a quieter worker, it is an invisible one. Calling this is how a
  * worker of an extension looks like a worker of the adapter.
+ * <p>
+ * The same goes for {@link #open}, which is where a worker of this adapter id is counted:
+ * the workers share the connection pool of one client, so a worker opened past this class
+ * is a connection nobody counts.
  */
 public final class Camunda8Workers {
 
@@ -88,6 +93,37 @@ public final class Camunda8Workers {
     return configuration.leasesItsJobs()
         ? Camunda8JobLease.leaseTheActivations(builder)
         : builder;
+
+  }
+
+  /**
+   * Opens the worker this builder describes and counts it among the workers of its adapter
+   * id.
+   * <p>
+   * Counting happens where a worker is OPENED and not where it is ordered, so every worker
+   * on this client is in the number no matter who wanted it. The adapter opens its own
+   * workers through here, and an EXTENSION which opens one on the same client calls it for
+   * the same reason it calls {@link #applyWorkerOptions}: the workers share one connection
+   * pool, and a worker missing from the count is a connection missing from the sum the
+   * adapter holds against that pool (see {@link Camunda8WorkerConnections}). Where the
+   * extension opens its worker after the start is over, this is also what makes the check
+   * run a second time.
+   * <p>
+   * The factory to pass is the one whose client this worker polls with. An extension which
+   * brings a CLIENT OF ITS OWN has a pool of its own as well: its workers are none of this
+   * adapter's business and it opens them without coming through here.
+   *
+   * @param builder The worker builder, ready to open
+   * @param clientFactory The factory of the adapter id whose client this worker polls with
+   * @return The open worker, which the caller closes when it is done with it
+   */
+  public static JobWorker open(
+      final JobWorkerBuilderStep1.JobWorkerBuilderStep3 builder,
+      final Camunda8ClientFactory clientFactory) {
+
+    final var worker = builder.open();
+    clientFactory.aWorkerWasOpened(worker);
+    return worker;
 
   }
 

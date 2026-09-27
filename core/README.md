@@ -255,6 +255,19 @@ with different opinions is the starvation the ratchet describes, and the decisio
 adapter's configuration rather than to the extension. Why there is no default, and what a lease
 costs a rollback, is decision 36 in the repository's `DECISIONS.md`.
 
+`Camunda8Workers.open` opens the worker and counts it among the workers of its adapter id. The
+workers of one client share its HTTP connection pool, and every one of them holds a connection
+while it waits for work, so the number the adapter holds against that pool has to be the number
+of workers really open. Counting happens here, where a worker is opened, rather than where the
+adapter ordered its own: an extension's worker is then in the number too, and one opened long
+after the start makes the check run again. An extension which brings a client of its own has a
+pool of its own and does not come through here. What the number is held against is decision 50
+in the repository's `DECISIONS.md`.
+
+`Camunda8ClientFactory.countTheOpenWorkers` is that number, and it is the answer for anything
+else which wants to know how much of the pool is taken. A worker which was closed gave its
+connection back and is not in it.
+
 `Camunda8ListenerJobs.completeOrFail` runs a listener job the way this adapter runs its own -
 registered with the drain, both answers through `Camunda8CommandRetry`, and a failure during a
 shutdown left to its lock rather than reported. That last part is what a listener whose failure

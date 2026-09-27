@@ -330,6 +330,22 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * Where the findings of this adapter id go.
+   * <p>
+   * Readable because the wiring of both platforms is what hands it over, and a wiring which
+   * broke writes the findings into the log instead of the block. Both are one line, so
+   * nobody would notice; a test of a booting application asks this instead.
+   *
+   * @return The collection point this service reports into, or <code>null</code> where it
+   *         writes its findings to the log
+   */
+  public StartupReport getStartupReport() {
+
+    return startupReport;
+
+  }
+
+  /**
    * Says a finding about this adapter id, into the collected block where the platform
    * published one.
    *
@@ -352,10 +368,15 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * How many workers each workflow module of this adapter id has open. Kept per module
-   * rather than as one sum, so a module which is stopped and started again is counted once.
+   * Whether a workflow module of this adapter id is opening its workers right now.
+   * <p>
+   * While it is, a worker which opens is not held against the pool yet. The check names a
+   * number, and the number a module reached halfway through is not the one it ends with;
+   * the module asks the check itself once its last worker is open. What this leaves open is
+   * the worker an EXTENSION opens while a module starts, which is then counted with that
+   * module's.
    */
-  private final Map<String, Integer> workersPerWorkflowModule = new ConcurrentHashMap<>();
+  private volatile boolean aModuleIsOpeningItsWorkers = false;
 
   /**
    * Whether this start was already told that the workers outgrew the connection pool. The
@@ -363,46 +384,42 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * would fill the block with the same sentence carrying different numbers. What the
    * developer does about it is the same either way, and a start after they raised the pool
    * says the number it is then short of, if any.
+   * <p>
+   * Volatile because an extension opening a worker asks the check from its own thread, and
+   * the answer to "was this said already" is the one the start wrote.
    */
-  private boolean saidThatTheWorkersOutgrewThePool = false;
+  private volatile boolean saidThatTheWorkersOutgrewThePool = false;
 
   /**
-   * Holds the workers a workflow module just opened against the connection pool of the
-   * client they poll with, and says so where they do not fit.
+   * Holds the workers which are open on the client of this adapter id against its
+   * connection pool, and says so where they do not fit.
    * <p>
    * The pool belongs to the client and the client belongs to the adapter id, so the number
-   * which counts is the one over all workflow modules of this service. It is known as soon
-   * as a module opened its workers, which is why this is a startup check and not something
-   * a running application finds out the hard way, one <code>request-timeout</code> at a
-   * time (see {@link Camunda8WorkerConnections}).
+   * which counts is the one over all workflow modules of this service AND over the workers
+   * an extension opened on the same client. It is known as soon as a module opened its
+   * workers, which is why this is a startup check and not something a running application
+   * finds out the hard way, one <code>request-timeout</code> at a time (see
+   * {@link Camunda8WorkerConnections}).
    * <p>
    * A client which prefers gRPC activates its jobs over that transport, where this pool is
    * not what limits the workers, so nothing is said for it.
    *
-   * @param workflowModuleId The module which just opened its workers
-   * @param workers How many workers it opened
+   * @param workers How many workers are open on that client
    * @param clientConfiguration The configuration of the client of this adapter id, as the
    *          CLIENT resolved it, so the pool is the configured one or the client's default
    */
   void holdTheWorkersAgainstTheConnectionPool(
-      final String workflowModuleId,
       final int workers,
       final CamundaClientConfiguration clientConfiguration) {
 
-    workersPerWorkflowModule.put(workflowModuleId, workers);
     if (!clientConfiguration.preferRestOverGrpc()) {
       return;
     }
     if (saidThatTheWorkersOutgrewThePool) {
       return;
     }
-    final var workersOfThisAdapter = workersPerWorkflowModule
-        .values()
-        .stream()
-        .mapToInt(Integer::intValue)
-        .sum();
     final var message = Camunda8WorkerConnections.moreWorkersThanConnections(
-        workersOfThisAdapter,
+        workers,
         clientConfiguration.getMaxHttpConnections(),
         clientConfiguration.getDefaultRequestTimeout());
     if (message == null) {
@@ -410,6 +427,27 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     }
     saidThatTheWorkersOutgrewThePool = true;
     warnAboutThisAdapter(StartupTopic.CONFIGURATION, message);
+
+  }
+
+  /**
+   * The same check, on the workers the client has open right now.
+   * <p>
+   * It runs at the end of a module's start, and it runs again whenever a worker opens
+   * outside one - which is the worker of an EXTENSION, opened through
+   * {@link Camunda8Workers#open(JobWorkerBuilderStep1.JobWorkerBuilderStep3, Camunda8ClientFactory)}
+   * on the client of this adapter id. Such a worker holds a connection of the same pool, so
+   * an application which fitted while the adapter counted alone can cross the limit
+   * afterwards, and then nothing would ever say so.
+   */
+  void holdTheOpenWorkersAgainstTheConnectionPool() {
+
+    if (aModuleIsOpeningItsWorkers) {
+      return;
+    }
+    holdTheWorkersAgainstTheConnectionPool(
+        clientFactory.countTheOpenWorkers(),
+        clientFactory.getClient().getConfiguration());
 
   }
 
@@ -601,6 +639,10 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         .provideModelsTheClusterHolds(
             new Camunda8ModelsTheClusterHolds(
                 adapterId, clientFactory.getDeployedProcesses(), this::readModelsTheClusterHolds));
+    // and what happens when a worker opens on this client: the workers share its
+    // connection pool, and an extension opening one after the start is the case nothing
+    // else would ever hold against that pool
+    clientFactory.provideTheOpenWorkerCheck(this::holdTheOpenWorkersAgainstTheConnectionPool);
     // and how the version catalog reaches one model out of that picture. Set here rather
     // than while a process is wired, because the questions it serves are asked about ids
     // this application wires nothing for
@@ -2752,6 +2794,22 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * Opens a worker of this adapter id through {@link Camunda8Workers}, which is where it is
+   * counted against the connection pool of the client it polls with - the adapter's own
+   * workers on the same path as those of an EXTENSION, so the number holds whoever opened
+   * them.
+   *
+   * @param builder The worker builder, ready to open
+   * @return The open worker
+   */
+  private JobWorker openWorker(
+      final JobWorkerBuilderStep1.JobWorkerBuilderStep3 builder) {
+
+    return Camunda8Workers.open(builder, clientFactory);
+
+  }
+
+  /**
    * The same, for a worker which serves tasks: it leases only where none of the tasks it
    * serves can stay open.
    * <p>
@@ -3001,6 +3059,31 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       final String workflowModuleId,
       final Camunda8ProcessingContext bpmsProcessingContext) {
 
+    aModuleIsOpeningItsWorkers = true;
+    try {
+      openTheWorkersOfTheWorkflowModule(workflowModuleId, bpmsProcessingContext);
+    } finally {
+      aModuleIsOpeningItsWorkers = false;
+    }
+    // every worker of this module is open now, so this is the first moment the number of
+    // workers of this adapter id is known and the last one before the block of the start
+    // is written
+    holdTheOpenWorkersAgainstTheConnectionPool();
+
+  }
+
+  /**
+   * Opens the workers of one workflow module: one per task definition it serves, plus the
+   * ones its listeners, its BPMS-initiated starts and its reported ends need.
+   *
+   * @param workflowModuleId The module which starts processing
+   * @param bpmsProcessingContext What preparing its models produced, and where its open
+   *          workers are collected
+   */
+  private void openTheWorkersOfTheWorkflowModule(
+      final String workflowModuleId,
+      final Camunda8ProcessingContext bpmsProcessingContext) {
+
     // one polling worker per (adapter id, task definition): the job type routes
     // deliveries; tasks of DIFFERENT processes sharing a task definition are
     // served by one worker (job.getBpmnProcessId() routes to the right handlers).
@@ -3119,7 +3202,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         // subscribing for that tenant
         listenerWorkerBuilder = listenerWorkerBuilder.tenantId(listenerTenantId);
       }
-      final var worker = listenerWorkerBuilder.open();
+      final var worker = openWorker(listenerWorkerBuilder);
       bpmsProcessingContext.getOpenWorkers().add(worker);
       log.info(
           "Camunda8[{}]: opened user-task listener worker for '{}' of workflow module '{}'",
@@ -3180,7 +3263,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (listenerTenantId != null) {
         builder = builder.tenantId(listenerTenantId);
       }
-      bpmsProcessingContext.getOpenWorkers().add(builder.open());
+      bpmsProcessingContext.getOpenWorkers().add(openWorker(builder));
       log.info(
           "Camunda8[{}]: opened listener worker for '{}' of workflow module '{}'",
           adapterId,
@@ -3218,7 +3301,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           if (startTenantId != null) {
             startWorkerBuilder = startWorkerBuilder.tenantId(startTenantId);
           }
-          bpmsProcessingContext.getOpenWorkers().add(startWorkerBuilder.open());
+          bpmsProcessingContext.getOpenWorkers().add(openWorker(startWorkerBuilder));
           log.info(
               "Camunda8[{}]: opened start-event worker for '{}' of workflow module '{}'",
               adapterId,
@@ -3258,7 +3341,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           if (endTenantId != null) {
             endWorkerBuilder = endWorkerBuilder.tenantId(endTenantId);
           }
-          bpmsProcessingContext.getOpenWorkers().add(endWorkerBuilder.open());
+          bpmsProcessingContext.getOpenWorkers().add(openWorker(endWorkerBuilder));
           log.info(
               "Camunda8[{}]: opened workflow-end worker for BPMN process '{}' of workflow module '{}'",
               adapterId,
@@ -3301,7 +3384,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (workerTenantId != null) {
         workerBuilder = workerBuilder.tenantId(workerTenantId);
       }
-      final var worker = workerBuilder.open();
+      final var worker = openWorker(workerBuilder);
       bpmsProcessingContext.getOpenWorkers().add(worker);
       log.info(
           "Camunda8[{}]: opened job worker for task definition '{}' of workflow module '{}' "
@@ -3319,14 +3402,6 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         drain,
         jobTypesAWorkerIsAlreadyOpenFor(servedByJobType.keySet(), bpmsProcessingContext),
         openTaskProbe);
-
-    // every worker of this module is open now, so this is the first moment the number of
-    // workers of this adapter id is known and the last one before the block of the start
-    // is written
-    holdTheWorkersAgainstTheConnectionPool(
-        workflowModuleId,
-        bpmsProcessingContext.getOpenWorkers().size(),
-        client.getConfiguration());
 
   }
 
@@ -3606,7 +3681,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (tenantId != null) {
       workerBuilder = workerBuilder.tenantId(tenantId);
     }
-    bpmsProcessingContext.getOpenWorkers().add(workerBuilder.open());
+    bpmsProcessingContext.getOpenWorkers().add(openWorker(workerBuilder));
 
   }
 
@@ -3655,7 +3730,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (tenantId != null) {
       workerBuilder = workerBuilder.tenantId(tenantId);
     }
-    bpmsProcessingContext.getOpenWorkers().add(workerBuilder.open());
+    bpmsProcessingContext.getOpenWorkers().add(openWorker(workerBuilder));
 
   }
 
@@ -3703,7 +3778,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (tenantId != null) {
       workerBuilder = workerBuilder.tenantId(tenantId);
     }
-    bpmsProcessingContext.getOpenWorkers().add(workerBuilder.open());
+    bpmsProcessingContext.getOpenWorkers().add(openWorker(workerBuilder));
     openedJobTypes.add(jobType);
 
   }
@@ -3795,10 +3870,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         () -> workers.stream().allMatch(JobWorker::isClosed));
     drain.report(grace, outcome);
 
+    // and the connections they held are free again: a closed worker leaves the count of
+    // the client factory, so a module which starts once more is not counted twice
     workers.clear();
-    // and the connections they held are free again, so a module which starts once more
-    // is not counted twice against the pool
-    workersPerWorkflowModule.remove(workflowModuleId);
     final var registration = shutdownRegistrations.remove(workflowModuleId);
     if (registration != null) {
       registration.close();

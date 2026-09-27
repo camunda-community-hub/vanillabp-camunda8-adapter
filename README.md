@@ -145,11 +145,18 @@ number of workers against the size of the pool is what decides, not the version 
 The test module therefore configures `max-http-connections`, and an application which grows
 past a hundred workers has to do the same.
 
-The adapter now says so at startup. It counts the workers it opened for an adapter id against
-the pool its client resolved, and warns where those workers take the whole pool. The warning
+The adapter now says so at startup. It counts the workers open on the client of an adapter id
+against the pool that client resolved, and warns where those workers take the whole pool. A
+worker is counted where it is OPENED, so the workers an extension opens on the same client are
+in the number as well, and one opened after the start makes the check run again. The warning
 names both numbers and the key which raises the limit. The application starts either way, and
 the adapter raises nobody's pool on its own: how many connections an application opens against
 its cluster is a decision about its own resources.
+
+The warning goes into the block the platform writes at the end of a start, and both platforms
+hand the adapter that block while the application boots. `Camunda8StartupReportBootTest` and
+`Camunda8StartupReportTest` hold them to it. A wiring which broke would put the finding into the
+log instead, where it is one line among the others and reads like nothing happened.
 
 Snapshots have no suffix yet. Until the first release they are `2.0.0-SNAPSHOT` of the
 current GA line, which is what a build without a profile produces.
