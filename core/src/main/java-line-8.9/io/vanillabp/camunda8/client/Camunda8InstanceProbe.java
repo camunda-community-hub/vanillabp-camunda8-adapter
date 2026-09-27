@@ -13,9 +13,10 @@ import io.camunda.client.CamundaClient;
  * it ends, so a key it does not hold says nothing about whether the workflow completed or
  * never existed.
  * <p>
- * A process instance modification is the only one of the two candidates this line has. The
- * business id of an instance arrived with 8.10, and so did the command which assigns one, so
- * a caller of this line never asks for it, see decision 35 in the repository's DECISIONS.md.
+ * A process instance modification is the only one of the two candidates this line has. An
+ * instance of this line carries a business id, written when it is created, but the command
+ * which ASSIGNS one to an instance already running arrived with 8.10, so a caller of this line
+ * never asks for it, see decision 35 in the repository's DECISIONS.md.
  * <p>
  * Public because the process service which asks lives in another package of this module. It
  * is not on the list of what an extension of the pipeline is told, so it stays the adapter's
@@ -34,7 +35,8 @@ public final class Camunda8InstanceProbe {
    * @param processInstanceKey The instance to ask about
    * @param reservedElementId An element id no model of this adapter carries, which is what
    *          makes the modification a question rather than a change
-   * @param businessId Ignored on this line, where an instance has no business id to assign
+   * @param businessId Ignored on this line, which cannot assign a business id to an instance
+   *          which is already running
    */
   public static void askTheEngine(
       final CamundaClient client,
