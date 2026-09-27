@@ -145,11 +145,18 @@ number of workers against the size of the pool is what decides, not the version 
 The test module therefore configures `max-http-connections`, and an application which grows
 past a hundred workers has to do the same.
 
-The adapter now says so at startup. It counts the workers it opened for an adapter id against
-the pool its client resolved, and warns where those workers take the whole pool. The warning
+The adapter now says so at startup. It counts the workers open on the client of an adapter id
+against the pool that client resolved, and warns where those workers take the whole pool. A
+worker is counted where it is OPENED, so the workers an extension opens on the same client are
+in the number as well, and one opened after the start makes the check run again. The warning
 names both numbers and the key which raises the limit. The application starts either way, and
 the adapter raises nobody's pool on its own: how many connections an application opens against
 its cluster is a decision about its own resources.
+
+The warning goes into the block the platform writes at the end of a start, and both platforms
+hand the adapter that block while the application boots. `Camunda8StartupReportBootTest` and
+`Camunda8StartupReportTest` hold them to it. A wiring which broke would put the finding into the
+log instead, where it is one line among the others and reads like nothing happened.
 
 Snapshots have no suffix yet. Until the first release they are `2.0.0-SNAPSHOT` of the
 current GA line, which is what a build without a profile produces.
@@ -517,6 +524,63 @@ and `Camunda8StartupValidationBootTest` for the adapter nobody configured,
 for the half configured one, and `Camunda8ClientFactoryTest` for the client which is built
 without asking the cluster anything. That no message carries a secret is
 `Camunda8StartupValidationBootTest#fullyConfiguredAdapterBootsWithoutWarningAndWithoutEchoingSecrets`.
+
+### How many workers an application opens, and what one costs
+
+A worker subscribes to a JOB TYPE, and this adapter opens one worker per job type it has to
+serve. What a job type is composed of differs per kind, and that is why the number grows with
+the processes of a workflow module and not with the module:
+
+|   kind of worker   |                 one per                  |                                    what its job type is                                    |
+|--------------------|------------------------------------------|--------------------------------------------------------------------------------------------|
+| task               | task definition                          | the `zeebe:taskDefinition` of the model, prefixed where `name-clash-avoidance: use-prefix` |
+| user-task listener | Camunda-managed user task                | `io.vanillabp.userTask:` and the external form reference, which carries process and task   |
+| modelled listener  | job type somebody modelled               | whatever the model says                                                                    |
+| start event        | start event the cluster fires on its own | `io.vanillabp.bpmsStart:` and the process and the element                                  |
+| workflow end       | process with a `@WorkflowEnded` method   | `io.vanillabp.workflowEnded:` and the process                                              |
+| cancel listener    | process, on the `8.10` line              | the process                                                                                |
+
+None of those cuts is this adapter's to make differently on its own. A worker is served the
+jobs of the type it names, so two processes share a worker only where they share a job type,
+and the job type of a task is what the modeller wrote. Where VanillaBP composes the type
+itself the process is IN it on purpose: it is what tells a handler which BPMN process a job
+belongs to without a second question, and what lets a job timeout, a fetch list and the lease
+be resolved per process and per task.
+
+**What one worker costs.** Measured on 2026-09-27 with `Camunda8WhatAWorkerCostsIT`, which
+opens workers in batches of fifty against a cluster and reports the step from one reading to
+the next, so the fixed cost of a client is not counted as a worker. On a client pool of 300,
+a request timeout of `PT10S`, twelve processors and a 4 GiB heap, against the cluster of each
+of the three lines:
+
+|       what       | per worker, `8.8.39` | per worker, `8.9.21` | per worker, `8.10.0-rc1` |
+|------------------|----------------------|----------------------|--------------------------|
+| HTTP connections | 1.00                 | 1.00                 | 1.00                     |
+| threads          | 0.00                 | 0.00                 | 0.00                     |
+| heap             | 42 to 76 KiB         | 34 to 42 KiB         | 36 to 49 KiB             |
+
+The connection is the one which decides a sizing, and it is not an average: fifty workers
+held fifty sockets and a hundred held a hundred, on every line, counted as established
+sockets to the cluster's REST port. A worker keeps its activation request open while it
+waits, so it holds one connection of the client's pool for as long as it is open, and an
+application whose workers outnumber `max-http-connections` serves the surplus of them a
+whole `request-timeout` late. That is what the startup warning is about, and it is why the
+number above matters more than the two next to it.
+
+The threads are zero because the client runs every worker on the executor the adapter hands
+it, which is as wide as `worker-threads` and not as wide as the worker list. One run of the
+`8.8` line counted a single thread more after its first fifty workers and none after the
+next fifty, which is a JVM being a JVM and not a thread per worker. The heap is an
+indication rather than an accounting, taken after a full collection in a JVM which has a
+test runner in it as well.
+
+So the sum an operator needs before the start is: count the job types of the table above
+across every workflow module of the adapter id, and give `max-http-connections` room for that
+many plus whatever the application's own commands need. Folding several processes into one
+worker per workflow module and kind would buy connections back, and it is a different product
+rather than a smaller one: such a worker would have to take the longest job timeout of all of
+them, fetch every variable any of them declares, and give up the lease wherever one task of
+one process stays open. That is a mode to ask for, not a default.
 
 ### Authenticating against a cluster
 
@@ -2663,6 +2727,17 @@ than carried out, exactly the way the election's probe asks it (see decision 35 
 repository's DECISIONS.md). A `404` there answers the whole list at once, because an instance
 the engine has forgotten holds nothing open. It is asked once per workflow and not once per
 record, so twenty records of one workflow cost one of these.
+
+That `404` really is the end of an instance, which had to be measured because a cancellation
+is not. An instance carrying a Camunda-managed user task waits for the `canceling` listener
+job of that task, and the engine answers `404` to a SECOND cancellation long before the
+instance is over. `Camunda8ProbeWhileAnInstanceTerminatesIT` holds that window open - it
+deploys a `canceling` listener no worker of this repository serves, takes the job and does not
+answer it - and asks inside it. Measured on 2026-09-27 against `camunda/camunda:8.8.39`,
+`camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`: the second cancellation answers
+`404`, the existence probe answers `400 INVALID_ARGUMENT` over five readings a second apart,
+the empty `UpdateUserTask` of the task probe answers `409`, and both turn to `404` once the
+listener job is answered. So neither probe reads a terminating instance as gone.
 
 Then the tasks, and what kind of task decides how. A job is asked about with the
 `UpdateJobTimeout` this adapter sends anyway: `NOT_FOUND` is gone, a 400 saying nobody has

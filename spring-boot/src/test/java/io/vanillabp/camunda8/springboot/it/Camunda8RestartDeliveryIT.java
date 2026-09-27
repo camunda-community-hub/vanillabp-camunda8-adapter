@@ -69,6 +69,33 @@ public class Camunda8RestartDeliveryIT extends TestOnTheSharedCluster {
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
   /**
+   * How long the shutdown of this class waits for its workers to be released, which is what
+   * the drain assertion below reads.
+   * <p>
+   * It is written down here because the default does not fit this class. A drain cannot end
+   * before the cluster answers the activation requests its workers have parked, so its floor
+   * is one {@link #REQUEST_TIMEOUT}, and this is the one class in the module which doubles
+   * that timeout without touching the grace: with the default of {@code PT20S} the drain of
+   * this class gets twice its own floor, while every other class gets four times theirs.
+   * <p>
+   * What that cost, measured on 2026-09-27. In the nightly-style run of line 8.10 on the
+   * runner of attempt 1 of run 36305111194, the first application of this test was stopped
+   * after 20045 ms with its 115 workers not yet released - the grace, exactly - while the
+   * SECOND application of the same run drained in 10073 ms. Re-running the same commit was
+   * green. Locally, on an idle machine, the whole {@code close()} takes 12252 to 12522 ms on
+   * {@code camunda/camunda:8.10.0-rc1} and 11973 to 12053 ms on {@code camunda/camunda:8.9.21},
+   * so the line is not what decides it; the load of the machine is. With the client's own
+   * pool of 100 connections instead of the 256 this module sets, the test fails at the
+   * DELIVERY assertion (10284 ms) rather than here, which is the finding of story 685 and a
+   * different one from this.
+   * <p>
+   * Twenty-five seconds and not more: from thirty on, the adapter warns that the grace
+   * reaches into the shutdown budget Spring Boot and Kubernetes default to, and that warning
+   * would be right.
+   */
+  private static final Duration SHUTDOWN_GRACE = Duration.ofSeconds(25);
+
+  /**
    * How long the second application waits before it starts. It has to stay below
    * {@link #REQUEST_TIMEOUT}, because that is how long an activation request of the closed
    * application can outlive it. The blueprint which found this took 7,4 seconds.
@@ -106,6 +133,8 @@ public class Camunda8RestartDeliveryIT extends TestOnTheSharedCluster {
                 + grpcAddress(),
             "--vanillabp.adapters.c8.request-timeout="
                 + REQUEST_TIMEOUT,
+            "--vanillabp.adapters.c8.shutdown-grace="
+                + SHUTDOWN_GRACE,
             "--vanillabp.workflow-modules.test-app.workflows.RestartProcess.adapters.c8.job-timeout="
                 + JOB_TIMEOUT);
 
@@ -193,8 +222,8 @@ public class Camunda8RestartDeliveryIT extends TestOnTheSharedCluster {
     // and this number is the whole point of the test
     report(
         reporter,
-        "the first job of a workflow started %s after a restart was delivered after %d ms (job timeout %s, the shutdown of the first application took %d ms)"
-            .formatted(GAP, deliveredAfterMillis, JOB_TIMEOUT, shutdownMillis));
+        "the first job of a workflow started %s after a restart was delivered after %d ms (job timeout %s, shutdown grace %s, the shutdown of the first application took %d ms)"
+            .formatted(GAP, deliveredAfterMillis, JOB_TIMEOUT, SHUTDOWN_GRACE, shutdownMillis));
 
     assertTrue(served, "the job reached the handler at all");
     assertTrue(

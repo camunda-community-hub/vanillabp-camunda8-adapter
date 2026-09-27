@@ -58,6 +58,15 @@ import lombok.extern.slf4j.Slf4j;
  * The <code>404</code> cannot tell an ended workflow from one which never existed, and it does
  * not have to here: the question is whether a task is still open, and both answers mean it is
  * not. That reading stays inside this check, for the reason decision 35 spells out.
+ * <p>
+ * And the <code>404</code> is not handed out early. A cancellation is not the end of an
+ * instance - one carrying a Camunda-managed user task waits for the <code>canceling</code>
+ * listener job of that task, and the engine answers <code>404</code> to a second cancellation
+ * within milliseconds of the first. The probe does NOT do the same: measured on 2026-09-27
+ * inside exactly that window, it answers <code>400</code> for as long as the engine holds the
+ * instance and <code>404</code> only once the listener job was answered, on all three lines.
+ * The user-task probe below answers <code>409</code> in the same window. What holds the window
+ * open and reads both is {@code Camunda8ProbeWhileAnInstanceTerminatesIT}.
  *
  * <h2>Then the task, and what kind of task decides how</h2>
  *
