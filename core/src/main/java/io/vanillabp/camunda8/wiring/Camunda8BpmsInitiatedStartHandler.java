@@ -27,7 +27,8 @@ import lombok.extern.slf4j.Slf4j;
  * The name the cluster holds for a workflow is the process variable called after the
  * workflow aggregate's id attribute, which is where every other part of this adapter reads
  * it as well. The job fetches every variable, so the core finds that name without the
- * handler having to know the attribute - see {@code DECISIONS.pending/653.md}.
+ * handler having to know the attribute - see decision 49 in the repository's
+ * DECISIONS.md.
  * <p>
  * The job is completed with the aggregate's ID (named after the aggregate's ID
  * attribute - how this adapter addresses workflows) plus the values shared per

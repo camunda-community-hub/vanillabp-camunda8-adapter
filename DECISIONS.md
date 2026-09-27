@@ -1651,6 +1651,10 @@ line.
 
 ### 43. On the preview line no test creates a Camunda-managed user task on a shared cluster
 
+Superseded by decision 47. The preview line runs on `8.10.0-rc1` now, that cluster hands out a
+`creating` job, and the tag, the rule and the exclusions went together the way the last paragraph
+of this entry said they would. The entry stays because it holds the measurement.
+
 The REST gateway of `8.10.0-alpha5` loses a whole activate-jobs batch when it meets a `creating`
 or a `canceling` task-listener job, which is `camunda/camunda#58193`. What that costs was read as
 a timeout in the test which waited for the job, and the tag `user-task-listener-jobs` was written
@@ -1702,3 +1706,347 @@ alive, not a search behind the engine, and `Camunda8ProcessService#awarenessOfWo
 
 When a cluster of this line hands out a `creating` job, the tag, this rule and the exclusions in
 the `line-8.10` profile go together.
+
+### 44. A `404` to a cancellation means the command is gone, not the instance
+
+Cancelling a process instance answers `204`, and every further cancellation of the same instance
+answers `404`. That reads like "the instance no longer exists", and it is the reading everything
+around cancellation used to carry.
+
+It is wrong while the instance holds a user task the cluster manages. Such an instance terminates
+only after the `canceling` listener job of that task is answered, and while no application of ours
+is running nobody answers it. Measured on 2026-09-25 against `8.10.0-alpha5` and against `8.9.21`:
+the instance was still alive 130 seconds after the cancellation, and it ended 0.52 seconds after a
+worker finally took the job. Until then it can hand a job to whichever application asks next.
+
+So the `404` says one thing only: the engine will not take a second cancellation for this key. It
+says nothing about whether the instance still runs, and nothing about whether its jobs are done
+being handed out. What says that is the search, or the absence of a user task standing between two
+of its states.
+
+Our own cleanup does not rest on the wrong reading, and that was worth checking.
+`TestOnTheSharedCluster#endWhateverAnEarlierClassLeftRunning` loops until two things hold at once:
+no instance of the class before answers the cancellation any more, and no user task is left between
+two states. It answers the listener jobs a cancellation waits for while it loops. Only the sentences
+which describe it said "the `404` is how the engine says it has let go", which is the half that is
+not true.
+
+One question this does not answer, because it was not measured: what the existence probe of
+`Camunda8ProcessService` answers for an instance in that window. The probe is a refused
+modification, not a cancellation, and the texts around it say "the engine forgets an instance the
+moment it ends". Whether that sentence has the same hole is a measurement somebody still has to
+take.
+
+Decision 43 carries the same measurement from the other side and needs nothing. Decision 35 says the
+engine forgets an instance the moment it ends, and decision 38 says a `404` means gone. Both are
+about the PROBE and not about a cancellation, so neither is touched here. They are named because
+whoever takes the measurement above decides what happens to them.
+
+### 45. A job for a workflow this application does not own keeps its incident
+
+Where two applications share a cluster and a listener job of one reaches the other, the job is
+failed and the cluster raises an incident. The retries are not raised to make that quiet, and the
+incident carries the core's message, which explains the situation instead of blaming whoever reads
+it. The core's half of this is decision 99 of `adapter-platform-integration`.
+
+Stephan decided this on 2026-09-27. The measurement behind it was made in story 605 and is kept
+below, because the wording of the decision only makes sense next to it.
+
+**What was measured.** A worker subscribes to a job type cluster-wide, so where two applications
+deploy a BPMN process of the same name, the cluster hands each job to whichever of them asks first.
+The same shape occurs with one application: a process instance left behind by an earlier run holds a
+`canceling` listener job, and the next worker of that job type is served it.
+
+The adapter reads the workflow aggregate id out of the job and hands the delivery to the core. The
+core loads the aggregate, finds nothing, and throws. The user-task listener path fails such a job
+with `NO_RETRIES_LEFT`, so the cluster raises an incident at the FIRST delivery, and the user task
+stands in `CREATING` or `CANCELING` until an operator resolves it. No delivery record is written,
+because the transaction rolled back.
+
+So the job is not consumed quietly. It was, however, consumed under the wrong name: the message read
+`No workflow aggregate of class '%s' having the ID '%s' was found ... it must not be deleted while
+the workflow is active`, which tells a developer they deleted an aggregate and says nothing about
+the job belonging somewhere else.
+
+**What was decided.** The incident stays. It is what a reader should see, and it is cheap: the work
+is still in the cluster, so the application which owns the workflow loses nothing by it. Raising the
+retries so that the delivery costs that application nothing would mean nobody ever finds out that
+two applications share a cluster and take each other's work.
+
+The message changes, and it changes in the core, because that is where the aggregate is looked up
+and where every adapter passes through. It is now `DeliveryOfAnUnknownWorkflowException`, it names
+everything the cluster said about the delivery so the reader can look the workflow up on the other
+side, and it names both situations it can be: a workflow another application owns, and a workflow
+aggregate deleted here while its workflow was still running. Nothing in the code can tell the two
+apart, so nothing in the message claims to.
+
+Two options from the earlier draft of this entry were not taken. A new inbound outcome meaning "not
+mine" was not introduced, because nothing is handed back. And the case is not left undocumented,
+which the third option would have meant.
+
+**What this adapter does with it.** `Camunda8ListenerJobs` fails the job the way it fails any other,
+so the retries the caller chose apply unchanged and `Camunda8Errors#incidentMessage` puts the type
+and the message into the incident. The one thing it does differently is the log line: a refusal of
+this kind is reported without its stack trace, because the message is the whole finding and a trace
+would only name the line of the core which read the database. Every other failure keeps its trace.
+
+Nothing is counted here. The core counts the case as `vanillabp.task.deliveries.unknown.workflow`,
+once per refusal, whichever adapter delivered it.
+
+**What is not solved.** A job of a workflow NOBODY owns, which is what a left-behind instance
+produces, stays where it is. It raises its incident, and an operator removes the instance. That is
+the honest end: there is no application to hand it to.
+
+`Camunda8ListenerJobsTest` holds the incident such a job leaves behind.
+
+### 46. A slot nobody gives back is measured and named, and the adapter does not end it
+
+A handler is application code and may block for as long as it likes. It holds one execution slot
+while it does, and a worker of this adapter id only asks the cluster for work while a slot is free.
+So a handler which never returns costs one slot forever, and losing every slot makes the whole
+adapter id quiet. Nothing about that state is visible. The connection is up and the health check is
+green, and no worker reports anything, because no worker does anything.
+
+Camunda confirmed the mechanism behind it for us. Polling and handler execution run on separate
+executors, but the routine which restarts the polling of a worker runs on the thread which just
+finished a job. A thread which never finishes never restarts anything. Camunda's remedy for that is
+to raise `numJobWorkerExecutionThreads`, and it does not reach us: this adapter hands the client an
+executor of its own, so the client builds no pool to raise. Our number is `worker-threads`, and it
+only decides how many stuck handlers it takes, four by default instead of one.
+
+**The adapter reports the state and leaves the handler alone.** Ending it would mean interrupting a
+thread which is inside application code, with an open transaction and an open database connection,
+and no way to know whether the work it did so far may be abandoned. An interrupt there buys a second
+defect in place of the first. The job itself is already safe without us: its lock ran out, the
+cluster handed it to somebody else, and where the line carries a lease the late answer of the stuck
+run is recognised and dropped. What is missing is not a repair, it is somebody knowing. So the
+adapter measures the state and says it, and the operator decides.
+
+A handler counts as overdue after the job timeout of its own task, not after an invented duration.
+That number is already configured, it is already resolved per task over the four configuration
+levels, and it is the exact point where the handler's claim on its job ended. A task which is
+allowed to run long is measured against its own value and does not have to be excluded from
+anything.
+
+**The alarm is every slot held while one of the holders is overdue.** One slot held for a long time
+is an application doing slow work, which is nobody's emergency. Every slot held while the oldest
+holder has lost its lock is the moment this adapter id stops asking for work, and that is a
+different event. The two gauges behind it are `vanillabp.camunda8.execution.slots.in.use` against
+`vanillabp.camunda8.execution.slots.configured`, and `vanillabp.camunda8.execution.overdue`.
+`vanillabp.camunda8.execution.oldest.seconds` is the third number and says the same thing earlier,
+because a handler which is not coming back only ages.
+
+The watch runs on a thread of its own. It has to answer while every thread this adapter runs
+handlers on is blocked, which is the whole point, so it cannot share one with them. One daemon
+thread per adapter id, looking at a handful of map entries every ten seconds.
+
+The message carries the stack of each overdue handler. The drain already knows which thread each
+running handler is on, so the top frames are free to take, and they are the difference between
+knowing that something hangs and knowing what hangs. In practice they name the remote call which has
+no time limit of its own. Twenty frames, because everything below that is the client and the
+executor and reads the same every time.
+
+It is said once. The state lasts until somebody acts, and a WARN every ten seconds would bury the
+line which said it first. One WARN when it begins, one INFO when a slot comes free again. An alert
+is built on the gauges; the log is what the operator reads afterwards.
+
+`Camunda8SlotWatch` is where the watch lives.
+
+### 47. The preview line runs on the release candidate, and it excludes nothing any more
+
+This supersedes decision 43, which stays where it is. Decision 43 kept every test which creates a
+Camunda-managed user task off the preview line. The reason was `camunda/camunda#58193`: the REST
+gateway of `8.10.0-alpha5` lost a whole activate-jobs batch when it met a task-listener job whose
+event carried no user task action, which is `creating` and `canceling`. Camunda closed the issue a
+day after that alpha was built, so the alpha was a day too old for its own fix.
+
+The pin now reads `8.10.0-rc1`, and the fix is in it. Measured on 2026-09-25 against
+`camunda/camunda:8.10.0-rc1`, with the exclusions taken out of the `line-8.10` profile:
+`Camunda8UserTaskStillCreatingIT` and `Camunda8UserTaskProbeIT` both pass, and the whole line runs
+with the tagged tests back in it. Decision 43 said the tag, the rule and the exclusions go together
+once a cluster of this line hands out a `creating` job. It does, so they went.
+
+`TestOnTheSharedCluster` keeps what decision 43 built into it. Ending what an earlier class left is
+not about one alpha: it answers the listener jobs a cancellation waits for, and it fails the class
+with a sentence naming the class before when a user task is still between two states afterwards.
+That is what a shared cluster needs on every line.
+
+Moving to the candidate cost two changes nobody had to make for an alpha bump, and both are worth
+writing down.
+
+The client renamed the lease API. `getLeaseToken()` became `getJobLeaseToken()` and
+`withLeaseToken(...)` became `withJobLeaseToken(...)`, which is the delta source of the 8.10 line
+and nothing else. The cluster also got stricter about the token: `8.10.0-rc1` refuses the completion
+of a leased job which carries none, with `409 INVALID_STATE` and `a matching lease token must be
+provided because the job is currently leased`. On the alpha the same answer went through. The
+adapter always sent the token, so nothing of it had to change; a test which completed a leased job
+with the raw client did.
+
+And the protobuf pin moved from `4.36.0` to `4.36.2`, because that is the gencode of the new client
+and protobuf refuses a runtime older than the code linked against it. `Camunda8ProtobufPinTest` is
+what says so, and an application on the preview line pins the same number in its own
+`dependencyManagement`.
+
+SUPPORT-34723 is the other defect this pin was moved for: up to `8.10.0-alpha5` the client planned
+its next poll only while no job of that worker was in a handler, so a worker stopped asking after
+the first empty poll. Camunda says the fix is `#59633` and that it is in `8.10.0-rc1`, and the run
+showed it from the other side. `Camunda8JobLeaseIT` blocks a handler and lets the job's lock run
+out, and on the alpha that job never came back to the worker holding it. On the candidate it came
+back four times, once per free slot. So the worker does keep asking while a job of it is in a
+handler.
+
+That has a second consequence, and it cost two red runs before it was understood. The adapter hands
+the client an executor as wide as `worker-threads`, and the client answers its own requests on it. A
+handler which occupies every slot therefore also stops the client from completing a request of the
+SAME application, whatever timeout that request was given: measured on 2026-09-25, the test's
+activation died of its socket timeout at 3000 ms with a window of two seconds and at 6000 ms with
+the module's five. Holding the slots down to one makes it worse rather than better.
+`Camunda8JobLeaseIT` now sends its second activation with a client of its own, the way
+`Camunda8TaskListenerVariablesCanaryIT` does, and it stopped counting the handler's runs, because
+how often the cluster offers an expired job is the cluster's business. Four runs in a row after
+that: 32.5, 38.2, 38.3 and 50.6 seconds.
+
+What is still missing is a test which drives the defect itself rather than meeting it sideways, and
+that is story 644.
+
+See [Release lines](./README.md#release-lines).
+
+### 48. An event subprocess does not start a workflow
+
+A workflow starts when the BPMS creates an instance of a BPMN process. At that moment there is no
+workflow aggregate, so VanillaBP asks the application to build one, and every start event the
+cluster fires by itself needs a `@WorkflowStartedByBpms` method. That is what this adapter means by
+a start of a workflow.
+
+The start event of an event subprocess is not one. The cluster fires it inside a workflow which is
+already running, and that workflow carries the aggregate it was started with. Building one here
+would leave one workflow with two aggregates, and the application would hear that a workflow
+started, long after it did.
+
+So this adapter counts a start event only where the process itself holds it. Walking up to the
+enclosing process is not enough. That walk gives the same answer for a start event at any depth of a
+model. Once every start of a workflow had to be served by a method, no model with an event
+subprocess booted any more.
+
+The rule covers the start event of a plain embedded subprocess as well. BPMN allows only a none
+start event there, and this adapter reports no none start event anyway, so nothing changes for such
+a model. One rule for every nesting is shorter than two.
+
+One walk reads the start events and injects the execution listener which tells VanillaBP about such
+a start, so both follow the rule at once: the core hears about the start events of the process, and
+the model reaches the cluster with a listener on those and on nothing else.
+
+`Camunda8EventSubprocessStartsNoWorkflowTest` holds both halves without a cluster, and
+`Camunda8EventSubprocessIT` runs a model whose event subprocess takes a waiting workflow over.
+
+### 49. The cluster holds the workflow's name in the variable named after the aggregate's id
+
+The id of a workflow is the id of its workflow aggregate, the application assigns it in the
+`@WorkflowStartedByBpms` method, and nobody else does. Camunda 8 keeps no business key, so this
+adapter keeps that id in a PROCESS VARIABLE. The rule itself and what the core does with it are
+decision 98 of `adapter-platform-integration`.
+
+**The name of the variable.** The variable is called after the workflow aggregate's id attribute: a
+`Ride` whose `@Id` field is `rideId` names its workflow in the variable `rideId`.
+
+That name is public. It stands in every process record of the cluster, every operator sees it and
+every model can read it. So it was worth choosing rather than inheriting, and three alternatives
+were weighed.
+
+A fixed name such as `vanillaBpWorkflowId` would be the same everywhere, which reads well in a
+cluster serving several applications. It was turned down because the model would then carry two
+names for one thing: `${rideId}` is what a modeller writes in an expression, in a call activity's
+input mapping and in a message correlation key, and version 1 of VanillaBP put the aggregate there
+under exactly that name. A second name would have to be kept in step with the first forever.
+
+A name derived from the BPMN process id would keep two processes of one model apart. It was turned
+down because they are not apart: a call activity passes the aggregate's id down, and both processes
+read it under the name the aggregate gave it.
+
+So the attribute's name it is, which is also the name this adapter already used everywhere else - in
+`Camunda8JobHandler`, in the completion of every task, in the variables a start writes. The only
+thing story 653 changes is that the start listener now READS it before it decides.
+
+**Why this works at the moment the listener runs.** A workflow the application starts is created
+with that variable, because `Camunda8ProcessService` writes it into the create command. The start
+execution listener of the start event runs after the instance exists and before anything else of the
+process does, and its job fetches every variable, so the listener sees the name if there is one. A
+workflow somebody started past VanillaBP has no such variable, and that is exactly what tells the
+two apart.
+
+**Only a process this application serves gets the listener.** The cluster runs whatever was deployed
+to it, and a workflow module may deploy a BPMN process no workflow service of this application
+claims. The listener holds the instance until its job is answered, and for such a process the core
+has no workflow service to answer with - the start would fail, the retries would run out and the
+instance would sit in an incident it never had before. So the wiring asks first, with the same
+question the end and cancel listeners ask: does this process have a workflow aggregate id name? A
+process without one is left exactly as it was.
+
+**What the listener on every start event costs.** The listener is written into the model at
+deployment, so the cost is paid twice: once in the model and once per started workflow.
+
+In the model it is one `zeebe:executionListeners` element with one `zeebe:executionListener` child
+per start event. Measured on a process with four start events, that is 294 characters of deployed
+XML per start event: most of it the extension-element wrapper, the rest the job type, which carries
+the process id and the element id. A model with ten start events therefore grows by some three
+kilobytes, against the four megabytes a Camunda 8 deployment may carry. Wiring the same model twice
+adds nothing. `Camunda8StartListenerCostTest` holds all three numbers, so a change shows up as a
+failing test rather than as a surprise in a deployment.
+
+Per workflow it is one job: the cluster creates the listener job, a worker of this adapter activates
+it, the core answers, and the job is completed. A workflow the application started pays for one
+round trip to the cluster and one load of its workflow aggregate. That is the price of telling a
+foreign start from an own one on a BPMS which does not tell you itself, and a workflow whose first
+task follows would load the same aggregate a moment later anyway.
+
+### 50. The adapter says that the workers outgrew the connection pool, and raises nothing
+
+The adapter opens one worker per process and per kind, and every worker holds a REST activation
+request open while it waits for work. The Camunda client keeps at most 100 HTTP connections unless
+the application says otherwise, the same number in the `8.8`, `8.9` and `8.10` clients
+(`DEFAULT_MAX_HTTP_CONNECTIONS`, readable in the bytecode of `CamundaClientBuilderImpl`). An
+application whose workers take that whole pool does not get them all served: the surplus workers
+take turns, and whatever one of them waits for arrives a whole `request-timeout` later.
+
+Measured on 2026-09-26 with `Camunda8RestartDeliveryIT` against `camunda/camunda:8.10.0-rc1`: 115
+workers against the client's 100 connections took 10412 ms, the same 115 against 256 took 215 ms,
+and 92 workers against the client's 100 took 184 ms. The number of workers against the size of the
+pool is what decides, not the version of the client.
+
+**The application is told, its pool is not raised.** The adapter could size the pool itself. It
+knows the number of workers before it opens them, so it could hand the client a bigger number and
+nobody would ever see this. It does not.
+
+How many connections an application opens against its cluster is a decision about that application's
+resources, and taking it behind its back is the wrong kind of help. A cluster behind a proxy with a
+connection budget, an application which runs twenty replicas of itself: neither is visible from
+here, and both are decided by somebody who never asked the adapter to decide them. So the adapter
+says what it found, names the property and leaves the number to the application.
+
+It is a warning and not a refusal. An application over the limit works, it is only slow in a way
+nothing else explains, and refusing to start it over a number it can raise in one line would be
+worse than the wait.
+
+**Where the check sits.** At the end of `startWorkflowProcessing` of `Camunda8DeploymentService`,
+once a workflow module opened its workers. That is the first moment the number is known and the last
+one before the platform writes the block of the start, which is what the rule "as early as possible"
+means here. The pool belongs to the client and the client belongs to the adapter id, so what counts
+is the sum over all workflow modules of one deployment service, and a module which is stopped gives
+its share back.
+
+A start says it once. The sum grows with every workflow module, and a start which repeated the
+sentence per module would fill the block with one text per number while the developer's next step
+stays the same. Where they raise the pool and are still short, the next start says the number they
+are then short of, which is how every other startup message of VanillaBP converges.
+
+Nothing is said for a client which prefers gRPC. Its workers activate over that transport, where
+this pool is not what limits them.
+
+**The first user of the collection point.** This is the first finding the Camunda 8 adapter reports
+through `StartupReport`, the bean of decision 97 of `adapter-platform-integration`. Both platform
+integrations publish one instance per application, and both producers of this adapter now hand it to
+the deployment service. Where there is none, which is a test building the service by hand, the
+message goes into the log where it was found.
+
+`Camunda8WorkerConnections` holds the number and `Camunda8WorkerConnectionsTest` holds the sentence
+it produces.

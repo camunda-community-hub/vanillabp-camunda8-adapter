@@ -10,8 +10,6 @@ import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
-import lombok.Getter;
-import lombok.Setter;
 
 /**
  * Resolved, platform-neutral connection configuration of one Camunda 8 adapter instance
@@ -94,8 +92,6 @@ import lombok.Setter;
  * adapter but never actually use it still boot; {@link #validate(String)} enforces the
  * required fields lazily on first use of the client.
  */
-@Getter
-@Setter
 public class Camunda8AdapterConfiguration {
 
   /**
@@ -124,12 +120,46 @@ public class Camunda8AdapterConfiguration {
   private Mode mode = Mode.SELF_MANAGED;
 
   /**
+   * How this adapter instance reaches its cluster.
+   *
+   * @return The mode, never <code>null</code>
+   */
+  public Mode getMode() {
+
+    return mode;
+
+  }
+
+  /**
    * Whether one of the defaulted properties ({@link #mode},
    * {@link #preferRestOverGrpc}) was set explicitly - required to distinguish the
    * "not configured yet" state (see {@link #isAbsent()}) from an inconsistent
    * configuration like <code>mode: saas</code> without any credential.
    */
   private boolean defaultedPropertySet = false;
+
+  /**
+   * Whether the application wrote one of the keys which carry a default.
+   *
+   * @return Whether such a key was written
+   */
+  public boolean isDefaultedPropertySet() {
+
+    return defaultedPropertySet;
+
+  }
+
+  /**
+   * Whether the application wrote one of the keys which carry a default.
+   *
+   * @param defaultedPropertySet Whether such a key was written
+   */
+  public void setDefaultedPropertySet(
+      final boolean defaultedPropertySet) {
+
+    this.defaultedPropertySet = defaultedPropertySet;
+
+  }
 
   /**
    * Sets the connection mode and marks this section as configured, which is what tells an
@@ -145,11 +175,77 @@ public class Camunda8AdapterConfiguration {
 
   }
 
+  /**
+   * The REST address of a self-managed cluster.
+   */
   private String restAddress;
 
+  /**
+   * The REST address of a self-managed cluster.
+   *
+   * @return The address, or <code>null</code> where none is configured
+   */
+  public String getRestAddress() {
+
+    return restAddress;
+
+  }
+
+  /**
+   * The REST address of a self-managed cluster.
+   *
+   * @param restAddress The address, or <code>null</code> where none is configured
+   */
+  public void setRestAddress(
+      final String restAddress) {
+
+    this.restAddress = restAddress;
+
+  }
+
+  /**
+   * The gRPC address of a self-managed cluster.
+   */
   private String grpcAddress;
 
+  /**
+   * The gRPC address of a self-managed cluster.
+   *
+   * @return The address, or <code>null</code> where none is configured
+   */
+  public String getGrpcAddress() {
+
+    return grpcAddress;
+
+  }
+
+  /**
+   * The gRPC address of a self-managed cluster.
+   *
+   * @param grpcAddress The address, or <code>null</code> where none is configured
+   */
+  public void setGrpcAddress(
+      final String grpcAddress) {
+
+    this.grpcAddress = grpcAddress;
+
+  }
+
+  /**
+   * Which of the two protocols the client talks. Default: REST.
+   */
   private boolean preferRestOverGrpc = true;
+
+  /**
+   * Whether the client talks REST rather than gRPC.
+   *
+   * @return Whether REST comes first
+   */
+  public boolean isPreferRestOverGrpc() {
+
+    return preferRestOverGrpc;
+
+  }
 
   /**
    * Sets which of the two protocols is preferred and marks this section as configured, the
@@ -165,15 +261,146 @@ public class Camunda8AdapterConfiguration {
 
   }
 
+  /**
+   * The Camunda 8 tenant every workflow module of this adapter is deployed into, unless the
+   * module names one of its own.
+   */
   private String tenantId;
 
+  /**
+   * The Camunda 8 tenant every workflow module of this adapter is deployed into.
+   *
+   * @return The tenant name, or <code>null</code> where none is configured
+   */
+  public String getTenantId() {
+
+    return tenantId;
+
+  }
+
+  /**
+   * The Camunda 8 tenant every workflow module of this adapter is deployed into.
+   *
+   * @param tenantId The tenant name, or <code>null</code> where none is configured
+   */
+  public void setTenantId(
+      final String tenantId) {
+
+    this.tenantId = tenantId;
+
+  }
+
+  /**
+   * The cluster a SaaS adapter connects to.
+   */
   private String clusterId;
 
+  /**
+   * The cluster a SaaS adapter connects to.
+   *
+   * @return The cluster id, or <code>null</code> where none is configured
+   */
+  public String getClusterId() {
+
+    return clusterId;
+
+  }
+
+  /**
+   * The cluster a SaaS adapter connects to.
+   *
+   * @param clusterId The cluster id, or <code>null</code> where none is configured
+   */
+  public void setClusterId(
+      final String clusterId) {
+
+    this.clusterId = clusterId;
+
+  }
+
+  /**
+   * The region that SaaS cluster runs in.
+   */
   private String region;
 
+  /**
+   * The region that SaaS cluster runs in.
+   *
+   * @return The region, or <code>null</code> where none is configured
+   */
+  public String getRegion() {
+
+    return region;
+
+  }
+
+  /**
+   * The region that SaaS cluster runs in.
+   *
+   * @param region The region, or <code>null</code> where none is configured
+   */
+  public void setRegion(
+      final String region) {
+
+    this.region = region;
+
+  }
+
+  /**
+   * The OIDC client a SaaS adapter connects as.
+   */
   private String clientId;
 
+  /**
+   * The OIDC client a SaaS adapter connects as.
+   *
+   * @return The client id, or <code>null</code> where none is configured
+   */
+  public String getClientId() {
+
+    return clientId;
+
+  }
+
+  /**
+   * The OIDC client a SaaS adapter connects as.
+   *
+   * @param clientId The client id, or <code>null</code> where none is configured
+   */
+  public void setClientId(
+      final String clientId) {
+
+    this.clientId = clientId;
+
+  }
+
+  /**
+   * The secret that SaaS client proves itself with.
+   */
   private String clientSecret;
+
+  /**
+   * The secret that SaaS client proves itself with.
+   *
+   * @return The client secret, or <code>null</code> where none is configured
+   */
+  public String getClientSecret() {
+
+    return clientSecret;
+
+  }
+
+  /**
+   * The secret that SaaS client proves itself with.
+   *
+   * @param clientSecret The client secret, or <code>null</code> where none is configured
+   */
+  public void setClientSecret(
+      final String clientSecret) {
+
+    this.clientSecret = clientSecret;
+
+  }
 
   /**
    * How this adapter instance proves who it is - the block
@@ -184,11 +411,57 @@ public class Camunda8AdapterConfiguration {
   private Camunda8AuthConfiguration auth = new Camunda8AuthConfiguration();
 
   /**
+   * How this adapter instance proves who it is.
+   *
+   * @return The auth block, never <code>null</code>
+   */
+  public Camunda8AuthConfiguration getAuth() {
+
+    return auth;
+
+  }
+
+  /**
+   * How this adapter instance proves who it is.
+   *
+   * @param auth The auth block, never <code>null</code>
+   */
+  public void setAuth(
+      final Camunda8AuthConfiguration auth) {
+
+    this.auth = auth;
+
+  }
+
+  /**
    * The worker's job timeout (lock duration) - adapter-level base of the
    * most-specific-wins resolution (task &gt; workflow &gt; workflow-module &gt;
    * adapter). Default: 5 minutes.
    */
   private Duration jobTimeout;
+
+  /**
+   * How long a job of this adapter stays locked, read at adapter level.
+   *
+   * @return The timeout, or <code>null</code> where no key set one
+   */
+  public Duration getJobTimeout() {
+
+    return jobTimeout;
+
+  }
+
+  /**
+   * How long a job of this adapter stays locked, read at adapter level.
+   *
+   * @param jobTimeout The timeout, or <code>null</code> where no key set one
+   */
+  public void setJobTimeout(
+      final Duration jobTimeout) {
+
+    this.jobTimeout = jobTimeout;
+
+  }
 
   /**
    * Whether the application states that its identifiers are unique across all of its
@@ -199,6 +472,31 @@ public class Camunda8AdapterConfiguration {
    * <code>false</code>.
    */
   private boolean acceptUnscopedIdentifiers = false;
+
+  /**
+   * Whether the application states that its identifiers are unique across all of its
+   * workflow modules.
+   *
+   * @return Whether unscoped identifiers are accepted
+   */
+  public boolean isAcceptUnscopedIdentifiers() {
+
+    return acceptUnscopedIdentifiers;
+
+  }
+
+  /**
+   * Whether the application states that its identifiers are unique across all of its
+   * workflow modules.
+   *
+   * @param acceptUnscopedIdentifiers Whether unscoped identifiers are accepted
+   */
+  public void setAcceptUnscopedIdentifiers(
+      final boolean acceptUnscopedIdentifiers) {
+
+    this.acceptUnscopedIdentifiers = acceptUnscopedIdentifiers;
+
+  }
 
   /**
    * Whether this application honours the element-template marker of a model, so an element
@@ -223,6 +521,31 @@ public class Camunda8AdapterConfiguration {
   private boolean allowConnectors = false;
 
   /**
+   * Whether an element built from an element template is left to the runtime which owns it,
+   * read at adapter level.
+   *
+   * @return Whether such elements are allowed
+   */
+  public boolean isAllowConnectors() {
+
+    return allowConnectors;
+
+  }
+
+  /**
+   * Whether an element built from an element template is left to the runtime which owns it,
+   * read at adapter level.
+   *
+   * @param allowConnectors Whether such elements are allowed
+   */
+  public void setAllowConnectors(
+      final boolean allowConnectors) {
+
+    this.allowConnectors = allowConnectors;
+
+  }
+
+  /**
    * Whether the listeners somebody MODELLED are served by <code>@WorkflowTask</code> methods.
    * Adapter-level base of the most-specific-wins resolution over three levels (workflow &gt;
    * workflow-module &gt; adapter), see
@@ -240,6 +563,31 @@ public class Camunda8AdapterConfiguration {
    * this key decides.
    */
   private boolean allowListeners = false;
+
+  /**
+   * Whether modelled listeners are served by <code>&#64;WorkflowTask</code> methods, read at
+   * adapter level.
+   *
+   * @return Whether modelled listeners are served
+   */
+  public boolean isAllowListeners() {
+
+    return allowListeners;
+
+  }
+
+  /**
+   * Whether modelled listeners are served by <code>&#64;WorkflowTask</code> methods, read at
+   * adapter level.
+   *
+   * @param allowListeners Whether modelled listeners are served
+   */
+  public void setAllowListeners(
+      final boolean allowListeners) {
+
+    this.allowListeners = allowListeners;
+
+  }
 
   /**
    * How long the lock of a job left open by a <code>&#64;TaskId</code> handler is
@@ -272,6 +620,31 @@ public class Camunda8AdapterConfiguration {
   private Duration asyncTaskLockRenewal;
 
   /**
+   * How long the lock of a job left open by a <code>&#64;TaskId</code> handler is extended
+   * for.
+   *
+   * @return The window, or <code>null</code> where no key set one
+   */
+  public Duration getAsyncTaskLockRenewal() {
+
+    return asyncTaskLockRenewal;
+
+  }
+
+  /**
+   * How long the lock of a job left open by a <code>&#64;TaskId</code> handler is extended
+   * for.
+   *
+   * @param asyncTaskLockRenewal The window, or <code>null</code> where no key set one
+   */
+  public void setAsyncTaskLockRenewal(
+      final Duration asyncTaskLockRenewal) {
+
+    this.asyncTaskLockRenewal = asyncTaskLockRenewal;
+
+  }
+
+  /**
    * How long the cluster waits before it hands a FAILED job out again - adapter-level base
    * of the most-specific-wins resolution (task &gt; workflow &gt; workflow-module &gt;
    * adapter), see
@@ -279,6 +652,31 @@ public class Camunda8AdapterConfiguration {
    * behind the default of ten seconds.
    */
   private Duration retryBackoff;
+
+  /**
+   * How long the cluster waits before it hands a failed job out again, read at adapter
+   * level.
+   *
+   * @return The backoff, or <code>null</code> where no key set one
+   */
+  public Duration getRetryBackoff() {
+
+    return retryBackoff;
+
+  }
+
+  /**
+   * How long the cluster waits before it hands a failed job out again, read at adapter
+   * level.
+   *
+   * @param retryBackoff The backoff, or <code>null</code> where no key set one
+   */
+  public void setRetryBackoff(
+      final Duration retryBackoff) {
+
+    this.retryBackoff = retryBackoff;
+
+  }
 
   /**
    * Whether the workers of this adapter instance ask the cluster for the variables the
@@ -289,6 +687,31 @@ public class Camunda8AdapterConfiguration {
    * why.
    */
   private Camunda8FetchVariables.Mode fetchVariables;
+
+  /**
+   * Whether a worker asks for the derived variables or for all of them, read at adapter
+   * level.
+   *
+   * @return The mode, or <code>null</code> where no key set one
+   */
+  public Camunda8FetchVariables.Mode getFetchVariables() {
+
+    return fetchVariables;
+
+  }
+
+  /**
+   * Whether a worker asks for the derived variables or for all of them, read at adapter
+   * level.
+   *
+   * @param fetchVariables The mode, or <code>null</code> where no key set one
+   */
+  public void setFetchVariables(
+      final Camunda8FetchVariables.Mode fetchVariables) {
+
+    this.fetchVariables = fetchVariables;
+
+  }
 
   /**
    * The default of {@link #asyncTaskLockRenewal} in ISO-8601 notation, for javadoc and
@@ -310,6 +733,31 @@ public class Camunda8AdapterConfiguration {
    * released, so a loud rename is better than a silent one.
    */
   private Duration asyncTaskTimeout;
+
+  /**
+   * What the application wrote under the old name of the lock renewal window, kept so the
+   * startup can refuse it.
+   *
+   * @return The value of the retired key, or <code>null</code> where nobody wrote it
+   */
+  public Duration getAsyncTaskTimeout() {
+
+    return asyncTaskTimeout;
+
+  }
+
+  /**
+   * What the application wrote under the old name of the lock renewal window, kept so the
+   * startup can refuse it.
+   *
+   * @param asyncTaskTimeout The value of the retired key, or <code>null</code> where nobody wrote it
+   */
+  public void setAsyncTaskTimeout(
+      final Duration asyncTaskTimeout) {
+
+    this.asyncTaskTimeout = asyncTaskTimeout;
+
+  }
 
   /**
    * What this adapter does with a task the core reports as older than
@@ -355,6 +803,29 @@ public class Camunda8AdapterConfiguration {
   private JobLease jobLease;
 
   /**
+   * Whether the jobs this adapter holds from the activation to the answer are leased.
+   *
+   * @return The setting, or <code>null</code> where no key set one
+   */
+  public JobLease getJobLease() {
+
+    return jobLease;
+
+  }
+
+  /**
+   * Whether the jobs this adapter holds from the activation to the answer are leased.
+   *
+   * @param jobLease The setting, or <code>null</code> where no key set one
+   */
+  public void setJobLease(
+      final JobLease jobLease) {
+
+    this.jobLease = jobLease;
+
+  }
+
+  /**
    * What this adapter does about a task which stayed open longer than
    * <code>vanillabp.delivery.max-task-age</code> allows (thirty days by default). Default:
    * {@link AsyncTaskMaxAgeAction#REPORT}, which leaves it at the core's message.
@@ -366,6 +837,29 @@ public class Camunda8AdapterConfiguration {
    * weeks, and an incident on such a task would be worse than the leak the age looks for.
    */
   private AsyncTaskMaxAgeAction asyncTaskMaxAgeAction = AsyncTaskMaxAgeAction.REPORT;
+
+  /**
+   * What this adapter does about a task which stayed open longer than the core allows.
+   *
+   * @return The action, never <code>null</code>
+   */
+  public AsyncTaskMaxAgeAction getAsyncTaskMaxAgeAction() {
+
+    return asyncTaskMaxAgeAction;
+
+  }
+
+  /**
+   * What this adapter does about a task which stayed open longer than the core allows.
+   *
+   * @param asyncTaskMaxAgeAction The action, never <code>null</code>
+   */
+  public void setAsyncTaskMaxAgeAction(
+      final AsyncTaskMaxAgeAction asyncTaskMaxAgeAction) {
+
+    this.asyncTaskMaxAgeAction = asyncTaskMaxAgeAction;
+
+  }
 
   /**
    * How long the shutdown of a workflow module waits for the handlers this adapter has in
@@ -392,6 +886,29 @@ public class Camunda8AdapterConfiguration {
   private Duration shutdownGrace;
 
   /**
+   * How long a shutdown waits for the handlers this adapter has in flight.
+   *
+   * @return The grace, or <code>null</code> where no key set one
+   */
+  public Duration getShutdownGrace() {
+
+    return shutdownGrace;
+
+  }
+
+  /**
+   * How long a shutdown waits for the handlers this adapter has in flight.
+   *
+   * @param shutdownGrace The grace, or <code>null</code> where no key set one
+   */
+  public void setShutdownGrace(
+      final Duration shutdownGrace) {
+
+    this.shutdownGrace = shutdownGrace;
+
+  }
+
+  /**
    * How long the health check of this adapter instance waits for the cluster to answer its
    * topology request. Default: {@value #DEFAULT_HEALTH_TIMEOUT_ISO}.
    * <p>
@@ -408,6 +925,29 @@ public class Camunda8AdapterConfiguration {
    * saying so, and the endpoint stops talking to the cluster at all.
    */
   private Duration healthTimeout;
+
+  /**
+   * How long the health check waits for the cluster to answer its topology request.
+   *
+   * @return The timeout, or <code>null</code> where no key set one
+   */
+  public Duration getHealthTimeout() {
+
+    return healthTimeout;
+
+  }
+
+  /**
+   * How long the health check waits for the cluster to answer its topology request.
+   *
+   * @param healthTimeout The timeout, or <code>null</code> where no key set one
+   */
+  public void setHealthTimeout(
+      final Duration healthTimeout) {
+
+    this.healthTimeout = healthTimeout;
+
+  }
 
   /**
    * How long the start of this adapter instance waits for its cluster to answer before it
@@ -428,6 +968,29 @@ public class Camunda8AdapterConfiguration {
    * a workflow module.
    */
   private Duration startupWait;
+
+  /**
+   * How long the start waits for the cluster to answer before it gives up.
+   *
+   * @return The wait, or <code>null</code> where no key set one
+   */
+  public Duration getStartupWait() {
+
+    return startupWait;
+
+  }
+
+  /**
+   * How long the start waits for the cluster to answer before it gives up.
+   *
+   * @param startupWait The wait, or <code>null</code> where no key set one
+   */
+  public void setStartupWait(
+      final Duration startupWait) {
+
+    this.startupWait = startupWait;
+
+  }
 
   /**
    * The default of {@link #startupWait} in ISO-8601 notation, for javadoc and messages.
@@ -480,6 +1043,31 @@ public class Camunda8AdapterConfiguration {
   private String workerThreads;
 
   /**
+   * How this adapter instance runs what it delivers: a number of platform threads, or
+   * <code>virtual</code>.
+   *
+   * @return What the application wrote, or <code>null</code> where no key set one
+   */
+  public String getWorkerThreads() {
+
+    return workerThreads;
+
+  }
+
+  /**
+   * How this adapter instance runs what it delivers: a number of platform threads, or
+   * <code>virtual</code>.
+   *
+   * @param workerThreads What the application wrote, or <code>null</code> where no key set one
+   */
+  public void setWorkerThreads(
+      final String workerThreads) {
+
+    this.workerThreads = workerThreads;
+
+  }
+
+  /**
    * How many handlers may run at the same time while
    * {@link #workerThreads} is <code>virtual</code> - virtual threads have no limit of
    * their own, and the client's limit is per worker. Default: the number the
@@ -488,6 +1076,29 @@ public class Camunda8AdapterConfiguration {
    * boot, because it would be ignored.
    */
   private Integer workerThreadsBound;
+
+  /**
+   * How many handlers may run at the same time while the threads are virtual.
+   *
+   * @return The bound, or <code>null</code> where no key set one
+   */
+  public Integer getWorkerThreadsBound() {
+
+    return workerThreadsBound;
+
+  }
+
+  /**
+   * How many handlers may run at the same time while the threads are virtual.
+   *
+   * @param workerThreadsBound The bound, or <code>null</code> where no key set one
+   */
+  public void setWorkerThreadsBound(
+      final Integer workerThreadsBound) {
+
+    this.workerThreadsBound = workerThreadsBound;
+
+  }
 
   /**
    * How many jobs one worker may hold at the same time (the client's
@@ -500,16 +1111,85 @@ public class Camunda8AdapterConfiguration {
   private Integer maxJobsActive;
 
   /**
+   * How many jobs one worker may hold at the same time.
+   *
+   * @return The number, or <code>null</code> where no key set one
+   */
+  public Integer getMaxJobsActive() {
+
+    return maxJobsActive;
+
+  }
+
+  /**
+   * How many jobs one worker may hold at the same time.
+   *
+   * @param maxJobsActive The number, or <code>null</code> where no key set one
+   */
+  public void setMaxJobsActive(
+      final Integer maxJobsActive) {
+
+    this.maxJobsActive = maxJobsActive;
+
+  }
+
+  /**
    * How long a worker waits between two activation requests. Default: the client's 100
    * milliseconds.
    */
   private Duration pollInterval;
 
   /**
+   * How long a worker waits between two activation requests.
+   *
+   * @return The interval, or <code>null</code> to leave the client's own default alone
+   */
+  public Duration getPollInterval() {
+
+    return pollInterval;
+
+  }
+
+  /**
+   * How long a worker waits between two activation requests.
+   *
+   * @param pollInterval The interval, or <code>null</code> to leave the client's own default alone
+   */
+  public void setPollInterval(
+      final Duration pollInterval) {
+
+    this.pollInterval = pollInterval;
+
+  }
+
+  /**
    * How long a request to the cluster may take, which for an activation request is also
    * the long-polling window. Default: the client's 10 seconds.
    */
   private Duration requestTimeout;
+
+  /**
+   * How long a request to the cluster may take.
+   *
+   * @return The timeout, or <code>null</code> where no key set one
+   */
+  public Duration getRequestTimeout() {
+
+    return requestTimeout;
+
+  }
+
+  /**
+   * How long a request to the cluster may take.
+   *
+   * @param requestTimeout The timeout, or <code>null</code> where no key set one
+   */
+  public void setRequestTimeout(
+      final Duration requestTimeout) {
+
+    this.requestTimeout = requestTimeout;
+
+  }
 
   /**
    * Whether the cluster PUSHES jobs to the workers instead of only answering their
@@ -520,10 +1200,56 @@ public class Camunda8AdapterConfiguration {
   private Boolean streamEnabled;
 
   /**
+   * Whether the cluster pushes jobs to the workers instead of only answering their polls.
+   *
+   * @return The setting, or <code>null</code> to leave the client's own default alone
+   */
+  public Boolean getStreamEnabled() {
+
+    return streamEnabled;
+
+  }
+
+  /**
+   * Whether the cluster pushes jobs to the workers instead of only answering their polls.
+   *
+   * @param streamEnabled The setting, or <code>null</code> to leave the client's own default alone
+   */
+  public void setStreamEnabled(
+      final Boolean streamEnabled) {
+
+    this.streamEnabled = streamEnabled;
+
+  }
+
+  /**
    * How long a job stream stays open before the client re-opens it. Default: the
    * client's. Only relevant with {@link #streamEnabled}.
    */
   private Duration streamTimeout;
+
+  /**
+   * How long a job stream stays open before the client re-opens it.
+   *
+   * @return The timeout, or <code>null</code> to leave the client's own default alone
+   */
+  public Duration getStreamTimeout() {
+
+    return streamTimeout;
+
+  }
+
+  /**
+   * How long a job stream stays open before the client re-opens it.
+   *
+   * @param streamTimeout The timeout, or <code>null</code> to leave the client's own default alone
+   */
+  public void setStreamTimeout(
+      final Duration streamTimeout) {
+
+    this.streamTimeout = streamTimeout;
+
+  }
 
   /**
    * How long the cluster keeps a published message. The number does two jobs which pull in
@@ -551,9 +1277,55 @@ public class Camunda8AdapterConfiguration {
   private Duration messageTimeToLive;
 
   /**
+   * How long the cluster keeps a published message, read at adapter level.
+   *
+   * @return The time to live, or <code>null</code> to leave the client's own default alone
+   */
+  public Duration getMessageTimeToLive() {
+
+    return messageTimeToLive;
+
+  }
+
+  /**
+   * How long the cluster keeps a published message, read at adapter level.
+   *
+   * @param messageTimeToLive The time to live, or <code>null</code> to leave the client's own default alone
+   */
+  public void setMessageTimeToLive(
+      final Duration messageTimeToLive) {
+
+    this.messageTimeToLive = messageTimeToLive;
+
+  }
+
+  /**
    * The client's maximum inbound message size in bytes. Default: the client's.
    */
   private Integer maxMessageSize;
+
+  /**
+   * The largest inbound message the client accepts, in bytes.
+   *
+   * @return The size, or <code>null</code> to leave the client's own default alone
+   */
+  public Integer getMaxMessageSize() {
+
+    return maxMessageSize;
+
+  }
+
+  /**
+   * The largest inbound message the client accepts, in bytes.
+   *
+   * @param maxMessageSize The size, or <code>null</code> to leave the client's own default alone
+   */
+  public void setMaxMessageSize(
+      final Integer maxMessageSize) {
+
+    this.maxMessageSize = maxMessageSize;
+
+  }
 
   /**
    * The keep-alive interval of the client's connections. Default: the client's.
@@ -561,15 +1333,84 @@ public class Camunda8AdapterConfiguration {
   private Duration keepAlive;
 
   /**
+   * The keep-alive interval of the client's connections.
+   *
+   * @return The interval, or <code>null</code> to leave the client's own default alone
+   */
+  public Duration getKeepAlive() {
+
+    return keepAlive;
+
+  }
+
+  /**
+   * The keep-alive interval of the client's connections.
+   *
+   * @param keepAlive The interval, or <code>null</code> to leave the client's own default alone
+   */
+  public void setKeepAlive(
+      final Duration keepAlive) {
+
+    this.keepAlive = keepAlive;
+
+  }
+
+  /**
    * How many HTTP connections the REST transport may open. Default: the client's.
    */
   private Integer maxHttpConnections;
+
+  /**
+   * How many HTTP connections the REST transport may open.
+   *
+   * @return The number, or <code>null</code> to leave the client's own default alone
+   */
+  public Integer getMaxHttpConnections() {
+
+    return maxHttpConnections;
+
+  }
+
+  /**
+   * How many HTTP connections the REST transport may open.
+   *
+   * @param maxHttpConnections The number, or <code>null</code> to leave the client's own default alone
+   */
+  public void setMaxHttpConnections(
+      final Integer maxHttpConnections) {
+
+    this.maxHttpConnections = maxHttpConnections;
+
+  }
 
   /**
    * The authority the TLS certificate is verified against, for a gateway reached under
    * another name than the certificate carries. Default: none.
    */
   private String overrideAuthority;
+
+  /**
+   * The authority the TLS certificate of the cluster is verified against.
+   *
+   * @return The authority, or <code>null</code> where none is configured
+   */
+  public String getOverrideAuthority() {
+
+    return overrideAuthority;
+
+  }
+
+  /**
+   * The authority the TLS certificate of the cluster is verified against.
+   *
+   * @param overrideAuthority The authority, or <code>null</code> where none is configured
+   */
+  public void setOverrideAuthority(
+      final String overrideAuthority) {
+
+    this.overrideAuthority = overrideAuthority;
+
+  }
 
   /**
    * How long a workflow this cluster holds may stay invisible to the query API the
@@ -582,6 +1423,29 @@ public class Camunda8AdapterConfiguration {
    * zero to switch the waiting off. Default: 10 seconds.
    */
   private Duration workflowVisibilityTimeout;
+
+  /**
+   * How long a workflow this cluster holds may stay invisible to the query API.
+   *
+   * @return The window, or <code>null</code> where no key set one
+   */
+  public Duration getWorkflowVisibilityTimeout() {
+
+    return workflowVisibilityTimeout;
+
+  }
+
+  /**
+   * How long a workflow this cluster holds may stay invisible to the query API.
+   *
+   * @param workflowVisibilityTimeout The window, or <code>null</code> where no key set one
+   */
+  public void setWorkflowVisibilityTimeout(
+      final Duration workflowVisibilityTimeout) {
+
+    this.workflowVisibilityTimeout = workflowVisibilityTimeout;
+
+  }
 
   /**
    * The same window for a workflow the ENGINE has already forgotten, which is a much
@@ -601,6 +1465,29 @@ public class Camunda8AdapterConfiguration {
   private Duration endedWorkflowVisibilityTimeout;
 
   /**
+   * How long the end of a workflow may take to reach the query API.
+   *
+   * @return The window, or <code>null</code> where no key set one
+   */
+  public Duration getEndedWorkflowVisibilityTimeout() {
+
+    return endedWorkflowVisibilityTimeout;
+
+  }
+
+  /**
+   * How long the end of a workflow may take to reach the query API.
+   *
+   * @param endedWorkflowVisibilityTimeout The window, or <code>null</code> where no key set one
+   */
+  public void setEndedWorkflowVisibilityTimeout(
+      final Duration endedWorkflowVisibilityTimeout) {
+
+    this.endedWorkflowVisibilityTimeout = endedWorkflowVisibilityTimeout;
+
+  }
+
+  /**
    * Whether a workflow this adapter starts carries the workflow aggregate's id as its
    * business id. Default: <code>false</code>.
    * <p>
@@ -618,6 +1505,31 @@ public class Camunda8AdapterConfiguration {
   private boolean aggregateIdAsBusinessId = false;
 
   /**
+   * Whether a workflow this adapter starts carries the id of the workflow aggregate as its
+   * business id.
+   *
+   * @return Whether the aggregate id is written there
+   */
+  public boolean isAggregateIdAsBusinessId() {
+
+    return aggregateIdAsBusinessId;
+
+  }
+
+  /**
+   * Whether a workflow this adapter starts carries the id of the workflow aggregate as its
+   * business id.
+   *
+   * @param aggregateIdAsBusinessId Whether the aggregate id is written there
+   */
+  public void setAggregateIdAsBusinessId(
+      final boolean aggregateIdAsBusinessId) {
+
+    this.aggregateIdAsBusinessId = aggregateIdAsBusinessId;
+
+  }
+
+  /**
    * Whether the per task probe of {@code Camunda8OpenTaskProbe} is sent for the
    * Camunda-managed user tasks this adapter serves. Default: <code>false</code>.
    * <p>
@@ -631,6 +1543,31 @@ public class Camunda8AdapterConfiguration {
    * DECISIONS.md.
    */
   private boolean probeOpenUserTasks = false;
+
+  /**
+   * Whether the adapter asks the cluster about every Camunda-managed user task of a running
+   * instance.
+   *
+   * @return Whether the per task probe is sent
+   */
+  public boolean isProbeOpenUserTasks() {
+
+    return probeOpenUserTasks;
+
+  }
+
+  /**
+   * Whether the adapter asks the cluster about every Camunda-managed user task of a running
+   * instance.
+   *
+   * @param probeOpenUserTasks Whether the per task probe is sent
+   */
+  public void setProbeOpenUserTasks(
+      final boolean probeOpenUserTasks) {
+
+    this.probeOpenUserTasks = probeOpenUserTasks;
+
+  }
 
   /**
    * How many characters a business id may carry. The cluster refuses a longer one with

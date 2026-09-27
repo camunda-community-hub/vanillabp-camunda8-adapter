@@ -20,8 +20,6 @@ import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
-import lombok.Getter;
-import lombok.Setter;
 
 /**
  * The Camunda 8 adapter's OVERLAY of the shared <code>vanillabp.*</code> configuration
@@ -41,8 +39,6 @@ import lombok.Setter;
  * overrides can materialize phantom map entries in the overlay).
  */
 @ConfigurationProperties("vanillabp")
-@Getter
-@Setter
 public class VanillaBpCamunda8Properties {
 
   /**
@@ -60,6 +56,29 @@ public class VanillaBpCamunda8Properties {
   private Map<String, Camunda8AdapterConfiguration> adapters = Map.of();
 
   /**
+   * The adapter sections of the shared tree, keyed by adapter id.
+   *
+   * @return The sections, keyed by adapter id, never <code>null</code>
+   */
+  public Map<String, Camunda8AdapterConfiguration> getAdapters() {
+
+    return adapters;
+
+  }
+
+  /**
+   * The adapter sections of the shared tree, keyed by adapter id.
+   *
+   * @param adapters The sections, keyed by adapter id, never <code>null</code>
+   */
+  public void setAdapters(
+      final Map<String, Camunda8AdapterConfiguration> adapters) {
+
+    this.adapters = adapters;
+
+  }
+
+  /**
    * The workflow-module sections of the shared tree - the overlay mirrors the
    * levels of the most-specific-wins resolution of scope-specific adapter keys
    * (task &gt; workflow &gt; workflow-module &gt; adapter), currently:
@@ -72,6 +91,29 @@ public class VanillaBpCamunda8Properties {
    * adapter deploys once per workflow module.
    */
   private Map<String, ModuleOverlay> workflowModules = Map.of();
+
+  /**
+   * The workflow-module sections of the shared tree, keyed by workflow module id.
+   *
+   * @return The sections, keyed by workflow module id, never <code>null</code>
+   */
+  public Map<String, ModuleOverlay> getWorkflowModules() {
+
+    return workflowModules;
+
+  }
+
+  /**
+   * The workflow-module sections of the shared tree, keyed by workflow module id.
+   *
+   * @param workflowModules The sections, keyed by workflow module id, never <code>null</code>
+   */
+  public void setWorkflowModules(
+      final Map<String, ModuleOverlay> workflowModules) {
+
+    this.workflowModules = workflowModules;
+
+  }
 
   /**
    * Resolves the job timeout for a task with most-specific-wins semantics across
@@ -534,8 +576,6 @@ public class VanillaBpCamunda8Properties {
    * The scope-specific Camunda 8 keys of one <code>adapters.&lt;id&gt;</code>
    * section below a workflow-module/workflow/task level.
    */
-  @Getter
-  @Setter
   public static class Camunda8ScopedKeys {
 
     /**
@@ -545,13 +585,117 @@ public class VanillaBpCamunda8Properties {
     public Camunda8ScopedKeys() {
     }
 
+    /**
+     * How long a job of this scope stays locked.
+     */
     private Duration jobTimeout;
 
+    /**
+     * How long a job of this scope stays locked.
+     *
+     * @return The timeout, or <code>null</code> where this level says nothing
+     */
+    public Duration getJobTimeout() {
+
+      return jobTimeout;
+
+    }
+
+    /**
+     * How long a job of this scope stays locked.
+     *
+     * @param jobTimeout The timeout, or <code>null</code> where this level says nothing
+     */
+    public void setJobTimeout(
+        final Duration jobTimeout) {
+
+      this.jobTimeout = jobTimeout;
+
+    }
+
+    /**
+     * How long the cluster waits before it hands a failed job of this scope out again.
+     */
     private Duration retryBackoff;
 
+    /**
+     * How long the cluster waits before it hands a failed job of this scope out again.
+     *
+     * @return The backoff, or <code>null</code> where this level says nothing
+     */
+    public Duration getRetryBackoff() {
+
+      return retryBackoff;
+
+    }
+
+    /**
+     * How long the cluster waits before it hands a failed job of this scope out again.
+     *
+     * @param retryBackoff The backoff, or <code>null</code> where this level says nothing
+     */
+    public void setRetryBackoff(
+        final Duration retryBackoff) {
+
+      this.retryBackoff = retryBackoff;
+
+    }
+
+    /**
+     * Whether a worker of this scope asks for the derived variables or for all of them.
+     */
     private Camunda8FetchVariables.Mode fetchVariables;
 
+    /**
+     * Whether a worker of this scope asks for the derived variables or for all of them.
+     *
+     * @return The mode, or <code>null</code> where this level says nothing
+     */
+    public Camunda8FetchVariables.Mode getFetchVariables() {
+
+      return fetchVariables;
+
+    }
+
+    /**
+     * Whether a worker of this scope asks for the derived variables or for all of them.
+     *
+     * @param fetchVariables The mode, or <code>null</code> where this level says nothing
+     */
+    public void setFetchVariables(
+        final Camunda8FetchVariables.Mode fetchVariables) {
+
+      this.fetchVariables = fetchVariables;
+
+    }
+
+    /**
+     * How long the cluster keeps a message published in this scope.
+     */
     private Duration messageTimeToLive;
+
+    /**
+     * How long the cluster keeps a message published in this scope.
+     *
+     * @return The time to live, or <code>null</code> where this level says nothing
+     */
+    public Duration getMessageTimeToLive() {
+
+      return messageTimeToLive;
+
+    }
+
+    /**
+     * How long the cluster keeps a message published in this scope.
+     *
+     * @param messageTimeToLive The time to live, or <code>null</code> where this level says nothing
+     */
+    public void setMessageTimeToLive(
+        final Duration messageTimeToLive) {
+
+      this.messageTimeToLive = messageTimeToLive;
+
+    }
 
     /**
      * Whether an element built from an element template is left to the runtime which owns
@@ -562,10 +706,58 @@ public class VanillaBpCamunda8Properties {
     private Boolean allowConnectors;
 
     /**
+     * Whether an element built from an element template is left to the runtime which owns it.
+     *
+     * @return The setting, or <code>null</code> where this level says nothing
+     */
+    public Boolean getAllowConnectors() {
+
+      return allowConnectors;
+
+    }
+
+    /**
+     * Whether an element built from an element template is left to the runtime which owns it.
+     *
+     * @param allowConnectors The setting, or <code>null</code> where this level says nothing
+     */
+    public void setAllowConnectors(
+        final Boolean allowConnectors) {
+
+      this.allowConnectors = allowConnectors;
+
+    }
+
+    /**
      * Whether the listeners somebody modelled are served by <code>@WorkflowTask</code>
      * methods. A {@code Boolean} for the reason {@link #allowConnectors} is one.
      */
     private Boolean allowListeners;
+
+    /**
+     * Whether the listeners somebody modelled are served by <code>&#64;WorkflowTask</code>
+     * methods.
+     *
+     * @return The setting, or <code>null</code> where this level says nothing
+     */
+    public Boolean getAllowListeners() {
+
+      return allowListeners;
+
+    }
+
+    /**
+     * Whether the listeners somebody modelled are served by <code>&#64;WorkflowTask</code>
+     * methods.
+     *
+     * @param allowListeners The setting, or <code>null</code> where this level says nothing
+     */
+    public void setAllowListeners(
+        final Boolean allowListeners) {
+
+      this.allowListeners = allowListeners;
+
+    }
 
   }
 
@@ -574,8 +766,6 @@ public class VanillaBpCamunda8Properties {
    * has, plus the tenant, which only a workflow module may override because a tenant id is an
    * attribute of the deployment this adapter makes per workflow module.
    */
-  @Getter
-  @Setter
   public static class Camunda8ModuleScopedKeys extends Camunda8ScopedKeys {
 
     /**
@@ -591,13 +781,34 @@ public class VanillaBpCamunda8Properties {
      */
     private String tenantId;
 
+    /**
+     * The Camunda 8 tenant this workflow module is deployed into.
+     *
+     * @return The tenant name, or <code>null</code> where this level says nothing
+     */
+    public String getTenantId() {
+
+      return tenantId;
+
+    }
+
+    /**
+     * The Camunda 8 tenant this workflow module is deployed into.
+     *
+     * @param tenantId The tenant name, or <code>null</code> where this level says nothing
+     */
+    public void setTenantId(
+        final String tenantId) {
+
+      this.tenantId = tenantId;
+
+    }
+
   }
 
   /**
    * The Camunda 8 adapter's view of one workflow-module section.
    */
-  @Getter
-  @Setter
   public static class ModuleOverlay {
 
     /**
@@ -607,17 +818,67 @@ public class VanillaBpCamunda8Properties {
     public ModuleOverlay() {
     }
 
+    /**
+     * The adapter sections of this workflow module, keyed by adapter id.
+     */
     private Map<String, Camunda8ModuleScopedKeys> adapters = Map.of();
 
+    /**
+     * The adapter sections of this workflow module, keyed by adapter id.
+     *
+     * @return The sections, keyed by adapter id, never <code>null</code>
+     */
+    public Map<String, Camunda8ModuleScopedKeys> getAdapters() {
+
+      return adapters;
+
+    }
+
+    /**
+     * The adapter sections of this workflow module, keyed by adapter id.
+     *
+     * @param adapters The sections, keyed by adapter id, never <code>null</code>
+     */
+    public void setAdapters(
+        final Map<String, Camunda8ModuleScopedKeys> adapters) {
+
+      this.adapters = adapters;
+
+    }
+
+    /**
+     * The workflow sections of this workflow module, keyed by BPMN process id.
+     */
     private Map<String, WorkflowOverlay> workflows = Map.of();
+
+    /**
+     * The workflow sections of this workflow module, keyed by BPMN process id.
+     *
+     * @return The sections, keyed by BPMN process id, never <code>null</code>
+     */
+    public Map<String, WorkflowOverlay> getWorkflows() {
+
+      return workflows;
+
+    }
+
+    /**
+     * The workflow sections of this workflow module, keyed by BPMN process id.
+     *
+     * @param workflows The sections, keyed by BPMN process id, never <code>null</code>
+     */
+    public void setWorkflows(
+        final Map<String, WorkflowOverlay> workflows) {
+
+      this.workflows = workflows;
+
+    }
 
   }
 
   /**
    * The Camunda 8 adapter's view of one workflow section.
    */
-  @Getter
-  @Setter
   public static class WorkflowOverlay {
 
     /**
@@ -627,9 +888,61 @@ public class VanillaBpCamunda8Properties {
     public WorkflowOverlay() {
     }
 
+    /**
+     * The adapter sections of this workflow, keyed by adapter id.
+     */
     private Map<String, Camunda8ScopedKeys> adapters = Map.of();
 
+    /**
+     * The adapter sections of this workflow, keyed by adapter id.
+     *
+     * @return The sections, keyed by adapter id, never <code>null</code>
+     */
+    public Map<String, Camunda8ScopedKeys> getAdapters() {
+
+      return adapters;
+
+    }
+
+    /**
+     * The adapter sections of this workflow, keyed by adapter id.
+     *
+     * @param adapters The sections, keyed by adapter id, never <code>null</code>
+     */
+    public void setAdapters(
+        final Map<String, Camunda8ScopedKeys> adapters) {
+
+      this.adapters = adapters;
+
+    }
+
+    /**
+     * The task sections of this workflow, keyed by task definition.
+     */
     private Map<String, TaskOverlay> tasks = Map.of();
+
+    /**
+     * The task sections of this workflow, keyed by task definition.
+     *
+     * @return The sections, keyed by task definition, never <code>null</code>
+     */
+    public Map<String, TaskOverlay> getTasks() {
+
+      return tasks;
+
+    }
+
+    /**
+     * The task sections of this workflow, keyed by task definition.
+     *
+     * @param tasks The sections, keyed by task definition, never <code>null</code>
+     */
+    public void setTasks(
+        final Map<String, TaskOverlay> tasks) {
+
+      this.tasks = tasks;
+
+    }
 
     /**
      * The message sections of this workflow - the most specific level of the keys which
@@ -637,14 +950,35 @@ public class VanillaBpCamunda8Properties {
      */
     private Map<String, MessageOverlay> messages = Map.of();
 
+    /**
+     * The message sections of this workflow, keyed by BPMN message name.
+     *
+     * @return The sections, keyed by message name, never <code>null</code>
+     */
+    public Map<String, MessageOverlay> getMessages() {
+
+      return messages;
+
+    }
+
+    /**
+     * The message sections of this workflow, keyed by BPMN message name.
+     *
+     * @param messages The sections, keyed by message name, never <code>null</code>
+     */
+    public void setMessages(
+        final Map<String, MessageOverlay> messages) {
+
+      this.messages = messages;
+
+    }
+
   }
 
   /**
    * The Camunda 8 adapter's view of one message section - the most specific level for a
    * key about a published message.
    */
-  @Getter
-  @Setter
   public static class MessageOverlay {
 
     /**
@@ -654,15 +988,39 @@ public class VanillaBpCamunda8Properties {
     public MessageOverlay() {
     }
 
+    /**
+     * The adapter sections of this message, keyed by adapter id.
+     */
     private Map<String, Camunda8ScopedKeys> adapters = Map.of();
+
+    /**
+     * The adapter sections of this message, keyed by adapter id.
+     *
+     * @return The sections, keyed by adapter id, never <code>null</code>
+     */
+    public Map<String, Camunda8ScopedKeys> getAdapters() {
+
+      return adapters;
+
+    }
+
+    /**
+     * The adapter sections of this message, keyed by adapter id.
+     *
+     * @param adapters The sections, keyed by adapter id, never <code>null</code>
+     */
+    public void setAdapters(
+        final Map<String, Camunda8ScopedKeys> adapters) {
+
+      this.adapters = adapters;
+
+    }
 
   }
 
   /**
    * The Camunda 8 adapter's view of one task section - the MOST specific level.
    */
-  @Getter
-  @Setter
   public static class TaskOverlay {
 
     /**
@@ -672,7 +1030,33 @@ public class VanillaBpCamunda8Properties {
     public TaskOverlay() {
     }
 
+    /**
+     * The adapter sections of this task, keyed by adapter id.
+     */
     private Map<String, Camunda8ScopedKeys> adapters = Map.of();
+
+    /**
+     * The adapter sections of this task, keyed by adapter id.
+     *
+     * @return The sections, keyed by adapter id, never <code>null</code>
+     */
+    public Map<String, Camunda8ScopedKeys> getAdapters() {
+
+      return adapters;
+
+    }
+
+    /**
+     * The adapter sections of this task, keyed by adapter id.
+     *
+     * @param adapters The sections, keyed by adapter id, never <code>null</code>
+     */
+    public void setAdapters(
+        final Map<String, Camunda8ScopedKeys> adapters) {
+
+      this.adapters = adapters;
+
+    }
 
   }
 

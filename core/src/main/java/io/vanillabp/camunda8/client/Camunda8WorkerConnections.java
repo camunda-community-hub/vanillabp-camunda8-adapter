@@ -22,8 +22,7 @@ import java.time.Duration;
  * <p>
  * The adapter says this and changes nothing. How many connections an application opens
  * against its cluster is a decision about its own resources, and raising that number behind
- * its back would take the decision away. See decision &lt;pending: 685&gt; in the
- * repository's DECISIONS.md.
+ * its back would take the decision away. See decision 50 in the repository's DECISIONS.md.
  */
 public final class Camunda8WorkerConnections {
 
