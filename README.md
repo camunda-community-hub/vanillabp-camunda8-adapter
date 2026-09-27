@@ -2702,6 +2702,17 @@ repository's DECISIONS.md). A `404` there answers the whole list at once, becaus
 the engine has forgotten holds nothing open. It is asked once per workflow and not once per
 record, so twenty records of one workflow cost one of these.
 
+That `404` really is the end of an instance, which had to be measured because a cancellation
+is not. An instance carrying a Camunda-managed user task waits for the `canceling` listener
+job of that task, and the engine answers `404` to a SECOND cancellation long before the
+instance is over. `Camunda8ProbeWhileAnInstanceTerminatesIT` holds that window open - it
+deploys a `canceling` listener no worker of this repository serves, takes the job and does not
+answer it - and asks inside it. Measured on 2026-09-27 against `camunda/camunda:8.8.39`,
+`camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`: the second cancellation answers
+`404`, the existence probe answers `400 INVALID_ARGUMENT` over five readings a second apart,
+the empty `UpdateUserTask` of the task probe answers `409`, and both turn to `404` once the
+listener job is answered. So neither probe reads a terminating instance as gone.
+
 Then the tasks, and what kind of task decides how. A job is asked about with the
 `UpdateJobTimeout` this adapter sends anyway: `NOT_FOUND` is gone, a 400 saying nobody has
 the job activated right now means the task is alive, and anything else is "cannot say".
