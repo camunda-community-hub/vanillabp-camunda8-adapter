@@ -371,8 +371,7 @@ public final class Camunda8TaskWiring {
   private static final String CANCELING_AN_INSTANCE = "cancel";
 
   /**
-   * One start event the cluster fires on its own, to be served by a start
-   * execution-listener worker.
+   * One start event of a process, to be served by a start execution-listener worker.
    *
    * @param bpmnProcessId The SCOPED BPMN process id (what the cluster knows)
    * @param startEventId The BPMN id of the start event
@@ -415,15 +414,16 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The start events of the given executable process which the CLUSTER fires on its
-   * own (timer, signal, conditional) - and attaches a <code>start</code> execution
-   * listener to each of them, which is how VanillaBP learns about such a start and
-   * gets to build the workflow aggregate before anything else runs.
+   * EVERY start event of the given executable process - and attaches an execution listener
+   * to each of them, which is how VanillaBP learns about a start and gets to decide what it
+   * means before anything else of the process runs.
    * <p>
-   * Message start events are not among them: those are triggered by the application
-   * through {@code ProcessService#startWorkflowByMessage}, which carries the
-   * aggregate. Camunda 8 has no conditional events at all; the kind is part of the
-   * model here so an unsupported model fails at the cluster, not silently.
+   * The plain and the message start event are among them. What a start MEANS is read from
+   * the state of the workflow and not from the kind of its start event, so a workflow the
+   * application started is told apart from one somebody started past VanillaBP by the name
+   * the cluster holds for it, whichever event began it - see
+   * {@code DECISIONS.pending/653.md}. Camunda 8 has no conditional events at all; the kind
+   * is part of the model here so an unsupported model fails at the cluster, not silently.
    * <p>
    * Only the start events the process itself holds are read. An event subprocess starts
    * no workflow, which {@link #startsTheWorkflow(StartEvent)} says more about.
@@ -491,6 +491,10 @@ public final class Camunda8TaskWiring {
               .stream()
               .anyMatch(ConditionalEventDefinition.class::isInstance);
 
+          final var message = definitions
+              .stream()
+              .anyMatch(io.camunda.zeebe.model.bpmn.instance.MessageEventDefinition.class::isInstance);
+
           final BpmsStartTrigger.Kind kind;
           final String signalName;
           if (timer) {
@@ -507,8 +511,12 @@ public final class Camunda8TaskWiring {
           } else if (conditional) {
             kind = BpmsStartTrigger.Kind.CONDITIONAL;
             signalName = null;
+          } else if (message) {
+            kind = BpmsStartTrigger.Kind.MESSAGE;
+            signalName = null;
           } else {
-            return;
+            kind = BpmsStartTrigger.Kind.NONE;
+            signalName = null;
           }
 
           if (attachTheStartListener) {
@@ -528,6 +536,9 @@ public final class Camunda8TaskWiring {
    * model already carries it (re-wiring an already-processed model). Retries stay at
    * the Camunda default: unlike the user-task listeners, a failure here means the
    * workflow has no aggregate, which is worth retrying before it becomes an incident.
+   * <p>
+   * What it costs the model is one <code>zeebe:executionListeners</code> element per start
+   * event, which is what {@code Camunda8StartListenerCostTest} measures.
    */
   private static void addStartExecutionListener(
       final StartEvent startEvent,

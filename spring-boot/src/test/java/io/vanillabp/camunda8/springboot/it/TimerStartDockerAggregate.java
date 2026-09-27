@@ -7,10 +7,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the timer-start integration test. Its ID is a
- * String, so the <code>@WorkflowStartedByBpms</code> method can write the trigger time
- * into it - nobody starts this workflow through the {@code ProcessService}, so there is
- * no other moment at which it gets a name.
+ * JPA workflow aggregate of the timer-start integration test. Nobody starts this workflow
+ * through the {@code ProcessService}, so the <code>@WorkflowStartedByBpms</code> method is
+ * the one moment at which it gets a name.
  */
 @Entity
 @Table(name = "C8_TIMER_START_AGGREGATE")
@@ -22,6 +21,11 @@ public class TimerStartDockerAggregate {
   private String id;
 
   private String processedBy;
+
+  /**
+   * Which kind of start event began this workflow, as the trigger reported it.
+   */
+  private String startedBy;
 
   /**
    * Set by the <code>@WorkflowEnded</code> method.

@@ -100,13 +100,14 @@ public class Camunda8BpmsInitiatedStartIT {
     assertEquals(1, aggregates.size(), "one workflow, one aggregate");
     final var aggregate = aggregates.getFirst();
 
-    // the application named the workflow, and it named it after the trigger time: the
-    // aggregate of a start the cluster fired has no other moment at which it gets a name
+    // the application named the workflow, and nobody else did: the process instance key
+    // of the cluster plays no part in it any more
     assertNotNull(aggregate.getId());
     assertTrue(
-        aggregate.getId().endsWith("Z"),
-        "the aggregate's ID is the trigger time: "
+        aggregate.getId().startsWith("timer-"),
+        "the aggregate carries the name the application gave it: "
             + aggregate.getId());
+    assertEquals("TIMER", aggregate.getStartedBy(), "the trigger says which start event fired");
 
     // the service task behind the start event ran against exactly that aggregate,
     // which proves the aggregate-ID variable was written by the listener completion

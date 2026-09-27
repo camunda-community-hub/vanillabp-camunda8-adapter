@@ -8,6 +8,7 @@ vanillabp:
   adapters:
     c8:
       type: camunda8
+      max-http-connections: 256
       request-timeout: PT5S
       job-lease: use
       name-clash-avoidance: use-prefix

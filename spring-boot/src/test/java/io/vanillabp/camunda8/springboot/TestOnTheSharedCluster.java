@@ -67,6 +67,20 @@ import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
  * for the first deployment of its version and for no later one. Both declare a
  * {@code @Container} field, the way every class here did before.
  * <p>
+ * <b>Why this module configures {@code max-http-connections}.</b> The adapter opens one worker
+ * per process and kind, and each of them holds a REST activation request open. The Camunda
+ * client caps its pool at 100 connections by default, the same number in the 8.8, 8.9 and 8.10
+ * clients. This module deploys 35 processes, which is 85 workers on the GA lines and 115 on
+ * 8.10, where a cancel listener per process comes on top. Above the cap the surplus workers
+ * take turns, and whatever one of them is waiting for arrives a whole {@code request-timeout}
+ * late. Measured on 2026-09-26 with {@code Camunda8RestartDeliveryIT} at 115 workers on
+ * {@code camunda/camunda:8.10.0-rc1}: 10412 ms with the client's 100 and 215 ms with the 256
+ * {@code camunda8-it.yaml} now sets. The same line with the 92 workers this module opened
+ * before the start-event listener of story 653 answers in 184 ms, and 8.10 held to the 85
+ * workers of the GA lines drains cleanly, so it is the number of workers against the size of
+ * the pool and not the version of the client. The setting lives in the YAML without a comment
+ * beside it because Spotless formats these files through Jackson, which drops comments.
+ * <p>
  * A user task left between two of its states is what the cleanup below watches hardest for,
  * and it is worth knowing why. Such a task holds a listener job which stays activatable, and
  * the first worker of that job type in the next class is served it. The 8.10 alphas could not
