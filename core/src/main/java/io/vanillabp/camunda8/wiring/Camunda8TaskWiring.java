@@ -421,8 +421,8 @@ public final class Camunda8TaskWiring {
    * The plain and the message start event are among them. What a start MEANS is read from
    * the state of the workflow and not from the kind of its start event, so a workflow the
    * application started is told apart from one somebody started past VanillaBP by the name
-   * the cluster holds for it, whichever event began it - see
-   * {@code DECISIONS.pending/653.md}. Camunda 8 has no conditional events at all; the kind
+   * the cluster holds for it, whichever event began it - see decision 49 in the
+   * repository's DECISIONS.md. Camunda 8 has no conditional events at all; the kind
    * is part of the model here so an unsupported model fails at the cluster, not silently.
    * <p>
    * Only the start events the process itself holds are read. An event subprocess starts

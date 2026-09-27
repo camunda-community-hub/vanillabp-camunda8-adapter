@@ -48,7 +48,7 @@ import lombok.extern.slf4j.Slf4j;
  * operator alerts on, and they are readable at every moment.
  * <p>
  * Why a hung slot is watched and reported instead of being ended by the adapter is
- * decision &lt;pending: 634&gt; in the repository's DECISIONS.md.
+ * decision 46 in the repository's DECISIONS.md.
  */
 @Slf4j
 public class Camunda8SlotWatch implements AutoCloseable {

@@ -2098,7 +2098,7 @@ VanillaBP, the application's `@WorkflowStartedByBpms` method builds the aggregat
 it, and the job completion writes that name into the instance. Where the variable holds a
 name no workflow aggregate carries, the start is refused, because VanillaBP names a workflow
 and nobody else. The reasoning and the choice of the variable's name are
-`DECISIONS.pending/653.md`.
+[decision 49](./DECISIONS.md#49-the-cluster-holds-the-workflows-name-in-the-variable-named-after-the-aggregates-id).
 
 The kind of the start event decides none of it, which is also what makes a redelivered
 listener job harmless: the first attempt wrote the name into the instance, so the second one

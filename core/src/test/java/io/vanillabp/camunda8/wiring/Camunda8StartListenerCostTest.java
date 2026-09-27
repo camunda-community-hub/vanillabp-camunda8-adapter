@@ -26,7 +26,7 @@ import io.vanillabp.spi.service.BpmsStartTrigger;
  * by it. These tests hold the number, so a change shows up here instead of in somebody's
  * deployment.
  * <p>
- * The reasoning is `DECISIONS.pending/653.md`.
+ * The reasoning is decision 49 in the repository's DECISIONS.md.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8StartListenerCostTest {
