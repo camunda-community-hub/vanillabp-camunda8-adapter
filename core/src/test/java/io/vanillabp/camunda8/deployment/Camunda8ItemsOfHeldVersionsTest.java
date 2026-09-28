@@ -77,6 +77,25 @@ public class Camunda8ItemsOfHeldVersionsTest {
           </bpmn:serviceTask>
       """;
 
+  private static final String LISTENER_ELEMENT = "Event_RoundDone";
+
+  private static final String A_LISTENER_IN_A_SUBPROCESS_NAMING_NO_ITEM = """
+          <bpmn:subProcess id="SubProcess_Applications">
+            <bpmn:multiInstanceLoopCharacteristics>
+              <bpmn:extensionElements>
+                <zeebe:loopCharacteristics inputCollection="=applications" />
+              </bpmn:extensionElements>
+            </bpmn:multiInstanceLoopCharacteristics>
+            <bpmn:endEvent id="Event_RoundDone">
+              <bpmn:extensionElements>
+                <zeebe:executionListeners>
+                  <zeebe:executionListener eventType="end" type="loan-approval__LoanApproval__auditTheRound" />
+                </zeebe:executionListeners>
+              </bpmn:extensionElements>
+            </bpmn:endEvent>
+          </bpmn:subProcess>
+      """;
+
   private static final String A_SUBPROCESS_NAMING_NO_ITEM = """
           <bpmn:subProcess id="SubProcess_Applications">
             <bpmn:multiInstanceLoopCharacteristics>
@@ -120,6 +139,29 @@ public class Camunda8ItemsOfHeldVersionsTest {
     // the subprocess hands no item over and the task inside it does, so the one round
     // without a value is the outer one
     assertEquals(List.of("SubProcess_Applications"), itemsNeverNamedBy(A_SUBPROCESS_NAMING_NO_ITEM));
+
+  }
+
+  @Test
+  @DisplayName("A modelled listener of a held version names the rounds around it too")
+  public void aListenerOfAHeldVersion() {
+
+    // a listener method reads its item out of the same iteration a task's method does, so
+    // leaving the chain off a listener would hide the finding for that half of the model
+    final var cluster = AClusterHolding
+        .theseModels(Map.of(1, heldModel(A_LISTENER_IN_A_SUBPROCESS_NAMING_NO_ITEM)))
+        .servingModelledListeners();
+
+    assertEquals(
+        List.of("SubProcess_Applications"),
+        cluster
+            .catalogOf(MODULE, PROCESS)
+            .tasksOfVersion(MODULE, PROCESS, "1")
+            .stream()
+            .filter(task -> LISTENER_ELEMENT.equals(task.activityId()))
+            .map(BpmnTaskSpec::multiInstanceElementsWithoutAnItem)
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("the listener of the held version was not read at all")));
 
   }
 

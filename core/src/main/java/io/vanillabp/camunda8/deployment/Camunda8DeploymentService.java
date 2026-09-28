@@ -773,7 +773,10 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // a version the cluster still holds carries its compensation flat, as element ids among
     // the others. The shaped report belongs to the model this boot deploys, which is the one
     // a developer can still redraw; for an older version the fact that its workflows can hold
-    // two tokens is what there is to say
+    // two tokens is what there is to say. Carrying the shape here as well would take a second
+    // method on the version catalog - the flat list has no room for which throw event starts
+    // which handlers - and nothing an old version could answer would change what a developer
+    // does about it
     Camunda8TaskWiring
         .compensationOf(model, scopedBpmnProcessId)
         .stream()
@@ -2424,8 +2427,13 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       Camunda8Listeners
           .listenersOf(model, scopedBpmnProcessId)
           .stream()
+          // the rounds the listener's element runs in without being handed their value, read
+          // the same way a task's are: a listener method reads its item out of the same
+          // iteration, so the core has to be able to warn about it on a held version too
           .map(listener -> new BpmnTaskSpec(
-              listener.elementId(), plainTaskDefinition(workflowModuleId, bpmnProcessId, listener.taskDefinition())))
+              listener.elementId(), plainTaskDefinition(workflowModuleId, bpmnProcessId, listener
+                  .taskDefinition()), false, null, itemsTheHeldModelNeverNames(heldChains, scopedBpmnProcessId,
+                      listener.elementId())))
           // the same gate the deployed model passes: only a listener a method names is a task of
           // this application, and a held model may carry one nobody here ever served
           .filter(

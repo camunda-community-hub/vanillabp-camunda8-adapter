@@ -335,6 +335,12 @@ public final class Camunda8Scoping {
         .getModelElementsByType(Escalation.class)
         .forEach(escalation -> escalation.setEscalationCode(
             scoping.scopedIdentifier(workflowModuleId, escalation.getEscalationCode(), adapterId)));
+    // an error code carries the prefix of the module whose model declares it, and so does
+    // the code a TaskException raises (Camunda8JobHandler). Both sides of a throw and its
+    // catcher are therefore the same module, which they are: a called element below gets this
+    // module's prefix, and a called element carries no tenant of its own, so the cluster
+    // resolves it in the tenant of the calling instance. A call activity cannot leave its
+    // workflow module here
     model
         .getModelElementsByType(Error.class)
         .forEach(error -> error.setErrorCode(
