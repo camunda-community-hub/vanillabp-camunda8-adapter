@@ -1346,13 +1346,13 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             bpmnProcessId,
             Camunda8TaskWiring.compensationOf(model, scopedBpmnProcessId));
 
-    // the user tasks version 1 modelled up to its release 1.6.3 are served by
-    // nothing here and would be silent - so they are counted and named
-    reportLegacyUserTasks(
+    // a plain BPMN user task is served by nothing here and would be silent - so they are
+    // counted and named, whether or not they carry version 1's formKey
+    reportUnservedUserTasks(
         workflowModuleId,
         bpmnProcessId,
         scopedBpmnProcessId,
-        Camunda8TaskWiring.legacyUserTaskIdsOf(model, scopedBpmnProcessId));
+        Camunda8TaskWiring.unservedUserTasksOf(model, scopedBpmnProcessId));
 
     // under 'use-prefix' a call activity naming its process by FEEL is the one place where
     // the application has to write the prefix itself, so the boot says which elements that is
@@ -2242,16 +2242,21 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Says that a BPMN process still carries user tasks in the shape VanillaBP 1 modelled
-   * them up to its release 1.6.3, and how many of them are open on the cluster right
-   * now.
+   * Says that a BPMN process carries plain BPMN user tasks, which nothing serves here, and
+   * how many tasks are open on them right now.
    * <p>
-   * A WARN rather than a failed deployment. The model itself is valid, the workflow runs,
-   * and an application may deliberately serve such a task with a job worker of its own -
-   * what does NOT happen is anything by VanillaBP: no CREATED notification, and
-   * <code>completeUserTask</code> cannot complete the task, because version 1 handed out
-   * the job's key while the cluster expects a user-task key. Being silent about that was
-   * the defect; ending the boot over it would be the other one.
+   * A WARN rather than a failed deployment. The model itself is valid, the workflow runs up
+   * to the element, and an application may deliberately serve such a task with a job worker of
+   * its own - what does NOT happen is anything by VanillaBP: no CREATED notification, and
+   * <code>completeUserTask</code> cannot complete the task, because the id it hands out is the
+   * job's key while the cluster expects a user-task key. Being silent about that was the
+   * defect; ending the boot over it would be the other one.
+   * <p>
+   * The two shapes are named apart because only one of them can be searched for. Up to
+   * release 1.6.3 VanillaBP 1 served this element and read its task definition off the
+   * <code>formKey</code>, so an upgrading application finds those by searching its models. A
+   * plain user task without a <code>formKey</code> is not that convention and no such search
+   * finds it, while the cluster does exactly the same with it.
    * <p>
    * Two numbers are reported and only the first one is certain. The elements come from
    * the model this boot deploys and are what has to reach zero; the count of open tasks is
@@ -2261,41 +2266,82 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * @param workflowModuleId The workflow module id
    * @param bpmnProcessId The plain BPMN process id
    * @param scopedBpmnProcessId The process id as the cluster knows it
-   * @param elementIds The user tasks found, empty for every model written since 1.7.0
+   * @param found The user tasks nothing serves, per shape, both empty for a model whose user
+   *          tasks are all Camunda-managed
    */
-  private void reportLegacyUserTasks(
+  private void reportUnservedUserTasks(
       final String workflowModuleId,
       final String bpmnProcessId,
       final String scopedBpmnProcessId,
-      final List<String> elementIds) {
+      final Camunda8TaskWiring.Camunda8UnservedUserTasks found) {
 
-    if (elementIds.isEmpty()) {
+    if (found.isEmpty()) {
       return;
     }
-    final var openTasks = countOpenLegacyUserTasks(scopedBpmnProcessId);
+    final var openTasks = countOpenUnservedUserTasks(scopedBpmnProcessId);
     log.warn(
         """
-            Camunda8[{}]: {} user task(s) of BPMN process '{}' (workflow module '{}') are modelled \
-            the way VanillaBP 1 modelled them up to its release 1.6.3 - a plain BPMN user task whose \
-            'zeebe:formDefinition' names a formKey, served by a job worker on '{}': {}. This version \
-            does not serve them, and it says so rather than failing the deployment, because the \
-            process itself is fine. What you lose for each of them: no notification when the task is \
-            created or canceled, and 'ProcessService#completeUserTask' cannot complete it, because \
-            the id such a task hands out is a job key while the cluster expects a user-task key. \
-            VanillaBP 1.7.0 replaced this construction, so the way out is the model: make the user \
-            task a Camunda-managed one ('zeebe:userTask') and set 'External form reference' \
-            (zeebe:formDefinition externalReference) to what the formKey said - VanillaBP then wires \
-            its lifecycle listeners itself. {} Finish or cancel the tasks which are still open BEFORE \
-            you rely on this application to complete them, because afterwards nothing can.""",
+            Camunda8[{}]: {} user task(s) of BPMN process '{}' (workflow module '{}') are plain BPMN \
+            user tasks, which this cluster serves with a job of '{}' and this version serves with \
+            nothing: {}. The workflow runs up to such an element and stops there until the job's \
+            retries are used up. This is said rather than failing the deployment, because the process \
+            itself is fine and an application may serve such a job with a worker of its own. What you \
+            lose for each of them: no notification when the task is created or canceled, and \
+            'ProcessService#completeUserTask' cannot complete it, because the id such a task hands \
+            out is a job key while the cluster expects a user-task key. The way out is the model, and \
+            it is the same for all of them: make the user task a Camunda-managed one \
+            ('zeebe:userTask') and set 'External form reference' (zeebe:formDefinition \
+            externalReference) to the task definition your @WorkflowTask method names - VanillaBP \
+            then wires its lifecycle listeners itself. {} Finish or cancel the tasks which are still \
+            open BEFORE you rely on this application to complete them, because afterwards nothing \
+            can.""",
         adapterId,
-        elementIds.size(),
+        found.all().size(),
         bpmnProcessId,
         workflowModuleId,
         Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1,
-        String.join("', '", elementIds.stream().map("'%s'"::formatted).toList()),
+        whichShapeEachOfThemIs(found),
         openTasks == null
             ? "The cluster did not answer how many of them are open right now."
             : "Open right now: %d.".formatted(openTasks));
+
+  }
+
+  /**
+   * Names the elements found, per shape, so a developer reads which of them a search for
+   * <code>formKey</code> would have found.
+   *
+   * @param found The user tasks nothing serves, per shape
+   * @return One sentence naming what there is, leaving out a shape which is not there
+   */
+  private static String whichShapeEachOfThemIs(
+      final Camunda8TaskWiring.Camunda8UnservedUserTasks found) {
+
+    final var sentences = new ArrayList<String>();
+    if (!found.withVersionOnesFormKey().isEmpty()) {
+      sentences
+          .add(
+              "carrying the formKey VanillaBP 1 read their task definition from, up to its release 1.6.3, which is what a search of your models for 'formKey' finds: %s"
+                  .formatted(named(found.withVersionOnesFormKey())));
+    }
+    if (!found.withoutAFormKey().isEmpty()) {
+      sentences
+          .add(
+              "carrying no formKey at all, so no search for one finds them although this cluster treats them the same: %s"
+                  .formatted(named(found.withoutAFormKey())));
+    }
+    return String.join("; ", sentences);
+
+  }
+
+  /**
+   * @param elementIds The element ids to name
+   * @return Them in quotes, comma separated
+   */
+  private static String named(
+      final List<String> elementIds) {
+
+    return String.join(", ", elementIds.stream().map("'%s'"::formatted).toList());
 
   }
 
@@ -2421,13 +2467,14 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * How many jobs of version 1's user-task type the cluster still holds for one process -
-   * the number which goes to zero as those tasks are finished.
+   * How many jobs of the plain user task's job type the cluster still holds for one process -
+   * the number which goes to zero as those tasks are finished. It covers both shapes the
+   * report names, because the cluster serves both with a job of that one type.
    *
    * @param scopedBpmnProcessId The process id as the cluster knows it
    * @return The count, or <code>null</code> where the cluster did not answer
    */
-  private Long countOpenLegacyUserTasks(
+  private Long countOpenUnservedUserTasks(
       final String scopedBpmnProcessId) {
 
     try {
@@ -2447,7 +2494,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       // a diagnostic never fails a deployment, and a cluster which cannot answer
       // says so in the message instead
       log.debug(
-          "Camunda8[{}]: the cluster did not answer how many version-1 user tasks of '{}' are open",
+          "Camunda8[{}]: the cluster did not answer how many plain BPMN user tasks of '{}' are open",
           adapterId,
           scopedBpmnProcessId,
           e);

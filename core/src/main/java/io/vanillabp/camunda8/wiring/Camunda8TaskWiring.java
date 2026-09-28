@@ -632,48 +632,102 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The job type version 1 served its user tasks with up to release 1.6.3, when a user
-   * task was a job-worker user task rather than a Camunda-managed one. Version 2 opens
-   * no worker on it, which is what {@link #legacyUserTaskIdsOf} exists to report.
+   * The job type the cluster serves a plain BPMN user task with - the shape version 1 used
+   * up to its release 1.6.3. Version 2 opens no worker on it, which is what
+   * {@link #unservedUserTasksOf} exists to report.
    */
   public static final String TASKDEFINITION_USERTASK_WORKER_V1 = "io.camunda.zeebe:userTask";
 
   /**
-   * The user tasks of the given executable process which are still modelled the way
-   * VanillaBP 1 modelled them up to its release 1.6.3: a plain BPMN user task, served by
-   * a job worker on {@value #TASKDEFINITION_USERTASK_WORKER_V1}, whose task definition
-   * was the <code>zeebe:formDefinition</code> <strong>formKey</strong>. Release 1.7.0
-   * replaced that with a Camunda-managed user task carrying the lifecycle listeners this
-   * version wires, and it kept serving the old shape alongside; this version does not.
+   * The user tasks of one BPMN process which this version serves with nothing, told apart by
+   * whether the model still carries version 1's <code>formKey</code>.
    * <p>
-   * Such a user task falls through everything else silently, which is why it is looked
-   * for on purpose: {@link #tasksOf} reads service-like tasks only, and
-   * {@link #userTasksOf} skips anything without a <code>zeebe:userTask</code>. So it is
-   * neither wired nor reported, the model deploys, the workflow runs - and VanillaBP
-   * never learns that the task was created, while
-   * <code>ProcessService#completeUserTask</code> cannot complete it either, because the
-   * id such a task hands out is a job key and the cluster expects a user-task key.
+   * Both shapes end the same way and the way out of both is the same, but only one of them
+   * can be found by searching a model for <code>formKey</code>, so the report has to keep
+   * them apart.
+   *
+   * @param withVersionOnesFormKey The element ids whose <code>zeebe:formDefinition</code>
+   *          names a <code>formKey</code>, which is what told version 1 the task definition
+   * @param withoutAFormKey The element ids of a plain BPMN user task carrying no
+   *          <code>formKey</code> at all - never a VanillaBP shape, and just as silent
+   */
+  public record Camunda8UnservedUserTasks(
+                                          List<String> withVersionOnesFormKey,
+                                          List<String> withoutAFormKey) {
+
+    /**
+     * Whether this process gives the report nothing to say.
+     *
+     * @return Whether the process carries neither shape
+     */
+    public boolean isEmpty() {
+
+      return withVersionOnesFormKey.isEmpty() && withoutAFormKey.isEmpty();
+
+    }
+
+    /**
+     * Both shapes together, which is what the count in the report is about: the way out is the
+     * same for all of them.
+     *
+     * @return Every element id found, version 1's shape first
+     */
+    public List<String> all() {
+
+      return java.util.stream.Stream
+          .concat(withVersionOnesFormKey.stream(), withoutAFormKey.stream())
+          .toList();
+
+    }
+
+  }
+
+  /**
+   * The user tasks of the given executable process which nothing serves: a plain BPMN user
+   * task, without a <code>zeebe:userTask</code> marker and without a
+   * <code>zeebe:taskDefinition</code> of the application's own.
+   * <p>
+   * The cluster serves such an element with a job of
+   * {@value #TASKDEFINITION_USERTASK_WORKER_V1}, and this version opens no worker on that job
+   * type. So the model deploys, the workflow runs up to the element and stops there until the
+   * job's retries are used up, and nothing tells the application. It falls through everything
+   * else: {@link #tasksOf} reads service-like tasks only, and {@link #userTasksOf} skips
+   * anything without a <code>zeebe:userTask</code>. It cannot be completed either, because the
+   * id such a task hands out is a job key while the cluster expects a user-task key.
+   * <p>
+   * Two shapes end up here and the answer said about them differs. Up to release 1.6.3
+   * VanillaBP 1 served exactly this element and read its task definition off the
+   * <code>zeebe:formDefinition</code> <strong>formKey</strong>; release 1.7.0 replaced it with
+   * a Camunda-managed user task and kept serving the old one alongside. An application
+   * upgrading from that version finds those elements by searching its models for
+   * <code>formKey</code>. A plain user task WITHOUT one is not version 1's convention and no
+   * search for a formKey finds it, while the cluster treats it exactly the same, which is why
+   * both are collected and reported apart.
    *
    * @param model The BPMN model of one file
    * @param bpmnProcessId The process id as the CLUSTER will know it
-   * @return The element ids, empty where the model carries none
+   * @return The element ids per shape, both empty where the model carries none
    */
-  public static List<String> legacyUserTaskIdsOf(
+  public static Camunda8UnservedUserTasks unservedUserTasksOf(
       final BpmnModelInstance model,
       final String bpmnProcessId) {
 
-    return model
+    final var byShape = model
         .getModelElementsByType(UserTask.class)
         .stream()
         .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
         // a Camunda-managed user task is what this version serves, and a user task
-        // carrying a zeebe:taskDefinition is the application's own job worker rather
-        // than version 1's convention - neither is meant here
+        // carrying a zeebe:taskDefinition is the application's own job worker - neither is
+        // an element nothing serves
         .filter(task -> task.getSingleExtensionElement(ZeebeUserTask.class) == null)
         .filter(task -> task.getSingleExtensionElement(ZeebeTaskDefinition.class) == null)
-        .filter(task -> namesAFormKey(task.getSingleExtensionElement(ZeebeFormDefinition.class)))
-        .map(FlowElement::getId)
-        .toList();
+        .collect(
+            java.util.stream.Collectors
+                .partitioningBy(
+                    task -> namesAFormKey(task.getSingleExtensionElement(ZeebeFormDefinition.class)),
+                    java.util.stream.Collectors.mapping(FlowElement::getId, java.util.stream.Collectors.toList())));
+    return new Camunda8UnservedUserTasks(
+        List.copyOf(byShape.get(Boolean.TRUE)), List.copyOf(byShape.get(Boolean.FALSE)));
 
   }
 

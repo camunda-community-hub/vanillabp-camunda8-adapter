@@ -1417,7 +1417,25 @@ offers no command to cancel a Camunda-managed user task by BPMN error (ThrowErro
 is job-based) and V1's marker-variable workaround is broken by V1's own admission
 - a guiding error naming the release line explains it; the listeners it needs
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
-or later. The wiring and the V1 order of the listeners are `Camunda8UserTaskWiringTest`. The
+or later.
+
+A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment names it. The
+cluster serves such an element with a job of `io.camunda.zeebe:userTask`, this version opens no
+worker on that job type, and the workflow stands at the element until the job's retries are used
+up. It falls through everything else: `tasksOf` reads service-like tasks only and `userTasksOf`
+skips anything without the marker. `Camunda8TaskWiring#unservedUserTasksOf` looks for it on
+purpose and splits it into the two shapes the message has to keep apart. One carries the `formKey`
+version 1 read the task definition from up to its release 1.6.3, which is what an upgrading
+application finds by searching its models for that word. The other carries no `formKey` at all,
+which no such search finds while the cluster treats it exactly the same. That second shape is why
+the reader no longer filters on the formKey: it went through the whole boot without a word. One WARN per BPMN process names
+the elements per shape plus how many tasks are open on them right now, counted from the jobs of
+that type, and the boot goes on for the reason
+[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on)
+gives. `Camunda8UnservedUserTasksReportTest` holds the message and
+`Camunda8UserTaskWiringTest` the reader.
+
+The wiring and the V1 order of the listeners are `Camunda8UserTaskWiringTest`. The
 lifecycle against a cluster is `Camunda8TaskProcessingIT#userTaskCreatedAndCompleted`,
 `#userTaskCanceledOnInstanceCancellation`, `#userTaskEdgeCases` and
 `#cancelUserTaskUnsupportedGuiding`, with
