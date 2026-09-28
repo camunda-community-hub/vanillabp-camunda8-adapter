@@ -268,6 +268,12 @@ in the repository's `DECISIONS.md`.
 else which wants to know how much of the pool is taken. A worker which was closed gave its
 connection back and is not in it.
 
+The three calls above are what an extension author has to know and cannot find out by reading a
+signature, so they are also on the wiki page
+[Extending the adapter](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Extending-the-adapter),
+with what happens when one of them is left out. That page is where an extension author looks;
+this one says why the calls are separate.
+
 `Camunda8ListenerJobs.completeOrFail` runs a listener job the way this adapter runs its own -
 registered with the drain, both answers through `Camunda8CommandRetry`, and a failure during a
 shutdown left to its lock rather than reported. That last part is what a listener whose failure

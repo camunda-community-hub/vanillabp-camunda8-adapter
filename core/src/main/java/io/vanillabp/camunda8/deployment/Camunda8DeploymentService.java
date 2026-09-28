@@ -391,8 +391,17 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   private volatile boolean saidThatTheWorkersOutgrewThePool = false;
 
   /**
+   * Whether this start was already told that the shutdown grace cannot carry the drain of
+   * these workers. Said once for the same reason the sentence above is said once: the number
+   * grows per workflow module and the step the developer takes is the same at every one of
+   * them.
+   */
+  private volatile boolean saidThatTheGraceCannotDrainTheWorkers = false;
+
+  /**
    * Holds the workers which are open on the client of this adapter id against its
-   * connection pool, and says so where they do not fit.
+   * connection pool, and says so where they do not fit - in what a running application
+   * waits for, and in what its shutdown needs.
    * <p>
    * The pool belongs to the client and the client belongs to the adapter id, so the number
    * which counts is the one over all workflow modules of this service AND over the workers
@@ -401,8 +410,15 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * finds out the hard way, one <code>request-timeout</code> at a time (see
    * {@link Camunda8WorkerConnections}).
    * <p>
+   * The grace is the second question about the same pool, and it is asked here rather than in
+   * the startup validation of the configuration because only here is the number of workers
+   * known. The validation checks the grace against the request timeout, which is the floor of
+   * a client whose workers fit its pool once; workers above the pool raise that floor, and
+   * before this check nothing held the grace against it.
+   * <p>
    * A client which prefers gRPC activates its jobs over that transport, where this pool is
-   * not what limits the workers, so nothing is said for it.
+   * not what limits the workers, so nothing is said for it. The drain of such a client has
+   * nothing to wait for either: a request of a gone gRPC client is released by the cluster.
    *
    * @param workers How many workers are open on that client
    * @param clientConfiguration The configuration of the client of this adapter id, as the
@@ -415,18 +431,30 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (!clientConfiguration.preferRestOverGrpc()) {
       return;
     }
-    if (saidThatTheWorkersOutgrewThePool) {
+    if (!saidThatTheWorkersOutgrewThePool) {
+      final var message = Camunda8WorkerConnections.moreWorkersThanConnections(
+          workers,
+          clientConfiguration.getMaxHttpConnections(),
+          clientConfiguration.getDefaultRequestTimeout());
+      if (message != null) {
+        saidThatTheWorkersOutgrewThePool = true;
+        warnAboutThisAdapter(StartupTopic.CONFIGURATION, message);
+      }
+    }
+    if (saidThatTheGraceCannotDrainTheWorkers) {
       return;
     }
-    final var message = Camunda8WorkerConnections.moreWorkersThanConnections(
+    final var aboutTheGrace = Camunda8WorkerConnections.aGraceTooShortForTheDrain(
         workers,
         clientConfiguration.getMaxHttpConnections(),
-        clientConfiguration.getDefaultRequestTimeout());
-    if (message == null) {
+        clientConfiguration.getDefaultRequestTimeout(),
+        shutdownGrace(),
+        Camunda8AdapterConfiguration.PLATFORM_SHUTDOWN_BUDGET);
+    if (aboutTheGrace == null) {
       return;
     }
-    saidThatTheWorkersOutgrewThePool = true;
-    warnAboutThisAdapter(StartupTopic.CONFIGURATION, message);
+    saidThatTheGraceCannotDrainTheWorkers = true;
+    warnAboutThisAdapter(StartupTopic.CONFIGURATION, aboutTheGrace);
 
   }
 

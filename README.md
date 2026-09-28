@@ -153,6 +153,18 @@ names both numbers and the key which raises the limit. The application starts ei
 the adapter raises nobody's pool on its own: how many connections an application opens against
 its cluster is a decision about its own resources.
 
+The same count answers a second question, and that one the adapter used to get wrong. A
+shutdown waits for the cluster to release the activation requests of the workers it closed, so
+its floor is a whole `request-timeout` - and the requests of the workers which found no
+connection are queued in the client rather than parked at the cluster. Such a request still
+goes out once a connection frees, and then waits a request timeout of its own. The workers are
+therefore rounds of the pool, every round costs a request timeout, and `shutdown-grace`
+defaults to twice one round. An application above the pool gave up in the middle of its drain
+and nothing had said so. The warning names the rounds, the floor and both ways out; where the
+floor has grown past the thirty seconds the runtime grants a shutdown, raising the grace is no
+longer one of them and the message says so. `Camunda8WorkerConnectionsTest` holds the
+sentences, `Camunda8WhatADrainWaitsForIT` the numbers below them.
+
 The warning goes into the block the platform writes at the end of a start, and both platforms
 hand the adapter that block while the application boots. `Camunda8StartupReportBootTest` and
 `Camunda8StartupReportTest` hold them to it. A wiring which broke would put the finding into the
@@ -574,9 +586,35 @@ next fifty, which is a JVM being a JVM and not a thread per worker. The heap is 
 indication rather than an accounting, taken after a full collection in a JVM which has a
 test runner in it as well.
 
-So the sum an operator needs before the start is: count the job types of the table above
-across every workflow module of the adapter id, and give `max-http-connections` room for that
-many plus whatever the application's own commands need. Folding several processes into one
+**What the same workers cost a shutdown.** Measured on 2026-09-28 with
+`Camunda8WhatADrainWaitsForIT`, which opens workers on a raw client with job types nothing
+produces, closes all of them at once and times how long the last one takes to report itself
+closed. That is what the drain waits for, without an application around it. Client pool 30,
+request timeout `PT10S`, against the cluster of the current GA line:
+
+| workers | rounds of the pool | released after |
+|---------|--------------------|----------------|
+| 15      | 1                  | 6272 ms        |
+| 30      | 1                  | 5566 ms        |
+| 60      | 2                  | 15424 ms       |
+| 90      | 3                  | 25541 ms       |
+
+A round of the pool costs a whole request timeout, and where inside the last round a shutdown
+lands depends on how far that round had got when the workers were closed. The pool is small
+because what decides is the RATIO: a pool of 100 would need three hundred workers and a quarter
+of an hour of request timeouts to read the same three rows.
+
+The number the check uses is the top of that window plus two seconds, and the two seconds come
+from the one reading which ran out rather than from the table: on 2026-09-27 an application with
+115 workers on a pool of 100, which is two rounds, gave up after its grace of 20045 ms with its
+workers still holding a request.
+
+So the sum an operator needs before the start is the wiki page
+[Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing),
+which puts these numbers together with the pool and the execution slots and works an example
+through. In short: count the job types of the table above across every workflow module of the
+adapter id, and give `max-http-connections` room for that many plus whatever the application's
+own commands need. Folding several processes into one
 worker per workflow module and kind would buy connections back, and it is a different product
 rather than a smaller one: such a worker would have to take the longest job timeout of all of
 them, fetch every variable any of them declares, and give up the lease wherever one task of
