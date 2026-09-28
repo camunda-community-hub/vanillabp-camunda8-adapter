@@ -2832,9 +2832,28 @@ mirror of the job command above. Measured in the same run against a plain BPMN u
 shape VanillaBP 1 served up to its release 1.6.3: the job command on that key was accepted and
 the engine said it holds the instance, while `UpdateUserTask`, `UserTaskGet` and the user-task
 search answered nothing but "not found" for a full minute on all three lines - the cluster keeps
-no user-task record for such a task at all. This adapter does not meet that case, because the
+no user-task record for such a task at all. This check does not meet that case, because the
 record says which kind of task is being asked about and no probe is sent for the other kind.
-Whoever rebuilds the question outside VanillaBP does meet it.
+An upgrading application does meet it, through the id it brought with it, so the two places
+which ask about ONE task a caller named say what such a `404` is about.
+
+`awarenessOfUserTask` and the pre-commit check of `completeUserTask` therefore ask the job side
+once, on the `404` and nowhere else, through `Camunda8ProcessService#whatThe404WasAbout`. The
+existence question goes to the ENGINE, with the `UpdateJobTimeout` above: `404` is no job of that
+key, anything which says the cluster HAS it makes the id a job key. Naming the element is the
+index's part and only that, through `Camunda8UserTaskProbe#theJobTheIndexHoldsFor`, because a
+search can carry neither half of the existence question. Measured on 2026-09-28 against
+`camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`: the job search answered "no job of that
+key" while the job of a plain BPMN user task was activated and the task open, and it still answered
+with that job once the job was over, `TIMED_OUT` at once and `COMPLETED` five seconds later, while
+`UpdateJobTimeout` was accepted for the open job and answered `404` once it was gone. The empty
+`UpdateJob`, which would have been the read-only mirror of the empty `UpdateUserTask`, is refused
+with `400 INVALID_ARGUMENT` ("At least one of [retries, timeout] is required", with `priority` in
+that list on 8.10) for a job which is open and for one which is over, so it separates nothing. The
+state goes into the message as the cluster wrote it and is never read: five seconds after the same
+job was activated, 8.9.21 called it `CREATED` and 8.10.0-rc1 `TIMEOUT_UPDATED`. What the caller gets is unchanged, a
+`TaskNotFoundException` respectively `UNKNOWN_TO_BPMS`; `Camunda8A404AboutAJobKeyTest` holds the
+sentences and the outcomes together.
 
 That listener job is this adapter's own doing, so this adapter closes it. A job whose
 `getUserTask().getAction()` is `io.vanillabp:probe` and whose `getChangedAttributes()` is
