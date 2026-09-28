@@ -23,6 +23,7 @@ import io.vanillabp.camunda8.TestCollaborators;
 import io.vanillabp.camunda8.TestScoping;
 import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactory;
+import io.vanillabp.camunda8.wiring.Camunda8AllowListenersResolver;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.adapter.spi.version.ProcessVersionCatalog;
@@ -183,6 +184,24 @@ final class AClusterHolding {
    * The deployment service the catalogs come from.
    */
   private Camunda8DeploymentService deploymentService;
+
+  /**
+   * Serves the listeners the held models carry, which is the key an application switched on
+   * before it deployed those versions. Without it a listener of a held model is nothing this
+   * application ever had a method for, and the catalog leaves it out.
+   *
+   * @return This cluster
+   */
+  AClusterHolding servingModelledListeners() {
+
+    deploymentService
+        .setAllowListenersResolver((
+            workflowModuleId,
+            bpmnProcessId) -> new Camunda8AllowListenersResolver.Setting(
+                true, "vanillabp.adapters.c8.allow-listeners"));
+    return this;
+
+  }
 
   /**
    * @param workflowModuleId The workflow module ID

@@ -2339,9 +2339,11 @@ without an item into `BpmnTaskSpec#multiInstanceElementsWithoutAnItem` of every 
 the core holds them against the methods which still serve that version. The chains come from
 `Camunda8MultiInstance#chainsOf`, which walks the held model without injecting anything into it:
 the chains this boot recorded belong to the model just deployed, and a model a check only reads
-must not be changed by the reading. A held model whose element ids cannot be told apart by their
-variable names answers `null` rather than ending a boot over a version nobody can change;
-`Camunda8ItemsOfHeldVersionsTest` reads a held version with an item and one without.
+must not be changed by the reading. A modelled listener of a held version carries its chain too: a
+listener method reads its item out of the same iteration a task's method does. A held model whose
+element ids cannot be told apart by their variable names answers `null` rather than ending a boot
+over a version nobody can change; `Camunda8ItemsOfHeldVersionsTest` reads a held version with an
+item, one without and one whose listener sits inside a round that names none.
 
 Those names cannot be shadowed, so a job of a nested task carries one set per iteration it
 runs in. Which iterations enclose which element is model knowledge and is remembered while
