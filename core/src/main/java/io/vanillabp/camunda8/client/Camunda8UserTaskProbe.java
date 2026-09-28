@@ -20,6 +20,23 @@ import io.camunda.client.api.search.enums.ListenerEventType;
  * engine. A modelled listener a worker answers makes the same <code>204</code> take 106 to 111
  * milliseconds on 8.9.19 and 15 to 78 milliseconds on 8.10.0-alpha5.
  *
+ * <h2>What the 404 is about</h2>
+ *
+ * The key, and not the task. A user task which is simply open never produces one: measured on
+ * 2026-09-28 by {@code Camunda8ProbeOfAnOpenUserTaskIT} against 8.8.39, 8.9.21 and 8.10.0-rc1,
+ * this command answered <code>204</code> 12, 21 respectively 13 ms after the
+ * <code>creating</code> listener job of the task arrived, and over five further readings. The
+ * same task read from the INDEX answered <code>404</code> until 1667, 649 respectively 219 ms
+ * after that moment, which is the reason this is a command and not a search.
+ * <p>
+ * Handed a JOB key it answers <code>404</code> for as long as that task is open - measured in
+ * the same run, for a full minute, while the job command on the same key was accepted. So the
+ * caller owes the kind of key: {@code Camunda8OpenTaskProbe} reads it from the model and sends
+ * nothing for a task of the other kind, and the two probes which ask about a task a caller
+ * named are asked about a user task by the core. A version-1 user task served by a job worker
+ * is the shape whose id is a job key, and the deployment reports one rather than letting it be
+ * asked about.
+ *
  * <h2>The mark, and why the change list belongs to it</h2>
  *
  * The empty update FIRES a modelled <code>updating</code> task listener, measured on both

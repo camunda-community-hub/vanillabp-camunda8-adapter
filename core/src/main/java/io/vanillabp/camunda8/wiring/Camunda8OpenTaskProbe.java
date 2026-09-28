@@ -78,7 +78,12 @@ import lombok.extern.slf4j.Slf4j;
  * <p>
  * <b>A Camunda-managed user task.</b> Its key is not a job key: handed to a job command it
  * answers <code>NOT_FOUND</code> for as long as the task is open, which read as gone would
- * cancel a task the cluster is holding out to somebody. What answers for one of those is the
+ * cancel a task the cluster is holding out to somebody. It holds the other way round as well,
+ * and {@code Camunda8ProbeOfAnOpenUserTaskIT} measured both on 2026-09-28 against 8.8.39,
+ * 8.9.21 and 8.10.0-rc1: each command answered <code>404</code> for a full minute about a key
+ * of the other kind, while the task was open and the engine said it holds the instance. Which
+ * kind of key a record carries is therefore the whole question, and that is what
+ * {@link KindOfTask} is for. What answers for one of those is the
  * empty update of {@link Camunda8UserTaskProbe}, and it is sent only where
  * {@code probe-open-user-tasks} asked for it and only where the instance said it is still
  * there. Without the key the answer is {@link TaskExistence#CANNOT_SAY}, which costs an

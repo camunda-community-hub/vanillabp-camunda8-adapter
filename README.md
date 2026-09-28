@@ -2767,6 +2767,27 @@ one for a user task. It is off by default because it costs a command per task an
 fires a modelled `updating` listener while it is at it, measured on 8.9 and on 8.10, although
 the update changes nothing at all.
 
+The `404` is about the KEY the command was handed, and a user task which is simply open never
+produces one. `Camunda8ProbeOfAnOpenUserTaskIT` asks every question about one such task, from
+the moment the `creating` listener job arrived - the moment an application, and with it the
+Business Cockpit, learns of a task. Measured on 2026-09-28 on this machine (16 GB, one cluster
+at a time), the questions one after another so each number carries the one before it: the empty
+`UpdateUserTask` answered `204` at the first reading, 12 ms after that moment on
+`camunda/camunda:8.8.39`, 21 ms on `camunda/camunda:8.9.21` and 13 ms on
+`camunda/camunda:8.10.0-rc1`, and it kept answering `204` over five further readings. The same
+task read from the INDEX answered `404` first and was held 1667 ms, 649 ms respectively 219 ms
+after that moment. So this probe is ahead of the index rather than behind it, which is why it is
+a command and not a search.
+
+Handed a JOB key that same command answers `404` for as long as the task is open, which is the
+mirror of the job command above. Measured in the same run against a plain BPMN user task, the
+shape VanillaBP 1 served up to its release 1.6.3: the job command on that key was accepted and
+the engine said it holds the instance, while `UpdateUserTask`, `UserTaskGet` and the user-task
+search answered nothing but "not found" for a full minute on all three lines - the cluster keeps
+no user-task record for such a task at all. This adapter does not meet that case, because the
+record says which kind of task is being asked about and no probe is sent for the other kind.
+Whoever rebuilds the question outside VanillaBP does meet it.
+
 That listener job is this adapter's own doing, so this adapter closes it. A job whose
 `getUserTask().getAction()` is `io.vanillabp:probe` and whose `getChangedAttributes()` is
 empty is completed at once and no `@WorkflowTask` method runs for it. Both halves, not one:
