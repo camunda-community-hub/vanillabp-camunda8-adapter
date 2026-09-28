@@ -509,7 +509,14 @@ application:
 - a process which is killed rather than asked to stop cannot pay it, so a workflow started within ten
   seconds of a `SIGKILL` may still wait for its lock. A shorter `job-timeout` bounds what that costs
   where restarts are frequent, and `stream-enabled: true` or `prefer-rest-over-grpc: false` avoids
-  the case altogether.
+  the case altogether,
+- an application with more workers than its client has HTTP connections pays the request window more
+  than once. The requests of the surplus workers are queued in the client and go out as connections
+  free, so the workers are rounds of the pool and every round costs a `request-timeout`. `PT20S`
+  carries one round and not two. The start says so, naming the rounds, the grace the drain needs and
+  the pool which would make them one round again; how many workers an application opens and how to
+  size the pool is on the wiki page
+  [Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing).
 
 The line the shutdown writes says how many workers were closed and whether the cluster released them,
 and it warns where one of them still holds its request when the grace passes.

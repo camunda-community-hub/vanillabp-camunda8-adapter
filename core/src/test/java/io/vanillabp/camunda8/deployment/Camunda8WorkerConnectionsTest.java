@@ -34,6 +34,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * {@code Camunda8WorkerConnections}: 115 workers against the client's 100 connections took
  * 10412 ms where 92 workers against the same 100 took 184 ms. So 115 and 92 are the two
  * numbers below, and the second one is the counter-check which has to stay quiet.
+ * <p>
+ * The same pool decides how long the shutdown of those workers takes, and that is the second
+ * half of this class. 115 workers on a pool of 100 are two rounds of it, a round costs a
+ * request timeout, and the grace this adapter defaults to carries one round and two seconds.
+ * So the application which the first half warns about is the same one whose restart ends in
+ * the middle of its drain, which is what happened on 2026-09-27.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8WorkerConnectionsTest {
@@ -194,6 +200,48 @@ public class Camunda8WorkerConnectionsTest {
 
   }
 
+  /**
+   * The findings which are about the connection pool a running application shares, which is
+   * the first of the two sentences this check can produce.
+   */
+  private static List<String> aboutThePool(
+      final WhatWasReported reported) {
+
+    return reported.findings
+        .stream()
+        .map(WhatWasReported.Finding::message)
+        .filter(message -> message.contains("max-http-connections") && !message.contains("shutdown-grace"))
+        .toList();
+
+  }
+
+  /**
+   * The findings which are about the shutdown of those workers, which is the second one.
+   */
+  private static List<String> aboutTheShutdown(
+      final WhatWasReported reported) {
+
+    return reported.findings
+        .stream()
+        .map(WhatWasReported.Finding::message)
+        .filter(message -> message.contains("shutdown-grace"))
+        .toList();
+
+  }
+
+  /**
+   * A deployment service whose adapter id has the given shutdown grace configured, so the
+   * check reads that value instead of the default.
+   */
+  private Camunda8DeploymentService deploymentServiceWithAGraceOf(
+      final Duration grace) {
+
+    final var clientFactory = clientFactory();
+    clientFactory.getConfiguration().setShutdownGrace(grace);
+    return deploymentService(clientFactory);
+
+  }
+
   @Test
   @DisplayName("More workers than connections is said at startup, with both numbers and the way out")
   public void theApplicationIsToldWhenItsWorkersOutgrewThePool() {
@@ -207,7 +255,7 @@ public class Camunda8WorkerConnectionsTest {
             MORE_WORKERS_THAN_THE_POOL,
             clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
 
-    assertEquals(1, reported.findings.size(), "one finding, and it is the one about the pool: "
+    assertEquals(1, aboutThePool(reported).size(), "one finding about the pool: "
         + reported.findings);
     final var finding = reported.findings.get(0);
     assertEquals("warn", finding.severity(), "the application still boots, so it is a warning");
@@ -264,6 +312,158 @@ public class Camunda8WorkerConnectionsTest {
 
     assertTrue(reported.findings.isEmpty(), "115 workers fit into 256 connections: "
         + reported.findings);
+
+  }
+
+  @Test
+  @DisplayName("A grace which carries one round of the pool is too short for two, and the start says so")
+  public void theApplicationIsToldWhenItsGraceCannotDrainItsWorkers() {
+
+    final var service = deploymentService();
+    final var reported = new WhatWasReported();
+    service.setStartupReport(reported);
+
+    // the default grace, which is what the run of 2026-09-27 had
+    service
+        .holdTheWorkersAgainstTheConnectionPool(
+            MORE_WORKERS_THAN_THE_POOL,
+            clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
+
+    final var aboutTheShutdown = aboutTheShutdown(reported);
+    assertEquals(1, aboutTheShutdown.size(), "one finding about the shutdown: "
+        + reported.findings);
+    final var message = aboutTheShutdown.get(0);
+    assertTrue(message.contains("115 job workers"), "how many workers have to be drained: "
+        + message);
+    assertTrue(message.contains("100 HTTP connections"), "against how many connections: "
+        + message);
+    assertTrue(message.contains("PT20S"), "what the grace is: "
+        + message);
+    assertTrue(message.contains("2 rounds"), "how many rounds of the pool that is: "
+        + message);
+    assertTrue(message.contains("PT22S"), "and what the drain therefore needs: "
+        + message);
+    assertTrue(
+        message.contains("vanillabp.adapters.<adapter id>.request-timeout"),
+        "the window a queued request waits once it goes out: "
+            + message);
+    assertTrue(
+        message.contains("vanillabp.adapters.<adapter id>.job-timeout"),
+        "and what a job created in the window pays: "
+            + message);
+    assertTrue(
+        message.contains("spring.lifecycle.timeout-per-shutdown-phase"),
+        "raising the grace means raising the runtime's budget with it: "
+            + message);
+    assertTrue(
+        message.contains("vanillabp.adapters.<adapter id>.max-http-connections"),
+        "and the other way out is the pool: "
+            + message);
+
+  }
+
+  @Test
+  @DisplayName("A grace above the floor of the drain hears nothing")
+  public void aGraceWhichCarriesTheDrainIsSilent() {
+
+    final var service = deploymentServiceWithAGraceOf(Duration.ofSeconds(25));
+    final var reported = new WhatWasReported();
+    service.setStartupReport(reported);
+
+    service
+        .holdTheWorkersAgainstTheConnectionPool(
+            MORE_WORKERS_THAN_THE_POOL,
+            clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
+
+    assertTrue(
+        aboutTheShutdown(reported).isEmpty(),
+        "PT25S carries the PT22S two rounds of the pool cost: "
+            + reported.findings);
+
+  }
+
+  @Test
+  @DisplayName("Workers which fit the pool once drain within the default grace")
+  public void oneRoundOfThePoolIsWhatTheDefaultGraceWasSizedFor() {
+
+    final var service = deploymentService();
+    final var reported = new WhatWasReported();
+    service.setStartupReport(reported);
+
+    service
+        .holdTheWorkersAgainstTheConnectionPool(
+            FEWER_WORKERS_THAN_THE_POOL,
+            clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
+
+    assertTrue(reported.findings.isEmpty(), "92 workers are one round of 100 connections: "
+        + reported.findings);
+
+  }
+
+  @Test
+  @DisplayName("Where the drain outgrew the runtime's budget, the pool is the only way out named first")
+  public void aDrainBeyondTheRuntimesBudgetIsNoLongerAboutTheGrace() {
+
+    final var service = deploymentServiceWithAGraceOf(Duration.ofSeconds(29));
+    final var reported = new WhatWasReported();
+    service.setStartupReport(reported);
+
+    // three rounds of the pool, so the drain needs 32 seconds and no grace under the 30 both
+    // Spring Boot and Kubernetes grant a shutdown can carry it
+    service
+        .holdTheWorkersAgainstTheConnectionPool(250, clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
+
+    final var aboutTheShutdown = aboutTheShutdown(reported);
+    assertEquals(1, aboutTheShutdown.size(), "one finding about the shutdown: "
+        + reported.findings);
+    final var message = aboutTheShutdown.get(0);
+    assertTrue(message.contains("3 rounds"), "three rounds of the pool: "
+        + message);
+    assertTrue(message.contains("PT32S"), "which is what the drain needs: "
+        + message);
+    assertTrue(
+        message.contains("Raising the grace is not the way out here"),
+        "and raising the grace that far would get the application killed instead: "
+            + message);
+    assertTrue(
+        message.contains("vanillabp.adapters.<adapter id>.max-http-connections"),
+        "so the pool is what is asked for: "
+            + message);
+    assertTrue(message.contains("512"), "with a value to start from: "
+        + message);
+
+  }
+
+  @Test
+  @DisplayName("A grace of zero and a grace below the request timeout say nothing here")
+  public void theOtherTwoGracesBelongToTheStartupValidation() {
+
+    final var withoutAnyWait = deploymentServiceWithAGraceOf(Duration.ZERO);
+    final var reportedForZero = new WhatWasReported();
+    withoutAnyWait.setStartupReport(reportedForZero);
+    withoutAnyWait
+        .holdTheWorkersAgainstTheConnectionPool(
+            MORE_WORKERS_THAN_THE_POOL,
+            clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
+
+    assertTrue(
+        aboutTheShutdown(reportedForZero).isEmpty(),
+        "a grace of zero is an operator asking for a shutdown which waits for nothing: "
+            + reportedForZero.findings);
+
+    final var belowOneRequest = deploymentServiceWithAGraceOf(Duration.ofSeconds(5));
+    final var reportedForFive = new WhatWasReported();
+    belowOneRequest.setStartupReport(reportedForFive);
+    belowOneRequest
+        .holdTheWorkersAgainstTheConnectionPool(
+            MORE_WORKERS_THAN_THE_POOL,
+            clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
+
+    assertTrue(
+        aboutTheShutdown(reportedForFive).isEmpty(),
+        "and a grace under one request timeout cannot drain for a reason which has nothing to do with "
+            + "the number of workers, which the startup validation of the grace says in its own words: "
+            + reportedForFive.findings);
 
   }
 
