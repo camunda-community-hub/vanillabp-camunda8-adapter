@@ -1951,12 +1951,30 @@ left an upgraded version-1 application deploying into no tenant while its workfl
 theirs. While `none` applies, a WARN per workflow module names the alternatives
 until `accept-unscoped-identifiers` acknowledges that the identifiers are unique.
 
+**A name written as FEEL gets no prefix, and the boot says so.** Two attributes can hold one:
+the `processId` of a `zeebe:calledElement` and the `decisionId` of a `zeebe:calledDecision`. An
+expression takes up the whole attribute, so a prefix in front of it lands in the expression's
+text rather than in the id it yields, and `loan-approval__=whichProcess` names no process and
+parses as no expression. `Camunda8Scoping` leaves both as the application wrote them, which makes
+this the one place under `use-prefix` where a developer composes a scoped id themselves
+(`="loan-approval__" + whichProcess`). Rewriting the FEEL instead was the alternative and was not
+taken: not every expression survives a concatenation wrapped around it, and it would be the
+adapter editing the application's code. So the deployment names the call activities it applies to,
+once per BPMN process, with the prefix and the expression to write
+(`reportCallActivitiesNamingTheirProcessByExpression`). It is a WARN which no key silences,
+because the adapter cannot evaluate the expression and therefore cannot tell an application which
+already composes the prefix from one which does not. A decision id is not reported: the module's
+own DMN files are renamed the same way, so the developer who wrote the expression is the one who
+also sees those ids. What the two forms deploy to is held by
+`Camunda8CalledProcessScopingTest` and `Camunda8CalledProcessByExpressionReportTest`.
+
 **A BPMN error code belongs to one workflow module, and so does its catcher.** The code a
 `TaskException` raises is composed from the module of the process whose job raised it
 (`Camunda8JobHandler`), and the codes in a model are rewritten with the module whose file
 declares them. That can only ever be one module here: a `zeebe:calledElement` names its
-process by id, that id gets the calling module's prefix under `use-prefix`, and under
-`by-adapter` the cluster resolves it in the tenant of the calling instance. A called element
+process by id, that id gets the calling module's prefix under `use-prefix` unless it is an
+expression, and under `by-adapter` the cluster resolves it in the tenant of the calling
+instance. A called element
 carries no tenant of its own, so a call activity cannot leave its workflow module on this
 BPMS, and there is nothing to report. Camunda 7 has the one attribute which can
 (`camunda:calledElementTenantId`) and warns about it while the application starts.

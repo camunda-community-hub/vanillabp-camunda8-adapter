@@ -2,8 +2,10 @@ package io.vanillabp.camunda8.wiring;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.List;
 
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
+import io.camunda.zeebe.model.bpmn.instance.BaseElement;
 import io.camunda.zeebe.model.bpmn.instance.BpmnModelElementInstance;
 import io.camunda.zeebe.model.bpmn.instance.Error;
 import io.camunda.zeebe.model.bpmn.instance.Escalation;
@@ -27,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
  * <caption>What is rewritten</caption>
  * <tr><th>Element</th><th>Scoped by</th><th>Why</th></tr>
  * <tr><td>{@code bpmn:process id}</td><td>workflow module</td><td>the process id addresses a process definition cluster-wide</td></tr>
- * <tr><td>{@code zeebe:calledElement processId}</td><td>workflow module</td><td>a call activity has to address the renamed process</td></tr>
+ * <tr><td>{@code zeebe:calledElement processId}, statically named</td><td>workflow module</td><td>a call activity has to address the renamed process</td></tr>
  * <tr><td>{@code bpmn:message name}</td><td>workflow module</td><td>messages are published and correlated by name</td></tr>
  * <tr><td>{@code bpmn:signal name}, {@code bpmn:escalation escalationCode}</td><td>workflow module</td><td>broadcast by name</td></tr>
  * <tr><td>{@code bpmn:error errorCode}</td><td>workflow module</td><td>completeness - a code is process-local, but the application may throw it via {@code ProcessService#cancelTask}</td></tr>
@@ -39,6 +41,14 @@ import lombok.extern.slf4j.Slf4j;
  * An element another runtime serves, see {@link Camunda8Connectors}, never enters that
  * table: its job type names a runtime somebody else deployed rather than an identifier of
  * this workflow module, so it is left as the modeller wrote it under every mode.
+ * <p>
+ * A name written as FEEL is left alone as well, and there are two of them: the process a call
+ * activity calls and the decision a business rule task evaluates. Such a name is no identifier
+ * of this workflow module, it is code which yields one at runtime, so the prefix belongs inside
+ * the expression and the application is the only party which can put it there. Under
+ * {@code use-prefix} that is the one place a developer types a prefix themselves, and the
+ * deployment names every call activity it applies to
+ * ({@link #callActivityIdsNamingTheirProcessByExpression}).
  * <p>
  * The same elements are READ rather than rewritten where somebody asks which names a
  * workflow module declares ({@link #moduleWideIdentifiersOf},
@@ -346,11 +356,21 @@ public final class Camunda8Scoping {
         .forEach(error -> error.setErrorCode(
             scoping.scopedIdentifier(workflowModuleId, error.getErrorCode(), adapterId)));
 
-    // call activities address another process BY ID - rewrite before the ids change
+    // call activities address another process BY ID - rewrite before the ids change. A
+    // process named as an expression (it starts with '=') is the application's own FEEL and
+    // stays untouched, like the decision id below: the expression takes up the whole value,
+    // so a prefix in front of it makes a string which names no process and is no expression
+    // either. Under 'use-prefix' such a call activity is the one place where the application
+    // composes the scoped id itself, and the deployment says so
     model
         .getModelElementsByType(ZeebeCalledElement.class)
-        .forEach(calledElement -> calledElement.setProcessId(
-            scoping.scopedProcessId(workflowModuleId, calledElement.getProcessId(), adapterId)));
+        .forEach(calledElement -> {
+          final var processId = calledElement.getProcessId();
+          if (nothingAPrefixCanBePutInFrontOf(processId)) {
+            return;
+          }
+          calledElement.setProcessId(scoping.scopedProcessId(workflowModuleId, processId, adapterId));
+        });
 
     // a business rule task addresses a decision BY ID, and the decisions this module
     // deploys were renamed the same way while their files were read. An id given as an
@@ -359,7 +379,7 @@ public final class Camunda8Scoping {
         .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision.class)
         .forEach(calledDecision -> {
           final var decisionId = calledDecision.getDecisionId();
-          if ((decisionId == null) || decisionId.isBlank() || decisionId.startsWith("=")) {
+          if (nothingAPrefixCanBePutInFrontOf(decisionId)) {
             return;
           }
           calledDecision
@@ -448,6 +468,57 @@ public final class Camunda8Scoping {
     return Camunda8AllowConnectorsResolver
         .resolve(allowConnectorsResolver, workflowModuleId, owningProcessId(element))
         .allowed();
+
+  }
+
+  /**
+   * Whether the given name of a called process or decision is one no prefix can be put in
+   * front of.
+   * <p>
+   * Two forms qualify. A name the modeller left empty names nothing, and the cluster refuses
+   * such a model itself, which a composed string would only hide. A name starting with
+   * <code>=</code> is FEEL: the expression takes up the WHOLE value, so a prefix in front of
+   * it is part of the expression's text rather than part of the id it yields, and what comes
+   * out names no process and parses as no expression.
+   *
+   * @param identifier What the model says the call points at
+   * @return Whether prefixing it would make something the cluster cannot use
+   */
+  private static boolean nothingAPrefixCanBePutInFrontOf(
+      final String identifier) {
+
+    return (identifier == null) || identifier.isBlank() || identifier.startsWith("=");
+
+  }
+
+  /**
+   * The call activities of one BPMN process which name the process they call as a FEEL
+   * expression.
+   * <p>
+   * Read for the one message {@code use-prefix} owes an application: the deployed processes
+   * of the workflow module carry the prefix, this call does not get one, so the expression has
+   * to compose the prefixed id itself. Nothing else in the boot notices - the model is valid,
+   * it deploys, and the call fails at the moment the workflow reaches it.
+   *
+   * @param model The BPMN model of one file
+   * @param bpmnProcessId The process id as the CLUSTER will know it
+   * @return The element ids, empty where every call activity names its process statically
+   */
+  public static List<String> callActivityIdsNamingTheirProcessByExpression(
+      final BpmnModelInstance model,
+      final String bpmnProcessId) {
+
+    return model
+        .getModelElementsByType(ZeebeCalledElement.class)
+        .stream()
+        .filter(calledElement -> {
+          final var processId = calledElement.getProcessId();
+          return (processId != null) && processId.startsWith("=");
+        })
+        .map(Camunda8Connectors::owningElementOf)
+        .filter(element -> (element != null) && bpmnProcessId.equals(owningProcessId(element)))
+        .map(BaseElement::getId)
+        .toList();
 
   }
 

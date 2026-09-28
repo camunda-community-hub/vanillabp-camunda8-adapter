@@ -1354,6 +1354,13 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         scopedBpmnProcessId,
         Camunda8TaskWiring.legacyUserTaskIdsOf(model, scopedBpmnProcessId));
 
+    // under 'use-prefix' a call activity naming its process by FEEL is the one place where
+    // the application has to write the prefix itself, so the boot says which elements that is
+    reportCallActivitiesNamingTheirProcessByExpression(
+        workflowModuleId,
+        bpmnProcessId,
+        Camunda8Scoping.callActivityIdsNamingTheirProcessByExpression(model, scopedBpmnProcessId));
+
     // an ad-hoc subprocess waiting for a job worker is the other element which would
     // stop a workflow without anything being said about it
     reportUnservedAdHocSubProcesses(
@@ -2289,6 +2296,78 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         openTasks == null
             ? "The cluster did not answer how many of them are open right now."
             : "Open right now: %d.".formatted(openTasks));
+
+  }
+
+  /**
+   * Says which call activities of a BPMN process name the process they call as a FEEL
+   * expression, while the workflow module's identifiers are prefixed.
+   * <p>
+   * Under {@code use-prefix} the processes of a workflow module reach the cluster under a
+   * prefixed id, and a call activity naming its process statically is rewritten with them. An
+   * expression cannot be: it takes up the whole value, so a prefix in front of it becomes part
+   * of the expression's text. The expression is left as the application wrote it, which makes
+   * this the one element where a developer composes a scoped id themselves - and the only
+   * chance to say so is the boot, because a model like this deploys and the call fails much
+   * later, when a workflow reaches the element.
+   * <p>
+   * A WARN for a model which may well be right. The adapter cannot evaluate the expression, so
+   * it cannot tell an application which already composes the prefix from one which does not,
+   * and no key silences it - the same choice connectors got, see decision 23 in the
+   * repository's DECISIONS.md.
+   *
+   * @param workflowModuleId The workflow module id
+   * @param bpmnProcessId The plain BPMN process id
+   * @param elementIds The call activities found, empty under every other mode and for every
+   *          model naming its called processes statically
+   */
+  private void reportCallActivitiesNamingTheirProcessByExpression(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final List<String> elementIds) {
+
+    if (elementIds.isEmpty() || !Camunda8Scoping.prefixes(workflowModuleId, adapterId, scoping)) {
+      return;
+    }
+    log.warn(
+        """
+            Camunda8[{}]: {} call activity(ies) of BPMN process '{}' (workflow module '{}') name the \
+            process they call by a FEEL expression: {}. Name-clash avoidance 'use-prefix' \
+            ({}) deploys every process of this workflow module under a prefix, \
+            and a prefix cannot be written in front of an expression: the expression is the whole \
+            value, so anything put before it becomes part of its text. So your expression is left \
+            as you wrote it and it has to yield the id the cluster knows. A process your module \
+            calls 'TheProcessYouCall' is deployed as '{}', which makes '=whichProcess' read \
+            '="{}" + whichProcess'. Where it already yields a prefixed id there is nothing to do. \
+            Where it does not, the call fails the moment a workflow reaches the element, because \
+            the plain id names no process on this cluster.""",
+        adapterId,
+        elementIds.size(),
+        bpmnProcessId,
+        workflowModuleId,
+        String.join(", ", elementIds.stream().map("'%s'"::formatted).toList()),
+        Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
+        scoping.scopedProcessId(workflowModuleId, "TheProcessYouCall", adapterId),
+        thePrefixOf(workflowModuleId));
+
+  }
+
+  /**
+   * The prefix a scoped process id of the given workflow module starts with, read off a
+   * scoped id rather than composed here: the core owns how a prefix is built, and a message
+   * which spells it out a second way could name something the core never writes.
+   *
+   * @param workflowModuleId The workflow module id
+   * @return The prefix, separator included
+   */
+  private String thePrefixOf(
+      final String workflowModuleId) {
+
+    final var marker = "TheProcessYouCall";
+    final var scoped = scoping.scopedProcessId(workflowModuleId, marker, adapterId);
+    return scoped.endsWith(marker)
+        ? scoped.substring(0, scoped.length() - marker.length())
+        : scoped;
 
   }
 
