@@ -609,9 +609,12 @@ from the one reading which ran out rather than from the table: on 2026-09-27 an 
 115 workers on a pool of 100, which is two rounds, gave up after its grace of 20045 ms with its
 workers still holding a request.
 
-So the sum an operator needs before the start is: count the job types of the table above
-across every workflow module of the adapter id, and give `max-http-connections` room for that
-many plus whatever the application's own commands need. Folding several processes into one
+So the sum an operator needs before the start is the wiki page
+[Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing),
+which puts these numbers together with the pool and the execution slots and works an example
+through. In short: count the job types of the table above across every workflow module of the
+adapter id, and give `max-http-connections` room for that many plus whatever the application's
+own commands need. Folding several processes into one
 worker per workflow module and kind would buy connections back, and it is a different product
 rather than a smaller one: such a worker would have to take the longest job timeout of all of
 them, fetch every variable any of them declares, and give up the lease wherever one task of
