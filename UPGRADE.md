@@ -129,6 +129,30 @@ boot would be the wrong answer. Of the two numbers only the first is certain: th
 from the model this boot deploys, while the open tasks are a search, and a cluster which is not up
 yet costs you that count.
 
+### A task your cockpit showed while a check answered 404
+
+If you have seen this under version 1 - the Business Cockpit shows a user task as active while a
+check about that task answers `404` - then it was one of two things, and 2.0 has neither.
+
+The first one is the index. Version 1 asked whether a user task still exists with a `UserTaskGet`,
+which reads the cluster's searchable storage, and that storage is written by an exporter running
+behind the engine. Measured on 2026-09-28 against `camunda/camunda:8.8.39`,
+`camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`, counting from the moment the
+`creating` listener job of the task arrived, which is the moment your application and the cockpit
+learn of it: the storage answered `404` for 1667 ms, 649 ms respectively 219 ms. Under load that
+window is as wide as your exporter's backlog. 2.0 asks the partition instead, with an
+`UpdateUserTask` carrying nothing but an audit action, and in the same runs that answered `204`
+after 12 ms, 21 ms respectively 13 ms.
+
+The second one is the shape of the task, and there the `404` never goes away. A user task served
+by a job worker, which is what version 1 modelled up to its release 1.6.3, has no user-task
+record in the cluster at all: in the same runs `UserTaskGet`, the empty `UpdateUserTask` and the
+user-task search answered nothing but "not found" for a full minute, while the job command on the
+same key was accepted and the engine said it still holds the instance. The id such a task hands
+out is a job key, so every question asked as if it were a user task misses. 2.0 does not serve
+that shape and says so while it deploys - see the section above, and finish what is open before
+you upgrade.
+
 ### Your user-task models get one new process version
 
 VanillaBP writes the lifecycle listeners of a Camunda-managed user task into the model it deploys.
