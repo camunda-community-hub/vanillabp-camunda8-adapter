@@ -1951,6 +1951,16 @@ left an upgraded version-1 application deploying into no tenant while its workfl
 theirs. While `none` applies, a WARN per workflow module names the alternatives
 until `accept-unscoped-identifiers` acknowledges that the identifiers are unique.
 
+**A BPMN error code belongs to one workflow module, and so does its catcher.** The code a
+`TaskException` raises is composed from the module of the process whose job raised it
+(`Camunda8JobHandler`), and the codes in a model are rewritten with the module whose file
+declares them. That can only ever be one module here: a `zeebe:calledElement` names its
+process by id, that id gets the calling module's prefix under `use-prefix`, and under
+`by-adapter` the cluster resolves it in the tenant of the calling instance. A called element
+carries no tenant of its own, so a call activity cannot leave its workflow module on this
+BPMS, and there is nothing to report. Camunda 7 has the one attribute which can
+(`camunda:calledElementTenantId`) and warns about it while the application starts.
+
 **Two adapter ids on one cluster.** Migrating a module from tenants to prefixes
 runs both scopes side by side: two ids of type `camunda8`, one cluster, differing only in
 the mode, the new one first in `prioritized-adapters`. What tells them apart is the scope a

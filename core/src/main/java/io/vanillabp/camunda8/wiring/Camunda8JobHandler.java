@@ -372,7 +372,13 @@ public class Camunda8JobHandler implements JobHandler {
                         .newThrowErrorCommand(job.getKey())
                         // the model's error codes are prefixed too, so the code the
                         // business method raised has to be translated on its way to the
-                        // cluster
+                        // cluster. The prefix is this task's workflow module, which is the
+                        // catcher's module as well: a call activity of this engine names its
+                        // called process by id, that id carries the calling module's prefix
+                        // under 'use-prefix', and under 'by-adapter' the cluster resolves it
+                        // in the tenant of the calling instance. There is no attribute on a
+                        // called element which could name another one, so a call activity
+                        // cannot leave its workflow module here
                         .errorCode(
                             NameClashAvoidanceSupport
                                 .scopedIdentifier(
