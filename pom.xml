@@ -124,7 +124,7 @@
     <camunda8.version>${camunda8.version.line-8.9}</camunda8.version>
     <camunda8.version.line-8.8>8.8.39</camunda8.version.line-8.8>
     <camunda8.version.line-8.9>8.9.21</camunda8.version.line-8.9>
-    <camunda8.version.line-8.10>8.10.0-rc1</camunda8.version.line-8.10>
+    <camunda8.version.line-8.10>8.10.0-rc3</camunda8.version.line-8.10>
     <!-- optional: the adapter's own meters are published where the application brings
          Micrometer (see MicrometerCamunda8Metrics). Pinned to the OLDER of both
          platforms, like the platform integration does it (Quarkus 3.37.1 manages 1.16.6,
