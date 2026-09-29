@@ -20,6 +20,7 @@ import org.junit.jupiter.api.TestReporter;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.camunda.client.CamundaClient;
+import io.camunda.client.api.command.JobChangeset;
 import io.camunda.client.api.response.ActivatedJob;
 import io.vanillabp.camunda8.client.Camunda8Errors;
 import io.vanillabp.camunda8.client.Camunda8InstanceProbe;
@@ -164,6 +165,12 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
   private static final long BETWEEN_TWO_READINGS_MILLIS = 50;
 
   /**
+   * How long the index is given to hold what the engine has already done, for the one reading
+   * which is about the index rather than about the engine.
+   */
+  private static final Duration THE_INDEX_IS_GIVEN_THIS_LONG = Duration.ofSeconds(5);
+
+  /**
    * How often a question which already answered is repeated, so what is written down is the
    * answer the cluster keeps giving rather than the one it happened to give first.
    */
@@ -238,6 +245,17 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       measured.add("the instance probe, asked once the readings were taken: "
           + whatTheClusterAnswered(() -> Camunda8InstanceProbe
               .askTheEngine(client, instanceKey, Camunda8TaskWiring.RESERVED_PROBE_ELEMENT_ID, null)));
+      // the mirror of the question the adapter asks after a 404: the job side has to say
+      // nothing about a USER-TASK key, or the message of that 404 would name a job key for
+      // every user task which really is over
+      final var theIndexOnAUserTaskKey = whatTheIndexSaid(client, userTaskKey);
+      measured.add("the job search by the user-task key: "
+          + theIndexOnAUserTaskKey);
+      assertTrue(
+          "no job of that key".equals(theIndexOnAUserTaskKey),
+          "The index answered about a USER-TASK key with a job. The values a 404 message takes "
+              + "from it would then belong to a task of the other kind: "
+              + String.join("; ", measured));
 
       // and the probe of version 2 again, several times, so the 204 above is the answer the
       // cluster keeps giving for a task which stays open
@@ -330,6 +348,25 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
               .timeout(A_LISTENER_JOB_IS_HELD_FOR)
               .send()
               .join()));
+
+      // the question the adapter asks itself once a user-task command answered 404: does the
+      // cluster hold a JOB of this key? Two commands could answer it and both are read here,
+      // first about the job which is open and further down about the same key once the job is
+      // gone. What separates a key the cluster holds from one it does not is the whole point,
+      // so a command answering 404 for both is no use whatever else it does
+      measured.add("the empty UpdateJob on the job key while the task is open: "
+          + whatTheClusterAnswered(() -> client
+              .newUpdateJobCommand(jobKey)
+              .update(new JobChangeset())
+              .send()
+              .join()));
+      measured.add("the job search by that key while the task is open, read at once: "
+          + whatTheIndexSaid(client, jobKey));
+      Thread.sleep(THE_INDEX_IS_GIVEN_THIS_LONG.toMillis());
+      measured.add("the job search by that key while the task is open, read %d ms later: %s"
+          .formatted(
+              Long.valueOf(THE_INDEX_IS_GIVEN_THIS_LONG.toMillis()),
+              whatTheIndexSaid(client, jobKey)));
       measured.add("the instance probe: "
           + whatTheClusterAnswered(() -> Camunda8InstanceProbe
               .askTheEngine(client, instanceKey, Camunda8TaskWiring.RESERVED_PROBE_ELEMENT_ID, null)));
@@ -355,8 +392,6 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
           },
           answer -> !isGone(answer)));
 
-      report(reporter, "probe-of-an-open-job-worker-user-task", measured);
-
       assertTrue(
           measured
               .stream()
@@ -372,6 +407,69 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
           .withToken(client.newCompleteCommand(jobKey), Camunda8JobLease.tokenOf(userTaskJob))
           .send()
           .join();
+
+      // the same two questions about the same key, now that the job really is gone: this is
+      // the reading which says whether either of them tells the two cases apart
+      final var emptyUpdateJobOnAGoneKey = whatTheClusterAnswered(() -> client
+          .newUpdateJobCommand(jobKey)
+          .update(new JobChangeset())
+          .send()
+          .join());
+      measured.add("the empty UpdateJob on the job key once the job is gone: "
+          + emptyUpdateJobOnAGoneKey);
+      final var jobTimeoutOnAGoneKey = whatTheClusterAnswered(() -> client
+          .newUpdateTimeoutCommand(jobKey)
+          .timeout(A_LISTENER_JOB_IS_HELD_FOR)
+          .send()
+          .join());
+      measured.add("the UpdateJobTimeout on the job key once the job is gone: "
+          + jobTimeoutOnAGoneKey);
+      measured.add("the job search by that key once the job is gone, read at once: "
+          + whatTheIndexSaid(client, jobKey));
+      Thread.sleep(THE_INDEX_IS_GIVEN_THIS_LONG.toMillis());
+      final var theIndexOnceTheJobWasOver = whatTheIndexSaid(client, jobKey);
+      measured.add("the job search by that key once the job is gone, read %d ms later: %s"
+          .formatted(
+              Long.valueOf(THE_INDEX_IS_GIVEN_THIS_LONG.toMillis()),
+              theIndexOnceTheJobWasOver));
+
+      report(reporter, "probe-of-an-open-job-worker-user-task", measured);
+
+      // Camunda8UserTaskProbe#aJobOfThatKeyIsThere asks the job side after a user-task
+      // command answered 404, and the whole value of that question is that its 404 means
+      // something else than its other answers
+      assertTrue(
+          isGone(jobTimeoutOnAGoneKey),
+          "A job command answered something other than 404 about a job which is over. The job "
+              + "side is then no question at all, and the message of a 404 about a user-task key "
+              + "may not name a job key: "
+              + String.join("; ", measured));
+      assertFalse(
+          isGone(
+              measured
+                  .stream()
+                  .filter(reading -> reading.startsWith("the job command about the job key"))
+                  .findFirst()
+                  .orElseThrow()),
+          "A job command answered 404 about the job of a user task which was open. Then no "
+              + "question can tell a job key from a key nobody holds: "
+              + String.join("; ", measured));
+
+      // and why the two questions are split the way Camunda8ProcessService splits them. The
+      // index cannot say whether the cluster holds a job: it answered "no job of that key" while
+      // this job was activated and open, and it kept answering with the job once the job was over.
+      // So the ENGINE is asked whether there is one, and the index only names the element
+      assertTrue(
+          theIndexOnceTheJobWasOver.contains(JOB_WORKER_USER_TASK_JOB_TYPE),
+          "The index said nothing about a job it had seen, so Camunda8UserTaskProbe"
+              + "#theJobTheIndexHoldsFor cannot name the element of a job key at all and the "
+              + "message of a 404 loses those values: "
+              + String.join("; ", measured));
+      assertFalse(
+          theIndexOnceTheJobWasOver.contains("no job of that key"),
+          "The index dropped a job which is over. If it does that, a search would be a way to ask "
+              + "whether the cluster holds one, and this adapter asks the engine instead: "
+              + String.join("; ", measured));
 
     }
 
@@ -429,6 +527,27 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       final String reading) {
 
     return reading.contains("and nothing else within");
+
+  }
+
+  /**
+   * What the adapter's own reader of the INDEX says about a key - the values
+   * {@code Camunda8ProcessService} puts into its message once a user-task command answered
+   * {@code 404} and the engine said it holds a job of that key.
+   *
+   * @param client The raw client of this measurement
+   * @param key The key to ask about
+   * @return One phrase for the record
+   */
+  private static String whatTheIndexSaid(
+      final CamundaClient client,
+      final long key) {
+
+    final var found = Camunda8UserTaskProbe.theJobTheIndexHoldsFor(client, key);
+    return found == null
+        ? "no job of that key"
+        : "a job of type '%s' at element '%s' of process '%s', state %s"
+            .formatted(found.type(), found.elementId(), found.bpmnProcessId(), found.state());
 
   }
 

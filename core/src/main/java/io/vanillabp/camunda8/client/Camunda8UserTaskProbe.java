@@ -90,6 +90,78 @@ public final class Camunda8UserTaskProbe {
   }
 
   /**
+   * What the cluster's index holds under a key a user-task command answered <code>404</code>
+   * for - the job's own description, for the message which says what that key is.
+   *
+   * @param type The job type, which is
+   *          {@link io.vanillabp.camunda8.wiring.Camunda8TaskWiring#TASKDEFINITION_USERTASK_WORKER_V1}
+   *          for a user task a job worker serves
+   * @param elementId The BPMN element the job belongs to
+   * @param bpmnProcessId The process definition id as the cluster knows it
+   * @param state What the index says the job is doing, in the cluster's own words
+   */
+  public record Camunda8JobOfThatKey(
+                                     String type,
+                                     String elementId,
+                                     String bpmnProcessId,
+                                     String state) {
+  }
+
+  /**
+   * Reads the job of a key out of the index, to NAME it in a message. It does not answer
+   * whether the cluster holds such a job, and no caller may read it that way.
+   * <p>
+   * A search reads the index an exporter feeds, so it is behind the engine on both ends.
+   * Measured on 2026-09-28 against <code>camunda/camunda:8.9.21</code> and
+   * <code>camunda/camunda:8.10.0-rc1</code> by {@code Camunda8ProbeOfAnOpenUserTaskIT}, on the job
+   * of a user task a job worker serves: the search answered "no job of that key" while that job was
+   * activated and open, and it still answered with the job once the job was over, as
+   * <code>TIMED_OUT</code> at once and <code>COMPLETED</code> five seconds later. So it says
+   * neither "there is one" nor "there is none". Whether the cluster holds a job of a key is a
+   * question for the ENGINE, which {@code Camunda8ProcessService} asks with an
+   * <code>UpdateJobTimeout</code>: <code>404</code> for a key it has no job of, and something else
+   * for one it has.
+   * <p>
+   * The state travels into the message as the cluster wrote it and is never read here. The two
+   * lines above named the same job differently five seconds after it was activated, 8.9.21 as
+   * <code>CREATED</code> and 8.10.0-rc1 as <code>TIMEOUT_UPDATED</code>, and a literal which is new
+   * in a patch release is nothing this adapter builds a decision on.
+   * <p>
+   * What this adds is the element, the process and the state, which is what turns "that is a job
+   * key" into a sentence somebody can act on. Where it answers nothing the message says the rest
+   * without them.
+   *
+   * @param client The client of the adapter asking
+   * @param key The key the user-task command was handed
+   * @return What the index holds under that key, or <code>null</code> where it holds nothing and
+   *         where the search itself could not answer
+   */
+  public static Camunda8JobOfThatKey theJobTheIndexHoldsFor(
+      final CamundaClient client,
+      final long key) {
+
+    try {
+      final var found = client
+          .newJobSearchRequest()
+          .filter(filter -> filter.jobKey(Long.valueOf(key)))
+          .page(page -> page.limit(1))
+          .send()
+          .join()
+          .items();
+      if (found.isEmpty()) {
+        return null;
+      }
+      final var job = found.getFirst();
+      return new Camunda8JobOfThatKey(
+          job.getType(), job.getElementId(), job.getProcessDefinitionId(), String.valueOf(job.getState()));
+    } catch (final RuntimeException e) {
+      // a diagnostic never becomes the failure: the message is written without these values
+      return null;
+    }
+
+  }
+
+  /**
    * Whether this listener job was fired by a probe of this adapter, which is a job no
    * application method has anything to say about.
    *

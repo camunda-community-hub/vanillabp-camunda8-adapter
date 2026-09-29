@@ -1455,7 +1455,25 @@ offers no command to cancel a Camunda-managed user task by BPMN error (ThrowErro
 is job-based) and V1's marker-variable workaround is broken by V1's own admission
 - a guiding error naming the release line explains it; the listeners it needs
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
-or later. The wiring and the V1 order of the listeners are `Camunda8UserTaskWiringTest`. The
+or later.
+
+A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment names it. The
+cluster serves such an element with a job of `io.camunda.zeebe:userTask`, this version opens no
+worker on that job type, and the workflow stands at the element until the job's retries are used
+up. It falls through everything else: `tasksOf` reads service-like tasks only and `userTasksOf`
+skips anything without the marker. `Camunda8TaskWiring#unservedUserTasksOf` looks for it on
+purpose and splits it into the two shapes the message has to keep apart. One carries the `formKey`
+version 1 read the task definition from up to its release 1.6.3, which is what an upgrading
+application finds by searching its models for that word. The other carries no `formKey` at all,
+which no such search finds while the cluster treats it exactly the same. That second shape is why
+the reader no longer filters on the formKey: it went through the whole boot without a word. One WARN per BPMN process names
+the elements per shape plus how many tasks are open on them right now, counted from the jobs of
+that type, and the boot goes on for the reason
+[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on)
+gives. `Camunda8UnservedUserTasksReportTest` holds the message and
+`Camunda8UserTaskWiringTest` the reader.
+
+The wiring and the V1 order of the listeners are `Camunda8UserTaskWiringTest`. The
 lifecycle against a cluster is `Camunda8TaskProcessingIT#userTaskCreatedAndCompleted`,
 `#userTaskCanceledOnInstanceCancellation`, `#userTaskEdgeCases` and
 `#cancelUserTaskUnsupportedGuiding`, with
@@ -1989,12 +2007,30 @@ left an upgraded version-1 application deploying into no tenant while its workfl
 theirs. While `none` applies, a WARN per workflow module names the alternatives
 until `accept-unscoped-identifiers` acknowledges that the identifiers are unique.
 
+**A name written as FEEL gets no prefix, and the boot says so.** Two attributes can hold one:
+the `processId` of a `zeebe:calledElement` and the `decisionId` of a `zeebe:calledDecision`. An
+expression takes up the whole attribute, so a prefix in front of it lands in the expression's
+text rather than in the id it yields, and `loan-approval__=whichProcess` names no process and
+parses as no expression. `Camunda8Scoping` leaves both as the application wrote them, which makes
+this the one place under `use-prefix` where a developer composes a scoped id themselves
+(`="loan-approval__" + whichProcess`). Rewriting the FEEL instead was the alternative and was not
+taken: not every expression survives a concatenation wrapped around it, and it would be the
+adapter editing the application's code. So the deployment names the call activities it applies to,
+once per BPMN process, with the prefix and the expression to write
+(`reportCallActivitiesNamingTheirProcessByExpression`). It is a WARN which no key silences,
+because the adapter cannot evaluate the expression and therefore cannot tell an application which
+already composes the prefix from one which does not. A decision id is not reported: the module's
+own DMN files are renamed the same way, so the developer who wrote the expression is the one who
+also sees those ids. What the two forms deploy to is held by
+`Camunda8CalledProcessScopingTest` and `Camunda8CalledProcessByExpressionReportTest`.
+
 **A BPMN error code belongs to one workflow module, and so does its catcher.** The code a
 `TaskException` raises is composed from the module of the process whose job raised it
 (`Camunda8JobHandler`), and the codes in a model are rewritten with the module whose file
 declares them. That can only ever be one module here: a `zeebe:calledElement` names its
-process by id, that id gets the calling module's prefix under `use-prefix`, and under
-`by-adapter` the cluster resolves it in the tenant of the calling instance. A called element
+process by id, that id gets the calling module's prefix under `use-prefix` unless it is an
+expression, and under `by-adapter` the cluster resolves it in the tenant of the calling
+instance. A called element
 carries no tenant of its own, so a call activity cannot leave its workflow module on this
 BPMS, and there is nothing to report. Camunda 7 has the one attribute which can
 (`camunda:calledElementTenantId`) and warns about it while the application starts.
@@ -2834,9 +2870,28 @@ mirror of the job command above. Measured in the same run against a plain BPMN u
 shape VanillaBP 1 served up to its release 1.6.3: the job command on that key was accepted and
 the engine said it holds the instance, while `UpdateUserTask`, `UserTaskGet` and the user-task
 search answered nothing but "not found" for a full minute on all three lines - the cluster keeps
-no user-task record for such a task at all. This adapter does not meet that case, because the
+no user-task record for such a task at all. This check does not meet that case, because the
 record says which kind of task is being asked about and no probe is sent for the other kind.
-Whoever rebuilds the question outside VanillaBP does meet it.
+An upgrading application does meet it, through the id it brought with it, so the two places
+which ask about ONE task a caller named say what such a `404` is about.
+
+`awarenessOfUserTask` and the pre-commit check of `completeUserTask` therefore ask the job side
+once, on the `404` and nowhere else, through `Camunda8ProcessService#whatThe404WasAbout`. The
+existence question goes to the ENGINE, with the `UpdateJobTimeout` above: `404` is no job of that
+key, anything which says the cluster HAS it makes the id a job key. Naming the element is the
+index's part and only that, through `Camunda8UserTaskProbe#theJobTheIndexHoldsFor`, because a
+search can carry neither half of the existence question. Measured on 2026-09-28 against
+`camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`: the job search answered "no job of that
+key" while the job of a plain BPMN user task was activated and the task open, and it still answered
+with that job once the job was over, `TIMED_OUT` at once and `COMPLETED` five seconds later, while
+`UpdateJobTimeout` was accepted for the open job and answered `404` once it was gone. The empty
+`UpdateJob`, which would have been the read-only mirror of the empty `UpdateUserTask`, is refused
+with `400 INVALID_ARGUMENT` ("At least one of [retries, timeout] is required", with `priority` in
+that list on 8.10) for a job which is open and for one which is over, so it separates nothing. The
+state goes into the message as the cluster wrote it and is never read: five seconds after the same
+job was activated, 8.9.21 called it `CREATED` and 8.10.0-rc1 `TIMEOUT_UPDATED`. What the caller gets is unchanged, a
+`TaskNotFoundException` respectively `UNKNOWN_TO_BPMS`; `Camunda8A404AboutAJobKeyTest` holds the
+sentences and the outcomes together.
 
 That listener job is this adapter's own doing, so this adapter closes it. A job whose
 `getUserTask().getAction()` is `io.vanillabp:probe` and whose `getChangedAttributes()` is

@@ -706,6 +706,118 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   }
 
+  /**
+   * What a <code>404</code> of a user-task command is about, in one sentence for the caller.
+   * <p>
+   * The command asks about a USER-TASK key, so its <code>404</code> means "I hold no user task of
+   * that key" and not "the task is over". For a key which really is a user-task key the two are
+   * the same thing. For a JOB key they are not: a user task served by a job worker, which is what
+   * VanillaBP modelled up to its release 1.6.3, has no user-task record in the cluster at all, so
+   * every user-task command answers <code>404</code> however open the task is.
+   * <p>
+   * An application meets this while it upgrades. The task ids of version 1 are data it brought
+   * with it, and the ones belonging to that shape of user task are job keys. Saying "completed or
+   * canceled meanwhile" about one of them names the one thing the cluster did not say.
+   * <p>
+   * So the job side is asked, once and only here, and what it answers goes into the message. The
+   * caller still gets what it got before, a {@code TaskNotFoundException} respectively
+   * {@code UNKNOWN_TO_BPMS}: what kind of key somebody handed in changes the sentence, not the
+   * outcome.
+   *
+   * @param taskId The id the caller named
+   * @param whatTheCommandWas What was sent, for the sentence
+   * @return The sentence, naming a job where the cluster holds one under that key
+   */
+  private String whatThe404WasAbout(
+      final String taskId,
+      final String whatTheCommandWas) {
+
+    if (!theClusterHoldsAJobOfThatKey(taskId)) {
+      return ("The user task '%s' is gone (completed or canceled meanwhile) - the cluster holds no "
+          + "user task of that key and no job either.")
+          .formatted(taskId);
+    }
+    final var job = Camunda8UserTaskProbe.theJobTheIndexHoldsFor(clientFactory.getClient(), taskKeyOf(taskId));
+    if (job == null) {
+      // the engine has the job and the index has not written it yet, so the message says what is
+      // certain and leaves out the element
+      return ("The id '%s' is a JOB key, not a user-task key: the cluster still holds a job of it, "
+          + "so the %s answered 404 about the KEY and says nothing about the task. Which element "
+          + "that job belongs to is not in the cluster's index yet. A user task served by a job "
+          + "worker has such a key, the way VanillaBP modelled one up to its release 1.6.3, and "
+          + "this version does not serve that shape - your deployment names every such element "
+          + "while this application starts.")
+          .formatted(taskId, whatTheCommandWas);
+    }
+    if (Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1.equals(job.type())) {
+      return ("The id '%s' is a JOB key, not a user-task key: the cluster holds a job of type '%s' "
+          + "for element '%s' of process '%s', last seen by its index as %s. That is a user task "
+          + "served by a job worker, the way VanillaBP modelled one up to its release 1.6.3, and "
+          + "this version does not serve it - so the %s answered 404 whatever the task is doing, "
+          + "and that 404 does NOT say the task is over. The way out is the model: make the user "
+          + "task a Camunda-managed one ('zeebe:userTask') and set 'External form reference' "
+          + "(zeebe:formDefinition externalReference) to the task definition your @WorkflowTask "
+          + "method names, and finish the tasks which are still open on the old element before you "
+          + "rely on this application to complete them. Your deployment names every such element "
+          + "while this application starts.")
+          .formatted(
+              taskId,
+              job.type(),
+              job.elementId(),
+              job.bpmnProcessId(),
+              job.state(),
+              whatTheCommandWas);
+    }
+    return ("The id '%s' is a JOB key, not a user-task key: the cluster holds a job of type '%s' "
+        + "for element '%s' of process '%s', last seen by its index as %s. The %s therefore "
+        + "answered 404 about the key rather than about the task. A task of that element is "
+        + "completed with 'ProcessService#completeTask', not with 'completeUserTask'.")
+        .formatted(
+            taskId,
+            job.type(),
+            job.elementId(),
+            job.bpmnProcessId(),
+            job.state(),
+            whatTheCommandWas);
+
+  }
+
+  /**
+   * Whether the cluster holds a JOB of the given key - the question which decides whether a
+   * <code>404</code> of a user-task command was about the key.
+   * <p>
+   * It is the ENGINE which is asked, with the <code>UpdateJobTimeout</code> this adapter sends
+   * as its existence check for a service task anyway: <code>404</code> for a key it holds no job
+   * of, a <code>400</code> saying nobody has it activated for one it holds, and an accepted
+   * command for one somebody is holding right now. The index cannot answer it. Measured on
+   * 2026-09-28 against <code>camunda/camunda:8.9.21</code> and
+   * <code>camunda/camunda:8.10.0-rc1</code> by {@code Camunda8ProbeOfAnOpenUserTaskIT}: this
+   * command was accepted for a job which was open and answered <code>404</code> once that job was
+   * gone, while the job search answered "no job of that key" for the open one and still answered
+   * with the job once it was over.
+   * <p>
+   * What it costs is the one thing worth naming: where a worker of the application holds that job
+   * right now, its deadline is pushed out to <code>async-task-lock-renewal</code>, the same as the
+   * existence check of a service task does. The job of this case is a user task nothing in this
+   * version fetches, so the answer is a <code>400</code> and the cluster writes nothing.
+   *
+   * @param taskId The id the caller named
+   * @return Whether a job of that key is there
+   */
+  private boolean theClusterHoldsAJobOfThatKey(
+      final String taskId) {
+
+    try {
+      updateJobTimeout(taskId);
+      return true;
+    } catch (final RuntimeException e) {
+      // only an answer which SAYS the cluster holds it counts: an unreachable cluster answers
+      // neither way, and a message claiming a job key from a failed request would be a guess
+      return Camunda8Errors.jobIsThereButNotActive(e);
+    }
+
+  }
+
   @Override
   public WorkflowAwareness awarenessOfUserTask(
       final WorkflowScope scope,
@@ -735,10 +847,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (Camunda8Errors.jobAlreadyGone(e)) {
         log.info(
             "Camunda8[{}]: user task '{}' is unknown to the cluster - it refused the probe's "
-                + "UpdateUserTask with {}",
+                + "UpdateUserTask with {}. {}",
             adapterId,
             taskId,
-            Camunda8Errors.rejection(e));
+            Camunda8Errors.rejection(e),
+            whatThe404WasAbout(taskId, "probe's UpdateUserTask"));
         return WorkflowAwareness.UNKNOWN_TO_BPMS;
       }
       if (Camunda8Errors.refusedAboutAUserTaskItHolds(e)) {
@@ -786,9 +899,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         if (Camunda8Errors.jobAlreadyGone(e)) {
           throw newTaskNotFound(
               request.taskId(),
-              ("The user task '%s' is gone (completed or canceled meanwhile) - aborting the "
-                  + "transaction completing it!")
-                  .formatted(request.taskId()),
+              "%s Aborting the transaction completing it!"
+                  .formatted(whatThe404WasAbout(request.taskId(), "empty UpdateUserTask of this check")),
               e);
         }
         if (Camunda8Errors.refusedAboutAUserTaskItHolds(e)) {

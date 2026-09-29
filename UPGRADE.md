@@ -117,17 +117,26 @@ model: make the task a Camunda-managed one and set "External form reference"
 (`zeebe:formDefinition externalReference`) to what the `formKey` said. VanillaBP then wires the
 lifecycle listeners itself.
 
+That grep finds what version 1 served, and not every element this applies to. A user task without
+a `formKey` at all is a plain BPMN user task too, and the cluster does exactly the same with it: it
+hands out a job of `io.camunda.zeebe:userTask` which VanillaBP 2 does not fetch, so the workflow
+stands at the element until the job's retries are used up. Measured on 2026-09-28 against
+`camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`: the model is accepted, the job appears,
+and the cluster keeps no user-task record for such a task at all. The way out is the one above. If
+you want a search which finds both, look for `bpmn:userTask` elements whose extension elements have
+no `zeebe:userTask` in them.
+
 Finish or cancel the tasks which are still open on such an element before you upgrade, because
 afterwards nothing can complete them. The id such a task hands out is a job key while the cluster
 expects a user-task key, so `ProcessService#completeUserTask` cannot answer it, and no
 notification arrives when the task is created or canceled.
 
-The deployment says all this rather than failing over it. One WARN per BPMN process names the
-elements it found and how many tasks are open on them right now. The model is valid, the workflow
-runs, and an application may well serve such a task with a job worker of its own, so ending the
-boot would be the wrong answer. Of the two numbers only the first is certain: the elements come
-from the model this boot deploys, while the open tasks are a search, and a cluster which is not up
-yet costs you that count.
+The deployment says all this rather than failing over it, and it needs no grep of yours. One WARN
+per BPMN process names the elements it found, which of the two shapes each of them is, and how many
+tasks are open on them right now. The model is valid, the workflow runs, and an application may well
+serve such a task with a job worker of its own, so ending the boot would be the wrong answer. Of the
+two numbers only the first is certain: the elements come from the model this boot deploys, while the
+open tasks are a search, and a cluster which is not up yet costs you that count.
 
 ### A task your cockpit showed while a check answered 404
 
