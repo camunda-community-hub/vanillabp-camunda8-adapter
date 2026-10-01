@@ -1233,6 +1233,11 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       // naming a called process or decision composes the prefix itself, which the rewrite
       // below would give a second one
       refuseAnExpressionWhichAlreadyCarriesThePrefix(workflowModuleId, filename, model);
+      // and for the job types written as an expression, which is a name no worker of this
+      // application can subscribe to. Asked here, before the rewrite and before the wiring
+      // validation, so the message quotes what the modeller typed and says what is really
+      // wrong instead of asking for a method nobody can write
+      refuseOrReportJobTypesWrittenAsAnExpression(workflowModuleId, filename, model);
       // read while the process ids are still the plain ones, and once per FILE rather
       // than once per process: after the rewrite below an element cannot be attributed
       // to the process the configuration is keyed by any more
@@ -2658,6 +2663,133 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
                 prefix,
                 prefix));
+
+  }
+
+  /**
+   * What a job type written as a FEEL expression is, said wherever the finding is reported.
+   */
+  private static final String WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_IS = """
+      A job type is the NAME a worker subscribes to, and an expression is not a name: this adapter \
+      opens one worker per job type it reads out of the model and subscribes exactly the string \
+      the model says.""";
+
+  /**
+   * What a workflow reaching such an element costs. Both answers Camunda 8 can give are named,
+   * because which of them it gives is not this adapter's to state: decision 55 in the
+   * repository's DECISIONS.md says why no list of the places Camunda evaluates an expression at
+   * is written down here. Neither answer serves the element.
+   */
+  private static final String WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_COSTS = """
+      Where the cluster evaluates the expression, the job it creates carries the RESULT while the \
+      worker waits for the expression; where it does not, the job carries the expression itself \
+      and no @WorkflowTask method can be named after it. Either way a workflow reaches the \
+      element and stands there, and the job ends in an incident once its retries are used up.""";
+
+  /**
+   * Ends the boot where a BPMN process this application claims names a job type by a FEEL
+   * expression, and names such a job type without ending anything where no workflow service
+   * claims the process.
+   * <p>
+   * Two attributes say a job type: the <code>zeebe:taskDefinition</code> type of a service-like
+   * task and the type of a listener somebody modelled. This adapter subscribes a worker to the
+   * string it finds at either place, so an expression there is a worker waiting for a name no job
+   * ever carries. Nothing later in the boot says that: the core's wiring validation asks for a
+   * <code>&#64;WorkflowTask</code> method named after the expression, which is a method nobody can
+   * write, and the listener half asks for the same method in its own words. So the finding is
+   * named here, in the words it is about.
+   * <p>
+   * Who claims the process decides what happens about it, the same way it decides about a user
+   * task a job worker serves and about an ad-hoc subprocess nothing serves - decisions 53 and 54
+   * in the repository's DECISIONS.md. A process nobody claims is somebody else's model and keeps
+   * a WARN.
+   * <p>
+   * An element built from an element template is left out, which is the marker of decision 23 and
+   * decision 24: its job type names a runtime somebody else deployed, and that runtime may well
+   * compose it by expression.
+   * <p>
+   * Read while the file is still the modeller's, so the message quotes the expression as it was
+   * typed. Under <code>use-prefix</code> every expression carries the frame of
+   * {@link Camunda8Scoping} after the rewrite.
+   *
+   * @param workflowModuleId The workflow module id
+   * @param filename The file the model was read from
+   * @param model The model as it was read, with the plain process ids still in it
+   * @throws IllegalStateException If a workflow service of this application claims the process
+   */
+  private void refuseOrReportJobTypesWrittenAsAnExpression(
+      final String workflowModuleId,
+      final String filename,
+      final BpmnModelInstance model) {
+
+    for (final var process : model.getModelElementsByType(Process.class)) {
+      if (!process.isExecutable()) {
+        continue;
+      }
+      final var written = new ArrayList<String>();
+      Camunda8TaskWiring
+          .jobTypesWrittenAsAnExpressionOf(
+              model, process.getId(), connectorsAllowedFor(workflowModuleId, process.getId()).allowed())
+          .stream()
+          .map(Camunda8TaskWiring.JobTypeWrittenAsAnExpression::describe)
+          .forEach(written::add);
+      // a listener is asked about by the shape of its job type alone, without asking whether
+      // anybody allowed listeners for this process: an expression is a name this adapter cannot
+      // subscribe to whatever that key says
+      Camunda8Listeners
+          .listenersOf(model, process.getId())
+          .stream()
+          .filter(listener -> Camunda8Scoping.isWrittenAsFeel(listener.taskDefinition()))
+          .filter(listener -> !sitsOnAnElementSomebodyElseOwns(model, listener))
+          .map(Camunda8Listeners.ModelledListener::describe)
+          .forEach(written::add);
+      if (written.isEmpty()) {
+        continue;
+      }
+      // the same question the other two refusals ask, answered the same way: the core knows the
+      // workflow aggregate of a claimed process and nothing of an unclaimed one
+      if (aggregateIdNameOf(workflowModuleId, process.getId()) != null) {
+        throw new IllegalStateException(
+            """
+                Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s' \
+                (file '%s'): %d job type(s) of it are written as a FEEL expression: %s. %s A \
+                @WorkflowService class of this application claims this process, so the application \
+                stands in for it, and such an element is where that stops being true. %s Two ways \
+                out. Write a job type which is a fixed name and a @WorkflowTask method of that \
+                name - where the work differs from workflow to workflow, let that method branch on \
+                the workflow aggregate it is handed, which is where the data the expression reads \
+                comes from anyway. Or leave the element to the runtime which does serve it, a \
+                connector or a worker you run beside this application: give the ELEMENT a \
+                'zeebe:modelerTemplate', which is how this adapter is told that an element belongs \
+                to somebody else, and allow such elements with '%s'."""
+                .formatted(
+                    adapterId,
+                    process.getId(),
+                    workflowModuleId,
+                    filename,
+                    written.size(),
+                    String.join("; ", written),
+                    WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_IS,
+                    WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_COSTS,
+                    Camunda8Connectors.propertyKeyOf(adapterId)));
+      }
+      log.warn(
+          """
+              Camunda8[{}]: {} job type(s) of BPMN process '{}' (file '{}', workflow module '{}') \
+              are written as a FEEL expression: {}. {} What it costs: {} No @WorkflowService class \
+              of this application claims this process, so there is nothing here for you to do: the \
+              file the process stands in travels to the cluster as a whole, and whoever owns the \
+              process may serve those jobs with a worker of their own. For a process this \
+              application does claim, the same finding ends the boot.""",
+          adapterId,
+          written.size(),
+          process.getId(),
+          filename,
+          workflowModuleId,
+          String.join("; ", written),
+          WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_IS,
+          WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_COSTS);
+    }
 
   }
 

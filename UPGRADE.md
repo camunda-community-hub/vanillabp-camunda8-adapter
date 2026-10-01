@@ -549,6 +549,29 @@ rather than from your text. A refused deployment of a prefixed module therefore 
 quote includes and names the elements it can be about. The same frame shows up in an incident where
 your expression yields `null`, together with the name of the variable it could not read.
 
+### A job type your model writes as an expression ends the boot
+
+This is about one attribute value in two places: the `type` of a `zeebe:taskDefinition` and the
+`type` of a listener you modelled. Where that value starts with `=`, it is a FEEL expression rather
+than a name, and your application does not start where one of your `@WorkflowService` classes claims
+the process.
+
+A job type is the name a worker subscribes to. VanillaBP opens one worker per job type it reads out
+of your model and subscribes exactly the string the model says, so an expression there leaves the
+element to nobody. Measured against clusters of the 8.9 and 8.10 lines: the job the cluster creates
+carries what the expression yields, while the worker waits for the expression. So no element you
+could serve stops being served by this. What changes is that you hear about it before a workflow
+reaches the element, and that you read what is really wrong: the boot used to end over the missing
+`@WorkflowTask` method instead, asking you for a method whose name nobody can write.
+
+The message now names the attribute, the element and the expression you typed, and it names the two
+ways out. Write a job type which is a fixed name and a `@WorkflowTask` method of that name, and let
+the method branch on the workflow aggregate it is handed where the work differs from workflow to
+workflow. Or leave the element to the runtime which serves it: give the element a
+`zeebe:modelerTemplate` and allow such elements with `allow-connectors`, after which nothing here
+asks about its job type. A BPMN process none of your classes claims earns one WARN per process
+instead, and the boot goes on.
+
 ### A start says which of your names the cluster already held
 
 Version 1 compared the identifiers of a deployment against each other and said nothing about the

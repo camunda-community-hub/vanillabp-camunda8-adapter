@@ -30,6 +30,7 @@ import io.camunda.client.api.search.response.DecisionDefinition;
 import io.camunda.client.api.search.response.ProcessDefinition;
 import io.camunda.client.api.search.response.SearchResponse;
 import io.camunda.client.api.search.response.SearchResponsePage;
+import io.vanillabp.camunda8.processservice.Camunda8SearchPages;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.IdentifierHeldElsewhere;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ScopedIdentifierKind;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
@@ -428,7 +429,7 @@ public class Camunda8IdentifiersTheClusterHoldsTest {
   public void aFullPageIsFollowedByTheNextOne() {
 
     final var firstPage = IntStream
-        .rangeClosed(1, Camunda8IdentifiersTheClusterHolds.PAGE_SIZE)
+        .rangeClosed(1, Camunda8SearchPages.PAGE_SIZE)
         .mapToObj(version -> definition("LoanApproval", OUR_FILE, version, 7000L + version))
         .toList();
     theClusterHoldsProcessDefinitions(

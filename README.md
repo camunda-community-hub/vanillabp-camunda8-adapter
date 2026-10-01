@@ -241,9 +241,29 @@ What that costs is CI. Three lines are three cluster runs per pull request, and 
 preview line will make it four. The work per line is close to nothing, because every line is
 built from this one source tree, so the matrix is the whole bill.
 
-How long a bugfix line is carried is not answered yet. Ending one needs a statement about
-that, and the statement is worth more than the saved build. Until it exists, a line ends
-when somebody decides it ends.
+A line is carried as long as Camunda keeps its minor in standard maintenance, and it ends
+on that date and not earlier. The date is Camunda's own, published per minor in its
+[release policy](https://docs.camunda.io/docs/reference/announcements-release-notes/release-policy/),
+so while Camunda still fixes your cluster this project still fixes the adapter for it:
+
+| Line |  Carried until  |
+|------|-----------------|
+| 8.8  | 13 April 2027   |
+| 8.9  | 12 October 2027 |
+| 8.10 | 11 April 2028   |
+
+Camunda maintains a minor for 18 months and releases one every six months, so three minors
+are in maintenance at any moment. A preview line sits beside them from the first pre-release
+of the next minor until its GA, which is what makes the matrix four columns for most of a
+cycle. The dates line up as well: 8.8 leaves maintenance in April 2027 and the next minor is
+due in the same April, so the column 8.11 adds is the one 8.8 gives back.
+
+This says when a line ends, not which lines exist. 8.7 is maintained until October 2026 and
+never got a line here, and the rule above does not open one for it.
+
+A line stays in the POM and in this matrix until its date, and it gets its last release
+before that date. Afterwards its `line-*` profile goes, which takes the line out of the
+matrix on its own, and what was published stays in the registry.
 
 ### How the lines are built
 
@@ -1694,6 +1714,40 @@ An answer refused because another activation holds the job arrives as HTTP `409`
 on gRPC as `FAILED_PRECONDITION`. The adapter neither repeats it nor fails the job over it: the run
 converged with a redelivery, and the newer run has answered. Why the code alone decides that is
 decision 36 in the repository's DECISIONS.md.
+
+### A job type has to be a name, not an expression
+
+Camunda 8 lets a model write a FEEL expression where a name belongs, and a job type is one of
+those places: the `type` of a `zeebe:taskDefinition` and the `type` of a listener somebody modelled
+may both start with `=`. This adapter refuses such a model for a BPMN process a `@WorkflowService`
+class claims, and names it in a WARN for a process nobody claims.
+
+The reason is the job type itself. It is the NAME a worker subscribes to, and this adapter opens one
+worker per job type it reads out of the model, subscribing exactly the string the model says. Both
+answers the cluster can give leave the element to nobody. Where it evaluates the expression, the job
+carries the result while the worker waits for the expression; where it does not, the job carries the
+expression and no `@WorkflowTask` method can be named after it. Measured on 2026-10-01 against
+clusters of the 8.9 and 8.10 lines, with `="theJobOf" + string(whichAssessment)` as the job type of
+a service task: the job came under `theJobOfTheFullCheck` and nothing answered under the expression
+(`Camunda8JobTypeWrittenAsAnExpressionCanaryIT`).
+
+The finding is read while the file is prepared, before name-clash avoidance rewrites anything and
+before the core's wiring validation runs. Both halves of that matter. The message quotes the
+expression as the modeller typed it rather than the frame `use-prefix` writes around it, see
+[Keeping workflow modules apart](#keeping-workflow-modules-apart), and the reader learns that a job
+type is not a name instead of being asked for a `@WorkflowTask` method whose name nobody can write.
+
+The two ways out are in the message. Write a job type which is a fixed name and a `@WorkflowTask`
+method of that name, and let the method branch on the workflow aggregate it is handed where the work
+differs from workflow to workflow, which is where the data such an expression reads comes from
+anyway. Or leave the element to the runtime which does serve it, as the next section describes: an
+element carrying a `zeebe:modelerTemplate` is passed over here, and a runtime somebody else deployed
+may compose its job type however it likes.
+
+Why this is a refusal for a claimed process and a WARN for an unclaimed one is decision 53 and
+decision 54 in the repository's DECISIONS.md, which draw the same line for a user task a job worker
+serves and for an ad-hoc subprocess nothing serves. `Camunda8JobTypeWrittenAsAnExpressionTest`
+holds both messages, the listener half and the element template.
 
 ### Elements another runtime serves
 

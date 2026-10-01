@@ -2280,10 +2280,11 @@ tree, so what a line costs is the matrix and not the maintenance.
 `2.0.0-8.10` is published with the 2.0 release, like the other two. The line is GA, and a user who
 runs 8.10 should not have to point at a pre-release to get the adapter built for their cluster.
 
-What this entry does not say is how long a bugfix line is carried. Ending one needs that statement,
-and the statement is worth more than the saved build, so until it exists a line ends when somebody
-ends it deliberately. The Renovate boundary rule asks the question at the moment it matters: a minor
-bump of a pin waits for approval and its body asks whether the oldest line is still carried.
+How long a bugfix line is carried is not said here. It is said in
+`DECISIONS.pending/830-how-long-a-bugfix-line-is-carried.md`: a line is carried as long as Camunda
+keeps its minor in standard maintenance, and it ends on that date and not earlier. The Renovate
+boundary rule asks the question at the moment it matters: a minor bump of a pin waits for approval
+and its body asks whether the oldest line is still carried.
 
 See [Release lines](./README.md#release-lines).
 

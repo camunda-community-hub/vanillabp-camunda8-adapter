@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -104,7 +105,9 @@ final class AClusterHolding {
         .thenAnswer(invocation -> future(response(modelsPerVersion
             .keySet()
             .stream()
-            .sorted()
+            // the version list is asked for newest first, which is the order the catalog
+            // reverses on its way out
+            .sorted(Comparator.reverseOrder())
             .filter(version -> (askedFor[0] == 0) || (askedFor[0] == version.intValue()))
             .map(AClusterHolding::definition)
             .toList())));
@@ -148,10 +151,10 @@ final class AClusterHolding {
   }
 
   private static ProcessDefinition definition(
-      final int version) {
+      final Integer version) {
 
     final var definition = mock(ProcessDefinition.class);
-    Mockito.lenient().when(definition.getProcessDefinitionKey()).thenReturn(Long.valueOf(1000 + version));
+    Mockito.lenient().when(definition.getProcessDefinitionKey()).thenReturn(Long.valueOf(1000 + version.intValue()));
     Mockito.lenient().when(definition.getVersion()).thenReturn(version);
     return definition;
 

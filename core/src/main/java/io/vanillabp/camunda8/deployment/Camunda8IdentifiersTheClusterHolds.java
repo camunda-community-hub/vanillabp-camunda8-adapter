@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import io.camunda.client.CamundaClient;
 import io.camunda.client.api.search.response.ProcessDefinition;
 import io.camunda.client.api.search.response.SearchResponse;
+import io.vanillabp.camunda8.processservice.Camunda8SearchPages;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.IdentifierHeldElsewhere;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ScopedIdentifierKind;
 import lombok.extern.slf4j.Slf4j;
@@ -51,18 +52,14 @@ import lombok.extern.slf4j.Slf4j;
 public final class Camunda8IdentifiersTheClusterHolds {
 
   /**
-   * How many definitions one page of a search brings back. A search here is bounded by the
-   * processes of one workflow module times the versions the cluster holds of them, so one
-   * page normally answers it and the paging below exists for the module which outgrows that.
+   * Where the paging stops regardless of what the cluster still offers, which is 2000
+   * definitions. Lower than what {@link Camunda8SearchPages} allows a caller by default: a
+   * diagnostic asks a bounded number of questions or it is not a diagnostic any more, and a
+   * cursor which never ends would hold up a boot. A search here is bounded by the processes
+   * of one workflow module times the versions the cluster holds of them, so one page
+   * normally answers it and the paging exists for the module which outgrows that.
    */
-  static final int PAGE_SIZE = 100;
-
-  /**
-   * Where the paging stops regardless of what the cluster still offers. A diagnostic asks a
-   * bounded number of questions or it is not a diagnostic any more, and a cursor which
-   * never ends would hold up a boot.
-   */
-  private static final int MAX_PAGES = 20;
+  static final int MAX_PAGES = 20;
 
   private Camunda8IdentifiersTheClusterHolds() {
     // static helper
@@ -184,7 +181,7 @@ public final class Camunda8IdentifiersTheClusterHolds {
               }
             })
             .page(page -> {
-              page.limit(Integer.valueOf(PAGE_SIZE));
+              page.limit(Integer.valueOf(Camunda8SearchPages.PAGE_SIZE));
               if (cursor != null) {
                 page.after(cursor);
               }
@@ -268,7 +265,7 @@ public final class Camunda8IdentifiersTheClusterHolds {
                 }
               })
               .page(page -> {
-                page.limit(Integer.valueOf(PAGE_SIZE));
+                page.limit(Integer.valueOf(Camunda8SearchPages.PAGE_SIZE));
                 if (cursor != null) {
                   page.after(cursor);
                 }
@@ -337,45 +334,30 @@ public final class Camunda8IdentifiersTheClusterHolds {
       final String what,
       final Function<String, SearchResponse<T>> page) {
 
-    final var items = new ArrayList<T>();
     try {
-      String cursor = null;
-      for (var pages = 0; pages < MAX_PAGES; pages++) {
-        final var answer = page.apply(cursor);
-        final var fetched = answer.items();
-        if ((fetched == null) || fetched.isEmpty()) {
-          return items;
-        }
-        items.addAll(fetched);
-        if (fetched.size() < PAGE_SIZE) {
-          return items;
-        }
-        cursor = answer
-            .page()
-            .endCursor();
-        if ((cursor == null) || cursor.isBlank()) {
-          return items;
-        }
+      final var read = Camunda8SearchPages.everyPage(MAX_PAGES, page);
+      if (read.theClusterHadMore()) {
+        log
+            .debug(
+                "Camunda8[{}]: stopped after {} pages of {} while asking what the cluster already holds of "
+                    + "workflow module '{}' - what was read is reported, the rest is not",
+                adapterId,
+                Integer.valueOf(MAX_PAGES),
+                what,
+                workflowModuleId);
       }
-      log
-          .debug(
-              "Camunda8[{}]: stopped after {} pages of {} while asking what the cluster already holds of "
-                  + "workflow module '{}' - what was read is reported, the rest is not",
-              adapterId,
-              Integer.valueOf(MAX_PAGES),
-              what,
-              workflowModuleId);
+      return read.items();
     } catch (final RuntimeException e) {
       log
           .debug(
-              "Camunda8[{}]: could not ask the cluster about the {} of workflow module '{}', so what is "
-                  + "reported about them is whatever was read before",
+              "Camunda8[{}]: could not ask the cluster about the {} of workflow module '{}', so nothing is "
+                  + "reported about them",
               adapterId,
               what,
               workflowModuleId,
               e);
+      return List.of();
     }
-    return items;
 
   }
 

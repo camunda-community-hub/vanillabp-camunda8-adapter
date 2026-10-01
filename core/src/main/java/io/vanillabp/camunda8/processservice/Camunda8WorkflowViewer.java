@@ -505,6 +505,10 @@ public class Camunda8WorkflowViewer {
   }
 
   /**
+   * The history of one workflow is every element instance it has, not the first page of
+   * them: a multi-instance or a loop takes one workflow past the 100 a search hands out
+   * without being asked, and a history cut off there looks exactly like a complete one.
+   *
    * @return The element instances in execution order, or <code>null</code> where the
    *         cluster did not answer - which the SPI reads as "this BPMS serves no
    *         history", never as an error
@@ -513,16 +517,35 @@ public class Camunda8WorkflowViewer {
       final Long processInstanceKey) {
 
     try {
-      return clientFactory
-          .getClient()
-          .newElementInstanceSearchRequest()
-          .filter(filter -> filter.processInstanceKey(processInstanceKey))
-          .sort(sort -> sort
-              .startDate()
-              .asc())
-          .send()
-          .join()
-          .items();
+      final var read = Camunda8SearchPages
+          .everyPage(
+              cursor -> clientFactory
+                  .getClient()
+                  .newElementInstanceSearchRequest()
+                  .filter(filter -> filter.processInstanceKey(processInstanceKey))
+                  .sort(sort -> sort
+                      .startDate()
+                      .asc())
+                  .page(page -> {
+                    page.limit(Integer.valueOf(Camunda8SearchPages.PAGE_SIZE));
+                    if (cursor != null) {
+                      page.after(cursor);
+                    }
+                  })
+                  .send()
+                  .join());
+      if (read.theClusterHadMore()) {
+        // the history record has no way of saying "and there was more", so the log is
+        // where it is said - a reader of the returned history cannot tell
+        log.warn(
+            "Camunda8[{}]: the history of process instance '{}' is reported with the first {} "
+                + "element instances, which is where reading stopped, so it shows the beginning of "
+                + "that workflow and not all of it",
+            adapterId,
+            processInstanceKey,
+            Integer.valueOf(read.items().size()));
+      }
+      return read.items();
     } catch (final Exception e) {
       theClusterDidNotAnswerTheViewer(e, "element instances");
       return null;
@@ -535,11 +558,22 @@ public class Camunda8WorkflowViewer {
 
     final var messages = new HashMap<String, String>();
     try {
-      clientFactory
-          .getClient()
-          .newIncidentsByProcessInstanceSearchRequest(processInstanceKey)
-          .send()
-          .join()
+      // paged for the same reason the element instances are: the iterations of a
+      // multi-instance fail one incident each, and a message missing from the history
+      // reads as an element which ran cleanly
+      Camunda8SearchPages
+          .everyPage(
+              cursor -> clientFactory
+                  .getClient()
+                  .newIncidentsByProcessInstanceSearchRequest(processInstanceKey)
+                  .page(page -> {
+                    page.limit(Integer.valueOf(Camunda8SearchPages.PAGE_SIZE));
+                    if (cursor != null) {
+                      page.after(cursor);
+                    }
+                  })
+                  .send()
+                  .join())
           .items()
           .forEach(incident -> {
             if (incident.getState() == IncidentState.ACTIVE) {

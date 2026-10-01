@@ -772,13 +772,17 @@ public final class Camunda8Scoping {
    * <code>=</code>. Such a value is code: it takes up the WHOLE attribute, so the prefix goes
    * inside it.
    *
+   * <p>
+   * Public because the refusal of a job type written this way asks exactly this question, and
+   * one answer is what keeps the frame and that refusal talking about the same values.
+   *
    * @param identifier What the model says at that place
    * @return Whether it is an expression
    */
-  private static boolean isWrittenAsFeel(
+  public static boolean isWrittenAsFeel(
       final String identifier) {
 
-    return identifier.startsWith("=");
+    return !namesNothing(identifier) && identifier.startsWith("=");
 
   }
 

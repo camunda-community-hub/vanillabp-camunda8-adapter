@@ -100,6 +100,11 @@ public final class Camunda8TaskWiring {
    * <code>null</code> task definition - reported by the wiring validation with a
    * guiding message. A business rule task calling a decision
    * (<code>zeebe:calledDecision</code>) is none of them: the cluster evaluates it.
+   * <p>
+   * The task definition is handed over as the model says it, expression or not. A job type
+   * written as an expression never reaches this method, because the deployment refuses or
+   * reports such a model while the file is prepared, see
+   * {@link #jobTypesWrittenAsAnExpressionOf}.
    *
    * @param model The BPMN model
    * @param bpmnProcessId The process id as it stands in the model
@@ -141,6 +146,85 @@ public final class Camunda8TaskWiring {
                   : null));
         });
     return tasks;
+
+  }
+
+  /**
+   * One job type of a model which is written as a FEEL expression instead of a name.
+   *
+   * @param attribute The attribute holding it, as the modeler names it
+   * @param elementId The BPMN element it belongs to
+   * @param jobType What the modeller wrote, <code>=</code> included
+   */
+  public record JobTypeWrittenAsAnExpression(
+                                             String attribute,
+                                             String elementId,
+                                             String jobType) {
+
+    /**
+     * The entry in one line, which is how the deployment names it.
+     *
+     * @return Where the expression stands and what it says
+     */
+    public String describe() {
+
+      return "%s of '%s' (%s)".formatted(attribute, elementId, jobType);
+
+    }
+
+  }
+
+  /**
+   * The <code>zeebe:taskDefinition</code> types of the given executable process which are
+   * written as a FEEL expression.
+   * <p>
+   * A job type is the NAME a worker subscribes to. This adapter opens one worker per job type
+   * it reads out of the model and subscribes exactly the string the model says, so an
+   * expression leaves the element unserved whatever the cluster makes of it: where the cluster
+   * evaluates the expression, the job carries the result while the worker waits for the
+   * expression, and where it does not, the job carries the expression and no
+   * <code>&#64;WorkflowTask</code> method can be named after it. The deployment therefore
+   * refuses or reports such a model instead of letting {@link #tasksOf} hand the expression to
+   * the core, which would ask for a method nobody can write.
+   * <p>
+   * The same elements {@link #tasksOf} reads, with the same two exceptions: a business rule
+   * task calling a decision carries no job type at all, and an element built from an element
+   * template names a job type somebody else's runtime subscribes to.
+   * <p>
+   * Read while the model is still the modeller's. Under <code>use-prefix</code> every
+   * expression carries the frame of {@link Camunda8Scoping} afterwards, and a message quoting
+   * that would quote something nobody typed.
+   *
+   * @param model The BPMN model, as it was read
+   * @param bpmnProcessId The process id as it stands in the model
+   * @param connectorsAreAllowed Whether an element built from an element template is left to
+   *          the runtime which owns it, see {@link Camunda8Connectors}
+   * @return One entry per such job type, empty for every other model
+   */
+  public static List<JobTypeWrittenAsAnExpression> jobTypesWrittenAsAnExpressionOf(
+      final BpmnModelInstance model,
+      final String bpmnProcessId,
+      final boolean connectorsAreAllowed) {
+
+    final var found = new LinkedList<JobTypeWrittenAsAnExpression>();
+    Stream
+        .of(ServiceTask.class, SendTask.class, BusinessRuleTask.class, ScriptTask.class)
+        .flatMap(type -> model.getModelElementsByType(type).stream())
+        .map(Task.class::cast)
+        .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
+        .filter(task -> !connectorsAreAllowed || !Camunda8Connectors.isServedByAnotherRuntime(task))
+        .filter(task -> task.getSingleExtensionElement(
+            io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision.class) == null)
+        .forEach(task -> {
+          final var taskDefinition = task.getSingleExtensionElement(ZeebeTaskDefinition.class);
+          if ((taskDefinition == null) || !Camunda8Scoping.isWrittenAsFeel(taskDefinition.getType())) {
+            return;
+          }
+          found
+              .add(new JobTypeWrittenAsAnExpression(
+                  "zeebe:taskDefinition type", task.getId(), taskDefinition.getType()));
+        });
+    return List.copyOf(found);
 
   }
 
