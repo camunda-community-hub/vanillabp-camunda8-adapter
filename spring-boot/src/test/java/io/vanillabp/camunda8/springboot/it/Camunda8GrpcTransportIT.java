@@ -202,8 +202,8 @@ public class Camunda8GrpcTransportIT {
         "no job of type '"
             + jobType
             + "' within 120 seconds over gRPC, so this transport hands out nothing on this "
-            + "cluster - which is what the README says about the preview line and REST, and it "
-            + "would now be true of gRPC as well");
+            + "cluster - which is what the 8.10 alphas did over REST, and it would now be true "
+            + "of gRPC as well");
 
   }
 

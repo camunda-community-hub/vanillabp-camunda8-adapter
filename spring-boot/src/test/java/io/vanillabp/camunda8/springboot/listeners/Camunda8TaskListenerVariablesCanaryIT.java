@@ -28,10 +28,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * here is news about Camunda rather than a defect of this repository, and the message says what
  * to do with the news.
  * <p>
- * It runs on the line this build is pinned to and is tagged out of the preview line, because its
- * model waits for a {@code creating} listener job and the REST gateway of the 8.10 alpha never
- * hands such a job out (see the {@code line-8.10} profile of the parent POM for the bug and for
- * the events it touches). A canary which dies of somebody else's alpha bug stops being read.
+ * It runs on the line this build is pinned to, and on every line. It was kept off the 8.10 line
+ * while that line was built against an alpha, because its model waits for a {@code creating}
+ * listener job and the REST gateway of those alphas never handed one out. A canary which dies of
+ * somebody else's alpha bug stops being read, so the same exclusion is owed to the next preview
+ * line which cannot hand out what this model waits for.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).

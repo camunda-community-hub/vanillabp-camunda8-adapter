@@ -26,8 +26,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * client used to schedule the next poll of a worker only once no job of that worker was in
  * a handler any more, so one long handler stopped the whole worker, and the jobs it was
  * subscribed to waited for their lock instead of for a free slot. Camunda answered it as
- * SUPPORT-34723 and shipped the fix in {@code 8.8.37}, {@code 8.9.18} and
- * {@code 8.10.0-rc1}, which is what the pins of this repository stand on.
+ * SUPPORT-34723 and shipped the fix in {@code 8.8.37}, {@code 8.9.18} and {@code 8.10.0-rc1},
+ * which is what the pins of this repository stand on. The release {@code 8.10.0} carries it as
+ * well, measured here and by the bare-client reproduction on 2026-10-01.
  * <p>
  * Nothing here proved that before. {@link Camunda8PollWhenASlotIsFreeIT} drives the
  * opposite direction - a worker of an adapter whose every slot is busy must NOT fetch - and
@@ -148,7 +149,7 @@ public class Camunda8KeepsAskingWhileAHandlerRunsIT extends SpringBootTestOnTheS
             + THE_SECOND_JOB_ARRIVES_WITHIN
             + " seconds without being fetched although an execution slot was free the whole time. "
             + "That is news about the Camunda client rather than a defect of this repository: it is "
-            + "SUPPORT-34723, fixed in 8.8.37, 8.9.18 and 8.10.0-rc1, and a client pin below one of "
+            + "SUPPORT-34723, fixed in 8.8.37, 8.9.18 and 8.10.0, and a client pin below one of "
             + "those - or a bump which reintroduced it - brings it back. Read which client this line "
             + "resolved (the 'camunda8.version.line-*' properties of the parent POM), report it to "
             + "Camunda under that ticket, and hold the pin until it is answered. Until then every "

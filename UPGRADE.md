@@ -15,8 +15,8 @@ and for the [Camunda 7 adapter](https://github.com/vanillabp/camunda7-adapter/bl
 Visible to every consumer, because the coordinates change.
 
 The adapter is published once per Camunda 8 minor, and the minor is part of the version:
-`2.0.0-8.8`, `2.0.0-8.9`, and `2.0.0-8.10-rc<n>` for the preview line built against a
-pre-release of the next minor. Which one you take is decided by your cluster, and the table in the
+`2.0.0-8.8`, `2.0.0-8.9` and `2.0.0-8.10`. Which one you take is decided by your cluster, and the
+table in the
 [wiki](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki) says which client
 and which tested cluster each line stands for.
 
@@ -47,9 +47,10 @@ sorts `2.2.0-8.8` above `2.1.0-8.9`.
 At startup each configured `camunda8` adapter id logs its release line and the client it was built
 against, which is the lowest cluster version it accepts.
 
-A line lives until the next minor goes GA, so two GA lines exist at a time plus the preview. When
-8.10 goes GA, 8.9 becomes the previous GA and 8.8 ends, although Camunda supports 8.8 until April
-2027. That is the project's policy rather than a technical limit.
+All three lines take bugfixes. 8.10 is the line new features land on, and 8.8 and 8.9 take fixes
+for as long as they are carried. The project does not end a line on the day the next minor goes
+GA: Camunda supports 8.8 until April 2027, and ending the line would mean telling a cluster which
+is still in support to upgrade before it can have the next fix.
 
 ### The cluster has to be one the adapter can search
 

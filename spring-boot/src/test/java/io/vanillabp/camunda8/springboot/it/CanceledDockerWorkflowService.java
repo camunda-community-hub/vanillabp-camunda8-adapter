@@ -15,9 +15,10 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the test which cancels a running instance. Its one task stays
- * open, so the instance sits at a SERVICE task while it is canceled - which is what the
- * preview line needs, because an instance holding a Camunda-managed user task cannot be
- * canceled there at all (camunda/camunda#58193).
+ * open, so the instance sits at a SERVICE task while it is canceled. That shape was what the
+ * 8.10 alphas needed, because an instance holding a Camunda-managed user task could not be
+ * canceled on them at all (camunda/camunda#58193). The bug is fixed and the shape is still a
+ * service task.
  */
 @Service
 @WorkflowService(

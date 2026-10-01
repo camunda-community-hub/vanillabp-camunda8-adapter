@@ -65,11 +65,16 @@ cannot be parsed`, so a workflow started and its task was never delivered.
 
 The adapter is therefore published once per Camunda 8 minor, with the minor in the version:
 
-|   Channel   |        Version        |  Line  |            What lands there            |
-|-------------|-----------------------|--------|----------------------------------------|
-| previous GA | `2.x.y-8.8`           | `8.8`  | bugfixes only                          |
-| current GA  | `2.x.y-8.9`           | `8.9`  | everything                             |
-| preview     | `2.x.y-8.10-alpha<n>` | `8.10` | everything, plus what only 8.10 can do |
+|  Channel   |   Version    |  Line  | What lands there |
+|------------|--------------|--------|------------------|
+| bugfix     | `2.x.y-8.8`  | `8.8`  | bugfixes only    |
+| bugfix     | `2.x.y-8.9`  | `8.9`  | bugfixes only    |
+| current GA | `2.x.y-8.10` | `8.10` | everything       |
+
+There is no preview line at the moment. 8.10 was the preview line until Camunda released
+`8.10.0` on 2026-09-29, and the next preview line is the one built against the first
+pre-release of 8.11. Two bugfix lines instead of one is deliberate, see
+[How long a line lives](#how-long-a-line-lives).
 
 The table names the minor of each line and no patch level, because a patch level moves
 without anybody editing this file. The patch a line is pinned to is one property per line
@@ -95,36 +100,45 @@ such a change through unread. That is `.github/workflows/client-api-changes.yaml
 `bin/client-api-changes.sh`, and `Camunda8UnknownClientEnumsTest` holds what the adapter does
 with a literal it has never seen.
 
-The preview line runs against `8.10.0-rc1`, and that pin is what makes it usable again. Up
-to `8.10.0-alpha5` the REST gateway of that line dropped a whole activate-jobs batch when it
-met a task-listener job whose event carried no user task action in its headers, and the two
-events without one are `creating` and `canceling`. Every Camunda-managed user task this
-adapter deploys carries a `creating` listener, so on that alpha the application never heard
-that the task existed. The bug is `camunda/camunda#58193`: the engine writes the action header
-only where the command carried an action, creation and cancelation carry none, and the
-gateway's response mapper demanded one anyway and threw a `NullPointerException`, which lost
-the whole batch and not just the one job.
+The 8.10 line is pinned to `8.10.0`. Two cluster defects had kept it on a pre-release, and
+both of them are measured on the release rather than read off a changelog.
 
-Camunda closed the issue on 2026-09-01, a day after `8.10.0-alpha5` was built, and the fix is
-in the candidate. Measured against `camunda/camunda:8.10.0-rc1` on 2026-09-25: a user task with
-a `creating` listener hands its job out, `Camunda8UserTaskStillCreatingIT` and
-`Camunda8UserTaskProbeIT` pass, and the tests which create such a task run on this line again.
-The exclusions the alpha needed are gone from the `line-8.10` profile, and so is the tag which
-carried them.
+The first one hid the job of a `creating` task listener. Up to `8.10.0-alpha5` the REST gateway
+of that line dropped a whole activate-jobs batch when it met a task-listener job whose event
+carried no user task action in its headers, and the two events without one are `creating` and
+`canceling`. Every Camunda-managed user task this adapter deploys carries a `creating`
+listener, so on that alpha the application never heard that the task existed. The bug is
+`camunda/camunda#58193`: the engine writes the action header only where the command carried an
+action, creation and cancelation carry none, and the gateway's response mapper demanded one
+anyway and threw a `NullPointerException`, which lost the whole batch and not just the one job.
 
-The second defect this pin was moved for is SUPPORT-34723, the worker which stopped asking for
-work after its first empty poll while a job of it was still in a handler. Camunda's fix is
-`#59633` and it is in the candidate as well, and our own run met it from the other side: with four
-execution slots and one handler blocked, the cluster handed the same job back to the same
-worker as soon as its lock ran out, four times over. That has a consequence worth knowing. The
-adapter hands the client an executor as wide as `worker-threads` and the client answers its own
-requests on it, so a handler which occupies every slot also stops the client from completing a
-request of that same application. `Camunda8JobLeaseIT` blocks a handler on purpose and now
-sends its second activation with a client of its own for that reason.
+Camunda closed the issue on 2026-09-01, a day after `8.10.0-alpha5` was built, and the fix was
+in the first candidate. It is in the release as well. Measured against
+`camunda/camunda:8.10.0` on 2026-10-01: the 27 cases of `Camunda8TaskProcessingIT` pass,
+`userTaskCreatedAndCompleted`, `userTaskCanceledOnInstanceCancellation` and
+`cancelUserTaskUnsupportedGuiding` among them, and `Camunda8TaskListenerVariablesCanaryIT`
+gets its `creating` job in five seconds. Nothing is excluded for this bug on any line, and
+nothing has been since the pin moved to `8.10.0-rc1`.
 
-Two things changed with the candidate which an alpha bump never asked for. The client renamed
-the lease API to `getJobLeaseToken()` and `withJobLeaseToken(...)`, which is the delta source
-of this line and nothing else. And the cluster now refuses the answer to a leased job which
+The second defect is SUPPORT-34723, the worker which stopped asking for work after its first
+empty poll while a job of it was still in a handler. Camunda's fix is `#59633`, shipped in
+`8.8.37` and `8.9.18`, and for 8.10 we were told only that the line would follow. It did, and
+that was measured twice on 2026-10-01 against `camunda/camunda:8.10.0`:
+`Camunda8KeepsAskingWhileAHandlerRunsIT` passes, which is this adapter's own worker asking
+again while one of its handlers blocks a slot, and the bare-client reproduction outside this
+repository passes with client `8.10.0` in nine seconds.
+
+That defect taught us something about the executor which still holds. The adapter hands the
+client an executor as wide as `worker-threads` and the client answers its own requests on it,
+so a handler which occupies every slot also stops the client from completing a request of that
+same application. `Camunda8JobLeaseIT` blocks a handler on purpose and sends its second
+activation with a client of its own for that reason. The run which found it measured four
+redeliveries of the same job to the same worker, once per free slot, as soon as its lock ran
+out.
+
+Two things changed with the first candidate which an alpha bump never asked for. The client
+renamed the lease API to `getJobLeaseToken()` and `withJobLeaseToken(...)`, which is the delta
+source of this line and nothing else. And the cluster refuses the answer to a leased job which
 carries no token, with `409 INVALID_STATE`; the adapter always sent one, a test which used the
 raw client did not.
 
@@ -133,14 +147,14 @@ opens one worker per process and kind, and every one of them holds a REST activa
 open. The Camunda client caps its connection pool at 100 by default, the same number in the
 `8.8`, `8.9` and `8.10` clients. An application with more workers than that does not get them
 all served: the surplus workers take turns, and whatever one of them is waiting for arrives a
-whole `request-timeout` late. The preview line reaches the cap first because it deploys a
-cancel listener per process, which the GA lines have not: the Spring Boot test module opens 85
+whole `request-timeout` late. The 8.10 line reaches the cap first because it deploys a cancel
+listener per process, which the two older lines have not: the Spring Boot test module opens 85
 workers on 8.9 and 115 on 8.10.
 
 Measured on 2026-09-26 with `Camunda8RestartDeliveryIT` at 115 workers on
 `camunda/camunda:8.10.0-rc1`: 10412 ms with the client's 100 connections and 215 ms with 256.
 The same line with the 92 workers the module opened before the start-event listener of story
-653 answers in 184 ms, and 8.10 held to the 85 workers of the GA lines drains cleanly. So the
+653 answers in 184 ms, and 8.10 held to the 85 workers of the older lines drains cleanly. So the
 number of workers against the size of the pool is what decides, not the version of the client.
 The test module therefore configures `max-http-connections`, and an application which grows
 past a hundred workers has to do the same.
@@ -178,8 +192,8 @@ current GA line, which is what a build without a profile produces.
 ### Which line to use, and moving to the next one
 
 Take the line whose pin is at or below your cluster's minor. On 8.8 that is `-8.8`, on 8.9
-and above `-8.9`, and `-8.10-alpha<n>` if you run an alpha, usually because the cluster is
-not productive yet and you want everything the newest one offers.
+that is `-8.9`, and on 8.10 and above `-8.10`. The newest line is where features land, so a
+cluster on 8.10 should be on `-8.10`.
 
 Moving to the next line means upgrading the cluster, so it is one decision and not two.
 Renovate will not do it behind your back: the version suffix is read as a compatibility
@@ -201,10 +215,24 @@ cluster minimum is in effect.
 
 ### How long a line lives
 
-A GA line lives until the next minor goes GA, so there are two GA lines at a time plus the
-preview. When 8.10 goes GA in October 2026, 8.9 becomes the previous GA and 8.8 ends, even
-though Camunda supports 8.8 until April 2027. That is our policy and not a technical limit:
-it keeps the matrix at three builds and three cluster runs.
+The rule used to be two GA lines at a time plus a preview line, so the oldest of them ended
+whenever a new minor went GA. That kept the matrix at three builds. 8.10 went GA on
+2026-09-29, and under that rule 8.8 would have ended that day.
+
+It did not. The reason the lines exist is that a VanillaBP bugfix has to be deliverable
+without a Camunda cluster upgrade, and dropping 8.8 would have told everybody on an 8.8
+cluster to upgrade to get the next fix. Camunda supports 8.8 until April 2027, so such a
+cluster is in support and its application is not. So 8.8 and 8.9 are both bugfix lines now,
+8.10 is the current GA line, and there is no preview line until Camunda publishes the first
+8.11 pre-release.
+
+What that costs is CI. Three lines are three cluster runs per pull request, and the 8.11
+preview line will make it four. The work per line is close to nothing, because every line is
+built from this one source tree, so the matrix is the whole bill.
+
+How long a bugfix line is carried is not answered yet. Ending one needs a statement about
+that, and the statement is worth more than the saved build. Until it exists, a line ends
+when somebody decides it ends.
 
 ### How the lines are built
 
@@ -214,7 +242,7 @@ run against:
 
 ```bash
 mvn install                                          # current GA line, 2.0.0-SNAPSHOT
-mvn -Pline-8.8 -Drevision=2.1.0-8.8 clean install    # a release of the previous GA line
+mvn -Pline-8.8 -Drevision=2.1.0-8.8 clean install    # a release of the oldest line
 mvn -Pline-8.10 -Drevision=2.1.0-8.10-alpha1 clean install
 ```
 
@@ -238,7 +266,7 @@ to the default of the file, which is the current GA line, on every line. That is
 line did until September 2026. Nobody had looked, because the source POM reads right and the
 build of a line uses the source POM. The first sample application resolved per platform and
 line showed it: the 8.8 line handed an application the 8.9 client, whose job activations an
-8.8 cluster rejects, and the preview line handed it a client older than the code it runs.
+8.8 cluster rejects, and the 8.10 line handed it a client older than the code it runs.
 `Camunda8PublishedPomTest` reads the published POM on every line since and compares the
 client version in it with the client the build was compiled against.
 
@@ -304,16 +332,16 @@ platform and line:
 | 8.10 | 4.36.2         | 4.36.2          | **4.35.1**        | **4.35.0**     | 4.36.2          |
 
 Spring Boot manages `protobuf-java` from 4.1 on and Quarkus manages it in every version, and
-an imported BOM wins over anything the adapter brings. So on the two GA lines an application
-runs a protobuf newer than its client asks for, which protobuf allows. On the preview line
-both platforms hand it an older one, and that is the failure this pin exists to avoid: the
+an imported BOM wins over anything the adapter brings. So on the 8.8 and the 8.9 line an
+application runs a protobuf newer than its client asks for, which protobuf allows. On the 8.10
+line both platforms hand it an older one, and that is the failure this pin exists to avoid: the
 application dies with `Detected incompatible Protobuf Gencode/Runtime versions` on the first
 command that touches the protocol. Measured by loading the gateway protocol class of client
 `8.10.0-rc1` against runtime `4.35.1` and `4.35.0`.
 
-An application on the preview line therefore pins `protobuf-java` to the gencode of that
-line's client itself, in its own `dependencyManagement`, above the platform BOM. Nothing this
-repository publishes can do it for it. The GA lines need nothing.
+An application on the 8.10 line therefore pins `protobuf-java` to the gencode of that line's
+client itself, in its own `dependencyManagement`, above the platform BOM. Nothing this
+repository publishes can do it for it. The two older lines need nothing.
 
 What the adapter can do is say it. `Camunda8ProtobufRuntime` loads one generated class while
 the adapter validates its configuration, which is a class load the client does a moment later
@@ -340,10 +368,11 @@ lexically. One comparison goes wrong, and it is the whole risk of a suffix:
 the suffix as a compatibility value instead of a version part, which fixes exactly that.
 `renovate/verify-line-gating.js` runs the check in CI, including the case above.
 
-A pre-release of the preview line is `2.2.0-8.10-alpha1`: the qualifier comes after the
+A pre-release of a preview line is written `2.2.0-8.11-alpha1`: the qualifier comes after the
 line, so the line always sits in the same place, and Maven sorts
-`2.2.0-8.10-alpha1 < 2.2.0-8.10-alpha2 < 2.2.0-8.10`. `preview1` was rejected, because
-Maven ranks an unknown qualifier ABOVE the release: `2.2.0-8.10-preview1 > 2.2.0-8.10`.
+`2.2.0-8.11-alpha1 < 2.2.0-8.11-alpha2 < 2.2.0-8.11`. `preview1` was rejected, because
+Maven ranks an unknown qualifier ABOVE the release: `2.2.0-8.11-preview1 > 2.2.0-8.11`.
+The 8.10 line was published this way while it was the preview line.
 
 ### What CI runs
 
@@ -354,12 +383,17 @@ the same matrix: `checks.yaml` calls it without a condition, and the result repo
 `line-pins-verified`. A pull request used to build the current GA line alone, and then a night
 found on `main` what the pull request of the same commit had not. See decision 42.
 
-That check reads the GA lines of the matrix, and so does `lines-verified` inside it. The preview
+That check reads the GA lines of the matrix, and so does `lines-verified` inside it. A preview
 line builds there like every other line and its job is red where it broke, but it decides neither
 name: a defect of the alpha cluster it pins must not stop somebody who needs a fix on a released
 line. What it gets instead is an issue of its own, and the job summary of the matrix names the
-lines which decided the run. A release still waits for every line, the preview one included. See
+lines which decided the run. A release still waits for every line, a preview one included. See
 decision 42.
+
+Since 8.10 went GA there is no preview line, so every line of the matrix decides a pull request.
+Which line is the preview one is read from the `camunda8.line.preview` property of a `line-*`
+profile, and no profile carries it today. Nothing in the workflows had to change for that, and
+nothing has to change back when the 8.11 preview line arrives and sets it.
 
 The matrix takes about forty minutes, where a pull request on its own took about twenty, and a wave
 of stories pays that once instead of once per story. Whoever opened the wave watches it and starts
@@ -389,10 +423,11 @@ summary and into the issue of a red line. `2.0.0-SNAPSHOT` does not say it: the 
 under that string several times a day, and the reader of a red line has to be able to tell a break
 of the platform from a break of this adapter.
 
-A preview line which breaks on a pull request gets an issue as well, and a separate one.
-`checks.yaml` calls `preview-line-issue.yaml` after the matrix, which opens it under the label
-`preview-line` and a title naming the line, and writes a comment instead while such an issue is
-open. The pull request stays green, so the break would otherwise turn up in the night after the
+A preview line which breaks on a pull request gets an issue as well, and a separate one. That
+machinery is idle while no line is the preview one, and it is kept for the next one.
+`checks.yaml` calls `preview-line-issue.yaml` after the matrix, which opens the issue under the
+label `preview-line` and a title naming the line, and writes a comment instead while such an
+issue is open. The pull request stays green, so the break would otherwise turn up in the night after the
 change was merged, with nothing pointing back at what caused it. Nothing closes that issue either:
 a later pull request builds another branch and says nothing about this break.
 
@@ -401,7 +436,7 @@ a later pull request builds another branch and says nothing about this break.
 A release of one line consists of:
 
 1. `mvn -Pline-<id> -Drevision=<version>-<id> deploy` from the release commit, once per
-   live line, all from the same commit. The preview line publishes as a pre-release with
+   live line, all from the same commit. A preview line publishes as a pre-release with
    `-alpha<n>` appended.
 2. Every current line green in the full matrix, run by the release itself rather than looked
    up from last night. The release makes its first job a call of `line-matrix.yaml`, and every
@@ -415,7 +450,8 @@ A release of one line consists of:
 6. The consumers of the snapshot follow the current GA line too. The blueprints start a
    Camunda 8 cluster of their own for the CI (`bin/camunda8_cluster.sh`), and that cluster
    has to be at least the client the adapter was built against, so it moves with the
-   default line.
+   default line. The default line became 8.10 when that minor went GA, so that cluster has
+   to be 8.10 as well.
 7. One real `renovate --dry-run` against the published artifacts. The gating is proven
    today by `renovate/verify-line-gating.js`, which asks Renovate's own versioning module
    what it would offer a consumer of each line; a full dry run needs versions in a
@@ -592,7 +628,7 @@ test runner in it as well.
 `Camunda8WhatADrainWaitsForIT`, which opens workers on a raw client with job types nothing
 produces, closes all of them at once and times how long the last one takes to report itself
 closed. That is what the drain waits for, without an application around it. Client pool 30,
-request timeout `PT10S`, against the cluster of the current GA line:
+request timeout `PT10S`, against `camunda/camunda:8.9.21`:
 
 | workers | rounds of the pool | released after |
 |---------|--------------------|----------------|
@@ -1596,12 +1632,11 @@ Whether the second run happens at all depends on the client. Up to `8.8.36` and 
 which still held a job stopped asking for work, so its own expired job could only be picked up
 somewhere else, in practice by a second pod. From `8.8.37` and `8.9.18` on the worker keeps asking
 while its handler runs, and the measurement above is that case: the same worker activated its own
-expired job again about a second after the lock had run out. This build pins `8.8.39` and `8.9.21`,
-so both GA lines behave that way. The 8.10 client still carries the old behaviour up to
-`8.10.0-alpha5`, and 8.10 is the only line which has a lease at all: measured there on 2026-09-21,
-a single worker holding its job saw no second activation for 120 seconds, with the lease and
-without it. So on the line which can lease, the race a lease decides still needs a second worker
-today. Only a repaired 8.10 client has both halves at once.
+expired job again about a second after the lock had run out. Every pin of this build has that
+behaviour now, `8.8.40`, `8.9.21` and `8.10.0` alike, the last one measured on 2026-10-01. The
+8.10 alphas did not: a single worker holding its job saw no second activation for 120 seconds
+there on 2026-09-21, with the lease and without it, so on the only line which can lease at all the
+race a lease decides needed a second worker. Both halves are now in one client.
 
 The workers which lease are the ones which hold their job from the activation to the answer: the
 user-task listeners, the listeners somebody modelled, the cancel listeners VanillaBP writes, the

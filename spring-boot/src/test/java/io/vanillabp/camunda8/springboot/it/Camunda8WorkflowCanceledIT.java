@@ -30,15 +30,15 @@ import io.vanillabp.spi.service.WorkflowEnd;
  * <p>
  * It runs on the 8.10 line and nowhere else: the <code>cancel</code> execution listener of
  * the process element arrived there, and the class is skipped rather than failed on the older
- * lines, so their run costs no container for it. The pull-request checks build the GA lines,
- * so what proves this is the nightly matrix.
+ * lines, so their run costs no container for it. That line is GA, so every pull request runs
+ * this class.
  * <p>
- * The instance waits at a SERVICE task. An instance holding a Camunda-managed user task
- * cannot be canceled on 8.10.0-alpha5 at all: the <code>canceling</code> task-listener job is
- * created and never handed out, so the instance stays ACTIVE and the process listener never
- * fires, because the cluster runs it only after every child element has terminated. That is
- * camunda/camunda#58193, and widening this test to a user task is what to do once it is
- * fixed.
+ * The instance waits at a SERVICE task, and that was once the only shape which could be
+ * canceled here. On 8.10.0-alpha5 an instance holding a Camunda-managed user task could not be
+ * canceled at all: the <code>canceling</code> task-listener job was created and never handed
+ * out, so the instance stayed ACTIVE and the process listener never fired, because the cluster
+ * runs it only after every child element has terminated. That is camunda/camunda#58193 and it
+ * is fixed from 8.10.0-rc1 on. Widening this class to a user task is open work.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput

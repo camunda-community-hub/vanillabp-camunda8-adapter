@@ -10,7 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Release line <code>8.10</code>, the preview line, built against the alpha of the next minor.
+ * Release line <code>8.10</code>, the current GA line, built against the newest Camunda minor.
  * <p>
  * This test exists once per line, in the line's own test source directory, and only the
  * active line's copy is compiled. It is what proves the per-line build itself: the profile

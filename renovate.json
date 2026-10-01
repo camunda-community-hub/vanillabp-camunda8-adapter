@@ -8,7 +8,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "The pin of the previous-GA line.",
+      "description": "The pin of the 8.8 bugfix line.",
       "managerFilePatterns": ["/^pom\\.xml$/"],
       "matchStrings": [
         "<camunda8\\.version\\.line-8\\.8>(?<currentValue>[^<]+)</camunda8\\.version\\.line-8\\.8>"
@@ -20,7 +20,7 @@
     },
     {
       "customType": "regex",
-      "description": "The pin of the current-GA line, which is also the default of a plain build.",
+      "description": "The pin of the 8.9 bugfix line.",
       "managerFilePatterns": ["/^pom\\.xml$/"],
       "matchStrings": [
         "<camunda8\\.version\\.line-8\\.9>(?<currentValue>[^<]+)</camunda8\\.version\\.line-8\\.9>"
@@ -32,12 +32,12 @@
     },
     {
       "customType": "regex",
-      "description": "The pin of the preview line, which follows the pre-releases of the next minor.",
+      "description": "The pin of the current-GA line, which is also the default of a plain build. It was the preview line until Camunda released 8.10.0 on 2026-09-29. A preview line pins a pre-release, so it also needed a rule keeping it off a candidate of an alpha such as 8.10.0-alpha5-rc2, which is a step towards an alpha rather than something to publish a line on. This pin is a release now and Renovate offers no pre-release against one, so that rule went with the preview line and the next preview line needs it again.",
       "managerFilePatterns": ["/^pom\\.xml$/"],
       "matchStrings": [
         "<camunda8\\.version\\.line-8\\.10>(?<currentValue>[^<]+)</camunda8\\.version\\.line-8\\.10>"
       ],
-      "depNameTemplate": "camunda-client-java (line 8.10 preview)",
+      "depNameTemplate": "camunda-client-java (line 8.10)",
       "packageNameTemplate": "io.camunda:camunda-client-java",
       "datasourceTemplate": "maven",
       "versioningTemplate": "maven"
@@ -66,11 +66,11 @@
       "enabled": false
     },
     {
-      "description": "Every line keeps its own pin, so a client update is proposed per line rather than as one shared PR: the lines are released separately and a failure on the preview must not hold up a bugfix on a GA line. A patch and a minor are separated here rather than repository-wide, because for these pins the two mean different things: upkeep inside the line, and a new line.",
+      "description": "Every line keeps its own pin, so a client update is proposed per line rather than as one shared PR: the lines are released separately and a failure on one must not hold up a bugfix on another. A patch and a minor are separated here rather than repository-wide, because for these pins the two mean different things: upkeep inside the line, and a new line.",
       "matchDepNames": [
         "camunda-client-java (line 8.8)",
         "camunda-client-java (line 8.9)",
-        "camunda-client-java (line 8.10 preview)"
+        "camunda-client-java (line 8.10)"
       ],
       "groupName": null,
       "addLabels": ["camunda8-line-pin"],
@@ -81,7 +81,7 @@
       "matchDepNames": [
         "camunda-client-java (line 8.8)",
         "camunda-client-java (line 8.9)",
-        "camunda-client-java (line 8.10 preview)"
+        "camunda-client-java (line 8.10)"
       ],
       "matchUpdateTypes": ["patch"],
       "automerge": true,
@@ -95,7 +95,7 @@
       "matchDepNames": [
         "camunda-client-java (line 8.8)",
         "camunda-client-java (line 8.9)",
-        "camunda-client-java (line 8.10 preview)"
+        "camunda-client-java (line 8.10)"
       ],
       "matchUpdateTypes": ["minor", "major"],
       "groupName": null,
@@ -107,13 +107,8 @@
       "prBodyNotes": [
         "A client brings generated protobuf code, and protobuf refuses a runtime older than its gencode. If this bump raises what the client asks for, `<protobuf.version>` in `pom.xml` has to move with it. `Camunda8ProtobufPinTest` fails this build with both numbers when it does.",
         "This crosses a release-line boundary. A Camunda 8 cluster and the applications running on it move together, and a cluster upgrade costs more organizationally than technically, which is why the lines exist at all. Merging this raises the lowest cluster version the built artifacts accept.",
-        "Before merging: is the new minor GA, does the line table of the README still describe reality, and does the previous GA line end with it?"
+        "Before merging: is the new minor GA, does the line table of the README still describe reality, and is the oldest line still carried?"
       ]
-    },
-    {
-      "description": "The preview line follows Camunda's pre-releases of the next minor, which are its alphas and then its release candidates. What it does not follow is a candidate OF AN ALPHA (8.10.0-alpha5-rc2): that is a step on the way to an alpha and not something to build a published line on.",
-      "matchDepNames": ["camunda-client-java (line 8.10 preview)"],
-      "allowedVersions": "!/-alpha\\d+-rc\\d+$/"
     }
   ]
 }
