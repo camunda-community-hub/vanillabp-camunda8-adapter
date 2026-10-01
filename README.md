@@ -1715,6 +1715,40 @@ on gRPC as `FAILED_PRECONDITION`. The adapter neither repeats it nor fails the j
 converged with a redelivery, and the newer run has answered. Why the code alone decides that is
 decision 36 in the repository's DECISIONS.md.
 
+### A job type has to be a name, not an expression
+
+Camunda 8 lets a model write a FEEL expression where a name belongs, and a job type is one of
+those places: the `type` of a `zeebe:taskDefinition` and the `type` of a listener somebody modelled
+may both start with `=`. This adapter refuses such a model for a BPMN process a `@WorkflowService`
+class claims, and names it in a WARN for a process nobody claims.
+
+The reason is the job type itself. It is the NAME a worker subscribes to, and this adapter opens one
+worker per job type it reads out of the model, subscribing exactly the string the model says. Both
+answers the cluster can give leave the element to nobody. Where it evaluates the expression, the job
+carries the result while the worker waits for the expression; where it does not, the job carries the
+expression and no `@WorkflowTask` method can be named after it. Measured on 2026-10-01 against
+clusters of the 8.9 and 8.10 lines, with `="theJobOf" + string(whichAssessment)` as the job type of
+a service task: the job came under `theJobOfTheFullCheck` and nothing answered under the expression
+(`Camunda8JobTypeWrittenAsAnExpressionCanaryIT`).
+
+The finding is read while the file is prepared, before name-clash avoidance rewrites anything and
+before the core's wiring validation runs. Both halves of that matter. The message quotes the
+expression as the modeller typed it rather than the frame `use-prefix` writes around it, see
+[Keeping workflow modules apart](#keeping-workflow-modules-apart), and the reader learns that a job
+type is not a name instead of being asked for a `@WorkflowTask` method whose name nobody can write.
+
+The two ways out are in the message. Write a job type which is a fixed name and a `@WorkflowTask`
+method of that name, and let the method branch on the workflow aggregate it is handed where the work
+differs from workflow to workflow, which is where the data such an expression reads comes from
+anyway. Or leave the element to the runtime which does serve it, as the next section describes: an
+element carrying a `zeebe:modelerTemplate` is passed over here, and a runtime somebody else deployed
+may compose its job type however it likes.
+
+Why this is a refusal for a claimed process and a WARN for an unclaimed one is decision 53 and
+decision 54 in the repository's DECISIONS.md, which draw the same line for a user task a job worker
+serves and for an ad-hoc subprocess nothing serves. `Camunda8JobTypeWrittenAsAnExpressionTest`
+holds both messages, the listener half and the element template.
+
 ### Elements another runtime serves
 
 An element carrying the attribute `zeebe:modelerTemplate` was configured from an ELEMENT TEMPLATE.
