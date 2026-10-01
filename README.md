@@ -1495,26 +1495,34 @@ is job-based) and V1's marker-variable workaround is broken by V1's own admissio
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
 or later.
 
-A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment says so. The
-cluster serves such an element with a job of `io.camunda.zeebe:userTask`, this version opens no
-worker on that job type, and the workflow stands at the element until the job's retries are used
-up. It falls through everything else: `tasksOf` reads service-like tasks only and `userTasksOf`
-skips anything without the marker. `Camunda8TaskWiring#unservedUserTasksOf` looks for it on
-purpose and splits it into the two shapes the message has to keep apart. One carries the `formKey`
-version 1 read the task definition from up to its release 1.6.3, which is what an upgrading
-application finds by searching its models for that word. The other carries no `formKey` at all,
-which no such search finds while the cluster treats it exactly the same. That second shape is why
-the reader no longer filters on the formKey: it went through the whole boot without a word.
+A user task WITHOUT `zeebe:userTask` is a user task a job worker serves, and this adapter does not
+accept that shape. The question is the shape of the element and nothing else: nothing asks whether
+some worker would fetch the job, because the model already says who serves the task. What the
+shape would cost is why that answer is the kind one: the cluster hands out a job of
+`io.camunda.zeebe:userTask`, this version opens no worker on that job type, and the workflow
+stands at the element until the job's retries are used up. It falls through everything else:
+`tasksOf` reads service-like tasks only and `userTasksOf` skips anything without the marker.
+`Camunda8TaskWiring#jobWorkerUserTasksOf` looks for it on purpose and splits it into the two
+shapes the message has to keep apart. One carries the `formKey` version 1 read the task definition
+from up to its release 1.6.3, which is what an upgrading application finds by searching its models
+for that word. The other carries no `formKey` at all, which no such search finds while the cluster
+treats it exactly the same. That second shape is why the reader does not filter on the formKey: it
+went through the whole boot without a word.
+
+One element carries the shape and is still none of this: a user task with a `zeebe:taskDefinition`
+of its own. A worker of the APPLICATION serves it, under a job type the application chose, so it is
+no longer a user task VanillaBP is meant to serve and the reader passes over it. That is the third
+way out the refusal names, and `Camunda8JobWorkerUserTasksReportTest` holds the boundary.
 
 Who claims the process decides what happens next, in
-`Camunda8DeploymentService#refuseOrReportUnservedUserTasks`. Where a `@WorkflowService` class of
-the application claims the process, the boot ends: the class promised that the application serves
-that process, and this element is where the promise breaks. The message names the process, the
-elements per shape and the two ways out. Where nobody claims the process, the WARN it always had
-is written and the boot goes on, without the sentences which asked the reader to change
-something: the model travels to the cluster because of the file it sits in, and whoever owns it
-may serve such a job with a worker of their own.
-`Camunda8UnservedUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
+`Camunda8DeploymentService#refuseOrReportJobWorkerUserTasks`. Where a `@WorkflowService` class of
+the application claims the process, the boot ends: the class says the application stands in for
+that process, and VanillaBP serves a user task only where the cluster manages it. The message names
+the process, the elements per shape and the three ways out. Where nobody claims the process, the
+WARN it always had is written and the boot goes on, without the sentences which asked the reader to
+change something: the model travels to the cluster because of the file it sits in, and whoever owns
+it may serve such a job with a worker of their own.
+`Camunda8JobWorkerUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
 reader.
 
 Both messages carry how many tasks are open on the elements right now, and that number used to

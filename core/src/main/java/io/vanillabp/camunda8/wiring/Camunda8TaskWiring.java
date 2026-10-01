@@ -632,28 +632,28 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The job type the cluster serves a plain BPMN user task with - the shape version 1 used
-   * up to its release 1.6.3. Version 2 opens no worker on it, which is what
-   * {@link #unservedUserTasksOf} exists to report.
+   * The job type the cluster serves a job-worker user task with - the shape version 1 used
+   * up to its release 1.6.3. Version 2 opens no worker on it, and it does not accept the
+   * shape either, which is what {@link #jobWorkerUserTasksOf} exists to find.
    */
   public static final String TASKDEFINITION_USERTASK_WORKER_V1 = "io.camunda.zeebe:userTask";
 
   /**
-   * The user tasks of one BPMN process which this version serves with nothing, told apart by
-   * whether the model still carries version 1's <code>formKey</code>.
+   * The job-worker user tasks of one BPMN process, told apart by whether the model still
+   * carries version 1's <code>formKey</code>.
    * <p>
-   * Both shapes end the same way and the way out of both is the same, but only one of them
+   * The shape is the same for both and the way out of both is the same, but only one of them
    * can be found by searching a model for <code>formKey</code>, so the report has to keep
    * them apart.
    *
    * @param withVersionOnesFormKey The element ids whose <code>zeebe:formDefinition</code>
    *          names a <code>formKey</code>, which is what told version 1 the task definition
-   * @param withoutAFormKey The element ids of a plain BPMN user task carrying no
+   * @param withoutAFormKey The element ids of a job-worker user task carrying no
    *          <code>formKey</code> at all - never a VanillaBP shape, and just as silent
    */
-  public record Camunda8UnservedUserTasks(
-                                          List<String> withVersionOnesFormKey,
-                                          List<String> withoutAFormKey) {
+  public record Camunda8JobWorkerUserTasks(
+                                           List<String> withVersionOnesFormKey,
+                                           List<String> withoutAFormKey) {
 
     /**
      * Whether this process gives the report nothing to say.
@@ -683,34 +683,41 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The user tasks of the given executable process which nothing serves: a plain BPMN user
-   * task, without a <code>zeebe:userTask</code> marker and without a
+   * The user tasks of the given executable process which are modelled as a JOB-WORKER user
+   * task: a user task without a <code>zeebe:userTask</code> extension element and without a
    * <code>zeebe:taskDefinition</code> of the application's own.
    * <p>
-   * The cluster serves such an element with a job of
-   * {@value #TASKDEFINITION_USERTASK_WORKER_V1}, and this version opens no worker on that job
-   * type. So without this reader the model would deploy, the workflow would run up to the
-   * element and stand there until the job's retries are used up, and nothing would tell the
-   * application. What the deployment does with the answer depends on the process: it ends the
-   * boot for one a workflow service of the application claims, and it names the elements for
-   * one nobody claims. The element falls through everything else: {@link #tasksOf} reads service-like tasks only, and {@link #userTasksOf} skips
-   * anything without a <code>zeebe:userTask</code>. It cannot be completed either, because the
-   * id such a task hands out is a job key while the cluster expects a user-task key.
+   * The question is the shape of the element and nothing else. A user task carrying
+   * <code>zeebe:userTask</code> is managed by the cluster and is the one shape this adapter
+   * takes; a user task without it is served by a job of
+   * {@value #TASKDEFINITION_USERTASK_WORKER_V1}, which is how VanillaBP 1 worked up to its
+   * release 1.6.3, and this adapter does not take that shape. So the reader asks neither
+   * whether something would fetch that job nor whether the element names a
+   * <code>formKey</code>. What the deployment does with the answer depends on the process: it
+   * ends the boot for one a workflow service of the application claims, and it names the
+   * elements for one nobody claims.
    * <p>
-   * Two shapes end up here and the answer said about them differs. Up to release 1.6.3
+   * The element carrying a <code>zeebe:taskDefinition</code> is left out, and it is the one
+   * case which is not this shape. Such an element is served by a worker of the APPLICATION
+   * under a job type the application chose, so it is no longer a user task VanillaBP is meant
+   * to serve: nothing here notifies anybody about it and nothing completes it. It falls
+   * through the rest as well, because {@link #tasksOf} reads service-like tasks only and
+   * {@link #userTasksOf} skips anything without a <code>zeebe:userTask</code>.
+   * <p>
+   * Two shapes end up here and the message has to keep them apart. Up to release 1.6.3
    * VanillaBP 1 served exactly this element and read its task definition off the
    * <code>zeebe:formDefinition</code> <strong>formKey</strong>; release 1.7.0 replaced it with
    * a Camunda-managed user task and kept serving the old one alongside. An application
    * upgrading from that version finds those elements by searching its models for
-   * <code>formKey</code>. A plain user task WITHOUT one is not version 1's convention and no
-   * search for a formKey finds it, while the cluster treats it exactly the same, which is why
-   * both are collected and reported apart.
+   * <code>formKey</code>. A user task WITHOUT one is not version 1's convention and no search
+   * for a formKey finds it, while the cluster treats it exactly the same, which is why both
+   * are collected and reported apart.
    *
    * @param model The BPMN model of one file
    * @param bpmnProcessId The process id as the CLUSTER will know it
    * @return The element ids per shape, both empty where the model carries none
    */
-  public static Camunda8UnservedUserTasks unservedUserTasksOf(
+  public static Camunda8JobWorkerUserTasks jobWorkerUserTasksOf(
       final BpmnModelInstance model,
       final String bpmnProcessId) {
 
@@ -718,9 +725,9 @@ public final class Camunda8TaskWiring {
         .getModelElementsByType(UserTask.class)
         .stream()
         .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
-        // a Camunda-managed user task is what this version serves, and a user task
-        // carrying a zeebe:taskDefinition is the application's own job worker - neither is
-        // an element nothing serves
+        // a Camunda-managed user task is the shape this adapter takes, and a user task
+        // carrying a zeebe:taskDefinition is an element the application serves itself -
+        // neither of them is a job-worker user task of VanillaBP's
         .filter(task -> task.getSingleExtensionElement(ZeebeUserTask.class) == null)
         .filter(task -> task.getSingleExtensionElement(ZeebeTaskDefinition.class) == null)
         .collect(
@@ -728,7 +735,7 @@ public final class Camunda8TaskWiring {
                 .partitioningBy(
                     task -> namesAFormKey(task.getSingleExtensionElement(ZeebeFormDefinition.class)),
                     java.util.stream.Collectors.mapping(FlowElement::getId, java.util.stream.Collectors.toList())));
-    return new Camunda8UnservedUserTasks(
+    return new Camunda8JobWorkerUserTasks(
         List.copyOf(byShape.get(Boolean.TRUE)), List.copyOf(byShape.get(Boolean.FALSE)));
 
   }

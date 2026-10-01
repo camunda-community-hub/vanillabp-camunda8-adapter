@@ -109,8 +109,10 @@ never had them.
 
 Up to release 1.6.3 a user task was a plain BPMN user task served by a job worker, and its
 `zeebe:formDefinition` named a `formKey`. Release 1.7.0 replaced that with a Camunda-managed user
-task (`zeebe:userTask`) whose external form reference carries the task definition, and 2.0 serves
-only that one.
+task (`zeebe:userTask`) whose external form reference carries the task definition. **2.0 does not
+accept the older shape at all.** It is not a matter of what gets served: a user task without
+`zeebe:userTask` is a user task a job worker serves, and this adapter takes a user task only where
+the cluster manages it.
 
 So grep your models for `formKey` before you upgrade. Where one sits on a user task, change the
 model: make the task a Camunda-managed one and set "External form reference"
@@ -132,12 +134,12 @@ expects a user-task key, so `ProcessService#completeUserTask` cannot answer it, 
 notification arrives when the task is created or canceled.
 
 **Your application does not boot until those models are changed, and that is on purpose.** A
-`@WorkflowService` class claiming a BPMN process says that your application serves that process, and
-a user task nothing fetches takes that back without a sound. So the deployment refuses such a
-process instead of letting a workflow stand at the element: the message names the process, the
-elements, which of the two shapes each of them is, and the two ways out. Where a worker of your own
-serves the element, give it a `zeebe:taskDefinition` naming that worker's job type and the check
-passes over it.
+`@WorkflowService` class claiming a BPMN process says that your application stands in for that
+process, so the deployment refuses a process which carries a shape this adapter does not take. The
+message names the process, the elements, which of the two shapes each of them is, and the ways out.
+Where a worker of your own serves the element, give it a `zeebe:taskDefinition` naming that
+worker's job type: the element is then yours to serve rather than a user task of VanillaBP's, and
+the check passes over it.
 
 A BPMN process no `@WorkflowService` class of yours claims is not refused. It reaches the cluster
 because it sits in a file next to a process you do serve, and what it contains is not ours to make
