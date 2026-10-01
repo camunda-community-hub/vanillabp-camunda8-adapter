@@ -110,8 +110,10 @@ never had them.
 
 Up to release 1.6.3 a user task was a plain BPMN user task served by a job worker, and its
 `zeebe:formDefinition` named a `formKey`. Release 1.7.0 replaced that with a Camunda-managed user
-task (`zeebe:userTask`) whose external form reference carries the task definition, and 2.0 serves
-only that one.
+task (`zeebe:userTask`) whose external form reference carries the task definition. **2.0 does not
+accept the older shape at all.** It is not a matter of what gets served: a user task without
+`zeebe:userTask` is a user task a job worker serves, and this adapter takes a user task only where
+the cluster manages it.
 
 So grep your models for `formKey` before you upgrade. Where one sits on a user task, change the
 model: make the task a Camunda-managed one and set "External form reference"
@@ -133,12 +135,12 @@ expects a user-task key, so `ProcessService#completeUserTask` cannot answer it, 
 notification arrives when the task is created or canceled.
 
 **Your application does not boot until those models are changed, and that is on purpose.** A
-`@WorkflowService` class claiming a BPMN process says that your application serves that process, and
-a user task nothing fetches takes that back without a sound. So the deployment refuses such a
-process instead of letting a workflow stand at the element: the message names the process, the
-elements, which of the two shapes each of them is, and the two ways out. Where a worker of your own
-serves the element, give it a `zeebe:taskDefinition` naming that worker's job type and the check
-passes over it.
+`@WorkflowService` class claiming a BPMN process says that your application stands in for that
+process, so the deployment refuses a process which carries a shape this adapter does not take. The
+message names the process, the elements, which of the two shapes each of them is, and the ways out.
+Where a worker of your own serves the element, give it a `zeebe:taskDefinition` naming that
+worker's job type: the element is then yours to serve rather than a user task of VanillaBP's, and
+the check passes over it.
 
 A BPMN process no `@WorkflowService` class of yours claims is not refused. It reaches the cluster
 because it sits in a file next to a process you do serve, and what it contains is not ours to make
@@ -346,11 +348,8 @@ never served on Camunda 8 at all.
 
 If your models carry such a listener and a `@WorkflowTask` method of yours names its job type, this is
 the entry to act on. This version does not serve it unless you say so, and a model carrying one ends
-the boot with a message naming the elements, the key and what it costs. A listener whose job type no
-method of yours names is left alone: a worker you run yourself may well be the answer. The boot names
-it all the same, because the cluster creates that job either way and a workflow reaching the element
-stands there. Say so per adapter, per workflow module or per workflow, and the most specific
-configured value wins in both directions:
+the boot with a message naming the elements, the key and what it costs. Say so per adapter, per
+workflow module or per workflow, and the most specific configured value wins in both directions:
 
 ```yaml
 vanillabp:
@@ -382,6 +381,20 @@ it. Every boot of a workflow module whose listeners are served writes a framed W
 each listener and the way back, and no key silences it. Where you can, move what the listener does
 into a task of the model with a `@WorkflowTask` method behind it, which is the way back the report
 names.
+
+**A listener whose job type NO method of yours names ends the boot as well, where one of your
+`@WorkflowService` classes claims the process.** Version 1 said nothing about such a listener at
+all. The cluster creates the job the moment it reaches the listener,
+so a workflow stands inside the element until something takes that job, with no incident and nothing
+in any log. A class claiming the process says your application stands in for it, which is why that
+silence ends the boot now.
+
+If a worker of yours answers that job beside VanillaBP, say so in the model: give the ELEMENT a
+`zeebe:modelerTemplate`. That attribute is how this adapter is told that an element belongs to the
+runtime which owns it, the same way it is told about a connector, and such a listener is named in a
+WARN instead. A process none of your `@WorkflowService` classes claims keeps its WARN as well,
+because that model reaches the cluster because of the file it sits in and there is nothing in it for
+you to change.
 
 A `zeebe:executionListener` is served as well now. Any element may carry one, so the door is wider
 than version 1's, and the key is what keeps it shut by default. One placement is refused whatever the
@@ -444,7 +457,7 @@ multi-instance element, so a handler which only counts needs no change to its mo
 Nothing else is refused. An element without an `inputElement` still deploys where no handler asks
 for its item.
 
-### An ad-hoc subprocess in your model earns two warnings
+### An ad-hoc subprocess in your model earns a warning, or ends the boot
 
 Version 1 said nothing about the element and neither executed nor reported it. This version serves
 the flavour whose activities the model names through `zeebe:adHoc activeElementsCollection`, and it
@@ -453,10 +466,15 @@ says two things about a model carrying an ad-hoc subprocess which version 1 kept
 The element is named as a source of a second token, so a workflow aggregate without a version
 attribute earns the warning about two writers on one aggregate, whichever flavour the model uses.
 
-The flavour carrying a `zeebe:taskDefinition` of its own earns one WARN per BPMN process saying that
-nothing serves it. That was true in version 1 as well; the difference is that it is said now.
-Nothing is said about an element which also carries a `zeebe:modelerTemplate`, because a connector
-runtime owns that one.
+The flavour carrying a `zeebe:taskDefinition` of its own is served by nothing here: a worker would
+have to complete its job with a result naming the activities to activate, and a `@WorkflowTask`
+method has no way to say that. **Where one of your `@WorkflowService` classes claims the process,
+your application does not boot.** A workflow would reach the element and stop there, and the job
+ends in an incident once its retries are used up. The message names the element and the two ways
+out: let the model say which activities to run and fill the aggregate attribute that expression
+reads, or leave the element to a runtime which does serve it. A process none of your classes claims
+earns one WARN per process instead, and the boot goes on. Nothing is said at all about an element
+which also carries a `zeebe:modelerTemplate`, because a connector runtime owns that one.
 
 ### Two workflow modules with the same BPMN process id end the boot
 
@@ -502,22 +520,27 @@ If you neither set a `tenant-id` nor use `none`, nothing changes for you: the de
 workflow module into a tenant named after it, and under `use-prefix` the module id is part of
 every identifier, so the two processes never meet.
 
-### Under `use-prefix` a call activity naming its process by FEEL is rewritten for you
+### Under `use-prefix` a value your model writes as FEEL is rewritten for you
 
-Only under that mode, and only where a `zeebe:calledElement processId` or a
-`zeebe:calledDecision decisionId` of your models holds a FEEL expression instead of an id. Version 1
-had no prefixing mode, so such an expression yielded the id the cluster held and nothing touched it.
+Only under that mode, and only where your model writes a FEEL expression instead of a plain name at
+a place this version prefixes: the `processId` of a `zeebe:calledElement`, the `decisionId` of a
+`zeebe:calledDecision`, a message or signal name, an error or escalation code, a job type and the
+external form reference of a user task. Version 1 had no prefixing mode, so such an expression
+reached the cluster as you wrote it.
 
 This version prefixes every identifier of the workflow module, and an expression cannot be prefixed
 from the outside: it takes up the whole attribute value, so anything written in front of it becomes
 part of its text. The prefix therefore goes INSIDE the expression. Your `=whichProcess` is deployed
 as `="loan-approval__" + string(whichProcess)`, and your expression keeps yielding the plain id your
-own model declares. There is nothing to change in your model and nothing to change in your code.
+own model declares. A job type carries the prefix of its BPMN process as well, so its frame reads
+`="loan-approval__LoanApproval__" + string(...)`. There is nothing to change in your model and
+nothing to change in your code.
 
-One model does not boot: an expression which composes the prefix itself. It would be given a second
-one, the cluster would be asked for `loan-approval__loan-approval__PaymentHandling`, and every call
-of that element would fail once a workflow reached it. The boot ends instead, naming the file, the
-element and the expression to take the prefix out of.
+One model does not boot: an expression which composes the prefix itself, at any of those places.
+It would be given a second one, the cluster would be asked for
+`loan-approval__loan-approval__PaymentHandling`, and whatever reads that name would fail once a
+workflow reached the element. The boot ends instead, naming the file, the element, the attribute
+and the expression to take the prefix out of.
 
 What the rewrite costs you is worth knowing before you read a message about it. Camunda 8 parses the
 FEEL of a model while it deploys it, so a syntax error in your own part refuses the deployment and

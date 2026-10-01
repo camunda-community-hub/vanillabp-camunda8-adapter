@@ -31,6 +31,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What a boot says about the listeners somebody modelled: nothing where there are none, a
  * refusal where nobody asked for them, and one framed report where somebody did.
  * <p>
+ * A listener whose job type no method of this application names is the other half, and who
+ * claims the process decides it. The process of a {@code @WorkflowService} class does not
+ * deploy, because the cluster creates that job and nothing would answer it. A process nobody
+ * claims keeps its WARN, and so does a listener on an element built from an element template:
+ * that template is how a developer says the element belongs to somebody else.
+ * <p>
  * The cluster is an address nothing listens on. What is under test is the text a reader gets
  * and the task specs the core is handed, and neither needs a cluster.
  */
@@ -261,12 +267,17 @@ public class Camunda8ListenersReportTest {
 
   }
 
-  @Test
-  @DisplayName("A job type no method names is named as what it is: a workflow which will stand there")
-  public void aJobTypeNoMethodNamesIsNamed(
-      final CapturedOutput output) {
+  /**
+   * The sentence both messages about such a listener carry.
+   */
+  private static final String NO_METHOD_NAMES_IT = "no @WorkflowTask method of this application names";
 
-    final var core = new Camunda8DeploymentServiceTest.NoOpInvoker() {
+  /**
+   * A core which serves the ordinary task of the model and no listener of it.
+   */
+  private static Camunda8DeploymentServiceTest.NoOpInvoker aCoreServingTheTaskOnly() {
+
+    return new Camunda8DeploymentServiceTest.NoOpInvoker() {
 
       @Override
       public boolean workflowTaskHandlerExists(
@@ -280,23 +291,136 @@ public class Camunda8ListenersReportTest {
 
     };
 
+  }
+
+  /**
+   * The same core, answering that no {@code @WorkflowService} class of the application claims
+   * the process.
+   */
+  private static Camunda8DeploymentServiceTest.NoOpInvoker aCoreWhoseProcessNobodyClaims() {
+
+    return new Camunda8DeploymentServiceTest.NoOpInvoker() {
+
+      @Override
+      public boolean workflowTaskHandlerExists(
+          final String workflowModuleId,
+          final String bpmnProcessId,
+          final String taskDefinitionOrActivityId) {
+
+        return "approve".equals(taskDefinitionOrActivityId);
+
+      }
+
+      @Override
+      public String resolveWorkflowAggregateIdName(
+          final String workflowModuleId,
+          final String bpmnProcessId) {
+        throw new IllegalStateException(
+            "no @WorkflowService class of this application claims '%s'".formatted(bpmnProcessId));
+      }
+
+    };
+
+  }
+
+  @Test
+  @DisplayName("A job type no method names ends the boot of a process the application claims")
+  public void aJobTypeNoMethodNamesEndsTheBootOfAClaimedProcess() {
+
+    final var service = adapterServedBy(aCoreServingTheTaskOnly(), NameClashAvoidance.BY_ADAPTER, null);
+    final var model = modelWithAListener();
+
+    final var refused = assertThrows(
+        IllegalStateException.class,
+        () -> service.prepareBpmn(MODULE, null, FILE, PROCESS, model)).getMessage();
+
+    assertTrue(
+        refused.contains(NO_METHOD_NAMES_IT),
+        () -> "the cluster creates that job and nothing here would answer it: "
+            + refused);
+    assertTrue(
+        refused.contains("job type 'archiveTheOrder'"),
+        () -> "naming the job type nothing here subscribes to: "
+            + refused);
+    assertTrue(
+        refused.contains("@WorkflowService"),
+        () -> "and that the application stands in for this process, which is why the boot ends: "
+            + refused);
+    assertTrue(
+        refused.contains("vanillabp.adapters.c8.allow-listeners"),
+        () -> "the first way out, with the key a served listener needs: "
+            + refused);
+    assertTrue(
+        refused.contains("take the listener out of the model"),
+        () -> "the second one: "
+            + refused);
+    assertTrue(
+        refused.contains("zeebe:modelerTemplate"),
+        () -> "and the third, for a job a runtime other than VanillaBP answers: "
+            + refused);
+
+  }
+
+  @Test
+  @DisplayName("The same listener in a process nobody claims keeps its warning, and the boot goes on")
+  public void aJobTypeNoMethodNamesOnlyWarnsForAnUnclaimedProcess(
+      final CapturedOutput output) {
+
     final var logged = deploy(
         output,
-        adapterServedBy(core, NameClashAvoidance.BY_ADAPTER, null),
+        adapterServedBy(aCoreWhoseProcessNobodyClaims(), NameClashAvoidance.BY_ADAPTER, null),
         modelWithAListener());
 
     assertTrue(
-        logged.contains("no @WorkflowTask method of this application names"),
-        () -> "the boot goes on, because a worker of the application's own may be the answer, but it "
-            + "does not go on silently: "
+        logged.contains(NO_METHOD_NAMES_IT) && logged.contains("job type 'archiveTheOrder'"),
+        () -> "a reader still has to learn that the job type is there: "
             + logged);
     assertTrue(
-        logged.contains("job type 'archiveTheOrder'"),
-        () -> "naming the job type nothing here subscribes to: "
+        logged.contains("No @WorkflowService class of this application claims this process"),
+        () -> "and why this one is a warning: "
+            + logged);
+    assertFalse(
+        logged.contains("take the listener out of the model"),
+        () -> "nothing asks the reader to change a model which is none of ours: "
             + logged);
     assertFalse(
         logged.contains("MODELLED LISTENERS ARE SERVED"),
         () -> "and nothing of it is served: "
+            + logged);
+
+  }
+
+  @Test
+  @DisplayName("A listener on an element built from an element template is warned about, not refused")
+  public void aListenerOnAnElementOfAnotherRuntimeIsOnlyWarnedAbout(
+      final CapturedOutput output) {
+
+    final var logged = deploy(
+        output,
+        adapterServedBy(aCoreServingTheTaskOnly(), NameClashAvoidance.BY_ADAPTER, null),
+        model("""
+                <bpmn:serviceTask id="Activity_Approve">
+                  <bpmn:extensionElements>
+                    <zeebe:taskDefinition type="approve" />
+                  </bpmn:extensionElements>
+                </bpmn:serviceTask>
+                <bpmn:serviceTask id="Activity_Fetch" zeebe:modelerTemplate="io.camunda.connectors.HttpJson.v2">
+                  <bpmn:extensionElements>
+                    <zeebe:taskDefinition type="io.camunda:http-json:1" />
+                    <zeebe:executionListeners>
+                      <zeebe:executionListener eventType="end" type="auditTheCall" />
+                    </zeebe:executionListeners>
+                  </bpmn:extensionElements>
+                </bpmn:serviceTask>
+            """));
+
+    assertTrue(
+        logged.contains(NO_METHOD_NAMES_IT) && logged.contains("job type 'auditTheCall'"),
+        () -> "the job type is named, because one a reader does not recognise is worth a look: "
+            + logged);
+    assertTrue(
+        logged.contains("element built from an element template"),
+        () -> "and why the boot goes on although the application claims this process: "
             + logged);
 
   }

@@ -26,14 +26,22 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What a boot does about a plain BPMN user task, which the cluster serves with a job of its
- * own user-task type and this version serves with nothing.
+ * What a boot does about a user task a job worker serves, which is a user task without a
+ * {@code zeebe:userTask} extension element.
+ *
+ * <p>
+ * The shape is the finding. This adapter serves a user task only where the cluster manages it,
+ * so nothing here asks whether some worker would fetch the job the cluster hands out.
  * <p>
  * Who claims the process decides the answer. A process a {@code @WorkflowService} class of the
- * application claims is a promise that the application serves it, and an element nothing
- * fetches breaks that promise without a sound, so the boot ends. A process nobody claims
- * travels to the cluster because of the file it sits in, and there is nothing to ask of a model
- * somebody else owns, so it is named and the boot goes on.
+ * application claims is a promise that the application serves it, so the boot ends over such an
+ * element. A process nobody claims travels to the cluster because of the file it sits in, and
+ * there is nothing to ask of a model somebody else owns, so it is named and the boot goes on.
+ * <p>
+ * One element carries the shape and is still none of this: a user task with a
+ * {@code zeebe:taskDefinition} of its own. A worker of the application serves it under a job
+ * type the application chose, so the reader passes over it, and a test below holds that
+ * boundary.
  * <p>
  * Two shapes reach both messages and both have to keep them apart. One carries the
  * {@code formKey} VanillaBP 1 read the task definition from up to its release 1.6.3, and an
@@ -47,7 +55,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
-public class Camunda8UnservedUserTasksReportTest {
+public class Camunda8JobWorkerUserTasksReportTest {
 
   private static final String MODULE = "loan-approval";
 
@@ -58,7 +66,12 @@ public class Camunda8UnservedUserTasksReportTest {
   /**
    * The sentence which tells this finding apart from everything else a boot may say.
    */
-  private static final String THE_FINDING = "plain BPMN user task";
+  private static final String THE_FINDING = "no 'zeebe:userTask' extension element";
+
+  /**
+   * The reason both messages give: the shape is not one this adapter takes.
+   */
+  private static final String THE_REASON = "does not accept that shape";
 
   /**
    * What is said about the shape a search of the models finds.
@@ -119,6 +132,22 @@ public class Camunda8UnservedUserTasksReportTest {
 
     return model("""
             <bpmn:userTask id="Activity_ApproveTheLoan" name="approve the loan" />
+        """);
+
+  }
+
+  /**
+   * The one element which carries the shape and is still none of this: a worker of the
+   * application serves it, under a job type the application chose.
+   */
+  private static BpmnModelInstance aUserTaskAWorkerOfTheApplicationServes() {
+
+    return model("""
+            <bpmn:userTask id="Activity_ApproveTheLoan">
+              <bpmn:extensionElements>
+                <zeebe:taskDefinition type="approveTheLoan" />
+              </bpmn:extensionElements>
+            </bpmn:userTask>
         """);
 
   }
@@ -242,8 +271,12 @@ public class Camunda8UnservedUserTasksReportTest {
         () -> "the other shape is not in this model, so nothing is said about it: "
             + refused);
     assertTrue(
+        refused.contains(THE_REASON),
+        () -> "the reason is the shape of the element, not what the cluster would do with it: "
+            + refused);
+    assertTrue(
         refused.contains("@WorkflowService"),
-        () -> "the reason the boot ends is that the application claims this process: "
+        () -> "and the boot ends because the application claims this process: "
             + refused);
     assertTrue(
         refused.contains(THE_WAY_OUT_THROUGH_A_METHOD) && refused.contains(THE_WAY_OUT_THROUGH_THE_MODEL),
@@ -303,7 +336,7 @@ public class Camunda8UnservedUserTasksReportTest {
         () -> "and the one it does not: "
             + refused);
     assertTrue(
-        refused.contains("2 plain BPMN user task(s)"),
+        refused.contains("2 user task(s) with no 'zeebe:userTask' extension element"),
         () -> "counted together, because the way out is the same for both: "
             + refused);
 
@@ -341,12 +374,33 @@ public class Camunda8UnservedUserTasksReportTest {
         () -> "named by its element id and by its shape, as before: "
             + logged);
     assertTrue(
+        logged.contains(THE_REASON),
+        () -> "with the same reason the refusal gives: "
+            + logged);
+    assertTrue(
         logged.contains("No @WorkflowService class of this application claims this process"),
         () -> "and told why this one is a warning: "
             + logged);
     assertFalse(
         logged.contains(THE_WAY_OUT_THROUGH_A_METHOD) || logged.contains(THE_WAY_OUT_THROUGH_THE_MODEL),
         () -> "nothing asks the reader to change a model which is none of ours: "
+            + logged);
+
+  }
+
+  @Test
+  @DisplayName("A claimed process whose user task carries a task definition of its own boots")
+  public void anElementTheApplicationServesItselfIsLeftAlone(
+      final CapturedOutput output) {
+
+    final var before = output.getAll().length();
+    assertDoesNotThrow(wiringOf(aUserTaskAWorkerOfTheApplicationServes(), true));
+    final var logged = output.getAll().substring(before);
+
+    assertFalse(
+        logged.contains(THE_FINDING),
+        () -> "a task definition of its own says a worker of the application serves the element, "
+            + "so it is no user task of VanillaBP's and this check passes over it: "
             + logged);
 
   }

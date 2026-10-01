@@ -122,7 +122,7 @@ public class Camunda8PrefixInsideAnExpressionTest {
         () -> "the message names the key which put the workflow module into this mode: "
             + said);
     assertTrue(
-        said.contains("loan-approval__loan-approval__TheProcessYouCall"),
+        said.contains("loan-approval__loan-approval__TheIdentifierYouWrote"),
         () -> "and shows what the cluster would have been given: "
             + said);
 

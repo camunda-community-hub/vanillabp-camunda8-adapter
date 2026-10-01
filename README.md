@@ -1531,26 +1531,34 @@ is job-based) and V1's marker-variable workaround is broken by V1's own admissio
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
 or later.
 
-A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment says so. The
-cluster serves such an element with a job of `io.camunda.zeebe:userTask`, this version opens no
-worker on that job type, and the workflow stands at the element until the job's retries are used
-up. It falls through everything else: `tasksOf` reads service-like tasks only and `userTasksOf`
-skips anything without the marker. `Camunda8TaskWiring#unservedUserTasksOf` looks for it on
-purpose and splits it into the two shapes the message has to keep apart. One carries the `formKey`
-version 1 read the task definition from up to its release 1.6.3, which is what an upgrading
-application finds by searching its models for that word. The other carries no `formKey` at all,
-which no such search finds while the cluster treats it exactly the same. That second shape is why
-the reader no longer filters on the formKey: it went through the whole boot without a word.
+A user task WITHOUT `zeebe:userTask` is a user task a job worker serves, and this adapter does not
+accept that shape. The question is the shape of the element and nothing else: nothing asks whether
+some worker would fetch the job, because the model already says who serves the task. What the
+shape would cost is why that answer is the kind one: the cluster hands out a job of
+`io.camunda.zeebe:userTask`, this version opens no worker on that job type, and the workflow
+stands at the element until the job's retries are used up. It falls through everything else:
+`tasksOf` reads service-like tasks only and `userTasksOf` skips anything without the marker.
+`Camunda8TaskWiring#jobWorkerUserTasksOf` looks for it on purpose and splits it into the two
+shapes the message has to keep apart. One carries the `formKey` version 1 read the task definition
+from up to its release 1.6.3, which is what an upgrading application finds by searching its models
+for that word. The other carries no `formKey` at all, which no such search finds while the cluster
+treats it exactly the same. That second shape is why the reader does not filter on the formKey: it
+went through the whole boot without a word.
+
+One element carries the shape and is still none of this: a user task with a `zeebe:taskDefinition`
+of its own. A worker of the APPLICATION serves it, under a job type the application chose, so it is
+no longer a user task VanillaBP is meant to serve and the reader passes over it. That is the third
+way out the refusal names, and `Camunda8JobWorkerUserTasksReportTest` holds the boundary.
 
 Who claims the process decides what happens next, in
-`Camunda8DeploymentService#refuseOrReportUnservedUserTasks`. Where a `@WorkflowService` class of
-the application claims the process, the boot ends: the class promised that the application serves
-that process, and this element is where the promise breaks. The message names the process, the
-elements per shape and the two ways out. Where nobody claims the process, the WARN it always had
-is written and the boot goes on, without the sentences which asked the reader to change
-something: the model travels to the cluster because of the file it sits in, and whoever owns it
-may serve such a job with a worker of their own.
-`Camunda8UnservedUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
+`Camunda8DeploymentService#refuseOrReportJobWorkerUserTasks`. Where a `@WorkflowService` class of
+the application claims the process, the boot ends: the class says the application stands in for
+that process, and VanillaBP serves a user task only where the cluster manages it. The message names
+the process, the elements per shape and the three ways out. Where nobody claims the process, the
+WARN it always had is written and the boot goes on, without the sentences which asked the reader to
+change something: the model travels to the cluster because of the file it sits in, and whoever owns
+it may serve such a job with a worker of their own.
+`Camunda8JobWorkerUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
 reader.
 
 Both messages carry how many tasks are open on the elements right now, and that number used to
@@ -1759,10 +1767,23 @@ A listener is served only where a `@WorkflowTask` method names its job type, and
 task definition such a method names. A job type is a name in the cluster which anybody may subscribe
 to, so a model carrying one says nothing about who serves it while a method naming it does. Only the
 task-definition route counts: `@WorkflowTask(id = ...)` names the ELEMENT, and one element may carry a
-task and a listener at once. A listener no method names is not refused and not passed over in silence
-either: `sayWhichListenerJobsNothingServes` names it and the boot goes on, the way
-`reportUnservedAdHocSubProcesses` does, because a worker the application runs itself may be the answer
-while the cluster creates the job either way.
+task and a listener at once. A listener no method names is not passed over in silence, and who claims the
+process decides the rest, in `refuseOrReportListenerJobsNothingServes`. Where a `@WorkflowService`
+class claims the process, the boot ends: the class says the application stands in for the process,
+and the cluster creates that job the moment it reaches the listener, so a workflow would stand inside
+the element with no incident and nothing in any log. Where nobody claims the process, the WARN it
+always had is written and the boot goes on, without the sentences which asked the reader to change a
+model which is none of ours.
+
+The job type cannot say who answers it, which is why the ELEMENT is asked instead. A worker somebody
+else runs and a worker the application runs beside VanillaBP look exactly the same in a model, so a
+developer who answers such a job elsewhere needs a way of saying so. The way is the marker this
+adapter already reads for the same question: an element built from an element template belongs to the
+runtime which owns it, see [decision 23](./DECISIONS.md#23-connectors-are-allowed-per-adapter-and-every-boot-says-what-they-cost)
+and [decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on).
+A listener on such an element is named in a WARN of its own and the boot goes on, whoever claims the
+process. What that costs is one miss: a developer who meant VanillaBP to serve the listener of a
+templated element and forgot the method reads a warning rather than a refusal.
 
 `Camunda8Listeners#listenersOf` is what reads a model, and it is asked while the BPMN file is
 PREPARED rather than while a process of it is wired. Two things follow from the moment. The job
@@ -1872,10 +1893,16 @@ ad-hoc subprocess carrying a `zeebe:taskDefinition` of its own expects a worker 
 by round which activities to activate, by completing the job with
 `newCompleteJobCommand(key).withResult(r -> r.forAdHocSubProcess().activateElement(...))`. Neither
 the `@WorkflowTask` contract nor the adapter SPI can express that outcome, so no worker is opened,
-the workflow stops at the element and the job ends in an incident once its retries are used up. One
-WARN per BPMN process says so, and the boot goes on, see
-[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on).
-An element carrying a `zeebe:modelerTemplate` as well is left out of that report, through
+the workflow stops at the element and the job ends in an incident once its retries are used up.
+Nothing later in the boot sees it, because the element produces no task spec and no validation
+misses a method.
+
+Who claims the process decides the rest, in `refuseOrReportUnservedAdHocSubProcesses` and in the
+shape of the user task a job worker serves. Where a `@WorkflowService` class claims the process, the
+boot ends, naming the element, what it costs and the two ways out. Where nobody claims the process,
+one WARN per BPMN process says so and the boot goes on, which is the half of
+[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on)
+that still holds. An element carrying a `zeebe:modelerTemplate` as well is left out of both, through
 `Camunda8Connectors#elementTemplateOf`: the Camunda AI agent is an element template on exactly this
 element, and a connector runtime fetches its job.
 
@@ -2070,7 +2097,8 @@ what reaches the handler.
 Under `use-prefix` the decision ids are rewritten like the process ids, and the
 `decisionId` of the business rule tasks is rewritten with them, so both name the same
 decision (`Camunda8DeploymentServiceTest#aBusinessRuleTaskFindsItsRenamedDecision`). A
-`decisionId` given as a FEEL expression stays untouched. What this mode cannot follow is a
+`decisionId` given as a FEEL expression gets the prefix written inside it, like every other value
+of a prefixed module. What this mode cannot follow is a
 reference to a decision the module does not deploy: that one is renamed here and not in the
 cluster.
 
@@ -2099,15 +2127,30 @@ left an upgraded version-1 application deploying into no tenant while its workfl
 theirs. While `none` applies, a WARN per workflow module names the alternatives
 until `accept-unscoped-identifiers` acknowledges that the identifiers are unique.
 
-**A name written as FEEL gets the prefix inside the expression.** Two attributes can hold one:
-the `processId` of a `zeebe:calledElement` and the `decisionId` of a `zeebe:calledDecision`. An
-expression takes up the whole attribute, so a prefix in front of it lands in the expression's
-text rather than in the id it yields, and `loan-approval__=whichProcess` names no process and
-parses as no expression. `Camunda8Scoping` therefore writes the prefix into the expression:
-`=whichProcess` is deployed as `="loan-approval__" + string(whichProcess)`, and the application
-writes no prefix anywhere. Camunda's FEEL concatenates two strings with `+`, `string(...)` makes
-that work whatever the application's part returns, and the parentheses carry every shape such a
-part can have, an `if ... then ... else ...` and a `get value(...)` included.
+**A value written as FEEL gets the prefix inside the expression, at every place a prefix is
+written.** An expression takes up the whole attribute, so a prefix in front of it lands in the
+expression's text rather than in the identifier it yields, and `loan-approval__=whichProcess`
+names no process and parses as no expression. `Camunda8Scoping` therefore writes the prefix into
+the expression: `=whichProcess` is deployed as `="loan-approval__" + string(whichProcess)`, and
+the application writes no prefix anywhere. Camunda's FEEL concatenates two strings with `+`,
+`string(...)` makes that work whatever the application's part returns, and the parentheses carry
+every shape such a part can have, an `if ... then ... else ...` and a `get value(...)` included.
+
+The rule is one rule and the places are one list. `Camunda8Scoping#forEveryPrefixedValue` hands
+over every value this adapter prefixes, each with the prefix of its own place, and the rule above
+is a method on what it hands over. A job type is the place where that prefix is more than the
+module's, because a task definition is scoped by its BPMN process as well, so its frame reads
+`="loan-approval__LoanApproval__" + string(...)`. The same list answers the refusal below, which
+is what keeps the two from drifting apart: a place added to it is rewritten and guarded in one
+change.
+
+Whether Camunda 8 evaluates an expression at a given place is deliberately not asked. Such a list
+ages with every Camunda release, while this rule cannot be wrong: where no expression is
+evaluated, a value starting with `=` does not appear and the rule costs nothing, and where one is
+evaluated later, nothing here has to change. What is watched instead is that the cluster still
+ACCEPTS a model carrying the frame at those places, which
+`Camunda8PrefixInsideAnExpressionCanaryIT` does by deploying one model twice, once plain and once
+framed.
 
 The price is that the cluster holds an expression nobody typed. Camunda 8 parses the FEEL while it
 deploys, so a syntax error in the application's part refuses the deployment quoting the framed
@@ -2116,9 +2159,11 @@ module says what such a quote includes and names the elements it can be about
 (`Camunda8Scoping#whatAQuotedExpressionIncludes`). Nothing is said while a deployment goes
 through. An expression which composes the prefix ITSELF ends the boot instead of being given a
 second one (`refuseAnExpressionWhichAlreadyCarriesThePrefix`), which is the model an earlier 2.0
-snapshot asked for while it left the expression alone. What the forms deploy to is held by
-`Camunda8CalledProcessScopingTest`, the refused boot by `Camunda8PrefixInsideAnExpressionTest`,
-and the cluster by `Camunda8PrefixInsideAnExpressionCanaryIT` on every release line.
+snapshot asked for while it left the expression alone, and that refusal covers every place of the
+list. What the two forms deploy to is held by `Camunda8CalledProcessScopingTest` for a called
+process and a called decision and by `Camunda8PrefixInEveryPlaceTest` for the rest, the refused
+boot by `Camunda8PrefixInsideAnExpressionTest`, and the cluster by
+`Camunda8PrefixInsideAnExpressionCanaryIT` on every release line.
 
 **A BPMN error code belongs to one workflow module, and so does its catcher.** The code a
 `TaskException` raises is composed from the module of the process whose job raised it
