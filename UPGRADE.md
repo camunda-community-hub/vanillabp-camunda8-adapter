@@ -131,12 +131,21 @@ afterwards nothing can complete them. The id such a task hands out is a job key 
 expects a user-task key, so `ProcessService#completeUserTask` cannot answer it, and no
 notification arrives when the task is created or canceled.
 
-The deployment says all this rather than failing over it, and it needs no grep of yours. One WARN
-per BPMN process names the elements it found, which of the two shapes each of them is, and how many
-tasks are open on them right now. The model is valid, the workflow runs, and an application may well
-serve such a task with a job worker of its own, so ending the boot would be the wrong answer. Of the
-two numbers only the first is certain: the elements come from the model this boot deploys, while the
-open tasks are a search, and a cluster which is not up yet costs you that count.
+**Your application does not boot until those models are changed, and that is on purpose.** A
+`@WorkflowService` class claiming a BPMN process says that your application serves that process, and
+a user task nothing fetches takes that back without a sound. So the deployment refuses such a
+process instead of letting a workflow stand at the element: the message names the process, the
+elements, which of the two shapes each of them is, and the two ways out. Where a worker of your own
+serves the element, give it a `zeebe:taskDefinition` naming that worker's job type and the check
+passes over it.
+
+A BPMN process no `@WorkflowService` class of yours claims is not refused. It reaches the cluster
+because it sits in a file next to a process you do serve, and what it contains is not ours to make
+demands about, so one WARN per process names the elements and the boot goes on.
+
+Both messages say how many tasks are open on the elements right now, and only the count of elements
+is certain: they come from the model this boot deploys, while the open tasks are a search, and a
+cluster which is not up yet costs you that count.
 
 ### A task your cockpit showed while a check answered 404
 

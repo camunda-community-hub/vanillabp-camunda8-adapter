@@ -54,8 +54,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * task - a plain BPMN user task, which is what VanillaBP 1 served up to its release 1.6.3 -
  * has a JOB key. The two live in namespaces of their own, so a command of the one kind
  * answers {@code 404} for a key of the other kind however open the task is. Version 2 serves
- * the managed shape only and reports the other one while it deploys; version 1 served both,
- * and its {@code UserTaskGet} was sent for either.
+ * the managed shape only: it ends the boot over the other one where a workflow service claims
+ * the process and names it where nobody does, which is why the models here are deployed with
+ * the raw client. Version 1 served both, and its {@code UserTaskGet} was sent for either.
  *
  * <h2>What an application knows before the index does</h2>
  *

@@ -1457,7 +1457,7 @@ is job-based) and V1's marker-variable workaround is broken by V1's own admissio
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
 or later.
 
-A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment names it. The
+A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment says so. The
 cluster serves such an element with a job of `io.camunda.zeebe:userTask`, this version opens no
 worker on that job type, and the workflow stands at the element until the job's retries are used
 up. It falls through everything else: `tasksOf` reads service-like tasks only and `userTasksOf`
@@ -1466,12 +1466,19 @@ purpose and splits it into the two shapes the message has to keep apart. One car
 version 1 read the task definition from up to its release 1.6.3, which is what an upgrading
 application finds by searching its models for that word. The other carries no `formKey` at all,
 which no such search finds while the cluster treats it exactly the same. That second shape is why
-the reader no longer filters on the formKey: it went through the whole boot without a word. One WARN per BPMN process names
-the elements per shape plus how many tasks are open on them right now, counted from the jobs of
-that type, and the boot goes on for the reason
-[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on)
-gives. `Camunda8UnservedUserTasksReportTest` holds the message and
-`Camunda8UserTaskWiringTest` the reader.
+the reader no longer filters on the formKey: it went through the whole boot without a word.
+
+Who claims the process decides what happens next, in
+`Camunda8DeploymentService#refuseOrReportUnservedUserTasks`. Where a `@WorkflowService` class of
+the application claims the process, the boot ends: the class promised that the application serves
+that process, and this element is where the promise breaks. The message names the process, the
+elements per shape and the two ways out. Where nobody claims the process, the WARN it always had
+is written and the boot goes on, without the sentences which asked the reader to change
+something: the model travels to the cluster because of the file it sits in, and whoever owns it
+may serve such a job with a worker of their own. Both messages carry how many tasks are open on
+the elements right now, counted from the jobs of that type.
+`Camunda8UnservedUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
+reader.
 
 The wiring and the V1 order of the listeners are `Camunda8UserTaskWiringTest`. The
 lifecycle against a cluster is `Camunda8TaskProcessingIT#userTaskCreatedAndCompleted`,
