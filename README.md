@@ -2026,22 +2026,26 @@ left an upgraded version-1 application deploying into no tenant while its workfl
 theirs. While `none` applies, a WARN per workflow module names the alternatives
 until `accept-unscoped-identifiers` acknowledges that the identifiers are unique.
 
-**A name written as FEEL gets no prefix, and the boot says so.** Two attributes can hold one:
+**A name written as FEEL gets the prefix inside the expression.** Two attributes can hold one:
 the `processId` of a `zeebe:calledElement` and the `decisionId` of a `zeebe:calledDecision`. An
 expression takes up the whole attribute, so a prefix in front of it lands in the expression's
 text rather than in the id it yields, and `loan-approval__=whichProcess` names no process and
-parses as no expression. `Camunda8Scoping` leaves both as the application wrote them, which makes
-this the one place under `use-prefix` where a developer composes a scoped id themselves
-(`="loan-approval__" + whichProcess`). Rewriting the FEEL instead was the alternative and was not
-taken: not every expression survives a concatenation wrapped around it, and it would be the
-adapter editing the application's code. So the deployment names the call activities it applies to,
-once per BPMN process, with the prefix and the expression to write
-(`reportCallActivitiesNamingTheirProcessByExpression`). It is a WARN which no key silences,
-because the adapter cannot evaluate the expression and therefore cannot tell an application which
-already composes the prefix from one which does not. A decision id is not reported: the module's
-own DMN files are renamed the same way, so the developer who wrote the expression is the one who
-also sees those ids. What the two forms deploy to is held by
-`Camunda8CalledProcessScopingTest` and `Camunda8CalledProcessByExpressionReportTest`.
+parses as no expression. `Camunda8Scoping` therefore writes the prefix into the expression:
+`=whichProcess` is deployed as `="loan-approval__" + string(whichProcess)`, and the application
+writes no prefix anywhere. Camunda's FEEL concatenates two strings with `+`, `string(...)` makes
+that work whatever the application's part returns, and the parentheses carry every shape such a
+part can have, an `if ... then ... else ...` and a `get value(...)` included.
+
+The price is that the cluster holds an expression nobody typed. Camunda 8 parses the FEEL while it
+deploys, so a syntax error in the application's part refuses the deployment quoting the framed
+expression, with the column counted from its opening quote. A refused deployment of a prefixed
+module says what such a quote includes and names the elements it can be about
+(`Camunda8Scoping#whatAQuotedExpressionIncludes`). Nothing is said while a deployment goes
+through. An expression which composes the prefix ITSELF ends the boot instead of being given a
+second one (`refuseAnExpressionWhichAlreadyCarriesThePrefix`), which is the model an earlier 2.0
+snapshot asked for while it left the expression alone. What the forms deploy to is held by
+`Camunda8CalledProcessScopingTest`, the refused boot by `Camunda8PrefixInsideAnExpressionTest`,
+and the cluster by `Camunda8PrefixInsideAnExpressionCanaryIT` on every release line.
 
 **A BPMN error code belongs to one workflow module, and so does its catcher.** The code a
 `TaskException` raises is composed from the module of the process whose job raised it

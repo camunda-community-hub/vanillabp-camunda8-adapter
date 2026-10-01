@@ -1229,6 +1229,10 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       // the file is read for what it demands of the cluster while it is still the
       // model somebody wrote, before this adapter rewrote a single element of it
       refuseAFileTheClusterWouldReject(workflowModuleId, filename, model);
+      // and for the one thing only the untouched model can say: whether an expression
+      // naming a called process or decision composes the prefix itself, which the rewrite
+      // below would give a second one
+      refuseAnExpressionWhichAlreadyCarriesThePrefix(workflowModuleId, filename, model);
       // read while the process ids are still the plain ones, and once per FILE rather
       // than once per process: after the rewrite below an element cannot be attributed
       // to the process the configuration is keyed by any more
@@ -1385,12 +1389,14 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         scopedBpmnProcessId,
         Camunda8TaskWiring.unservedUserTasksOf(model, scopedBpmnProcessId));
 
-    // under 'use-prefix' a call activity naming its process by FEEL is the one place where
-    // the application has to write the prefix itself, so the boot says which elements that is
-    reportCallActivitiesNamingTheirProcessByExpression(
-        workflowModuleId,
-        bpmnProcessId,
-        Camunda8Scoping.callActivityIdsNamingTheirProcessByExpression(model, scopedBpmnProcessId));
+    // under 'use-prefix' the prefix of a called process or decision named by FEEL is written
+    // INSIDE the expression, so what the cluster holds is longer than what the developer
+    // typed. Nothing is said about it while it works; the elements are remembered for the one
+    // message where it matters, a deployment the cluster refuses over an expression
+    context
+        .recordElementsNamingTheirTargetByExpression(
+            bpmnProcessId,
+            Camunda8Scoping.elementIdsNamingTheirTargetByExpression(model, scopedBpmnProcessId));
 
     // an ad-hoc subprocess waiting for a job worker is the other element which would
     // stop a workflow without anything being said about it
@@ -2413,74 +2419,88 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Says which call activities of a BPMN process name the process they call as a FEEL
-   * expression, while the workflow module's identifiers are prefixed.
+   * Refuses a BPMN file whose FEEL expression naming a called process or decision already
+   * carries the workflow module's prefix.
    * <p>
-   * Under {@code use-prefix} the processes of a workflow module reach the cluster under a
-   * prefixed id, and a call activity naming its process statically is rewritten with them. An
-   * expression cannot be: it takes up the whole value, so a prefix in front of it becomes part
-   * of the expression's text. The expression is left as the application wrote it, which makes
-   * this the one element where a developer composes a scoped id themselves - and the only
-   * chance to say so is the boot, because a model like this deploys and the call fails much
-   * later, when a workflow reaches the element.
+   * Under {@code use-prefix} this adapter writes that prefix into such an expression itself,
+   * so an expression which composes it as well would yield it twice and every call of the
+   * element would fail the moment a workflow reached it. An earlier VanillaBP 2 snapshot
+   * asked an application to compose the prefix, which is why this is refused rather than
+   * doubled quietly: the model is a defect somebody can fix in a minute, and a boot is where
+   * they learn about it instead of in one incident per instance.
    * <p>
-   * A WARN for a model which may well be right. The adapter cannot evaluate the expression, so
-   * it cannot tell an application which already composes the prefix from one which does not,
-   * and no key silences it - the same choice connectors got, see decision 23 in the
-   * repository's DECISIONS.md.
+   * Read off the model while it is still the one the modeller wrote, because after the rewrite
+   * every such expression carries the prefix by design.
    *
-   * @param workflowModuleId The workflow module id
-   * @param bpmnProcessId The plain BPMN process id
-   * @param elementIds The call activities found, empty under every other mode and for every
-   *          model naming its called processes statically
+   * @param workflowModuleId The workflow module
+   * @param filename The BPMN file
+   * @param model Its model, before anything of it was rewritten
    */
-  private void reportCallActivitiesNamingTheirProcessByExpression(
+  private void refuseAnExpressionWhichAlreadyCarriesThePrefix(
       final String workflowModuleId,
-      final String bpmnProcessId,
-      final List<String> elementIds) {
+      final String filename,
+      final BpmnModelInstance model) {
 
-    if (elementIds.isEmpty() || !Camunda8Scoping.prefixes(workflowModuleId, adapterId, scoping)) {
+    if (!Camunda8Scoping.prefixes(workflowModuleId, adapterId, scoping)) {
       return;
     }
-    log.warn(
+    final var prefix = Camunda8Scoping.prefixOf(workflowModuleId, adapterId, scoping);
+    final var carryingItAlready = Camunda8Scoping
+        .targetsWhoseExpressionAlreadyCarriesThePrefix(model, prefix);
+    if (carryingItAlready.isEmpty()) {
+      return;
+    }
+    throw new IllegalStateException(
         """
-            Camunda8[{}]: {} call activity(ies) of BPMN process '{}' (workflow module '{}') name the \
-            process they call by a FEEL expression: {}. Name-clash avoidance 'use-prefix' \
-            ({}) deploys every process of this workflow module under a prefix, \
-            and a prefix cannot be written in front of an expression: the expression is the whole \
-            value, so anything put before it becomes part of its text. So your expression is left \
-            as you wrote it and it has to yield the id the cluster knows. A process your module \
-            calls 'TheProcessYouCall' is deployed as '{}', which makes '=whichProcess' read \
-            '="{}" + whichProcess'. Where it already yields a prefixed id there is nothing to do. \
-            Where it does not, the call fails the moment a workflow reaches the element, because \
-            the plain id names no process on this cluster.""",
-        adapterId,
-        elementIds.size(),
-        bpmnProcessId,
-        workflowModuleId,
-        String.join(", ", elementIds.stream().map("'%s'"::formatted).toList()),
-        Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
-        scoping.scopedProcessId(workflowModuleId, "TheProcessYouCall", adapterId),
-        thePrefixOf(workflowModuleId));
+            Camunda 8 adapter '%s' does not deploy BPMN file '%s' of workflow module '%s': %d \
+            element(s) of it name the process they call or the decision they evaluate by a FEEL \
+            expression which composes the prefix '%s' itself: %s. Name-clash avoidance \
+            'use-prefix' (%s) writes that prefix INTO such an expression, so what reached the \
+            cluster would carry it twice ('%s%sTheProcessYouCall' for an expression yielding \
+            'TheProcessYouCall') and the call would fail the moment a workflow reached the \
+            element. Take the prefix out of the expression(s) named above and let them yield the \
+            id your own model declares, the one without any prefix. An earlier VanillaBP 2 \
+            snapshot asked for the opposite and warned about every such element; this adapter \
+            writes the prefix itself now."""
+            .formatted(
+                adapterId,
+                filename,
+                workflowModuleId,
+                carryingItAlready.size(),
+                prefix,
+                carryingItAlready
+                    .stream()
+                    .map(named -> "'%s' of BPMN process '%s' (%s)"
+                        .formatted(named.elementId(), named.bpmnProcessId(), named.expression()))
+                    .collect(Collectors.joining(", ")),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
+                prefix,
+                prefix));
 
   }
 
   /**
-   * The prefix a scoped process id of the given workflow module starts with, read off a
-   * scoped id rather than composed here: the core owns how a prefix is built, and a message
-   * which spells it out a second way could name something the core never writes.
+   * The sentence a developer needs where the cluster refuses a deployment of this module and
+   * quotes an expression this adapter wrote the prefix into, and an empty string where this
+   * module has no such element or nothing is prefixed.
    *
-   * @param workflowModuleId The workflow module id
-   * @return The prefix, separator included
+   * @param workflowModuleId The workflow module
+   * @param context What its files were read into
+   * @return The sentence, starting with a space, or an empty string
+   * @see Camunda8Scoping#whatAQuotedExpressionIncludes(String, String, java.util.Map)
    */
-  private String thePrefixOf(
-      final String workflowModuleId) {
+  private String whatAQuotedExpressionIncludes(
+      final String workflowModuleId,
+      final Camunda8ProcessingContext context) {
 
-    final var marker = "TheProcessYouCall";
-    final var scoped = scoping.scopedProcessId(workflowModuleId, marker, adapterId);
-    return scoped.endsWith(marker)
-        ? scoped.substring(0, scoped.length() - marker.length())
-        : scoped;
+    if (!Camunda8Scoping.prefixes(workflowModuleId, adapterId, scoping)) {
+      return "";
+    }
+    return Camunda8Scoping
+        .whatAQuotedExpressionIncludes(
+            Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
+            Camunda8Scoping.prefixOf(workflowModuleId, adapterId, scoping),
+            context.getElementsNamingTheirTargetByExpression());
 
   }
 
@@ -2875,8 +2895,11 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           bpmsProcessingContext.getResources().keySet());
     } catch (final RuntimeException e) {
       throw new IllegalStateException(
-          "Failed to deploy BPMN resources of workflow module '%s' to Camunda 8 (adapter '%s')!"
-              .formatted(workflowModuleId, adapterId), e);
+          "Failed to deploy BPMN resources of workflow module '%s' to Camunda 8 (adapter '%s')!%s"
+              .formatted(
+                  workflowModuleId,
+                  adapterId,
+                  whatAQuotedExpressionIncludes(workflowModuleId, bpmsProcessingContext)), e);
     }
 
     // which of this module's identifiers the cluster held before this deployment, asked now

@@ -501,6 +501,32 @@ If you neither set a `tenant-id` nor use `none`, nothing changes for you: the de
 workflow module into a tenant named after it, and under `use-prefix` the module id is part of
 every identifier, so the two processes never meet.
 
+### Under `use-prefix` a call activity naming its process by FEEL is rewritten for you
+
+Only under that mode, and only where a `zeebe:calledElement processId` or a
+`zeebe:calledDecision decisionId` of your models holds a FEEL expression instead of an id. Version 1
+had no prefixing mode, so such an expression yielded the id the cluster held and nothing touched it.
+
+This version prefixes every identifier of the workflow module, and an expression cannot be prefixed
+from the outside: it takes up the whole attribute value, so anything written in front of it becomes
+part of its text. The prefix therefore goes INSIDE the expression. Your `=whichProcess` is deployed
+as `="loan-approval__" + string(whichProcess)`, and your expression keeps yielding the plain id your
+own model declares. There is nothing to change in your model and nothing to change in your code.
+
+One model does not boot: an expression which composes the prefix itself. It would be given a second
+one, the cluster would be asked for `loan-approval__loan-approval__PaymentHandling`, and every call
+of that element would fail once a workflow reached it. The boot ends instead, naming the file, the
+element and the expression to take the prefix out of. This is owed to an earlier 2.0 snapshot, which
+left the expression alone and asked you to compose the prefix; if you followed that advice, remove
+the prefix again.
+
+What the rewrite costs you is worth knowing before you read a message about it. Camunda 8 parses the
+FEEL of a model while it deploys it, so a syntax error in your own part refuses the deployment and
+the cluster's answer quotes the whole framed expression, counting its column from the opening quote
+rather than from your text. A refused deployment of a prefixed module therefore says what such a
+quote includes and names the elements it can be about. The same frame shows up in an incident where
+your expression yields `null`, together with the name of the variable it could not read.
+
 ### A start says which of your names the cluster already held
 
 Version 1 compared the identifiers of a deployment against each other and said nothing about the
