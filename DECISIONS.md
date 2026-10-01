@@ -611,6 +611,10 @@ See [Elements another runtime serves](./README.md#elements-another-runtime-serve
 
 ### 24. An ad-hoc subprocess nothing serves is named, and the boot goes on
 
+**Superseded for a BPMN process the application claims by decision 54.** What is written below
+holds for a process no `@WorkflowService` class of the application claims. For one which is claimed,
+the deployment refuses the file instead of warning about the element.
+
 Camunda 8 knows two flavours of the element. The one where the model names the activities to run is
 served by this adapter without anything having been written for it: the activities inside are
 ordinary tasks and the list of ids is an attribute of the workflow aggregate. The one where the
@@ -1925,6 +1929,10 @@ is built on the gauges; the log is what the operator reads afterwards.
 
 ### 47. The preview line runs on the release candidate, and it excludes nothing any more
 
+Superseded by decision 52. Camunda released `8.10.0` on 2026-09-29, so the 8.10 line is the current
+GA line and the pin is that release rather than a candidate. There is no preview line until 8.11
+reaches its first pre-release. The entry stays because it holds what moving to the candidate cost.
+
 This supersedes decision 43, which stays where it is. Decision 43 kept every test which creates a
 Camunda-managed user task off the preview line. The reason was `camunda/camunda#58193`: the REST
 gateway of `8.10.0-alpha5` lost a whole activate-jobs batch when it met a task-listener job whose
@@ -2129,6 +2137,51 @@ are then short of, which is how every other startup message of VanillaBP converg
 Nothing is said for a client which prefers gRPC. Its workers activate over that transport, where
 this pool is not what limits them.
 
+**The same pool decides how long a shutdown takes.** A drain waits for the cluster to answer the
+activation requests of the workers it closed, because closing a worker does not cancel the request
+it has in flight, so its floor is a whole `request-timeout` (decision 6). That was the whole story
+as long as the workers fitted into the pool. They do not always: the workers which found no
+connection have their request QUEUED inside the client, that request still goes out once a
+connection frees, and it then waits a request timeout of its own. So the workers of a client are
+rounds of its pool, a round costs a request timeout, and the floor of the drain is the rounds plus
+what the last worker needs to report itself closed.
+
+`shutdown-grace` defaults to `PT20S` at a `request-timeout` of `PT10S`, which is two rounds exactly,
+and nothing held the two against each other. On 2026-09-27 that cost a red integration test: an
+application with 115 workers on a pool of 100 gave up after 20045 ms with its workers still holding
+a request, which is exactly what the wait exists to prevent. The application was over the pool, the
+pool check warned about the delivery of its jobs, and about its shutdown nobody said anything.
+
+Measured on 2026-09-28 with `Camunda8WhatADrainWaitsForIT` against the cluster of the current GA
+line, a client pool of 30 and a request timeout of `PT10S`: 15 workers released after 6272 ms and 30
+after 5566 ms, which is one round; 60 workers after 15424 ms, which is two; 90 workers after 25541
+ms, which is three. Where inside its last round a shutdown lands depends on how far that round had
+got when the workers were closed, so the floor takes the whole round. The two seconds on top come
+from the run which ran OUT rather than from these readings.
+
+**It warns, like the rest of this entry.** The adapter could raise the grace itself, and for the
+same reason it does not raise the pool it does not raise the grace: the grace has to stay under the
+shutdown budget of whatever runs the application, and that budget is not something the adapter can
+see or set.
+
+**Which way out the message names first depends on the runtime.** Spring Boot's
+`spring.lifecycle.timeout-per-shutdown-phase` and Kubernetes' `terminationGracePeriodSeconds` both
+default to 30 seconds, and from three rounds of the pool the floor is past that. So a grace which
+carries the drain would get the application killed instead, and the message says that raising the
+grace is not the way out here and asks for the pool. Below three rounds it offers both, the grace
+first, because that is the smaller change.
+
+**Why it sits next to the pool check and not in the startup validation.** The validation of the
+grace knows the request timeout and not the number of workers, so the floor it can check is the
+one-round floor, and it keeps doing exactly that. The rounds are known where the workers are
+counted. Each of the two says its own sentence and neither says the other's: a grace under one
+request timeout is reported by the validation only, because it cannot drain for a reason which has
+nothing to do with the number of workers, and two messages about one value would leave the reader
+choosing between them.
+
+`Camunda8WorkerConnections.aDrainFloor` is the number and `Camunda8WorkerConnectionsTest` holds the
+sentences.
+
 **The first user of the collection point.** This is the first finding the Camunda 8 adapter reports
 through `StartupReport`, the bean of decision 97 of `adapter-platform-integration`. Both platform
 integrations publish one instance per application, and both producers of this adapter now hand it to
@@ -2203,3 +2256,315 @@ configured.
 
 `Camunda8Drain#awaitEveryModuleQuiet` is the wait, `Camunda8ShutdownDrainTest#twoModulesAreOneWait`
 holds it, and `Camunda8WhatSeveralModulesPayForAShutdownIT` holds the numbers.
+
+### 52. Three lines after the GA of 8.10, two of them for bugfixes, and no preview line until 8.11
+
+The rule until 2026-09-29 was that a line ends when the next minor goes GA, so there were two GA
+lines at a time plus a preview line. Under that rule the GA of 8.10 would have ended the 8.8 line on
+the day it arrived.
+
+It did not end it. The lines exist for one reason, which is decision 11: a VanillaBP bugfix has to
+be deliverable without a Camunda cluster upgrade. Ending 8.8 on that day would have told everybody
+on an 8.8 cluster to upgrade before they can have the next fix, and Camunda supports 8.8 until April
+2027. Their cluster would have been in support while their adapter was not.
+
+So the lines are 8.8, 8.9 and 8.10. 8.10 is the current GA line, which means a plain build produces
+it and a feature lands on it. A cluster of 8.10 or newer takes it. 8.8 and 8.9 take fixes and
+nothing which needs a newer cluster. There is no preview line, and the next one is the line built
+against the first pre-release of 8.11.
+
+The price is CI. Three lines are three cluster runs per pull request, and the 8.11 preview line will
+make it four. The work per line is close to nothing, because every line is built from one source
+tree, so what a line costs is the matrix and not the maintenance.
+
+`2.0.0-8.10` is published with the 2.0 release, like the other two. The line is GA, and a user who
+runs 8.10 should not have to point at a pre-release to get the adapter built for their cluster.
+
+What this entry does not say is how long a bugfix line is carried. Ending one needs that statement,
+and the statement is worth more than the saved build, so until it exists a line ends when somebody
+ends it deliberately. The Renovate boundary rule asks the question at the moment it matters: a minor
+bump of a pin waits for approval and its body asks whether the oldest line is still carried.
+
+See [Release lines](./README.md#release-lines).
+
+### 53. A user task a job worker serves is refused in a process the application claims, and only warned about in one it does not
+
+Camunda 8 knows two kinds of user task. One carries `zeebe:userTask` and the CLUSTER manages it,
+which is the kind this adapter serves. The other carries none and a job worker serves it, which is
+how VanillaBP 1 worked up to its release 1.6.3. **This adapter does not accept the second kind.**
+The question is the shape of the element and nothing else, so nothing asks whether some worker would
+fetch the job the cluster hands out: the model already says who serves the task.
+
+Why the shape is refused rather than left alone is what it would cost. The cluster hands out a job
+of `io.camunda.zeebe:userTask`, this version opens no worker on that job type, and the workflow
+stands at the element until the job's retries are used up. No notification arrives, and
+`completeUserTask` cannot answer such a task either, because the id it hands out is a job key while
+the cluster expects a user-task key. Nobody sees any of that until somebody waits for a task which
+never appears.
+
+A `@WorkflowService` class claiming a BPMN process says that this application stands in for the
+process. So the deployment refuses such a process. The message names the process and the elements
+per shape, and it names the ways out: make the user task a Camunda-managed one whose external form
+reference names the task definition of a `@WorkflowTask` method, or take the element out of the
+model.
+
+The third way out is not a user task at all, and the message names it because the boot would
+otherwise end for an application which is right. An element carrying a `zeebe:taskDefinition` is
+served by a worker of the APPLICATION, under a job type the application chose. Nothing of VanillaBP
+notifies anybody about it and nothing completes it, so it is no longer a user task this adapter is
+meant to serve, and the reader passes over it. That is the difference this entry draws: between a
+user task VanillaBP serves and an element the application serves itself.
+
+A process no class of this application claims keeps the WARN it always had, without the sentences
+which asked the reader to change something. Such a process reaches the cluster because it sits in a
+file next to a process this application does serve, `validateTaskWiring` asks nothing of it for the
+same reason, and whoever owns it may serve such a job with a worker of their own. There is nothing
+for the reader of this application's log to do about it, so nothing is asked of them.
+
+Whether the process is claimed is read the way everything else in this adapter reads it: the core
+answers the name of the workflow aggregate's id for a claimed process and nothing for an unclaimed
+one. The module-level report of the core names the unclaimed processes once per workflow module, and
+an adapter neither implements nor calls that one.
+
+This is where decision 24 stops. Its reasoning holds for every unclaimed process: a file travels to
+the cluster as a whole, and ending the boot over a model somebody else owns would take an
+application down over an element it cannot change. What changed is the claimed process, where there
+is no somebody else.
+
+A version-1 application whose model carries such an element stops booting after the upgrade, which
+is the point. `UPGRADE.md` says so in the section about user task models. An application which
+cannot change its models at once has the way out every deployment failure has: a non-primary adapter
+configured with `deployment-failure: warn` logs the failure instead of ending the boot.
+
+`Camunda8JobWorkerUserTasksReportTest` holds both messages, the boundary of the element the
+application serves itself, the counter-test of a claimed process whose user tasks are all
+Camunda-managed, and that the WARN asks for nothing.
+
+### 54. Every element of a claimed process has to be served, and an element template is how the model says it is served elsewhere
+
+A `@WorkflowService` class claiming a BPMN process says that this application stands in for the
+process. So no element of such a process may be left standing: where the cluster creates a job and
+nothing answers it, the workflow stops inside the element, and both ends of that are quiet. There is
+no incident until the job's retries are used up, and there is nothing in any log at all. The
+deployment therefore refuses the process, and a process nobody claims keeps the WARN it always had.
+
+Two elements were warned about before this entry, and both of them are now refused for a claimed
+process.
+
+An **ad-hoc subprocess with a `zeebe:taskDefinition` of its own** expects a worker which decides
+round by round which inner activities to activate, by completing the job with a result naming them.
+A `@WorkflowTask` method cannot say that, so this adapter opens no worker for the element. Nothing
+later in the boot catches it either, because the element produces no task spec and no validation
+misses a method.
+
+A **modelled listener whose job type no `@WorkflowTask` method names** is the harder one, and the
+reason is that the job type says nothing about who answers it. A worker somebody else runs and a
+worker the application runs beside VanillaBP look exactly the same in the model. So the ELEMENT is
+asked instead of the job type: an element built from an element template belongs to the runtime
+which owns it, which is the marker of decision 23 and of decision 24, and it is read through the
+same class rather than looked for a second time. A listener on such an element is named in a WARN of
+its own and the boot goes on, whoever claims the process.
+
+Using the element template for this costs one miss, and it is named rather than hidden. A developer
+who meant VanillaBP to serve the listener of a templated element and forgot the method reads a
+warning instead of a refusal. The alternative was a marker of this adapter's own, which would be a
+second way of saying what the template already says, and a model carrying it would stop being a
+model any Camunda 8 modeller understands.
+
+One element was never part of this question. A service task without a `@WorkflowTask` method ends
+the boot of a claimed process and always did: the reader hands the core a task spec whose task
+definition is `null`, and `validateTaskWiring` ends the start over it. The core asks nothing of an
+unclaimed process, which is the same split written in the core rather than here.
+
+What the refusals say is what to do next. The ad-hoc message names the two ways out, the model and
+the other runtime. The listener message names three: a method plus the key which lets VanillaBP
+serve modelled listeners, the listener taken out of the model, and the element template for a job
+somebody else answers. An application which cannot change its models at once has the way out every
+deployment failure has: a non-primary adapter configured with `deployment-failure: warn` logs the
+failure instead of ending the boot.
+
+`Camunda8AdHocSubProcessTest` holds the refusal and the WARN of the ad-hoc subprocess,
+`Camunda8ListenersReportTest` the refusal, the WARN of an unclaimed process and the WARN of the
+templated element.
+
+### 55. A value written as FEEL gets the prefix inside the expression, at every place a prefix is written
+
+Under `use-prefix` a value which starts with `=` is deployed with the prefix of its place written
+INSIDE the expression, so `=whichProcess` reaches the cluster as
+`="loan-approval__" + string(whichProcess)`. The application writes no prefix anywhere, which is
+what keeps its model portable: the same file runs on another BPMS, and the same business code with
+it.
+
+**One rule, and one list of the places it is used at.** The rule is: starts with `=`, the prefix
+goes inside; anything else, the prefix goes in front. The places are the `processId` of a
+`zeebe:calledElement`, the `decisionId` of a `zeebe:calledDecision`, a `bpmn:message` name, a
+`bpmn:signal` name, a `bpmn:error` code, a `bpmn:escalation` code, a `zeebe:taskDefinition` type, a
+`zeebe:formDefinition` external reference and the job type of a listener this application serves.
+`Camunda8Scoping#forEveryPrefixedValue` is that list, and both the rewrite and the refusal below
+read it, so a place added to it is covered by both in one change. A job type carries the prefix of
+its BPMN process as well, so its frame is `="loan-approval__LoanApproval__" + string(...)`.
+
+**Whether Camunda 8 evaluates an expression at a given place is not asked.** The maintainer decided
+that on 2026-10-01: a list of the places Camunda evaluates ages with every Camunda release, and
+writing one down would freeze today's answer into this adapter. The rule cannot be wrong instead.
+Where an expression is not evaluated, a value starting with `=` does not appear and the rule costs
+nothing; where Camunda learns to evaluate one, nothing here has to change. What is still watched is
+that the cluster ACCEPTS a model carrying the frame at those places, which the canary does by
+deploying one model twice, once plain and once framed. Measured on 2026-10-01 against
+`camunda/camunda:8.9.21`: both deployments went through. The first attempt did not, and what it
+refused was the test's own XML rather than the frame (`Element type "bpmn:message" must be followed
+by either attribute specifications, ">" or "/>"`), because a FEEL expression carries quotes of its
+own and those values sit in XML attributes. A model written by a modeller is escaped by the
+modeller; a model composed in a test is not.
+
+The prefix cannot go in front of such a value. An expression takes up the whole attribute, so
+`loan-approval__=whichProcess` names no process and parses as no expression either. Camunda 7 gets
+away with the same rewrite because `${processToCall}` is one part of a string the engine composes.
+
+Every part of the frame was measured. Camunda's FEEL concatenates two strings with `+`, which goes
+beyond the DMN standard where `+` is arithmetic. `string(...)` around the application's part makes
+that concatenation work whatever the part returns, a number included. The parentheses are what carry
+the shape of that part, so an `if ... then ... else ...` returning one of several ids, a
+`get value(...)` over a context, a text the expression composes itself and an expression written
+over several lines all survive being wrapped.
+
+Measured on 2026-10-01 against `camunda/camunda:8.8.40`, `8.9.21` and `8.10.0-rc3`, which answered
+the same in every case down to the wording of an incident. Those measurements are about the called
+process and the called decision, which were the places Camunda evaluated an expression at on that
+day; the frame is the same everywhere else, and the paragraph above says why it is not measured per
+place. The alternative frame, `string join(["loan-approval__", string(whichProcess)], "")`, works as
+well and was not taken: where the application's part is `null` it drops that part and asks the
+cluster for the bare prefix (`CALLED_ELEMENT_ERROR: Expected process with BPMN process id
+'loan-approval__' to be deployed, but not found.`), while `+` raises an incident which names the
+application's own variable (`EXTRACT_VALUE_ERROR: Expected result of the expression
+'"loan-approval__" + string(whichProcess)' to be 'STRING', but was 'NULL'. The evaluation reported
+the following warnings: [NO_VARIABLE_FOUND] No variable found with name 'whichProcess'
+[INVALID_TYPE] Can't add 'null' to '"loan-approval__"'`). A frame which hides a mistake of the
+application is the worse frame.
+
+The price is that the cluster then holds an expression nobody typed, and it is stated rather than
+hidden. Camunda 8 parses the FEEL of a model while it deploys it, so a syntax error in the
+application's part refuses the whole deployment quoting the framed expression, and the column it
+reports is counted from the opening quote: `string(whichProcess +)` inside the frame was reported at
+`:1:27`, the same mistake without a frame at `:1:14`. The deployment therefore says what a quoted
+expression includes, once, where it reports such a refusal
+(`Camunda8Scoping#whatAQuotedExpressionIncludes`). Nothing is said while a deployment goes through,
+because then there is nothing for anybody to do.
+
+An expression which composes the prefix ITSELF ends the boot, naming the element, the file, the
+attribute and the expression to change, at any of the places above. The rewrite would give it a
+second prefix, the cluster would be asked for `loan-approval__loan-approval__PaymentHandling`, and
+every call of that element would fail once a workflow reached it. An earlier snapshot of VanillaBP 2
+asked an application to compose the prefix and warned about every such element, so that model is the
+one case this can come from, and a boot which says it is cheaper than one incident per instance.
+
+What this does NOT reach is the model knowledge behind such a call. Which process the expression
+names is known at execution time, so a call activity naming it by FEEL stays outside the call graph
+the deployment links and outside what the workflow viewer can draw. Both read the attribute the same
+way and both still see an expression. The iteration chain is not lost with it: the caller writes its
+own levels into the called instance instead, which is the addendum to decision 30 of story 767.
+
+Where the mode is not `use-prefix` there is no prefix, so nothing of this applies and nothing is
+said.
+
+`Camunda8CalledProcessScopingTest` holds what the adapter writes into the model, per shape and for
+both of the attributes above, and that the frame survives the XML the deploy command sends.
+`Camunda8PrefixInEveryPlaceTest` holds the two forms at every other place, the longer prefix of a
+job type and the refusal covering all of them. `Camunda8PrefixInsideAnExpressionTest` holds the
+refused boot and the sentence about a quoted expression. `Camunda8PrefixInsideAnExpressionCanaryIT`
+holds the cluster to what was measured and to accepting the frame everywhere else.
+
+See [Keeping workflow modules apart](./README.md#keeping-workflow-modules-apart).
+
+### 56. The 404 of a user-task probe is about the key it was handed
+
+A user task which is simply open never makes the probe say `404`. Decision 38 reads that answer as
+"the task is gone", and story 643 measured it inside the window of a running cancelation only.
+`Camunda8ProbeOfAnOpenUserTaskIT` measures the plain case: a task nobody is cancelling, asked from
+the moment its `creating` listener job arrived, which is the moment an application - and with it the
+Business Cockpit - learns of the task.
+
+Measured on 2026-09-28, one cluster at a time on a machine with 16 GB, client and cluster of the
+same line, the questions asked one after another so every number carries the one before it:
+
+|                     the question                      |                      8.8.39                       |                      8.9.21                       |                    8.10.0-rc1                     |
+|-------------------------------------------------------|---------------------------------------------------|---------------------------------------------------|---------------------------------------------------|
+| the empty `UpdateUserTask`, answered by the partition | `204` after 12 ms, and over five further readings | `204` after 21 ms, and over five further readings | `204` after 13 ms, and over five further readings |
+| `UserTaskGet`, answered by the index                  | `404` until 1667 ms                               | `404` until 649 ms                                | `404` until 219 ms                                |
+| the user-task search, the other read of the index     | holds it after 1674 ms                            | after 659 ms                                      | after 229 ms                                      |
+| `UpdateJobTimeout` on that user-task key              | `404` for 60 s                                    | `404` for 60 s                                    | `404` for 60 s                                    |
+| the instance probe                                    | `400`, so the engine holds the instance           | `400`                                             | `400`                                             |
+
+So the probe is AHEAD of the index rather than behind it, which is the reason it is a command and
+not a search, and the `404` of decision 38 keeps its meaning for a key which is a user-task key.
+
+**For a key of the other kind it means nothing.** The same run measured a plain BPMN user task, the
+shape VanillaBP 1 served up to its release 1.6.3, whose id is a JOB key: `UpdateUserTask` and
+`UserTaskGet` answered `404` for a full minute, the user-task search never held a record of the task
+at all, while the job command on that key was accepted and the instance probe said the engine holds
+the instance. The cluster keeps no user-task record for such a task, on any of the three lines. A
+`404` there is the answer to "do you hold a user task under this key", and the task is open.
+
+This adapter does not meet that case, and not by accident. `Camunda8OpenTaskProbe` reads the kind of
+task from the model and sends no user-task command for a job, the two probes asking about a task a
+caller named are called for a user task by the core, and the deployment reports a user task of the
+version-1 shape rather than serving it. So the promise of decision 38 is conditional, the condition
+is held by the adapter, and it is said in the javadoc of `Camunda8UserTaskProbe` so that nobody
+rebuilding the question outside VanillaBP reads more out of a `404` than it says.
+
+What version 1 did differently, for the record, because this is the entry somebody looking for
+Stephan's case will find: its existence check for a user task was a `UserTaskGet`, so it read the
+index and met the first row of the table above; it served both shapes of user task, so it met the
+second one as well; and its Business Cockpit wrote its record from the listener job, which is why
+the cockpit shows a task the index does not have yet. `UPGRADE.md` says it where an application
+coming from version 1 will look.
+
+### 57. A 404 about a user task is asked about on the job side once, and only the sentence changes
+
+A user-task command answers `404` for a key it holds no user task under. For a user-task key that
+means the task is over. For a JOB key it means nothing about the task at all: a user task served by
+a job worker, the shape VanillaBP modelled up to its release 1.6.3, has no user-task record in the
+cluster, so every user-task command answers `404` however open the task is.
+
+An application meets such a key while it upgrades. `UPGRADE.md` says the task ids of version 1 are
+data to migrate, and the ids of that shape of user task are job keys. The adapter used to answer one
+with "gone (completed or canceled meanwhile)", which named the one thing the cluster had not said.
+
+So on the `404`, and nowhere else, the job side is asked. It takes two questions and they are not
+interchangeable.
+
+**Whether the cluster holds a job of that key is asked of the ENGINE**, with the `UpdateJobTimeout`
+this adapter sends as the existence check of a service task anyway: `404` for a key it holds no job
+of, a `400` saying nobody has it activated for one it holds, an accepted command for one somebody
+holds right now. Only an answer which says the cluster HAS it counts, so an unreachable cluster
+claims nothing. The price is named rather than hidden: where a worker holds that job at that moment,
+its deadline is pushed to `async-task-lock-renewal`. The job of this case is a user task nothing in
+this version fetches, so the answer is the `400` and the cluster writes nothing.
+
+**Which element the job belongs to is read from the INDEX**, and nothing else is. A search is behind
+the engine on both ends and can carry neither half of the existence question. Measured on 2026-09-28
+against `camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1` by
+`Camunda8ProbeOfAnOpenUserTaskIT`, on the job of a plain BPMN user task: the job search answered "no
+job of that key" while that job was activated and the task open, and it still answered with the job
+once the job was over, as `TIMED_OUT` at once and `COMPLETED` five seconds later, while
+`UpdateJobTimeout` was accepted for the open job and answered `404` once it was gone. Where the
+index answers nothing the message says the rest without the element.
+
+The state goes into the message as the cluster wrote it and is never read. The same job, five
+seconds after it was activated, was `CREATED` on 8.9.21 and `TIMEOUT_UPDATED` on 8.10.0-rc1, and a
+literal which is new in a patch release is nothing to build a decision on.
+
+The empty `UpdateJob` was the candidate which would have been the read-only mirror of the empty
+`UpdateUserTask`, and it is none: measured in the same runs it is refused with
+`400 INVALID_ARGUMENT` ("At least one of [retries, timeout] is required", with `priority` in that
+list on 8.10) both for a job which is open and for one which is over, so it tells the two cases
+apart not at all.
+
+The extra round trip costs nothing in the everyday case, because the everyday case is not a `404`.
+
+What the caller gets does not change: `TaskNotFoundException` from the pre-commit check of
+`completeUserTask`, `UNKNOWN_TO_BPMS` from `awarenessOfUserTask`. Which kind of key somebody handed
+in changes the sentence, not the outcome, because an outcome which depended on it would make the
+election behave differently for a migrating application than for any other.
+
+`Camunda8A404AboutAJobKeyTest` holds the sentences and the unchanged outcomes.
