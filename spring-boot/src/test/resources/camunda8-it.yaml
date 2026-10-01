@@ -61,6 +61,10 @@ vanillabp:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+        MiFeelCallProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         MultiInstanceProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:

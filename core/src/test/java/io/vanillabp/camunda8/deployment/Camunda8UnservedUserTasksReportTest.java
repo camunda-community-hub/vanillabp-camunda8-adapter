@@ -1,6 +1,8 @@
 package io.vanillabp.camunda8.deployment;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -10,6 +12,7 @@ import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.function.Executable;
 
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
@@ -23,10 +26,16 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What a boot says about a plain BPMN user task, which the cluster serves with a job of its
+ * What a boot does about a plain BPMN user task, which the cluster serves with a job of its
  * own user-task type and this version serves with nothing.
  * <p>
- * Two shapes reach this report and the message has to keep them apart. One carries the
+ * Who claims the process decides the answer. A process a {@code @WorkflowService} class of the
+ * application claims is a promise that the application serves it, and an element nothing
+ * fetches breaks that promise without a sound, so the boot ends. A process nobody claims
+ * travels to the cluster because of the file it sits in, and there is nothing to ask of a model
+ * somebody else owns, so it is named and the boot goes on.
+ * <p>
+ * Two shapes reach both messages and both have to keep them apart. One carries the
  * {@code formKey} VanillaBP 1 read the task definition from up to its release 1.6.3, and an
  * upgrading application finds those by searching its models for that word. The other carries
  * no {@code formKey} at all, so no such search finds it, while the cluster does exactly the
@@ -49,7 +58,7 @@ public class Camunda8UnservedUserTasksReportTest {
   /**
    * The sentence which tells this finding apart from everything else a boot may say.
    */
-  private static final String THE_FINDING = "are plain BPMN user tasks";
+  private static final String THE_FINDING = "plain BPMN user task";
 
   /**
    * What is said about the shape a search of the models finds.
@@ -60,6 +69,16 @@ public class Camunda8UnservedUserTasksReportTest {
    * What is said about the shape no such search finds.
    */
   private static final String THE_SHAPE_NO_SEARCH_FINDS = "carrying no formKey at all";
+
+  /**
+   * The way out which gets the process running, named by the refusal only.
+   */
+  private static final String THE_WAY_OUT_THROUGH_A_METHOD = "set 'External form reference'";
+
+  /**
+   * The other way out, named by the refusal only.
+   */
+  private static final String THE_WAY_OUT_THROUGH_THE_MODEL = "take the element out of the model";
 
   private static BpmnModelInstance model(
       final String userTaskContent) {
@@ -121,96 +140,152 @@ public class Camunda8UnservedUserTasksReportTest {
   }
 
   /**
-   * Deploys one model and hands back what this run wrote.
+   * A core which answers that no {@code @WorkflowService} class of the application claims the
+   * process - the answer the core gives by not knowing a workflow aggregate for it.
+   */
+  private static class NoWorkflowServiceClaimsIt extends Camunda8DeploymentServiceTest.NoOpInvoker {
+
+    @Override
+    public String resolveWorkflowAggregateIdName(
+        final String workflowModuleId,
+        final String bpmnProcessId) {
+      throw new IllegalStateException(
+          "no @WorkflowService class of this application claims '%s'".formatted(bpmnProcessId));
+    }
+
+  }
+
+  /**
+   * Wires one model and hands the wiring back unrun, so the test can read what it said or
+   * catch what it refused.
+   *
+   * @param model The model of the one BPMN file
+   * @param claimed Whether a workflow service of the application claims the process
+   * @return Preparing and wiring that file
+   */
+  private static Executable wiringOf(
+      final BpmnModelInstance model,
+      final boolean claimed) {
+
+    final var configuration = new Camunda8AdapterConfiguration();
+    configuration.setRestAddress("http://localhost:65535");
+    final var scoping = TestScoping.of(NameClashAvoidance.BY_ADAPTER);
+    final var core = claimed
+        ? new Camunda8DeploymentServiceTest.NoOpInvoker()
+        : new NoWorkflowServiceClaimsIt();
+    final var service = DeploymentServiceUnderTest.of(
+        "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators.of(core, scoping),
+        (
+            workflowModuleId,
+            bpmnProcessId,
+            taskDefinition) -> Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT,
+        Duration.ofHours(1), adapterId -> configuration, scoping);
+    return () -> {
+      final var context = service.prepareBpmn(MODULE, null, FILE, PROCESS, model);
+      service.wireBpmn(MODULE, FILE, PROCESS, model, context);
+    };
+
+  }
+
+  /**
+   * Wires one model of a process nobody claims and hands back what this run wrote.
    */
   private static String whatTheBootSaid(
       final CapturedOutput output,
       final BpmnModelInstance model) {
 
     final var before = output.getAll().length();
-    final var configuration = new Camunda8AdapterConfiguration();
-    configuration.setRestAddress("http://localhost:65535");
-    final var scoping = TestScoping.of(NameClashAvoidance.BY_ADAPTER);
-    final var service = DeploymentServiceUnderTest.of(
-        "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators
-            .of(new Camunda8DeploymentServiceTest.NoOpInvoker(), scoping),
-        (
-            workflowModuleId,
-            bpmnProcessId,
-            taskDefinition) -> Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT,
-        Duration.ofHours(1), adapterId -> configuration, scoping);
-    final var context = service.prepareBpmn(MODULE, null, FILE, PROCESS, model);
-    service.wireBpmn(MODULE, FILE, PROCESS, model, context);
+    assertDoesNotThrow(wiringOf(model, false));
     return output.getAll().substring(before);
 
   }
 
-  @Test
-  @DisplayName("A user task carrying version 1's formKey is named as the shape a search of the models finds")
-  public void theFormKeyShapeIsNamedAsSuch(
-      final CapturedOutput output) {
+  /**
+   * Wires one model of a process the application claims and hands back why the boot ended.
+   */
+  private static String whyTheBootEnded(
+      final BpmnModelInstance model) {
 
-    final var logged = whatTheBootSaid(output, aUserTaskCarryingAFormKey());
+    return assertThrows(IllegalStateException.class, wiringOf(model, true)).getMessage();
+
+  }
+
+  @Test
+  @DisplayName("A claimed process whose user task carries version 1's formKey does not deploy")
+  public void theFormKeyShapeEndsTheBootOfAClaimedProcess() {
+
+    final var refused = whyTheBootEnded(aUserTaskCarryingAFormKey());
 
     assertTrue(
-        logged.contains(THE_FINDING),
+        refused.contains(THE_FINDING),
         () -> "nothing else in the boot sees such an element: "
-            + logged);
+            + refused);
     assertTrue(
-        logged.contains("'Activity_SignTheContract'"),
+        refused.contains("'"
+            + PROCESS
+            + "'") && refused.contains(
+                "'"
+                    + MODULE
+                    + "'"),
+        () -> "the process and its workflow module are what a developer looks for first: "
+            + refused);
+    assertTrue(
+        refused.contains("'Activity_SignTheContract'"),
         () -> "a developer has to read WHICH element it is about: "
-            + logged);
+            + refused);
     assertTrue(
-        logged.contains(THE_SHAPE_A_SEARCH_FINDS),
+        refused.contains(THE_SHAPE_A_SEARCH_FINDS),
         () -> "and that a search of the models for 'formKey' finds this one: "
-            + logged);
+            + refused);
     assertFalse(
-        logged.contains(THE_SHAPE_NO_SEARCH_FINDS),
+        refused.contains(THE_SHAPE_NO_SEARCH_FINDS),
         () -> "the other shape is not in this model, so nothing is said about it: "
-            + logged);
+            + refused);
     assertTrue(
-        logged.contains("io.camunda.zeebe:userTask"),
-        () -> "the job type the cluster serves it with is what an own worker would subscribe to: "
-            + logged);
+        refused.contains("@WorkflowService"),
+        () -> "the reason the boot ends is that the application claims this process: "
+            + refused);
     assertTrue(
-        logged.contains("The cluster did not answer how many of them are open right now"),
+        refused.contains(THE_WAY_OUT_THROUGH_A_METHOD) && refused.contains(THE_WAY_OUT_THROUGH_THE_MODEL),
+        () -> "both ways out are named, so the developer needs no documentation: "
+            + refused);
+    assertTrue(
+        refused.contains("The cluster did not answer how many of them are open right now"),
         () -> "this run has no cluster, and the message says that rather than a number: "
-            + logged);
+            + refused);
 
   }
 
   @Test
-  @DisplayName("A plain user task without a formKey is reported too, as the shape no search finds")
-  public void theShapeWithoutAFormKeyIsReportedToo(
-      final CapturedOutput output) {
+  @DisplayName("A claimed process whose user task carries no formKey does not deploy either")
+  public void theShapeWithoutAFormKeyEndsTheBootToo() {
 
-    final var logged = whatTheBootSaid(output, aUserTaskCarryingNothing());
+    final var refused = whyTheBootEnded(aUserTaskCarryingNothing());
 
     assertTrue(
-        logged.contains(THE_FINDING),
-        () -> "this was the silent case: the model deploys, the job appears, nobody fetches it: "
-            + logged);
+        refused.contains(THE_FINDING),
+        () -> "this was the silent case: the model deployed, the job appeared, nobody fetched it: "
+            + refused);
     assertTrue(
-        logged.contains("'Activity_ApproveTheLoan'"),
+        refused.contains("'Activity_ApproveTheLoan'"),
         () -> "named by its element id like every other finding: "
-            + logged);
+            + refused);
     assertTrue(
-        logged.contains(THE_SHAPE_NO_SEARCH_FINDS),
+        refused.contains(THE_SHAPE_NO_SEARCH_FINDS),
         () -> "and said to be the shape a search for 'formKey' would have missed: "
-            + logged);
+            + refused);
     assertFalse(
-        logged.contains(THE_SHAPE_A_SEARCH_FINDS),
+        refused.contains(THE_SHAPE_A_SEARCH_FINDS),
         () -> "the sentence about version 1's convention is not true for this element: "
-            + logged);
+            + refused);
 
   }
 
   @Test
-  @DisplayName("Both shapes in one process are named apart, in one message")
-  public void bothShapesAreNamedApart(
-      final CapturedOutput output) {
+  @DisplayName("Both shapes of a claimed process are named apart, in the one message which ends the boot")
+  public void bothShapesAreNamedApart() {
 
-    final var logged = whatTheBootSaid(output, model("""
+    final var refused = whyTheBootEnded(model("""
             <bpmn:userTask id="Activity_SignTheContract">
               <bpmn:extensionElements>
                 <zeebe:formDefinition formKey="camunda-forms:bpmn:signTheContract" />
@@ -220,30 +295,72 @@ public class Camunda8UnservedUserTasksReportTest {
         """));
 
     assertTrue(
-        logged.contains(THE_SHAPE_A_SEARCH_FINDS) && logged.contains("'Activity_SignTheContract'"),
+        refused.contains(THE_SHAPE_A_SEARCH_FINDS) && refused.contains("'Activity_SignTheContract'"),
         () -> "the one a search finds: "
-            + logged);
+            + refused);
     assertTrue(
-        logged.contains(THE_SHAPE_NO_SEARCH_FINDS) && logged.contains("'Activity_ApproveTheLoan'"),
+        refused.contains(THE_SHAPE_NO_SEARCH_FINDS) && refused.contains("'Activity_ApproveTheLoan'"),
         () -> "and the one it does not: "
-            + logged);
+            + refused);
     assertTrue(
-        logged.contains("2 user task(s)"),
+        refused.contains("2 plain BPMN user task(s)"),
         () -> "counted together, because the way out is the same for both: "
+            + refused);
+
+  }
+
+  @Test
+  @DisplayName("A claimed process whose user tasks are all Camunda-managed boots")
+  public void aServedUserTaskIsNotWorthAWord(
+      final CapturedOutput output) {
+
+    final var before = output.getAll().length();
+    assertDoesNotThrow(wiringOf(aCamundaManagedUserTask(), true));
+    final var logged = output.getAll().substring(before);
+
+    assertFalse(
+        logged.contains(THE_FINDING),
+        () -> "VanillaBP wires this one and hears about every task it creates: "
             + logged);
 
   }
 
   @Test
-  @DisplayName("A Camunda-managed user task is served, so the boot says nothing about it")
-  public void aServedUserTaskIsNotWorthAWord(
+  @DisplayName("A process nobody claims keeps its warning, and the boot goes on")
+  public void anUnclaimedProcessIsNamedAndBoots(
       final CapturedOutput output) {
 
-    final var logged = whatTheBootSaid(output, aCamundaManagedUserTask());
+    final var logged = whatTheBootSaid(output, aUserTaskCarryingNothing());
 
-    assertFalse(
+    assertTrue(
         logged.contains(THE_FINDING),
-        () -> "VanillaBP wires this one and hears about every task it creates: "
+        () -> "a reader still has to learn that the element is there: "
+            + logged);
+    assertTrue(
+        logged.contains("'Activity_ApproveTheLoan'") && logged.contains(THE_SHAPE_NO_SEARCH_FINDS),
+        () -> "named by its element id and by its shape, as before: "
+            + logged);
+    assertTrue(
+        logged.contains("No @WorkflowService class of this application claims this process"),
+        () -> "and told why this one is a warning: "
+            + logged);
+    assertFalse(
+        logged.contains(THE_WAY_OUT_THROUGH_A_METHOD) || logged.contains(THE_WAY_OUT_THROUGH_THE_MODEL),
+        () -> "nothing asks the reader to change a model which is none of ours: "
+            + logged);
+
+  }
+
+  @Test
+  @DisplayName("A process nobody claims keeps its warning for version 1's shape too")
+  public void anUnclaimedProcessIsNamedForTheFormKeyShapeToo(
+      final CapturedOutput output) {
+
+    final var logged = whatTheBootSaid(output, aUserTaskCarryingAFormKey());
+
+    assertTrue(
+        logged.contains(THE_SHAPE_A_SEARCH_FINDS) && logged.contains("'Activity_SignTheContract'"),
+        () -> "the shape a search of the models finds is named here as well: "
             + logged);
 
   }

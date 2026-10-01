@@ -122,11 +122,12 @@ by nobody until its lock expires, so the application which starts next waits out
 rather than milliseconds. Measured against a real cluster, that turned a seven-second restart into
 a twenty-second gap.
 
-So `stopWorkflowProcessing` closes the workers of the module first and then waits, within
-`shutdown-grace`, for two things: the handlers which are still inside the application, and the
-cluster releasing the workers. The client factory closes whatever never reached that path before
-it closes the client, so the order holds on every shutdown path and not only on the one the
-platform lifecycles happen to take.
+So `stopWorkflowProcessing` closes the workers of the module first, and the shutdown then waits,
+within `shutdown-grace`, for two things: the handlers which are still inside the application, and
+the cluster releasing the workers. The wait is one wait for every workflow module of the adapter
+instance rather than one per module, which is the decision above. The client factory closes
+whatever never reached that path before it closes the client, so the order holds on every shutdown
+path and not only on the one the platform lifecycles happen to take.
 
 While that shutdown runs, no worker reports a job as failed. The job keeps its lock and its
 retries, the cluster redelivers it, and the delivery record of the platform decides whether the
@@ -936,12 +937,82 @@ element's own, outermost first. The fetch list follows without a change of its o
 built from the same chain: before this, a worker of a called process did not even ask the cluster
 for values the cluster was holding.
 
-Two call activities stay out of the graph. One naming its process by an expression decides per
-instance which process it reaches, which no deployment can resolve. One calling a process with a
-workflow aggregate of its own is not decomposition, and the core answers that with
-`workflowsShareTheWorkflowAggregate`. Such a process reports no iteration of its caller although
-the cluster still copies the values into its instance, and that is the only place the line can
-honestly be drawn.
+One call activity stays out of the graph. One calling a process with a workflow aggregate of its
+own is not decomposition, and the core answers that with `workflowsShareTheWorkflowAggregate`.
+Such a process reports no iteration of its caller although the cluster still copies the values
+into its instance, and that is the only place the line can honestly be drawn.
+
+A call activity naming its process by an EXPRESSION is outside the graph as well, and it is told
+its iteration all the same. Which process it reaches is decided per instance, so there are not two
+models to link - but the levels are the CALLER's model knowledge, complete while the module is
+deployed, and the caller hands them down. Such a call activity gets one more input mapping,
+appending one entry to the process variable `vanillabpMiParents`: the calling process as the
+cluster knows it, and its levels outermost first, each with the BPMN element id, the index, the
+total and the item. An enclosing level reads the variables of its own mappings from decision 5, and
+the call activity's own round reads `loopCounter`, `count(...)` over its input collection and its
+input element, because one input mapping of an element must not depend on another one of the same
+element.
+
+An input mapping rather than a start listener. The cluster evaluates it in the same record which
+creates the called instance, so there is no window in which the variable is missing, and it
+evaluates it per multi-instance instance, so each called instance gets its own round. A listener
+would cost a job per instance for bookkeeping, a start listener at the process does not see the
+start variables, and an element listener on a call activity is not taken by any current line. A
+second such call activity further down appends its own entry, which is how a chain several
+processes long comes about.
+
+The values travel IN the entry rather than being named by it. A worker has one fetch list, fixed at
+registration, so it cannot read the variable, look inside and then ask for the names it finds.
+Either it fetches everything, which makes the payload unbounded, or the values are in the entry.
+The keys are the readable ones (`process`, `levels`, `element`, `index`, `total`, `item`): short
+keys would save about two percent of an entry and cost the one thing the variable is looked at for,
+which is somebody in Operate asking why an index is missing.
+
+Two call activities get nothing of this. A statically named one is linked model to model and keeps
+its payload at not one byte more. One saying `propagateAllParentVariables="false"` is left alone,
+because the modeller switched the caller's context off on purpose; a mapping travels even then, so
+writing one would undo that rule instead of following it.
+
+The workflow aggregate is the one question left for the runtime, and only its lookup is. While the
+module is deployed every process of it is held against the caller, and the ones sharing the
+caller's aggregate are recorded as processes which may use that chain. At runtime the reader checks
+whether the pair in front of it is one of them, so a call reaching a process with an aggregate of
+its own is dropped, and so is one which crossed the boundary of a workflow module, where this
+adapter never saw the caller's model. Dropped, not guessed at, and a DEBUG line says which caller
+it was.
+
+The reading side keeps one way. `chainOf` answers what the deployment knows, the handed-down levels
+go in front of it, and `valuesOf` stays the only place turning a level into a `MultiInstanceValue`.
+A level whose element id the called process uses itself is dropped, because both write the same
+variable names and the inner scope overwrites the outer one - the same rule the graph follows. Once
+the two sources are together, nothing tells them apart.
+
+`vanillabpMiParents` is not a protected name, and the reading side is where that is survived. An
+input mapping of it is refused like every name VanillaBP writes, but a start variable, an output
+mapping or the write-back of the workflow aggregate can all set it and nothing in the cluster
+objects. Measured on 2026-10-01 against `camunda/camunda:8.8.40`, `8.9.21` and `8.10.0-rc3`: a FEEL
+expression which reaches into nothing becomes `null`, the cluster writes that `null` without an
+incident, `append` on a text results in `null` as well, and a foreign list is appended to. So a
+value which is not a list is read as if the variable were not there, an entry which describes no
+level is left out while the real ones still count, and nothing of it reaches a `@WorkflowTask` as an
+exception. A DEBUG line names the variable and the process; a WARN would repeat itself for every job
+of an application which uses the name on purpose, and it could change nothing about a job which
+already ran.
+
+The chain counts against the cluster's `MAX_MESSAGE_SIZE` and the adapter cannot catch that limit:
+it arrives as an incident on the call activity rather than as a refused command, so there is nothing
+to classify and nothing to refuse. It is documented instead. Three levels with 1 KB element values
+cost about 3.3 KB while the limit bites between 1000 and 2000 such entries, which is three orders of
+magnitude of room. What gets expensive is the element VALUE and not the depth.
+
+`Camunda8MultiInstanceTest` holds the expression written into the model, the three call activities
+which get nothing, the inherited level of a caller travelling on, and the reading side against a
+foreign value. `Camunda8FetchVariablesTest` holds that every worker serving an element carries the
+one name and that the worker of a whole process does not.
+`Camunda8MultiInstanceIT#theIterationCrossesACallActivityNamedByAnExpression` is what a handler
+really sees, and `#theApplicationMayWriteTheChainVariableItself` what it sees once the application
+took the chain away from itself. `Camunda8CallActivityVariablesCanaryIT` holds the cluster to the
+three properties all of this rests on.
 
 Four rules keep the chain answerable where a graph is not a straight line.
 
@@ -2066,3 +2137,69 @@ message goes into the log where it was found.
 
 `Camunda8WorkerConnections` holds the number and `Camunda8WorkerConnectionsTest` holds the sentence
 it produces.
+
+### 51. The shutdown grace is the budget of the whole shutdown, and the workflow modules are one wait
+
+The platform stops the workflow modules one after another, on the shutdown thread, and it calls
+the adapter once per module and per adapter instance. `shutdown-grace` sits at adapter level, so
+each of those calls used to close the workers of its module and then wait the whole grace for
+them. An application with three workflow modules therefore had three waits of up to twenty
+seconds in a shutdown its runtime grants thirty.
+
+The waits do not overlap. A module whose workers are still open keeps renewing their activation
+request while another module is drained, and closing a worker does not cancel the request it has
+in flight, so the module stopped next has a request of its own to sit out. The closed workers of
+the module being drained also wait behind the still polling workers of the others for the client's
+executor, which costs more than one request timeout.
+
+Measured on 2026-10-01 with `Camunda8WhatSeveralModulesPayForAShutdownIT` against
+`camunda/camunda:8.9.21`, one client with a pool of 256, `request-timeout` `PT10S`,
+`shutdown-grace` `PT20S` and thirty workers per module. Each case read twice where the reading
+moves with the phase the close falls into:
+
+| modules | drained one after another | every module closed first, then one wait |
+|---------|---------------------------|------------------------------------------|
+| 1       | 823 ms                    | the same reading                         |
+| 2       | 12519 and 21421 ms        | 5436 ms                                  |
+| 3       | 32743 and 15424 ms        | 5242 ms                                  |
+
+Three modules one after another reached past the thirty seconds the runtime grants, and one module
+of that run gave up after the whole grace with its workers still holding a request, which is the
+case the wait exists to prevent. Waiting once stayed at about half a request timeout whether there
+were two modules or three, and every module was quiet.
+
+So the grace is spent once. Each module closes its workers as it is stopped and waits for nothing
+yet; the module stopped last, which is the one leaving no registration of this adapter behind,
+waits for every module of the adapter instance at once. The number the application configured is
+then the number its whole shutdown takes at most, and that is the number which can be held against
+the budget of the runtime. Nothing else can: only the application knows how many workflow modules
+it has.
+
+**Why not a share per module.** The adapter knows at shutdown how many modules are still to come,
+so it could hand each of them an equal share of what is left. It would not help. What a module
+needs is a whole request timeout, three of them do not fit into twenty seconds, and three modules
+on a share of under seven seconds each would every one of them leave a parked request behind. One
+wait needs one request timeout for all of them, because the requests of every module are parked at
+the same time and come back at the same time. The readings show it: one module alone was released
+in 823 ms and two modules together in 5436 ms, while a module drained while another one still
+polled sat out the whole grace twice.
+
+**What the SPI allows.** `stopWorkflowProcessing` of the extension SPI says that the workers of
+that module stop. It does not promise that the module is quiet when the call returns, and between
+two of those calls nothing touches the cluster and nothing closes the client. The client is closed
+later, by `Camunda8ClientFactory`, whose backstop stops a module which never reached the adapter
+before it closes the client, so the one wait happens before the client goes down on every shutdown
+path.
+
+**The key stays at adapter level.** It is read against one shutdown budget, and only the
+application has one of those. A value per workflow module would be a number nobody could hold
+against that budget, which is why `shutdown-grace` is not resolvable over the four levels the rest
+of this adapter's scoped properties use.
+
+**What this leaves open.** An application with two configured adapter instances has two of these
+budgets, because each instance waits for its own modules and knows nothing about the other. The
+adapter cannot close that: it sees neither how many other instances there are nor what they
+configured.
+
+`Camunda8Drain#awaitEveryModuleQuiet` is the wait, `Camunda8ShutdownDrainTest#twoModulesAreOneWait`
+holds it, and `Camunda8WhatSeveralModulesPayForAShutdownIT` holds the numbers.

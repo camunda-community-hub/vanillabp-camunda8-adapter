@@ -862,9 +862,18 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the shutdown of a workflow module waits for the handlers this adapter has in
-   * flight before the client is closed under them. Default:
+   * How long the shutdown of this adapter instance waits for the handlers it has in flight
+   * before the client is closed under them. Default:
    * {@value #DEFAULT_SHUTDOWN_GRACE_ISO}.
+   * <p>
+   * <b>It is the budget of the whole shutdown, not of one workflow module.</b> The platform
+   * stops the modules one after another, so an adapter which spent this number per module
+   * would spend it as often as the application has modules, and the number nobody could then
+   * hold against the runtime's budget is the only number which matters. So the key stays at
+   * adapter level and is not resolvable per workflow module, per workflow or per task: it is
+   * read against one shutdown budget, and only the application has one of those. The workers
+   * of a module are closed as that module is stopped, and the module stopped last waits for
+   * all of them at once (see {@code Camunda8Drain#awaitEveryModuleQuiet}).
    * <p>
    * <b>Why twenty seconds.</b> The Camunda client does not drain: closing a worker returns
    * without waiting for the jobs it already activated, and closing the client interrupts

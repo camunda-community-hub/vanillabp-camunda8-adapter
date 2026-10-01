@@ -37,6 +37,7 @@ import io.vanillabp.camunda8.client.Camunda8Drain;
 import io.vanillabp.camunda8.client.Camunda8InstanceIdentity;
 import io.vanillabp.camunda8.client.Camunda8SearchableClusterCheck;
 import io.vanillabp.camunda8.client.Camunda8TenantCheck;
+import io.vanillabp.camunda8.client.Camunda8UnservedUserTaskJobs;
 import io.vanillabp.camunda8.client.Camunda8WorkerConnections;
 import io.vanillabp.camunda8.client.Camunda8Workers;
 import io.vanillabp.camunda8.health.Camunda8Health;
@@ -1228,6 +1229,10 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       // the file is read for what it demands of the cluster while it is still the
       // model somebody wrote, before this adapter rewrote a single element of it
       refuseAFileTheClusterWouldReject(workflowModuleId, filename, model);
+      // and for the one thing only the untouched model can say: whether an expression
+      // naming a called process or decision composes the prefix itself, which the rewrite
+      // below would give a second one
+      refuseAnExpressionWhichAlreadyCarriesThePrefix(workflowModuleId, filename, model);
       // read while the process ids are still the plain ones, and once per FILE rather
       // than once per process: after the rewrite below an element cannot be attributed
       // to the process the configuration is keyed by any more
@@ -1374,20 +1379,24 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             bpmnProcessId,
             Camunda8TaskWiring.compensationOf(model, scopedBpmnProcessId));
 
-    // a plain BPMN user task is served by nothing here and would be silent - so they are
-    // counted and named, whether or not they carry version 1's formKey
-    reportUnservedUserTasks(
+    // a plain BPMN user task is served by nothing here and would be silent. Where a workflow
+    // service claims the process, that breaks a promise the application made and the boot ends;
+    // where none does, the elements are counted and named, whether or not they carry version 1's
+    // formKey
+    refuseOrReportUnservedUserTasks(
         workflowModuleId,
         bpmnProcessId,
         scopedBpmnProcessId,
         Camunda8TaskWiring.unservedUserTasksOf(model, scopedBpmnProcessId));
 
-    // under 'use-prefix' a call activity naming its process by FEEL is the one place where
-    // the application has to write the prefix itself, so the boot says which elements that is
-    reportCallActivitiesNamingTheirProcessByExpression(
-        workflowModuleId,
-        bpmnProcessId,
-        Camunda8Scoping.callActivityIdsNamingTheirProcessByExpression(model, scopedBpmnProcessId));
+    // under 'use-prefix' the prefix of a called process or decision named by FEEL is written
+    // INSIDE the expression, so what the cluster holds is longer than what the developer
+    // typed. Nothing is said about it while it works; the elements are remembered for the one
+    // message where it matters, a deployment the cluster refuses over an expression
+    context
+        .recordElementsNamingTheirTargetByExpression(
+            bpmnProcessId,
+            Camunda8Scoping.elementIdsNamingTheirTargetByExpression(model, scopedBpmnProcessId));
 
     // an ad-hoc subprocess waiting for a job worker is the other element which would
     // stop a workflow without anything being said about it
@@ -2270,15 +2279,22 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Says that a BPMN process carries plain BPMN user tasks, which nothing serves here, and
-   * how many tasks are open on them right now.
+   * Ends the boot where a BPMN process this application claims carries a plain BPMN user task,
+   * and names such an element without ending anything where no workflow service claims the
+   * process.
    * <p>
-   * A WARN rather than a failed deployment. The model itself is valid, the workflow runs up
-   * to the element, and an application may deliberately serve such a task with a job worker of
-   * its own - what does NOT happen is anything by VanillaBP: no CREATED notification, and
-   * <code>completeUserTask</code> cannot complete the task, because the id it hands out is the
-   * job's key while the cluster expects a user-task key. Being silent about that was the
-   * defect; ending the boot over it would be the other one.
+   * A <code>&#64;WorkflowService</code> class claiming a process says that the application
+   * serves that process. A plain BPMN user task takes that back, and it takes it back quietly:
+   * the cluster hands out a job of its own user-task type, this version opens no worker on that
+   * type, and the workflow stands at the element until the job's retries are used up. Nobody
+   * sees it until somebody waits for a task which never appears, so the boot ends over it and
+   * the message says which element it is and how to get the process running.
+   * <p>
+   * A process no class of this application claims is a different thing. It reaches the cluster
+   * because it sits in a file next to a process this application does serve, and what it
+   * contains is not ours to make demands about: whoever owns it may serve such a job with a
+   * worker of their own. That one keeps the WARN it always had, without the sentences which
+   * asked the reader to change something, because there is nothing here for them to do.
    * <p>
    * The two shapes are named apart because only one of them can be searched for. Up to
    * release 1.6.3 VanillaBP 1 served this element and read its task definition off the
@@ -2286,18 +2302,22 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * plain user task without a <code>formKey</code> is not that convention and no such search
    * finds it, while the cluster does exactly the same with it.
    * <p>
-   * Two numbers are reported and only the first one is certain. The elements come from
-   * the model this boot deploys and are what has to reach zero; the count of open tasks is
-   * a search, and this report runs while the module is wired, which is before the start
-   * has waited for its cluster - so a cluster which is not up yet costs the number.
+   * Two numbers are said and only the first one is certain. The elements come from the model
+   * this boot deploys and are what has to reach zero. The count of open tasks is a search of the
+   * cluster's index, and {@link Camunda8UnservedUserTaskJobs} says what that answer is worth:
+   * the index leaves out the jobs it has seen finish and runs behind the engine at both ends,
+   * so the number is near rather than exact and the message says so. It can also be missing
+   * altogether, because this runs while the module is wired, which is before the start has
+   * waited for its cluster.
    *
    * @param workflowModuleId The workflow module id
    * @param bpmnProcessId The plain BPMN process id
    * @param scopedBpmnProcessId The process id as the cluster knows it
    * @param found The user tasks nothing serves, per shape, both empty for a model whose user
    *          tasks are all Camunda-managed
+   * @throws IllegalStateException If a workflow service of this application claims the process
    */
-  private void reportUnservedUserTasks(
+  private void refuseOrReportUnservedUserTasks(
       final String workflowModuleId,
       final String bpmnProcessId,
       final String scopedBpmnProcessId,
@@ -2306,32 +2326,57 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (found.isEmpty()) {
       return;
     }
-    final var openTasks = countOpenUnservedUserTasks(scopedBpmnProcessId);
+    // whether the application claims the process is what the core answers by knowing the
+    // workflow aggregate of it, which is the same question the start listener and the
+    // refusal of a file without a correlation key ask
+    final var theApplicationClaimsTheProcess = aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null;
+    final var howManyAreOpen = Camunda8UnservedUserTaskJobs
+        .howManyAreOpen(whatTheIndexHoldsOfTheUnservedUserTasks(scopedBpmnProcessId));
+    if (theApplicationClaimsTheProcess) {
+      throw new IllegalStateException(
+          """
+              Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s': it \
+              carries %d plain BPMN user task(s), which this cluster serves with a job of '%s' and \
+              this version serves with nothing: %s. A @WorkflowService class of this \
+              application claims this process, which says that the application serves it, and this \
+              element is where that stops being true: the cluster hands out the job, nothing fetches \
+              it, and the workflow stands at the element until the job's retries are used up. Nobody \
+              sees that until somebody waits for a task which never appears, so the boot ends here \
+              instead. Two ways out. Make the user task a Camunda-managed one ('zeebe:userTask') and \
+              set 'External form reference' (zeebe:formDefinition externalReference) to the task \
+              definition your @WorkflowTask method names - VanillaBP then wires its lifecycle \
+              listeners itself. Or take the element out of the model, if that work is not done any \
+              more. Where a worker of your own serves the element, give it a 'zeebe:taskDefinition' \
+              naming that worker's job type, and this check passes over it. %s A task already open on \
+              such an element stays as it is: its workflow runs on the process version it was started \
+              on, which no change to your model reaches, so finish or cancel those through your own \
+              task list."""
+              .formatted(
+                  adapterId,
+                  bpmnProcessId,
+                  workflowModuleId,
+                  found.all().size(),
+                  Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1,
+                  whichShapeEachOfThemIs(found),
+                  howManyAreOpen));
+    }
     log.warn(
         """
             Camunda8[{}]: {} user task(s) of BPMN process '{}' (workflow module '{}') are plain BPMN \
             user tasks, which this cluster serves with a job of '{}' and this version serves with \
-            nothing: {}. The workflow runs up to such an element and stops there until the job's \
-            retries are used up. This is said rather than failing the deployment, because the process \
-            itself is fine and an application may serve such a job with a worker of its own. What you \
-            lose for each of them: no notification when the task is created or canceled, and \
-            'ProcessService#completeUserTask' cannot complete it, because the id such a task hands \
-            out is a job key while the cluster expects a user-task key. The way out is the model, and \
-            it is the same for all of them: make the user task a Camunda-managed one \
-            ('zeebe:userTask') and set 'External form reference' (zeebe:formDefinition \
-            externalReference) to the task definition your @WorkflowTask method names - VanillaBP \
-            then wires its lifecycle listeners itself. {} Finish or cancel the tasks which are still \
-            open BEFORE you rely on this application to complete them, because afterwards nothing \
-            can.""",
+            nothing: {}. A workflow which reaches such an element stands there until the job's \
+            retries are used up. No @WorkflowService class of this application claims this process, \
+            so there is nothing here for you to do: the file the process stands in travels to the \
+            cluster as a whole, and whoever owns the process may serve such a job with a worker of \
+            their own. For a process this application does claim, the same finding ends the boot. \
+            {}""",
         adapterId,
         found.all().size(),
         bpmnProcessId,
         workflowModuleId,
         Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1,
         whichShapeEachOfThemIs(found),
-        openTasks == null
-            ? "The cluster did not answer how many of them are open right now."
-            : "Open right now: %d.".formatted(openTasks));
+        howManyAreOpen);
 
   }
 
@@ -2374,74 +2419,88 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Says which call activities of a BPMN process name the process they call as a FEEL
-   * expression, while the workflow module's identifiers are prefixed.
+   * Refuses a BPMN file whose FEEL expression naming a called process or decision already
+   * carries the workflow module's prefix.
    * <p>
-   * Under {@code use-prefix} the processes of a workflow module reach the cluster under a
-   * prefixed id, and a call activity naming its process statically is rewritten with them. An
-   * expression cannot be: it takes up the whole value, so a prefix in front of it becomes part
-   * of the expression's text. The expression is left as the application wrote it, which makes
-   * this the one element where a developer composes a scoped id themselves - and the only
-   * chance to say so is the boot, because a model like this deploys and the call fails much
-   * later, when a workflow reaches the element.
+   * Under {@code use-prefix} this adapter writes that prefix into such an expression itself,
+   * so an expression which composes it as well would yield it twice and every call of the
+   * element would fail the moment a workflow reached it. An earlier VanillaBP 2 snapshot
+   * asked an application to compose the prefix, which is why this is refused rather than
+   * doubled quietly: the model is a defect somebody can fix in a minute, and a boot is where
+   * they learn about it instead of in one incident per instance.
    * <p>
-   * A WARN for a model which may well be right. The adapter cannot evaluate the expression, so
-   * it cannot tell an application which already composes the prefix from one which does not,
-   * and no key silences it - the same choice connectors got, see decision 23 in the
-   * repository's DECISIONS.md.
+   * Read off the model while it is still the one the modeller wrote, because after the rewrite
+   * every such expression carries the prefix by design.
    *
-   * @param workflowModuleId The workflow module id
-   * @param bpmnProcessId The plain BPMN process id
-   * @param elementIds The call activities found, empty under every other mode and for every
-   *          model naming its called processes statically
+   * @param workflowModuleId The workflow module
+   * @param filename The BPMN file
+   * @param model Its model, before anything of it was rewritten
    */
-  private void reportCallActivitiesNamingTheirProcessByExpression(
+  private void refuseAnExpressionWhichAlreadyCarriesThePrefix(
       final String workflowModuleId,
-      final String bpmnProcessId,
-      final List<String> elementIds) {
+      final String filename,
+      final BpmnModelInstance model) {
 
-    if (elementIds.isEmpty() || !Camunda8Scoping.prefixes(workflowModuleId, adapterId, scoping)) {
+    if (!Camunda8Scoping.prefixes(workflowModuleId, adapterId, scoping)) {
       return;
     }
-    log.warn(
+    final var prefix = Camunda8Scoping.prefixOf(workflowModuleId, adapterId, scoping);
+    final var carryingItAlready = Camunda8Scoping
+        .targetsWhoseExpressionAlreadyCarriesThePrefix(model, prefix);
+    if (carryingItAlready.isEmpty()) {
+      return;
+    }
+    throw new IllegalStateException(
         """
-            Camunda8[{}]: {} call activity(ies) of BPMN process '{}' (workflow module '{}') name the \
-            process they call by a FEEL expression: {}. Name-clash avoidance 'use-prefix' \
-            ({}) deploys every process of this workflow module under a prefix, \
-            and a prefix cannot be written in front of an expression: the expression is the whole \
-            value, so anything put before it becomes part of its text. So your expression is left \
-            as you wrote it and it has to yield the id the cluster knows. A process your module \
-            calls 'TheProcessYouCall' is deployed as '{}', which makes '=whichProcess' read \
-            '="{}" + whichProcess'. Where it already yields a prefixed id there is nothing to do. \
-            Where it does not, the call fails the moment a workflow reaches the element, because \
-            the plain id names no process on this cluster.""",
-        adapterId,
-        elementIds.size(),
-        bpmnProcessId,
-        workflowModuleId,
-        String.join(", ", elementIds.stream().map("'%s'"::formatted).toList()),
-        Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
-        scoping.scopedProcessId(workflowModuleId, "TheProcessYouCall", adapterId),
-        thePrefixOf(workflowModuleId));
+            Camunda 8 adapter '%s' does not deploy BPMN file '%s' of workflow module '%s': %d \
+            element(s) of it name the process they call or the decision they evaluate by a FEEL \
+            expression which composes the prefix '%s' itself: %s. Name-clash avoidance \
+            'use-prefix' (%s) writes that prefix INTO such an expression, so what reached the \
+            cluster would carry it twice ('%s%sTheProcessYouCall' for an expression yielding \
+            'TheProcessYouCall') and the call would fail the moment a workflow reached the \
+            element. Take the prefix out of the expression(s) named above and let them yield the \
+            id your own model declares, the one without any prefix. An earlier VanillaBP 2 \
+            snapshot asked for the opposite and warned about every such element; this adapter \
+            writes the prefix itself now."""
+            .formatted(
+                adapterId,
+                filename,
+                workflowModuleId,
+                carryingItAlready.size(),
+                prefix,
+                carryingItAlready
+                    .stream()
+                    .map(named -> "'%s' of BPMN process '%s' (%s)"
+                        .formatted(named.elementId(), named.bpmnProcessId(), named.expression()))
+                    .collect(Collectors.joining(", ")),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
+                prefix,
+                prefix));
 
   }
 
   /**
-   * The prefix a scoped process id of the given workflow module starts with, read off a
-   * scoped id rather than composed here: the core owns how a prefix is built, and a message
-   * which spells it out a second way could name something the core never writes.
+   * The sentence a developer needs where the cluster refuses a deployment of this module and
+   * quotes an expression this adapter wrote the prefix into, and an empty string where this
+   * module has no such element or nothing is prefixed.
    *
-   * @param workflowModuleId The workflow module id
-   * @return The prefix, separator included
+   * @param workflowModuleId The workflow module
+   * @param context What its files were read into
+   * @return The sentence, starting with a space, or an empty string
+   * @see Camunda8Scoping#whatAQuotedExpressionIncludes(String, String, java.util.Map)
    */
-  private String thePrefixOf(
-      final String workflowModuleId) {
+  private String whatAQuotedExpressionIncludes(
+      final String workflowModuleId,
+      final Camunda8ProcessingContext context) {
 
-    final var marker = "TheProcessYouCall";
-    final var scoped = scoping.scopedProcessId(workflowModuleId, marker, adapterId);
-    return scoped.endsWith(marker)
-        ? scoped.substring(0, scoped.length() - marker.length())
-        : scoped;
+    if (!Camunda8Scoping.prefixes(workflowModuleId, adapterId, scoping)) {
+      return "";
+    }
+    return Camunda8Scoping
+        .whatAQuotedExpressionIncludes(
+            Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
+            Camunda8Scoping.prefixOf(workflowModuleId, adapterId, scoping),
+            context.getElementsNamingTheirTargetByExpression());
 
   }
 
@@ -2495,29 +2554,21 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * How many jobs of the plain user task's job type the cluster still holds for one process -
-   * the number which goes to zero as those tasks are finished. It covers both shapes the
-   * report names, because the cluster serves both with a job of that one type.
+   * What the cluster's index holds about the jobs of the plain user task's type for one
+   * process. It covers both shapes the message names, because the cluster serves both with a
+   * job of that one type.
+   * <p>
+   * Why two numbers come back rather than one, and why neither of them is exact, is
+   * {@link Camunda8UnservedUserTaskJobs}.
    *
    * @param scopedBpmnProcessId The process id as the cluster knows it
-   * @return The count, or <code>null</code> where the cluster did not answer
+   * @return What the index answered, or <code>null</code> where the cluster did not answer
    */
-  private Long countOpenUnservedUserTasks(
+  private Camunda8UnservedUserTaskJobs.Count whatTheIndexHoldsOfTheUnservedUserTasks(
       final String scopedBpmnProcessId) {
 
     try {
-      // the TOTAL rather than the page which came back, and one item fetched because
-      // only the number is wanted
-      final var found = clientFactory
-          .getClient()
-          .newJobSearchRequest()
-          .filter(filter -> filter
-              .processDefinitionId(scopedBpmnProcessId)
-              .type(Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1))
-          .page(page -> page.limit(1))
-          .send()
-          .join();
-      return found.page().totalItems();
+      return Camunda8UnservedUserTaskJobs.countFor(clientFactory.getClient(), scopedBpmnProcessId);
     } catch (final RuntimeException e) {
       // a diagnostic never fails a deployment, and a cluster which cannot answer
       // says so in the message instead
@@ -2627,12 +2678,16 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * to the multi-instance registry so an element of a called process gets the chain of its
    * call site in front of its own.
    * <p>
-   * Two call activities are left out. One whose <code>zeebe:calledElement processId</code>
-   * is an expression names its process per instance, which a deployment cannot resolve.
-   * One calling a process with a workflow aggregate of its own is not decomposition: such a
-   * process runs a business case of its own and is not told the iteration of whoever
-   * started it, which is what the core answers with
-   * {@code workflowsShareTheWorkflowAggregate}.
+   * One call activity is left out of the graph: one calling a process with a workflow
+   * aggregate of its own is not decomposition, because such a process runs a business case of
+   * its own and is not told the iteration of whoever started it, which is what the core
+   * answers with {@code workflowsShareTheWorkflowAggregate}.
+   * <p>
+   * A call activity whose <code>zeebe:calledElement processId</code> is an EXPRESSION is left
+   * out of the graph too, and for a reason no deployment can remove: which process it reaches
+   * is decided per instance. It is not left without a chain, though - see
+   * {@link #handTheChainDownWhereTheProcessIsNamedByAnExpression}, which runs right after the
+   * graph is linked.
    * <p>
    * Where the call activity is kept, the model is also told that the caller's variables
    * travel, unless the model already said they do not. That is
@@ -2683,6 +2738,93 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       }
     }
     multiInstanceRegistry.linkCalledProcesses();
+    // what is left over are the call activities naming their process by an expression. They
+    // cannot be linked model to model, so they hand their chain down instead - which needs the
+    // graph above to be linked already, because a caller passes on what IT inherited too
+    handTheChainDownWhereTheProcessIsNamedByAnExpression(workflowModuleId, bpmsProcessingContext);
+
+  }
+
+  /**
+   * Writes the iteration chain of every call activity naming its process by an expression into
+   * the instance it calls, as the input mapping
+   * {@link Camunda8MultiInstance#CHAIN_VARIABLE}.
+   * <p>
+   * Such a call activity is the one case the paragraph above cannot wire: which process it
+   * reaches is decided per instance. The model knowledge is complete on the CALLER's side all
+   * the same, so the caller writes it down and the reader of the job puts those levels in
+   * front of its own. Nothing is written where the caller encloses the call activity in no
+   * iteration at all, nor where the model keeps the caller's variables out of the called
+   * instance.
+   * <p>
+   * The workflow aggregate is the one question left for the runtime, and it is asked HERE as
+   * far as it can be: every process of this module is held against the caller, and the ones
+   * sharing its aggregate are recorded as processes which may use that chain. At runtime the
+   * reader only looks up whether the pair in front of it is one of them, so a call reaching a
+   * process with an aggregate of its own, or a process of another workflow module, is dropped
+   * rather than guessed.
+   *
+   * @param workflowModuleId The workflow module being deployed
+   * @param bpmsProcessingContext Everything of it, as wired
+   */
+  private void handTheChainDownWhereTheProcessIsNamedByAnExpression(
+      final String workflowModuleId,
+      final Camunda8ProcessingContext bpmsProcessingContext) {
+
+    final var namedByAnExpression = bpmsProcessingContext.getElementsNamingTheirTargetByExpression();
+    if (namedByAnExpression.isEmpty()) {
+      return;
+    }
+    final var processesOfThisModule = new ArrayList<String>();
+    for (final var model : bpmsProcessingContext.getResources().values()) {
+      model
+          .getModelElementsByType(Process.class)
+          .stream()
+          .filter(Process::isExecutable)
+          .map(Process::getId)
+          .forEach(processesOfThisModule::add);
+    }
+    for (final var model : bpmsProcessingContext.getResources().values()) {
+      for (final var process : model.getModelElementsByType(Process.class)) {
+        if (!process.isExecutable()) {
+          continue;
+        }
+        final var scopedCallerId = process.getId();
+        final var plainCallerId = plainProcessId(workflowModuleId, scopedCallerId);
+        var somethingWasHandedDown = false;
+        for (final var elementId : namedByAnExpression.getOrDefault(plainCallerId, List.of())) {
+          final var expression = Camunda8MultiInstance
+              .handTheChainDown(model, scopedCallerId, elementId, multiInstanceRegistry);
+          if (expression == null) {
+            continue;
+          }
+          somethingWasHandedDown = true;
+          log
+              .debug(
+                  "Camunda8[{}]: the call activity '{}' of BPMN process '{}' names the process it "
+                      + "calls by an expression, so no deployment can say which process that is. "
+                      + "Its iteration chain travels into the called instance in the variable "
+                      + "'{}' instead: {}",
+                  adapterId,
+                  elementId,
+                  plainCallerId,
+                  Camunda8MultiInstance.CHAIN_VARIABLE,
+                  expression);
+        }
+        if (!somethingWasHandedDown) {
+          continue;
+        }
+        for (final var scopedCalledId : processesOfThisModule) {
+          if (workflowTaskWiring
+              .workflowsShareTheWorkflowAggregate(
+                  workflowModuleId,
+                  plainCallerId,
+                  plainProcessId(workflowModuleId, scopedCalledId))) {
+            multiInstanceRegistry.registerCallByExpression(scopedCallerId, scopedCalledId);
+          }
+        }
+      }
+    }
 
   }
 
@@ -2844,8 +2986,11 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           bpmsProcessingContext.getResources().keySet());
     } catch (final RuntimeException e) {
       throw new IllegalStateException(
-          "Failed to deploy BPMN resources of workflow module '%s' to Camunda 8 (adapter '%s')!"
-              .formatted(workflowModuleId, adapterId), e);
+          "Failed to deploy BPMN resources of workflow module '%s' to Camunda 8 (adapter '%s')!%s"
+              .formatted(
+                  workflowModuleId,
+                  adapterId,
+                  whatAQuotedExpressionIncludes(workflowModuleId, bpmsProcessingContext)), e);
     }
 
     // which of this module's identifiers the cluster held before this deployment, asked now
@@ -3192,8 +3337,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (element.elementId() == null) {
         // the workflow-end listener: it reports a process rather than an element, and a
         // @WorkflowEnded method cannot declare a @TaskParam at all (the core rejects one),
-        // so the aggregate's id is the complete answer here
-        Camunda8FetchVariables.collect(variables, aggregateIdName, List.of());
+        // so the aggregate's id is the complete answer here. It is also the one worker which
+        // reports no iteration, so it asks for no multi-instance variable either
+        variables.add(aggregateIdName);
         continue;
       }
       Camunda8FetchVariables.collect(
@@ -4074,18 +4220,12 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       workers.get(i).close();
     }
 
-    // and then wait until the module is quiet: for the handlers, because closing a worker
-    // does not drain it and the client interrupts every running handler when it goes down
-    // right afterwards, and for the workers themselves, because an activation
-    // request which is parked at the cluster when the client is closed stays parked and
-    // swallows the first job of the next application
-    final var grace = shutdownGrace();
-    final var closedWorkers = workers.size();
-    final var outcome = drain.awaitQuiet(
-        grace,
-        closedWorkers,
-        () -> workers.stream().allMatch(JobWorker::isClosed));
-    drain.report(grace, outcome);
+    // what this shutdown now has to wait for: the handlers, because closing a worker does
+    // not drain it and the client interrupts every running handler when it goes down right
+    // afterwards, and the workers themselves, because an activation request which is parked
+    // at the cluster when the client is closed stays parked and swallows the first job of
+    // the next application
+    final var closedWorkers = List.copyOf(workers);
 
     // and the connections they held are free again: a closed worker leaves the count of
     // the client factory, so a module which starts once more is not counted twice
@@ -4094,8 +4234,82 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (registration != null) {
       registration.close();
     }
+    synchronized (whatThisShutdownClosed) {
+      whatThisShutdownClosed
+          .add(new Camunda8Drain.ClosedWorkers(
+              drain, closedWorkers.size(), () -> closedWorkers.stream().allMatch(JobWorker::isClosed)));
+    }
     log.info("Workflow processing stopped for workflow module '{}' (adapter '{}')",
         workflowModuleId, adapterId);
+
+    // the grace belongs to the APPLICATION and the platform stops the modules one after
+    // another, so a module which is not the last one of this adapter instance waits for
+    // nothing of its own: the wait of all of them together is the number which has to fit
+    // into the shutdown budget of the runtime
+    if (!shutdownRegistrations.isEmpty()) {
+      log.debug(
+          "Camunda8[{}]: workflow module '{}' is closed and the workers of {} further module(s) of this "
+              + "adapter are still open, so this shutdown waits for all of them together",
+          adapterId,
+          workflowModuleId,
+          Integer.valueOf(shutdownRegistrations.size()));
+      return;
+    }
+    letEveryModuleOfThisAdapterBeReleased();
+
+  }
+
+  /**
+   * What the shutdown of this adapter instance has closed and not yet waited for, one entry
+   * per workflow module.
+   * <p>
+   * The grace period is one number for the whole application, and the platform stops the
+   * workflow modules one after another. A module which spent the whole grace on its own
+   * workers therefore spent the application's budget as often as it has modules: measured
+   * with {@code Camunda8WhatSeveralModulesPayForAShutdownIT}, three modules took 32743 ms
+   * where the runtime grants thirty seconds, and one of them gave up with its workers still
+   * holding a request. The workers of a module which is still open keep renewing their
+   * request while another module is drained, and the closed workers of that other module
+   * wait behind them. So every module closes its workers, puts them here, and the last one
+   * waits for all of them at once, which took 5242 ms for the same three modules.
+   */
+  private final List<Camunda8Drain.ClosedWorkers> whatThisShutdownClosed = new ArrayList<>();
+
+  /**
+   * Waits for every workflow module whose workers this shutdown closed, within one grace
+   * period, and says per module what that wait ended with.
+   * <p>
+   * Called by the module which was stopped last, which is the one leaving no registration of
+   * this adapter behind. Where a module is stopped once more afterwards - the backstop of the
+   * client factory, a test - there is nothing left to wait for and nothing is reported twice.
+   */
+  private void letEveryModuleOfThisAdapterBeReleased() {
+
+    final List<Camunda8Drain.ClosedWorkers> closed;
+    synchronized (whatThisShutdownClosed) {
+      if (whatThisShutdownClosed.isEmpty()) {
+        return;
+      }
+      closed = List.copyOf(whatThisShutdownClosed);
+      whatThisShutdownClosed.clear();
+    }
+    final var grace = shutdownGrace();
+    if (closed.size() > 1) {
+      log.info(
+          "Camunda8[{}]: the workers of {} workflow modules are closed, and this shutdown waits for all of "
+              + "them together within one '{}' of {}. The modules are stopped one after another, so a wait "
+              + "per module would spend that grace once per module and reach past the shutdown budget of "
+              + "the runtime",
+          adapterId,
+          Integer.valueOf(closed.size()),
+          Camunda8AdapterConfiguration.propertyKey(adapterId, "shutdown-grace"),
+          grace);
+    }
+    Camunda8Drain
+        .awaitEveryModuleQuiet(closed, grace)
+        .forEach((
+            drain,
+            outcome) -> drain.report(grace, outcome));
 
   }
 

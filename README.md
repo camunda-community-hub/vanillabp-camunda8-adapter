@@ -160,7 +160,9 @@ connection are queued in the client rather than parked at the cluster. Such a re
 goes out once a connection frees, and then waits a request timeout of its own. The workers are
 therefore rounds of the pool, every round costs a request timeout, and `shutdown-grace`
 defaults to twice one round. An application above the pool gave up in the middle of its drain
-and nothing had said so. The warning names the rounds, the floor and both ways out; where the
+and nothing had said so. The number the floor is read on is the number of the whole client,
+which is right because the shutdown is one wait for every workflow module of the adapter
+instance. The warning names the rounds, the floor and both ways out; where the
 floor has grown past the thirty seconds the runtime grants a shutdown, raising the grace is no
 longer one of them and the message says so. `Camunda8WorkerConnectionsTest` holds the
 sentences, `Camunda8WhatADrainWaitsForIT` the numbers below them.
@@ -608,6 +610,13 @@ The number the check uses is the top of that window plus two seconds, and the tw
 from the one reading which ran out rather than from the table: on 2026-09-27 an application with
 115 workers on a pool of 100, which is two rounds, gave up after its grace of 20045 ms with its
 workers still holding a request.
+
+**What several workflow modules cost it.** Measured on 2026-10-01 with
+`Camunda8WhatSeveralModulesPayForAShutdownIT`: three modules drained one after another took
+32743 ms, past the thirty seconds the runtime grants a shutdown, and the same three modules
+closed first and then waited for together took 5242 ms. That is why the wait is one wait for
+every module of an adapter instance, and the table of both readings is in "Shutting down while
+work is in flight" below.
 
 So the sum an operator needs before the start is the wiki page
 [Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing),
@@ -1309,9 +1318,37 @@ again at once. `Camunda8RetryBackoffHeaderTest` pins the rule and the tie-break,
 **Shutting down while work is in flight:** the client does not drain. A
 worker's `close()` returns without waiting for the jobs it already handed to a handler,
 and `CamundaClient.close()` interrupts every running handler milliseconds later. So
-`stopWorkflowProcessing` closes the module's workers and then waits `shutdown-grace`
-(default `PT20S`) for the handlers which are still inside the application; every handler
-registers its delivery in a per-module `Camunda8Drain`, which is what the wait watches.
+`stopWorkflowProcessing` closes the module's workers and the shutdown then waits
+`shutdown-grace` (default `PT20S`) for the handlers which are still inside the application;
+every handler registers its delivery in a per-module `Camunda8Drain`, which is what the wait
+watches.
+
+**One wait for every workflow module.** The platform stops the modules one after another and
+calls the adapter once per module, so a wait inside each of those calls spends the grace once
+per module. The waits do not overlap: the workers of a module which is still open keep
+renewing their activation request while another module is drained, and the closed workers of
+that other module wait behind them for the client's executor. Measured on 2026-10-01 with
+`Camunda8WhatSeveralModulesPayForAShutdownIT` against `camunda/camunda:8.9.21`, one client
+with a pool of 256, `request-timeout` `PT10S`, `shutdown-grace` `PT20S` and thirty workers
+per module:
+
+| modules | drained one after another | every module closed first, then one wait |
+|---------|---------------------------|------------------------------------------|
+| 1       | 823 ms                    | the same reading                         |
+| 2       | 12519 and 21421 ms        | 5436 ms                                  |
+| 3       | 32743 and 15424 ms        | 5242 ms                                  |
+
+Three modules one after another reached past the thirty seconds the runtime grants a
+shutdown, and one module of that run gave up after the whole grace with its workers still
+holding a request, which is the case the wait exists to prevent. The two readings per row are
+the same case read twice: what a module pays depends on where in its request cycle it was
+when its workers were closed. Waiting once does not depend on it, because the requests of
+every module are parked at the same time and come back at the same time.
+
+So the grace is the budget of the whole shutdown. Each module closes its workers as it is
+stopped, and the module stopped last waits for all of them at once. A booted application with
+one workflow module, which is what the test suite here has, closed in 2010 ms at the
+`request-timeout` of `PT5S` it configures.
 
 **And for the workers themselves.** The handler drain deliberately did not wait for
 `JobWorker#isClosed()`, because that answer also covers the activation request in flight
@@ -1357,7 +1394,8 @@ interrupted by the closing client throws like any other. The default sits below 
 shutdown budgets of Spring Boot (`spring.lifecycle.timeout-per-shutdown-phase`) and
 Kubernetes (`terminationGracePeriodSeconds`), both 30 seconds, so VanillaBP is never the
 reason a container is killed; a larger value warns at startup that those have to be
-raised with it. Held by `Camunda8ShutdownDrainTest`, `Camunda8DrainTest` and
+raised with it. Held by `Camunda8ShutdownDrainTest`, whose `#twoModulesAreOneWait` is the one
+wait above, `Camunda8DrainTest` and
 `Camunda8ShutdownGraceTest`, and against a real cluster by
 `Camunda8ShutdownDrainIT#aCutOffHandlerCostsNoRetry` with `#aHandlerWithinTheGraceFinishes`.
 The table above is a measurement.
@@ -1457,7 +1495,7 @@ is job-based) and V1's marker-variable workaround is broken by V1's own admissio
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
 or later.
 
-A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment names it. The
+A user task WITHOUT `zeebe:userTask` is served by nothing here, and the deployment says so. The
 cluster serves such an element with a job of `io.camunda.zeebe:userTask`, this version opens no
 worker on that job type, and the workflow stands at the element until the job's retries are used
 up. It falls through everything else: `tasksOf` reads service-like tasks only and `userTasksOf`
@@ -1466,12 +1504,31 @@ purpose and splits it into the two shapes the message has to keep apart. One car
 version 1 read the task definition from up to its release 1.6.3, which is what an upgrading
 application finds by searching its models for that word. The other carries no `formKey` at all,
 which no such search finds while the cluster treats it exactly the same. That second shape is why
-the reader no longer filters on the formKey: it went through the whole boot without a word. One WARN per BPMN process names
-the elements per shape plus how many tasks are open on them right now, counted from the jobs of
-that type, and the boot goes on for the reason
-[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on)
-gives. `Camunda8UnservedUserTasksReportTest` holds the message and
-`Camunda8UserTaskWiringTest` the reader.
+the reader no longer filters on the formKey: it went through the whole boot without a word.
+
+Who claims the process decides what happens next, in
+`Camunda8DeploymentService#refuseOrReportUnservedUserTasks`. Where a `@WorkflowService` class of
+the application claims the process, the boot ends: the class promised that the application serves
+that process, and this element is where the promise breaks. The message names the process, the
+elements per shape and the two ways out. Where nobody claims the process, the WARN it always had
+is written and the boot goes on, without the sentences which asked the reader to change
+something: the model travels to the cluster because of the file it sits in, and whoever owns it
+may serve such a job with a worker of their own.
+`Camunda8UnservedUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
+reader.
+
+Both messages carry how many tasks are open on the elements right now, and that number used to
+count the finished ones with it. It was the total of one job search by process and job type, and
+the index keeps a job after it is over, so it was every such job the process ever had and it never
+fell. `Camunda8UnservedUserTaskJobs` is the number now: two searches, all jobs of that type and
+those of them the index holds in a state a job does not leave again, and the difference between
+them. The end states are named rather than the open ones because the client grows that enum inside
+a release line, and a state this build has no literal for then counts as open rather than
+disappearing. What the number is worth is in that class and in every message carrying it: the index
+runs behind the engine at both ends. `Camunda8UnservedUserTaskJobsTest` holds the two searches and
+the arithmetic, and `Camunda8CountOfOpenUnservedUserTasksIT` reads one open and one finished job of
+the same type in the same process against a real cluster and writes down which states each line
+names.
 
 The wiring and the V1 order of the listeners are `Camunda8UserTaskWiringTest`. The
 lifecycle against a cluster is `Camunda8TaskProcessingIT#userTaskCreatedAndCompleted`,
@@ -2007,22 +2064,26 @@ left an upgraded version-1 application deploying into no tenant while its workfl
 theirs. While `none` applies, a WARN per workflow module names the alternatives
 until `accept-unscoped-identifiers` acknowledges that the identifiers are unique.
 
-**A name written as FEEL gets no prefix, and the boot says so.** Two attributes can hold one:
+**A name written as FEEL gets the prefix inside the expression.** Two attributes can hold one:
 the `processId` of a `zeebe:calledElement` and the `decisionId` of a `zeebe:calledDecision`. An
 expression takes up the whole attribute, so a prefix in front of it lands in the expression's
 text rather than in the id it yields, and `loan-approval__=whichProcess` names no process and
-parses as no expression. `Camunda8Scoping` leaves both as the application wrote them, which makes
-this the one place under `use-prefix` where a developer composes a scoped id themselves
-(`="loan-approval__" + whichProcess`). Rewriting the FEEL instead was the alternative and was not
-taken: not every expression survives a concatenation wrapped around it, and it would be the
-adapter editing the application's code. So the deployment names the call activities it applies to,
-once per BPMN process, with the prefix and the expression to write
-(`reportCallActivitiesNamingTheirProcessByExpression`). It is a WARN which no key silences,
-because the adapter cannot evaluate the expression and therefore cannot tell an application which
-already composes the prefix from one which does not. A decision id is not reported: the module's
-own DMN files are renamed the same way, so the developer who wrote the expression is the one who
-also sees those ids. What the two forms deploy to is held by
-`Camunda8CalledProcessScopingTest` and `Camunda8CalledProcessByExpressionReportTest`.
+parses as no expression. `Camunda8Scoping` therefore writes the prefix into the expression:
+`=whichProcess` is deployed as `="loan-approval__" + string(whichProcess)`, and the application
+writes no prefix anywhere. Camunda's FEEL concatenates two strings with `+`, `string(...)` makes
+that work whatever the application's part returns, and the parentheses carry every shape such a
+part can have, an `if ... then ... else ...` and a `get value(...)` included.
+
+The price is that the cluster holds an expression nobody typed. Camunda 8 parses the FEEL while it
+deploys, so a syntax error in the application's part refuses the deployment quoting the framed
+expression, with the column counted from its opening quote. A refused deployment of a prefixed
+module says what such a quote includes and names the elements it can be about
+(`Camunda8Scoping#whatAQuotedExpressionIncludes`). Nothing is said while a deployment goes
+through. An expression which composes the prefix ITSELF ends the boot instead of being given a
+second one (`refuseAnExpressionWhichAlreadyCarriesThePrefix`), which is the model an earlier 2.0
+snapshot asked for while it left the expression alone. What the forms deploy to is held by
+`Camunda8CalledProcessScopingTest`, the refused boot by `Camunda8PrefixInsideAnExpressionTest`,
+and the cluster by `Camunda8PrefixInsideAnExpressionCanaryIT` on every release line.
 
 **A BPMN error code belongs to one workflow module, and so does its catcher.** The code a
 `TaskException` raises is composed from the module of the process whose job raised it
@@ -2454,12 +2515,70 @@ BPMN process does not say who calls it. The call activities of the callers are r
 file of a workflow module is wired, and the chain of an element in a called process becomes the
 chain of the call site followed by its own, outermost first.
 
-A call activity only counts where its `zeebe:calledElement processId` is a plain id and where
-the called process works on the same workflow aggregate. An id given as an expression is
-decided per instance, and a process with an aggregate of its own runs a business case of its
-own. A task in either of those reports no iteration of its caller, although the cluster still
-copies the values into the instance, so a `@TaskParam` naming one of the variables would
-find it.
+A call activity is linked that way where its `zeebe:calledElement processId` is a plain id and
+where the called process works on the same workflow aggregate. A process with an aggregate of
+its own runs a business case of its own: a task in it reports no iteration of its caller,
+although the cluster still copies the values into the instance, so a `@TaskParam` naming one of
+the variables would find it.
+
+An id given as an EXPRESSION is decided per instance, so there are no two models to link. The
+chain is handed down instead. Such a call activity gets one more input mapping while it is
+deployed, writing the caller's levels into the called instance:
+
+```
+vanillabpMiParents = append(
+   if is defined(vanillabpMiParents) then vanillabpMiParents else [],
+   { process: "loan-approval__orderProcess",
+     levels: [ { element: "perGroup",
+                 index: vanillabpMiIndex_perGroup,
+                 total: vanillabpMiTotal_perGroup,
+                 item:  vanillabpMiElement_perGroup },
+               { element: "callCheck",
+                 index: loopCounter,
+                 total: count(positions),
+                 item:  position } ] })
+```
+
+Everything in it is known while deploying. An enclosing level reads the variables of its own
+mappings, and the call activity's own round reads what the cluster offers every multi-instance
+element, because one input mapping of an element must not depend on another one of the same
+element. The values are in the entry rather than named by it, because a worker has ONE fetch
+list, fixed at registration: it cannot read the variable, look inside and then ask for the
+names it finds.
+
+The cluster evaluates an input mapping in the same record which creates the called instance, so
+there is no window in which the variable is still missing. It also evaluates it per
+multi-instance instance, so a multi-instance call activity hands each called instance its own
+round. A second call activity further down appends its own entry to the list, which is how a
+chain several processes long comes about - the entries are then outermost first.
+
+Two call activities get nothing of this. A statically named one is linked model to model and
+pays not one byte more payload. One saying `propagateAllParentVariables="false"` is left alone,
+because the modeller switched the caller's context off on purpose and a mapping would travel all
+the same and undo that.
+
+What is left for the runtime is the workflow aggregate, and only the lookup of it. While
+deploying, every process of the module is held against the caller, and the ones sharing its
+aggregate are recorded as processes which may use that chain. A job then carries the variable,
+and an entry whose caller is not one of those is dropped rather than guessed at: a call across
+the boundary of a workflow module ends up there, because this adapter never saw that caller's
+model, and so does a call reaching a process with an aggregate of its own. A DEBUG line says so.
+
+`vanillabpMiParents` is not a protected name. VanillaBP refuses an input mapping of it, like of
+every name it writes, but a start variable, an output mapping or the write-back of the workflow
+aggregate can all set it, and nothing in the cluster objects. A value which is not a list is
+read as if the variable were not there, and an entry which describes no level is left out while
+the real ones still count. Nothing of this reaches a `@WorkflowTask` as an exception, and the
+DEBUG line names the variable and the process. What such an application loses is the chain
+itself: `append` on a text results in `null`, the cluster writes that `null` without an
+incident, and a task then reports no iteration rather than a wrong one.
+
+The chain counts against the cluster's `MAX_MESSAGE_SIZE`, and the adapter cannot catch that
+limit: it arrives as an incident on the call activity rather than as a refused command. There is
+a lot of room. Three levels carrying 1 KB element values cost about 3.3 KB, while the limit bites
+somewhere between 1000 and 2000 such entries, so what gets expensive is the element VALUE and not
+the depth: a multi-instance element iterating 100 KB objects needs only ten levels. Keep
+collections to identifiers, which is what `inputCollection` should hold anyway.
 
 Where the attribute is missing, the adapter writes `propagateAllParentVariables="true"` at
 such a call activity. That is what it already means today, and writing it says what the chain
@@ -2509,14 +2628,21 @@ committing last puts back what it read, so an iteration should write a row of it
 [workflow aggregates](https://github.com/vanillabp/adapter-platform-integration/wiki/Workflow-aggregates).
 
 `Camunda8MultiInstanceTest` covers the injection, its idempotency, the ambiguous element ids,
-the chain across a call activity, the union over call sites and the recursion stop.
+the chain across a call activity, the union over call sites and the recursion stop. It also
+covers the chain handed down by an expression: the expression written into the model, the three
+call activities which get none, and the reading side against a value of another shape.
 `Camunda8FetchVariablesTest#theListFollowsTheChainAcrossTheProcessBoundary` holds that the
 fetch list follows the chain without a change of its own, and
 `#aProcessOfItsOwnStaysOutsideTheChain` that a called process with a workflow aggregate of its
 own gets none of it. What a handler really sees is
 `Camunda8MultiInstanceIT#theIterationIsReported` with its Quarkus twin
 `Camunda8WorkflowLifecycleTest#multiInstanceBindsElementIndexAndTotal`, and across a call
-activity `Camunda8MultiInstanceIT#theIterationCrossesTheCallActivity`. The parallel tokens of
+activity `Camunda8MultiInstanceIT#theIterationCrossesTheCallActivity`. Across a call activity
+naming its process by an expression it is
+`Camunda8MultiInstanceIT#theIterationCrossesACallActivityNamedByAnExpression`, with
+`#theApplicationMayWriteTheChainVariableItself` for the two ways an application can take the
+chain away from itself. The three cluster properties all of this rests on are
+`Camunda8CallActivityVariablesCanaryIT`. The parallel tokens of
 the paragraph above are `Camunda8ConcurrentTokensTest#parallelMultiInstance`, and that the
 index reaches the application counting from 0 is `Camunda8MultiInstanceTest#valuesAreTranslated`.
 That this engine offers no loop cardinality is an assumption about Camunda 8, disproved by a

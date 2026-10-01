@@ -689,9 +689,11 @@ public final class Camunda8TaskWiring {
    * <p>
    * The cluster serves such an element with a job of
    * {@value #TASKDEFINITION_USERTASK_WORKER_V1}, and this version opens no worker on that job
-   * type. So the model deploys, the workflow runs up to the element and stops there until the
-   * job's retries are used up, and nothing tells the application. It falls through everything
-   * else: {@link #tasksOf} reads service-like tasks only, and {@link #userTasksOf} skips
+   * type. So without this reader the model would deploy, the workflow would run up to the
+   * element and stand there until the job's retries are used up, and nothing would tell the
+   * application. What the deployment does with the answer depends on the process: it ends the
+   * boot for one a workflow service of the application claims, and it names the elements for
+   * one nobody claims. The element falls through everything else: {@link #tasksOf} reads service-like tasks only, and {@link #userTasksOf} skips
    * anything without a <code>zeebe:userTask</code>. It cannot be completed either, because the
    * id such a task hands out is a job key while the cluster expects a user-task key.
    * <p>

@@ -217,6 +217,34 @@ public class Camunda8ProcessingContext {
   }
 
   /**
+   * Per BPMN process of this module, the elements which name the process they call or the
+   * decision they evaluate by a FEEL expression. Under {@code use-prefix} such an expression
+   * reaches the cluster with the prefix written inside it, so the cluster holds more text than
+   * the developer typed, which is what the deployment says where the cluster refuses a
+   * deployment.
+   */
+  @Getter
+  private final Map<String, List<String>> elementsNamingTheirTargetByExpression = new LinkedHashMap<>();
+
+  /**
+   * Remembers the elements of one BPMN process whose called process or decision is named by
+   * an expression. A process without such an element is not recorded at all.
+   *
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @param elementIds The call activities respectively business rule tasks
+   */
+  public void recordElementsNamingTheirTargetByExpression(
+      final String bpmnProcessId,
+      final List<String> elementIds) {
+
+    if (elementIds.isEmpty()) {
+      return;
+    }
+    elementsNamingTheirTargetByExpression.put(bpmnProcessId, elementIds);
+
+  }
+
+  /**
    * The listeners of this module's models which somebody modelled and this application
    * serves, collected while the BPMN files are prepared - the list the startup report names
    * one by one, see {@link Camunda8Listeners}.

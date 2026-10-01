@@ -131,12 +131,27 @@ afterwards nothing can complete them. The id such a task hands out is a job key 
 expects a user-task key, so `ProcessService#completeUserTask` cannot answer it, and no
 notification arrives when the task is created or canceled.
 
-The deployment says all this rather than failing over it, and it needs no grep of yours. One WARN
-per BPMN process names the elements it found, which of the two shapes each of them is, and how many
-tasks are open on them right now. The model is valid, the workflow runs, and an application may well
-serve such a task with a job worker of its own, so ending the boot would be the wrong answer. Of the
-two numbers only the first is certain: the elements come from the model this boot deploys, while the
-open tasks are a search, and a cluster which is not up yet costs you that count.
+**Your application does not boot until those models are changed, and that is on purpose.** A
+`@WorkflowService` class claiming a BPMN process says that your application serves that process, and
+a user task nothing fetches takes that back without a sound. So the deployment refuses such a
+process instead of letting a workflow stand at the element: the message names the process, the
+elements, which of the two shapes each of them is, and the two ways out. Where a worker of your own
+serves the element, give it a `zeebe:taskDefinition` naming that worker's job type and the check
+passes over it.
+
+A BPMN process no `@WorkflowService` class of yours claims is not refused. It reaches the cluster
+because it sits in a file next to a process you do serve, and what it contains is not ours to make
+demands about, so one WARN per process names the elements and the boot goes on.
+
+Both messages say how many tasks are open on the elements right now, and only the count of elements
+is certain. The elements come from the model this boot deploys. The open tasks are a search of the
+cluster's index: it is asked how many jobs of that element's job type the process has, and how many
+of those it has already seen end, and the message names the difference. That is the number which
+falls to zero as you work the tasks off, which the plain total of the search never did. It is near
+rather than exact, because an exporter feeds that index and the index runs behind the engine: a task
+which finished a moment ago can still be counted, and one which opened a moment ago can still be
+missing. A cluster which is not up yet costs you the number altogether, and the message says that
+instead of writing a zero.
 
 ### A task your cockpit showed while a check answered 404
 
@@ -486,6 +501,30 @@ If you neither set a `tenant-id` nor use `none`, nothing changes for you: the de
 workflow module into a tenant named after it, and under `use-prefix` the module id is part of
 every identifier, so the two processes never meet.
 
+### Under `use-prefix` a call activity naming its process by FEEL is rewritten for you
+
+Only under that mode, and only where a `zeebe:calledElement processId` or a
+`zeebe:calledDecision decisionId` of your models holds a FEEL expression instead of an id. Version 1
+had no prefixing mode, so such an expression yielded the id the cluster held and nothing touched it.
+
+This version prefixes every identifier of the workflow module, and an expression cannot be prefixed
+from the outside: it takes up the whole attribute value, so anything written in front of it becomes
+part of its text. The prefix therefore goes INSIDE the expression. Your `=whichProcess` is deployed
+as `="loan-approval__" + string(whichProcess)`, and your expression keeps yielding the plain id your
+own model declares. There is nothing to change in your model and nothing to change in your code.
+
+One model does not boot: an expression which composes the prefix itself. It would be given a second
+one, the cluster would be asked for `loan-approval__loan-approval__PaymentHandling`, and every call
+of that element would fail once a workflow reached it. The boot ends instead, naming the file, the
+element and the expression to take the prefix out of.
+
+What the rewrite costs you is worth knowing before you read a message about it. Camunda 8 parses the
+FEEL of a model while it deploys it, so a syntax error in your own part refuses the deployment and
+the cluster's answer quotes the whole framed expression, counting its column from the opening quote
+rather than from your text. A refused deployment of a prefixed module therefore says what such a
+quote includes and names the elements it can be about. The same frame shows up in an incident where
+your expression yields `null`, together with the name of the variable it could not read.
+
 ### A start says which of your names the cluster already held
 
 Version 1 compared the identifiers of a deployment against each other and said nothing about the
@@ -531,10 +570,12 @@ twenty runs; with twelve seconds, beyond the request window, twenty milliseconds
 transport, which is the default: the same scenario over gRPC, and over REST with `stream-enabled`,
 delivers in milliseconds.
 
-The shutdown of a workflow module therefore waits for its workers to be released before the client is
-closed, within the `shutdown-grace` it already had. In those runs the wait cost 8,2 to 8,5 seconds
-and turned a first job of 20 seconds into one of 30 milliseconds. Two things follow for an
-application:
+The shutdown therefore waits for the workers to be released before the client is closed, within the
+`shutdown-grace` it already had. In those runs the wait cost 8,2 to 8,5 seconds and turned a first
+job of 20 seconds into one of 30 milliseconds. It is one wait for every workflow module of an
+adapter instance: each module closes its own workers as it is stopped and the module stopped last
+waits for all of them, so the grace bounds the whole shutdown however many modules an application
+has. Two things follow for an application:
 
 - an ordinary restart takes those seconds longer. `shutdown-grace` (default `PT20S`) bounds it, and
   it still sits below the shutdown budgets of Spring Boot and Kubernetes. `PT0S` waives the wait

@@ -326,6 +326,13 @@ public class Camunda8WorkflowViewer {
    * version which WOULD be executed next: the version deployed by this
    * application. Call activities addressing their process by a FEEL expression
    * are skipped - the called definition is only known at execution time.
+   * <p>
+   * So an empty answer means one of two things, and a reader cannot tell them apart: this
+   * definition calls nothing, or every call activity of it names its process by an
+   * expression. Nothing says which, because a view is rendered without an instance running
+   * and there is no expression to evaluate. A task of such a called process IS told the
+   * iteration it runs in, which the caller hands it at runtime, but that is a job's knowledge
+   * and not a definition's.
    */
   private List<ProcessDefinition> calledDefinitions(
       final String workflowModuleId,
@@ -376,7 +383,8 @@ public class Camunda8WorkflowViewer {
 
   /**
    * Reads {@code zeebe:calledElement processId} of a call activity - a static
-   * process id only; an expression ({@code =...}) is not resolvable here.
+   * process id only; an expression ({@code =...}) is not resolvable here, so such a call
+   * activity is left out of the view rather than guessed at.
    */
   private static String calledProcessIdOf(
       final CallActivity callActivity) {
