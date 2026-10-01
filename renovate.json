@@ -91,6 +91,19 @@
       ]
     },
     {
+      "description": "While a pin names a pre-release, nothing proposed for it merges itself. Renovate reads the step from the last candidate of a minor to its release as a patch: major, minor and patch stay the same and only the qualifier falls away. The rule above would therefore have merged that step as soon as its checks were green. The pin is the small part of it. A line pins a pre-release while it is the preview line, and reaching the release is the moment that line becomes a GA line, which also moves the line table of the README, the camunda8.line.preview property of the line profile, the question whether the oldest line is still carried, and the release of the line itself. The condition is the current value of the pin, so nothing has to state a second time which line is the preview one. It is written as 'not a plain three-number release' rather than as a list of the qualifiers Camunda uses today, so a qualifier nobody has seen yet lands on the careful side. The lines are matched by a pattern and not by name, because a line added later would otherwise fall back into the automerge and nobody would hear about it. renovate/verify-pin-automerge.js checks what this rule does, with Renovate's own classifier and rule engine.",
+      "matchDepNames": ["/^camunda-client-java \\(line /"],
+      "matchUpdateTypes": ["patch"],
+      "matchCurrentValue": "!/^\\d+\\.\\d+\\.\\d+$/",
+      "automerge": false,
+      "platformAutomerge": false,
+      "additionalBranchPrefix": "camunda8-pre-release-pin-",
+      "addLabels": ["camunda8-pre-release-pin"],
+      "prBodyNotes": [
+        "The pin this starts from names a pre-release, so nothing here merges itself. Where this is the step onto the release of that minor, the line stops being the preview line with it. Part of the same move are the line table of the `README.md` and of the wiki, the `camunda8.line.preview` property of the `line-*` profile, whether the oldest line is still carried, and the release of the line."
+      ]
+    },
+    {
       "description": "A minor of the client is a new line, not an update. The client a build was compiled against is the lowest cluster version that build accepts, so this bump raises the cluster requirement of everybody who consumes the line. It gets a branch of its own, waits for approval on the dependency dashboard and never merges itself. Rotating the lines is more than this pin: it also means a profile, the pin properties, the line table of the README and a release of the new line.",
       "matchDepNames": [
         "camunda-client-java (line 8.8)",
