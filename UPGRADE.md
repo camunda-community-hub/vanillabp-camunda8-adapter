@@ -570,10 +570,12 @@ twenty runs; with twelve seconds, beyond the request window, twenty milliseconds
 transport, which is the default: the same scenario over gRPC, and over REST with `stream-enabled`,
 delivers in milliseconds.
 
-The shutdown of a workflow module therefore waits for its workers to be released before the client is
-closed, within the `shutdown-grace` it already had. In those runs the wait cost 8,2 to 8,5 seconds
-and turned a first job of 20 seconds into one of 30 milliseconds. Two things follow for an
-application:
+The shutdown therefore waits for the workers to be released before the client is closed, within the
+`shutdown-grace` it already had. In those runs the wait cost 8,2 to 8,5 seconds and turned a first
+job of 20 seconds into one of 30 milliseconds. It is one wait for every workflow module of an
+adapter instance: each module closes its own workers as it is stopped and the module stopped last
+waits for all of them, so the grace bounds the whole shutdown however many modules an application
+has. Two things follow for an application:
 
 - an ordinary restart takes those seconds longer. `shutdown-grace` (default `PT20S`) bounds it, and
   it still sits below the shutdown budgets of Spring Boot and Kubernetes. `PT0S` waives the wait

@@ -29,6 +29,14 @@ import java.time.Duration;
  * of the pool, and a grace period sized for one round gives up in the middle of the second
  * one.
  * <p>
+ * The number this is read on is the number of the whole CLIENT, and that is right because
+ * the shutdown is one wait. The platform stops the workflow modules one after another, the
+ * adapter closes the workers of each module as that module is stopped, and the module
+ * stopped last waits for all of them within one grace period
+ * ({@link Camunda8Drain#awaitEveryModuleQuiet}). So the floor below is the floor of the
+ * application's whole shutdown rather than of one module's share of it, which is what makes
+ * it a number the shutdown budget of the runtime can be held against.
+ * <p>
  * The adapter says this and changes nothing. How many connections an application opens
  * against its cluster is a decision about its own resources, and raising that number behind
  * its back would take the decision away. See decision 50 in the repository's DECISIONS.md.
@@ -74,6 +82,10 @@ public final class Camunda8WorkerConnections {
   /**
    * The shortest time a shutdown of these workers can take, which is what
    * <code>shutdown-grace</code> has to carry.
+   * <p>
+   * It is the floor of the WHOLE shutdown of this adapter instance, however many workflow
+   * modules it has: their workers are closed as the modules are stopped and waited for in
+   * one go, so what the floor is read on is the number of workers open on the client.
    * <p>
    * Measured on 2026-09-28 with {@code Camunda8WhatADrainWaitsForIT} against a cluster of the
    * current GA line, a client pool of 30 and a request timeout of {@code PT10S}: 15 workers
@@ -204,9 +216,11 @@ public final class Camunda8WorkerConnections {
     final var queued = Math.max(0, workers - maxHttpConnections);
     return """
         This adapter has %d job workers open, its Camunda client keeps at most %d HTTP connections \
-        and 'vanillabp.adapters.<adapter id>.shutdown-grace' is %s. A shutdown closes the workers \
-        and then waits for the cluster to answer the activation requests they parked, because \
-        closing a worker does not cancel the request it has in flight. %d of these workers found no \
+        and 'vanillabp.adapters.<adapter id>.shutdown-grace' is %s. A shutdown closes the workers of \
+        every workflow module and then waits once for the cluster to answer the activation requests \
+        they parked, because closing a worker does not cancel the request it has in flight. The \
+        grace is the budget of that one wait, so it is what the whole shutdown of this adapter has. \
+        %d of these workers found no \
         connection, so their request is queued inside the client: it goes out once a connection \
         frees and then waits a whole 'vanillabp.adapters.<adapter id>.request-timeout' of its own, \
         which is %s here. The workers are %d rounds of the pool, so this shutdown cannot end before \

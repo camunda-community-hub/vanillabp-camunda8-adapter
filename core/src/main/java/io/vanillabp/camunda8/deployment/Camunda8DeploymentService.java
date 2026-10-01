@@ -4128,18 +4128,12 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       workers.get(i).close();
     }
 
-    // and then wait until the module is quiet: for the handlers, because closing a worker
-    // does not drain it and the client interrupts every running handler when it goes down
-    // right afterwards, and for the workers themselves, because an activation
-    // request which is parked at the cluster when the client is closed stays parked and
-    // swallows the first job of the next application
-    final var grace = shutdownGrace();
-    final var closedWorkers = workers.size();
-    final var outcome = drain.awaitQuiet(
-        grace,
-        closedWorkers,
-        () -> workers.stream().allMatch(JobWorker::isClosed));
-    drain.report(grace, outcome);
+    // what this shutdown now has to wait for: the handlers, because closing a worker does
+    // not drain it and the client interrupts every running handler when it goes down right
+    // afterwards, and the workers themselves, because an activation request which is parked
+    // at the cluster when the client is closed stays parked and swallows the first job of
+    // the next application
+    final var closedWorkers = List.copyOf(workers);
 
     // and the connections they held are free again: a closed worker leaves the count of
     // the client factory, so a module which starts once more is not counted twice
@@ -4148,8 +4142,82 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (registration != null) {
       registration.close();
     }
+    synchronized (whatThisShutdownClosed) {
+      whatThisShutdownClosed
+          .add(new Camunda8Drain.ClosedWorkers(
+              drain, closedWorkers.size(), () -> closedWorkers.stream().allMatch(JobWorker::isClosed)));
+    }
     log.info("Workflow processing stopped for workflow module '{}' (adapter '{}')",
         workflowModuleId, adapterId);
+
+    // the grace belongs to the APPLICATION and the platform stops the modules one after
+    // another, so a module which is not the last one of this adapter instance waits for
+    // nothing of its own: the wait of all of them together is the number which has to fit
+    // into the shutdown budget of the runtime
+    if (!shutdownRegistrations.isEmpty()) {
+      log.debug(
+          "Camunda8[{}]: workflow module '{}' is closed and the workers of {} further module(s) of this "
+              + "adapter are still open, so this shutdown waits for all of them together",
+          adapterId,
+          workflowModuleId,
+          Integer.valueOf(shutdownRegistrations.size()));
+      return;
+    }
+    letEveryModuleOfThisAdapterBeReleased();
+
+  }
+
+  /**
+   * What the shutdown of this adapter instance has closed and not yet waited for, one entry
+   * per workflow module.
+   * <p>
+   * The grace period is one number for the whole application, and the platform stops the
+   * workflow modules one after another. A module which spent the whole grace on its own
+   * workers therefore spent the application's budget as often as it has modules: measured
+   * with {@code Camunda8WhatSeveralModulesPayForAShutdownIT}, three modules took 32743 ms
+   * where the runtime grants thirty seconds, and one of them gave up with its workers still
+   * holding a request. The workers of a module which is still open keep renewing their
+   * request while another module is drained, and the closed workers of that other module
+   * wait behind them. So every module closes its workers, puts them here, and the last one
+   * waits for all of them at once, which took 5242 ms for the same three modules.
+   */
+  private final List<Camunda8Drain.ClosedWorkers> whatThisShutdownClosed = new ArrayList<>();
+
+  /**
+   * Waits for every workflow module whose workers this shutdown closed, within one grace
+   * period, and says per module what that wait ended with.
+   * <p>
+   * Called by the module which was stopped last, which is the one leaving no registration of
+   * this adapter behind. Where a module is stopped once more afterwards - the backstop of the
+   * client factory, a test - there is nothing left to wait for and nothing is reported twice.
+   */
+  private void letEveryModuleOfThisAdapterBeReleased() {
+
+    final List<Camunda8Drain.ClosedWorkers> closed;
+    synchronized (whatThisShutdownClosed) {
+      if (whatThisShutdownClosed.isEmpty()) {
+        return;
+      }
+      closed = List.copyOf(whatThisShutdownClosed);
+      whatThisShutdownClosed.clear();
+    }
+    final var grace = shutdownGrace();
+    if (closed.size() > 1) {
+      log.info(
+          "Camunda8[{}]: the workers of {} workflow modules are closed, and this shutdown waits for all of "
+              + "them together within one '{}' of {}. The modules are stopped one after another, so a wait "
+              + "per module would spend that grace once per module and reach past the shutdown budget of "
+              + "the runtime",
+          adapterId,
+          Integer.valueOf(closed.size()),
+          Camunda8AdapterConfiguration.propertyKey(adapterId, "shutdown-grace"),
+          grace);
+    }
+    Camunda8Drain
+        .awaitEveryModuleQuiet(closed, grace)
+        .forEach((
+            drain,
+            outcome) -> drain.report(grace, outcome));
 
   }
 

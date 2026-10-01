@@ -160,7 +160,9 @@ connection are queued in the client rather than parked at the cluster. Such a re
 goes out once a connection frees, and then waits a request timeout of its own. The workers are
 therefore rounds of the pool, every round costs a request timeout, and `shutdown-grace`
 defaults to twice one round. An application above the pool gave up in the middle of its drain
-and nothing had said so. The warning names the rounds, the floor and both ways out; where the
+and nothing had said so. The number the floor is read on is the number of the whole client,
+which is right because the shutdown is one wait for every workflow module of the adapter
+instance. The warning names the rounds, the floor and both ways out; where the
 floor has grown past the thirty seconds the runtime grants a shutdown, raising the grace is no
 longer one of them and the message says so. `Camunda8WorkerConnectionsTest` holds the
 sentences, `Camunda8WhatADrainWaitsForIT` the numbers below them.
@@ -608,6 +610,13 @@ The number the check uses is the top of that window plus two seconds, and the tw
 from the one reading which ran out rather than from the table: on 2026-09-27 an application with
 115 workers on a pool of 100, which is two rounds, gave up after its grace of 20045 ms with its
 workers still holding a request.
+
+**What several workflow modules cost it.** Measured on 2026-10-01 with
+`Camunda8WhatSeveralModulesPayForAShutdownIT`: three modules drained one after another took
+32743 ms, past the thirty seconds the runtime grants a shutdown, and the same three modules
+closed first and then waited for together took 5242 ms. That is why the wait is one wait for
+every module of an adapter instance, and the table of both readings is in "Shutting down while
+work is in flight" below.
 
 So the sum an operator needs before the start is the wiki page
 [Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing),
@@ -1309,9 +1318,37 @@ again at once. `Camunda8RetryBackoffHeaderTest` pins the rule and the tie-break,
 **Shutting down while work is in flight:** the client does not drain. A
 worker's `close()` returns without waiting for the jobs it already handed to a handler,
 and `CamundaClient.close()` interrupts every running handler milliseconds later. So
-`stopWorkflowProcessing` closes the module's workers and then waits `shutdown-grace`
-(default `PT20S`) for the handlers which are still inside the application; every handler
-registers its delivery in a per-module `Camunda8Drain`, which is what the wait watches.
+`stopWorkflowProcessing` closes the module's workers and the shutdown then waits
+`shutdown-grace` (default `PT20S`) for the handlers which are still inside the application;
+every handler registers its delivery in a per-module `Camunda8Drain`, which is what the wait
+watches.
+
+**One wait for every workflow module.** The platform stops the modules one after another and
+calls the adapter once per module, so a wait inside each of those calls spends the grace once
+per module. The waits do not overlap: the workers of a module which is still open keep
+renewing their activation request while another module is drained, and the closed workers of
+that other module wait behind them for the client's executor. Measured on 2026-10-01 with
+`Camunda8WhatSeveralModulesPayForAShutdownIT` against `camunda/camunda:8.9.21`, one client
+with a pool of 256, `request-timeout` `PT10S`, `shutdown-grace` `PT20S` and thirty workers
+per module:
+
+| modules | drained one after another | every module closed first, then one wait |
+|---------|---------------------------|------------------------------------------|
+| 1       | 823 ms                    | the same reading                         |
+| 2       | 12519 and 21421 ms        | 5436 ms                                  |
+| 3       | 32743 and 15424 ms        | 5242 ms                                  |
+
+Three modules one after another reached past the thirty seconds the runtime grants a
+shutdown, and one module of that run gave up after the whole grace with its workers still
+holding a request, which is the case the wait exists to prevent. The two readings per row are
+the same case read twice: what a module pays depends on where in its request cycle it was
+when its workers were closed. Waiting once does not depend on it, because the requests of
+every module are parked at the same time and come back at the same time.
+
+So the grace is the budget of the whole shutdown. Each module closes its workers as it is
+stopped, and the module stopped last waits for all of them at once. A booted application with
+one workflow module, which is what the test suite here has, closed in 2010 ms at the
+`request-timeout` of `PT5S` it configures.
 
 **And for the workers themselves.** The handler drain deliberately did not wait for
 `JobWorker#isClosed()`, because that answer also covers the activation request in flight
@@ -1357,7 +1394,8 @@ interrupted by the closing client throws like any other. The default sits below 
 shutdown budgets of Spring Boot (`spring.lifecycle.timeout-per-shutdown-phase`) and
 Kubernetes (`terminationGracePeriodSeconds`), both 30 seconds, so VanillaBP is never the
 reason a container is killed; a larger value warns at startup that those have to be
-raised with it. Held by `Camunda8ShutdownDrainTest`, `Camunda8DrainTest` and
+raised with it. Held by `Camunda8ShutdownDrainTest`, whose `#twoModulesAreOneWait` is the one
+wait above, `Camunda8DrainTest` and
 `Camunda8ShutdownGraceTest`, and against a real cluster by
 `Camunda8ShutdownDrainIT#aCutOffHandlerCostsNoRetry` with `#aHandlerWithinTheGraceFinishes`.
 The table above is a measurement.

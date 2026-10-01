@@ -76,8 +76,21 @@ public class Camunda8ShutdownDrainTest {
    */
   private Camunda8DeploymentService deploymentServiceWithClient() {
 
+    return deploymentServiceWithClient(GRACE);
+
+  }
+
+  /**
+   * The same, with the grace the test needs.
+   *
+   * @param grace What the shutdown of that service is given
+   * @return The service
+   */
+  private Camunda8DeploymentService deploymentServiceWithClient(
+      final Duration grace) {
+
     final var configuration = new Camunda8AdapterConfiguration();
-    configuration.setShutdownGrace(GRACE);
+    configuration.setShutdownGrace(grace);
     configuration.setRestAddress("http://localhost:65535");
     return DeploymentServiceUnderTest.of(
         "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators
@@ -278,6 +291,92 @@ public class Camunda8ShutdownDrainTest {
     assertTrue(
         logged.contains("still holding an activation request at the cluster"),
         "and what is left is named: "
+            + logged);
+
+  }
+
+  /**
+   * A worker which reports itself closed only once something else happened: its activation
+   * request comes back when the workers of the OTHER workflow module are closed, which is
+   * what a cluster does to a client whose connections free up.
+   *
+   * @param released What has to be true before this worker reports itself closed
+   * @return The worker
+   */
+  private JobWorker workerReleasedOnlyAfter(
+      final AtomicBoolean released) {
+
+    final var worker = mock(JobWorker.class);
+    when(worker.isClosed()).thenAnswer(invocation -> released.get());
+    return worker;
+
+  }
+
+  /**
+   * A worker whose close releases the worker above, the way the last module of an
+   * application releases what the modules before it were waiting for.
+   *
+   * @param released What its close sets
+   * @return The worker
+   */
+  private JobWorker workerWhoseCloseReleasesTheOther(
+      final AtomicBoolean released) {
+
+    final var worker = mock(JobWorker.class);
+    final var closed = new AtomicBoolean(false);
+    when(worker.isClosed()).thenAnswer(invocation -> closed.get());
+    Mockito
+        .doAnswer(invocation -> {
+          closed.set(true);
+          released.set(true);
+          return null;
+        })
+        .when(worker)
+        .close();
+    return worker;
+
+  }
+
+  @Test
+  @DisplayName("Two workflow modules are one wait, and the grace is not spent once per module")
+  public void twoModulesAreOneWait(
+      final CapturedOutput output) {
+
+    final var service = deploymentServiceWithClient(A_GRACE_NOBODY_REACHES);
+    final var stoppedLast = new Camunda8ProcessingContext("c8", "module-a", new Camunda8MultiInstance.Registry());
+    final var stoppedFirst = new Camunda8ProcessingContext("c8", "module-b", new Camunda8MultiInstance.Registry());
+    service.startWorkflowProcessing("module-a", stoppedLast);
+    service.startWorkflowProcessing("module-b", stoppedFirst);
+
+    // the activation request of the module stopped first comes back when the workers of the
+    // other module are closed, which is the whole reason a wait per module adds up: while
+    // one module is drained, the workers of the modules which are still open keep their
+    // request alive
+    final var theOtherModuleIsClosedToo = new AtomicBoolean(false);
+    stoppedFirst.getOpenWorkers().add(workerReleasedOnlyAfter(theOtherModuleIsClosedToo));
+    stoppedLast.getOpenWorkers().add(workerWhoseCloseReleasesTheOther(theOtherModuleIsClosedToo));
+
+    final var startedAt = System.nanoTime();
+    service.stopWorkflowProcessing("module-b", stoppedFirst);
+    service.stopWorkflowProcessing("module-a", stoppedLast);
+    final var waited = (System.nanoTime() - startedAt) / 1_000_000;
+
+    // a minute of grace against a shutdown which has to wait for nothing once both modules
+    // are closed: a shutdown which spent the grace on the module stopped first is a minute
+    // away from this one, and nothing a loaded machine does to this JVM falls between the two
+    assertTrue(
+        waited < A_GRACE_NOBODY_REACHES.dividedBy(2).toMillis(),
+        "the module stopped first did not sit out a grace of its own (was "
+            + waited
+            + " ms)");
+    final var logged = output.getOut() + output.getErr();
+    assertTrue(
+        logged.contains("workflow module 'module-b' drained after"),
+        "and the module stopped first is reported as drained, by the one wait: "
+            + logged);
+    assertTrue(
+        logged.contains("workflow module 'module-a' drained after"),
+        "together with the module stopped last: "
             + logged);
 
   }
