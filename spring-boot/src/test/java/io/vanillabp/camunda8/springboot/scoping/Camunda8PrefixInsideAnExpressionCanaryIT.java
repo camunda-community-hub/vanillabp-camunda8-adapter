@@ -21,14 +21,20 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A CANARY: it watches the cluster, not this adapter.
  * <p>
- * Under {@code name-clash-avoidance: use-prefix} a called process or decision named by a FEEL
- * expression is deployed with the workflow module's prefix written INSIDE the expression,
- * {@code =whichProcess} becoming {@code ="loan-approval__" + string(whichProcess)}
- * ({@code Camunda8Scoping}). That frame is Camunda's FEEL and not ours, so what it does
- * belongs to the cluster: {@code +} concatenates two strings, {@code string(...)} turns the
- * application's part into one, and the parentheses hold whatever shape that part has. This
- * test holds the cluster to all of it, with the raw client so nothing of VanillaBP is in the
- * way.
+ * Under {@code name-clash-avoidance: use-prefix} a value written as a FEEL expression is
+ * deployed with the prefix of its place written INSIDE the expression, {@code =whichProcess}
+ * becoming {@code ="loan-approval__" + string(whichProcess)} ({@code Camunda8Scoping}). That
+ * frame is Camunda's FEEL and not ours, so what it does belongs to the cluster: {@code +}
+ * concatenates two strings, {@code string(...)} turns the application's part into one, and the
+ * parentheses hold whatever shape that part has. This test holds the cluster to all of it, with
+ * the raw client so nothing of VanillaBP is in the way.
+ * <p>
+ * Two things are watched. The called process and the called decision are the places Camunda 8
+ * evaluates such an expression at, so the cases below read what the frame RESOLVES to. Every
+ * other place a prefix is written gets the same frame without being measured first, because a
+ * list of the places Camunda evaluates ages with every release while the rule cannot be wrong.
+ * What is watched there is only that the cluster still ACCEPTS such a model, which the last case
+ * does by deploying the same model twice, once plain and once framed.
  * <p>
  * A red run here is news about Camunda rather than a defect of this repository, and each
  * message says what to do with the news. The fallback, measured on the same day and working
@@ -188,6 +194,125 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
             + "reads. That name is what makes the message readable for the developer whose "
             + "expression it is, and without it the frame hides their mistake. It answered: "
             + happened);
+
+  }
+
+  /**
+   * Measured on 2026-10-01 against {@code camunda/camunda:8.9.21}: the cluster accepted the frame
+   * at the message name, the signal name, the error code, the escalation code, the job type, the
+   * external form reference and the job type of a task listener, and it accepted the same model
+   * with plain values at those places as well. The other release lines run the same case in the
+   * pull request's matrix.
+   */
+  @Test
+  @DisplayName("The cluster still accepts the frame at every other place a prefix is written")
+  public void theFrameIsStillAcceptedEverywhereElse() {
+
+    // the same model twice, so a refusal cannot be blamed on the model: first with plain values
+    // at every place, then with the frame at every one of them
+    deploy("canary-every-place-plain.bpmn", aModelWriting("CanaryEveryPlacePlain", "theCanaryValue"));
+    try {
+      deploy(
+          "canary-every-place-framed.bpmn",
+          aModelWriting("CanaryEveryPlaceFramed", "=\"%s\" + string(whichOne)".formatted(PREFIX)));
+    } catch (final RuntimeException refused) {
+      fail(
+          ("The cluster refused a model whose message name, signal name, error code, escalation "
+              + "code, job type, external form reference and listener job type are each written as "
+              + "the frame '=\"%s\" + string(...)', while the same model with plain values at those "
+              + "places deployed. VanillaBP writes that frame wherever it writes a prefix, without "
+              + "asking first whether Camunda evaluates an expression at that place. A refusal here "
+              + "is news about Camunda: read which place it names, and decide whether that place "
+              + "keeps the frame. The cluster said: %s")
+              .formatted(PREFIX, refused.getMessage()),
+          refused);
+    }
+
+  }
+
+  /**
+   * One process writing the given value at every place this adapter writes a prefix, except the
+   * two the cases above measure.
+   *
+   * @param processId The BPMN process id, which differs per deployment so the two models stand
+   *          next to each other rather than as two versions of one
+   * @param value What every one of those places says
+   * @return The model
+   */
+  private static String aModelWriting(
+      final String processId,
+      final String value) {
+
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+            xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+            id="Definitions_%1$s" targetNamespace="http://bpmn.io/schema/bpmn">
+          <bpmn:message id="Message_%1$s" name="%2$s">
+            <bpmn:extensionElements>
+              <zeebe:subscription correlationKey="=orderId" />
+            </bpmn:extensionElements>
+          </bpmn:message>
+          <bpmn:signal id="Signal_%1$s" name="%2$s" />
+          <bpmn:error id="Error_%1$s" errorCode="%2$s" />
+          <bpmn:escalation id="Escalation_%1$s" escalationCode="%2$s" />
+          <bpmn:process id="%1$s" isExecutable="true">
+            <bpmn:startEvent id="Start"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>
+            <bpmn:sequenceFlow id="Flow_1" sourceRef="Start" targetRef="TheTask" />
+            <bpmn:serviceTask id="TheTask">
+              <bpmn:extensionElements>
+                <zeebe:taskDefinition type="%2$s" />
+              </bpmn:extensionElements>
+              <bpmn:incoming>Flow_1</bpmn:incoming>
+              <bpmn:outgoing>Flow_2</bpmn:outgoing>
+            </bpmn:serviceTask>
+            <bpmn:sequenceFlow id="Flow_2" sourceRef="TheTask" targetRef="TheUserTask" />
+            <bpmn:userTask id="TheUserTask">
+              <bpmn:extensionElements>
+                <zeebe:userTask />
+                <zeebe:formDefinition externalReference="%2$s" />
+                <zeebe:taskListeners>
+                  <zeebe:taskListener eventType="creating" type="%2$s" />
+                </zeebe:taskListeners>
+              </bpmn:extensionElements>
+              <bpmn:incoming>Flow_2</bpmn:incoming>
+              <bpmn:outgoing>Flow_3</bpmn:outgoing>
+            </bpmn:userTask>
+            <bpmn:sequenceFlow id="Flow_3" sourceRef="TheUserTask" targetRef="TheMessageCatch" />
+            <bpmn:intermediateCatchEvent id="TheMessageCatch">
+              <bpmn:incoming>Flow_3</bpmn:incoming>
+              <bpmn:outgoing>Flow_4</bpmn:outgoing>
+              <bpmn:messageEventDefinition id="MessageDefinition_%1$s" messageRef="Message_%1$s" />
+            </bpmn:intermediateCatchEvent>
+            <!-- the cluster refuses the whole file where a message a process waits for carries no
+                 correlation key, so the message element declares one of its own -->
+            <bpmn:sequenceFlow id="Flow_4" sourceRef="TheMessageCatch" targetRef="TheSignalThrow" />
+            <bpmn:intermediateThrowEvent id="TheSignalThrow">
+              <bpmn:incoming>Flow_4</bpmn:incoming>
+              <bpmn:outgoing>Flow_5</bpmn:outgoing>
+              <bpmn:signalEventDefinition id="SignalDefinition_%1$s" signalRef="Signal_%1$s" />
+            </bpmn:intermediateThrowEvent>
+            <bpmn:sequenceFlow id="Flow_5" sourceRef="TheSignalThrow" targetRef="TheEscalationThrow" />
+            <bpmn:intermediateThrowEvent id="TheEscalationThrow">
+              <bpmn:extensionElements>
+                <zeebe:executionListeners>
+                  <zeebe:executionListener eventType="end" type="%2$s" />
+                </zeebe:executionListeners>
+              </bpmn:extensionElements>
+              <bpmn:incoming>Flow_5</bpmn:incoming>
+              <bpmn:outgoing>Flow_6</bpmn:outgoing>
+              <bpmn:escalationEventDefinition id="EscalationDefinition_%1$s" escalationRef="Escalation_%1$s" />
+            </bpmn:intermediateThrowEvent>
+            <bpmn:sequenceFlow id="Flow_6" sourceRef="TheEscalationThrow" targetRef="TheErrorEnd" />
+            <bpmn:endEvent id="TheErrorEnd">
+              <bpmn:incoming>Flow_6</bpmn:incoming>
+              <bpmn:errorEventDefinition id="ErrorDefinition_%1$s" errorRef="Error_%1$s" />
+            </bpmn:endEvent>
+          </bpmn:process>
+        </bpmn:definitions>
+        """
+        // a FEEL expression carries quotes of its own, and these values sit in XML attributes
+        .formatted(processId, value.replace("\"", "&quot;"));
 
   }
 

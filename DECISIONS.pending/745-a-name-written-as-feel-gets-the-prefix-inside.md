@@ -1,14 +1,14 @@
-# A new decision, from story 745 and rewritten by story 782: a name written as FEEL gets the prefix inside it
+# A new decision, from story 745, rewritten by story 782 and widened by story 821: a value written as FEEL gets the prefix inside it
 
-This is a new decision and needs a number. It says what `use-prefix` does with a called process and a
-called decision whose id is a FEEL expression, and it is the reason `Camunda8Scoping` writes the prefix
-INTO such an expression while `Camunda8DeploymentService` refuses a file whose expression composes the
-prefix itself.
+This is a new decision and needs a number. It says what `use-prefix` does with a value of a model
+which is written as a FEEL expression instead of a name, and it is the reason `Camunda8Scoping` writes
+the prefix INTO such an expression while `Camunda8DeploymentService` refuses a file whose expression
+composes the prefix itself.
 
-Three things read it: the code (`Camunda8Scoping#withThePrefixInside`,
-`Camunda8Scoping#whatAQuotedExpressionIncludes` and
+Three things read it: the code (`Camunda8Scoping#forEveryPrefixedValue`,
+`Camunda8Scoping#withThePrefixInside`, `Camunda8Scoping#whatAQuotedExpressionIncludes` and
 `Camunda8DeploymentService#refuseAnExpressionWhichAlreadyCarriesThePrefix`), the wiki section
-[A called process named by an expression](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-called-process-named-by-an-expression)
+[A name written as an expression](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-name-written-as-an-expression)
 and `UPGRADE.md`. The choice was between two ways and the other one is a real option, so a comment at
 one of those places would not carry it.
 
@@ -16,20 +16,43 @@ one of those places would not carry it.
 the expression alone and asked the application to compose the scoped id, which gave decision 2 a
 boundary: a call activity naming its process by FEEL addressed the cluster with whatever the
 application's expression yielded. That boundary is gone. The adapter composes the scoped id in every
-case now, so decision 2 holds as it is written and needs neither an edit nor a successor.
+case now, so decision 2 holds as it is written and needs neither an edit nor a successor. Story 821
+finished that off at the remaining places: a message name, a job type or an error code written as an
+expression reached the cluster unprefixed until then, which was the last way an identifier of a
+prefixed module could arrive without its prefix.
 
 ## The entry
 
-> ### A name written as FEEL gets the prefix inside the expression
+> ### A value written as FEEL gets the prefix inside the expression, at every place a prefix is written
 >
-> Two attributes of a model can hold a FEEL expression instead of an identifier: the `processId` of a
-> `zeebe:calledElement` and the `decisionId` of a `zeebe:calledDecision`. Under `use-prefix` both are
-> deployed with the workflow module's prefix written INSIDE the expression, so `=whichProcess` reaches
-> the cluster as `="loan-approval__" + string(whichProcess)`. The application writes no prefix
-> anywhere, which is what keeps its model portable: the same file runs on another BPMS, and the same
-> business code with it.
+> Under `use-prefix` a value which starts with `=` is deployed with the prefix of its place written
+> INSIDE the expression, so `=whichProcess` reaches the cluster as
+> `="loan-approval__" + string(whichProcess)`. The application writes no prefix anywhere, which is what
+> keeps its model portable: the same file runs on another BPMS, and the same business code with it.
 >
-> The prefix cannot go in front of such a name. An expression takes up the whole attribute value, so
+> **One rule, and one list of the places it is used at.** The rule is: starts with `=`, the prefix
+> goes inside; anything else, the prefix goes in front. The places are the `processId` of a
+> `zeebe:calledElement`, the `decisionId` of a `zeebe:calledDecision`, a `bpmn:message` name, a
+> `bpmn:signal` name, a `bpmn:error` code, a `bpmn:escalation` code, a `zeebe:taskDefinition` type, a
+> `zeebe:formDefinition` external reference and the job type of a listener this application serves.
+> `Camunda8Scoping#forEveryPrefixedValue` is that list, and both the rewrite and the refusal below read
+> it, so a place added to it is covered by both in one change. A job type carries the prefix of its
+> BPMN process as well, so its frame is `="loan-approval__LoanApproval__" + string(...)`.
+>
+> **Whether Camunda 8 evaluates an expression at a given place is not asked.** The maintainer decided
+> that on 2026-10-01: a list of the places Camunda evaluates ages with every Camunda release, and
+> writing one down would freeze today's answer into this adapter. The rule cannot be wrong instead.
+> Where an expression is not evaluated, a value starting with `=` does not appear and the rule costs
+> nothing; where Camunda learns to evaluate one, nothing here has to change. What is still watched is
+> that the cluster ACCEPTS a model carrying the frame at those places, which the canary does by
+> deploying one model twice, once plain and once framed. Measured on 2026-10-01 against
+> `camunda/camunda:8.9.21`: both deployments went through. The first attempt did not, and what it
+> refused was the test's own XML rather than the frame (`Element type "bpmn:message" must be followed
+> by either attribute specifications, ">" or "/>"`), because a FEEL expression carries quotes of its
+> own and those values sit in XML attributes. A model written by a modeller is escaped by the
+> modeller; a model composed in a test is not.
+>
+> The prefix cannot go in front of such a value. An expression takes up the whole attribute, so
 > `loan-approval__=whichProcess` names no process and parses as no expression either. Camunda 7 gets
 > away with the same rewrite because `${processToCall}` is one part of a string the engine composes.
 >
@@ -41,7 +64,10 @@ case now, so decision 2 holds as it is written and needs neither an edit nor a s
 > over several lines all survive being wrapped.
 >
 > Measured on 2026-10-01 against `camunda/camunda:8.8.40`, `8.9.21` and `8.10.0-rc3`, which answered
-> the same in every case down to the wording of an incident. The alternative frame,
+> the same in every case down to the wording of an incident. Those measurements are about the called
+> process and the called decision, which were the places Camunda evaluated an expression at on that
+> day; the frame is the same everywhere else, and the paragraph above says why it is not measured per
+> place. The alternative frame,
 > `string join(["loan-approval__", string(whichProcess)], "")`, works as well and was not taken: where
 > the application's part is `null` it drops that part and asks the cluster for the bare prefix
 > (`CALLED_ELEMENT_ERROR: Expected process with BPMN process id 'loan-approval__' to be deployed, but
@@ -60,8 +86,8 @@ case now, so decision 2 holds as it is written and needs neither an edit nor a s
 > (`Camunda8Scoping#whatAQuotedExpressionIncludes`). Nothing is said while a deployment goes through,
 > because then there is nothing for anybody to do.
 >
-> An expression which composes the prefix ITSELF ends the boot, naming the element, the file and the
-> expression to change. The rewrite would give it a second prefix, the cluster would be asked for
+> An expression which composes the prefix ITSELF ends the boot, naming the element, the file, the
+> attribute and the expression to change, at any of the places above. The rewrite would give it a second prefix, the cluster would be asked for
 > `loan-approval__loan-approval__PaymentHandling`, and every call of that element would fail once a
 > workflow reached it. An earlier snapshot of VanillaBP 2 asked an application to compose the prefix
 > and warned about every such element, so that model is the one case this can come from, and a boot
@@ -77,9 +103,12 @@ case now, so decision 2 holds as it is written and needs neither an edit nor a s
 > said.
 >
 > `Camunda8CalledProcessScopingTest` holds what the adapter writes into the model, per shape and for
-> both attributes, and that the frame survives the XML the deploy command sends.
-> `Camunda8PrefixInsideAnExpressionTest` holds the refused boot and the sentence about a quoted
-> expression. `Camunda8PrefixInsideAnExpressionCanaryIT` holds the cluster to what was measured.
+> both of the attributes above, and that the frame survives the XML the deploy command sends.
+> `Camunda8PrefixInEveryPlaceTest` holds the two forms at every other place, the longer prefix of a
+> job type and the refusal covering all of them. `Camunda8PrefixInsideAnExpressionTest` holds the
+> refused boot and the sentence about a quoted expression.
+> `Camunda8PrefixInsideAnExpressionCanaryIT` holds the cluster to what was measured and to accepting
+> the frame everywhere else.
 >
 > See [Keeping workflow modules apart](./README.md#keeping-workflow-modules-apart).
 

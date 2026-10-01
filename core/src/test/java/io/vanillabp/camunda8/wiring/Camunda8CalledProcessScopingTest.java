@@ -291,6 +291,19 @@ public class Camunda8CalledProcessScopingTest {
 
   }
 
+  /**
+   * What the deployment reads off a model before anything of it was rewritten, in the mode which
+   * prefixes.
+   */
+  private static List<Camunda8Scoping.ExpressionCarryingThePrefix> alreadyCarryingThePrefix(
+      final BpmnModelInstance model,
+      final NameClashAvoidance mode) {
+
+    return Camunda8Scoping
+        .whatAlreadyCarriesThePrefixInAnExpression(model, MODULE, "c8", TestScoping.of(mode), null, null);
+
+  }
+
   @Test
   @DisplayName("An expression which composes the prefix itself is found before anything is rewritten")
   public void anExpressionCarryingThePrefixIsFound() {
@@ -299,32 +312,29 @@ public class Camunda8CalledProcessScopingTest {
         .prefixOf(MODULE, "c8", TestScoping.of(NameClashAvoidance.USE_PREFIX));
     assertEquals("loan-approval__", prefix, "the prefix is read off a scoped id of the core");
 
-    final var found = Camunda8Scoping
-        .targetsWhoseExpressionAlreadyCarriesThePrefix(
-            aCallActivityNaming("=\"loan-approval__\" + whichProcess"), prefix);
+    final var found = alreadyCarryingThePrefix(
+        aCallActivityNaming("=\"loan-approval__\" + whichProcess"), NameClashAvoidance.USE_PREFIX);
 
     assertEquals(1, found.size(), "such an expression would carry the prefix twice after the rewrite");
     assertEquals("Activity_Call", found.getFirst().elementId());
     assertEquals(PROCESS, found.getFirst().bpmnProcessId());
+    assertEquals("zeebe:calledElement processId", found.getFirst().attribute());
     assertTrue(
         found.getFirst().expression().contains("loan-approval__"),
         "the entry carries the expression, because the message quotes what to change");
     assertEquals(
         List.of(),
-        Camunda8Scoping
-            .targetsWhoseExpressionAlreadyCarriesThePrefix(aCallActivityNaming("=whichProcess"), prefix),
+        alreadyCarryingThePrefix(aCallActivityNaming("=whichProcess"), NameClashAvoidance.USE_PREFIX),
         "an expression yielding the plain id is the ordinary case and is rewritten");
     assertEquals(
         List.of(),
-        Camunda8Scoping
-            .targetsWhoseExpressionAlreadyCarriesThePrefix(
-                aCallActivityNaming("loan-approval__PaymentHandling"), prefix),
+        alreadyCarryingThePrefix(
+            aCallActivityNaming("loan-approval__PaymentHandling"), NameClashAvoidance.USE_PREFIX),
         "a STATIC name is not asked about here: the collision check of the core is what reads those");
     assertEquals(
         List.of(),
-        Camunda8Scoping
-            .targetsWhoseExpressionAlreadyCarriesThePrefix(
-                aCallActivityNaming("=\"loan-approval__\" + whichProcess"), ""),
+        alreadyCarryingThePrefix(
+            aCallActivityNaming("=\"loan-approval__\" + whichProcess"), NameClashAvoidance.BY_ADAPTER),
         "and where nothing is prefixed there is no prefix to find in an expression");
 
   }

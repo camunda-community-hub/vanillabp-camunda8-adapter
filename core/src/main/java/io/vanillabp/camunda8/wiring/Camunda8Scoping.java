@@ -4,8 +4,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
+import io.camunda.zeebe.model.bpmn.instance.BaseElement;
 import io.camunda.zeebe.model.bpmn.instance.BpmnModelElementInstance;
 import io.camunda.zeebe.model.bpmn.instance.Error;
 import io.camunda.zeebe.model.bpmn.instance.Escalation;
@@ -13,9 +20,12 @@ import io.camunda.zeebe.model.bpmn.instance.FlowElement;
 import io.camunda.zeebe.model.bpmn.instance.Message;
 import io.camunda.zeebe.model.bpmn.instance.Process;
 import io.camunda.zeebe.model.bpmn.instance.Signal;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledElement;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeExecutionListener;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeFormDefinition;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
+import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListener;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import lombok.extern.slf4j.Slf4j;
@@ -35,25 +45,37 @@ import lombok.extern.slf4j.Slf4j;
  * <tr><td>{@code bpmn:signal name}, {@code bpmn:escalation escalationCode}</td><td>workflow module</td><td>broadcast by name</td></tr>
  * <tr><td>{@code bpmn:error errorCode}</td><td>workflow module</td><td>completeness - a code is process-local, but the application may throw it via {@code ProcessService#cancelTask}</td></tr>
  * <tr><td>{@code zeebe:taskDefinition type}</td><td>workflow module + process</td><td>job types are what workers subscribe to, cluster-wide</td></tr>
+ * <tr><td>{@code zeebe:taskListener type}, {@code zeebe:executionListener type}</td><td>workflow module + process</td><td>a served listener's job type is a task definition of this module</td></tr>
  * <tr><td>{@code zeebe:formDefinition externalReference}</td><td>workflow module + process</td><td>it IS the user task's task definition and becomes a listener job type</td></tr>
  * </table>
  *
+ * <p>
+ * The job type of a listener somebody modelled is in that table as well, where a method of
+ * this application serves it: such a job type has become a task definition of this workflow
+ * module like any other.
  * <p>
  * An element another runtime serves, see {@link Camunda8Connectors}, never enters that
  * table: its job type names a runtime somebody else deployed rather than an identifier of
  * this workflow module, so it is left as the modeller wrote it under every mode.
  * <p>
- * A name written as FEEL is rewritten too, and there are two of them: the process a call
- * activity calls and the decision a business rule task evaluates. Such a name is code which
- * yields an identifier at runtime, so the prefix cannot be written in front of it - it goes
- * INSIDE it, and {@code =whichProcess} is deployed as
- * {@code ="loan-approval__" + string(whichProcess)}. The application therefore writes no
- * prefix anywhere, which is what keeps a model portable between this BPMS and the others.
- * What that costs is named rather than hidden: the cluster holds an expression nobody typed,
- * so a parse error it reports quotes this frame around the application's own text
- * ({@link #elementIdsNamingTheirTargetByExpression} is read for the one message where that
- * matters). An expression which carries the prefix already is refused instead of being given
- * a second one ({@link #targetsWhoseExpressionAlreadyCarriesThePrefix}).
+ * A value written as FEEL is rewritten too, and ONE rule says how, for every place above:
+ * where the value starts with {@code =} the prefix goes INSIDE the expression, and everywhere
+ * else it goes in front. Such a value is code which yields an identifier at runtime and it
+ * takes up the whole attribute, so a prefix written in front of it would become part of its
+ * text: {@code =whichProcess} is deployed as {@code ="loan-approval__" + string(whichProcess)}.
+ * The rule is not asked where Camunda 8 evaluates an expression today, because that is a list
+ * which ages. Where an expression is not evaluated, a {@code =} does not appear and the rule
+ * costs nothing; where Camunda 8 learns to evaluate one, nothing here has to change.
+ * {@link #forEveryPrefixedValue} is the one list of the places, and both the rewrite and the
+ * refusal below read it, so a place added there is covered by both in the same change.
+ * <p>
+ * The application therefore writes no prefix anywhere, which is what keeps a model portable
+ * between this BPMS and the others. What that costs is named rather than hidden: the cluster
+ * holds an expression nobody typed, so a parse error it reports quotes this frame around the
+ * application's own text ({@link #elementIdsNamingTheirTargetByExpression} is read for the one
+ * message where that matters). An expression which carries the prefix already is refused
+ * instead of being given a second one
+ * ({@link #whatAlreadyCarriesThePrefixInAnExpression}).
  * <p>
  * The same elements are READ rather than rewritten where somebody asks which names a
  * workflow module declares ({@link #moduleWideIdentifiersOf},
@@ -272,133 +294,28 @@ public final class Camunda8Scoping {
       final String adapterId,
       final NameClashAvoidanceSupport scoping,
       final Camunda8AllowConnectorsResolver allowConnectorsResolver,
-      final java.util.function.BiPredicate<String, String> servedListenerJobTypes) {
+      final BiPredicate<String, String> servedListenerJobTypes) {
 
     if (!prefixes(workflowModuleId, adapterId, scoping)) {
       return;
     }
 
-    // the job type of a listener this application serves is a task definition of this
-    // workflow module like any other, so it is scoped like any other: without that, two
-    // modules carrying the same listener job type would share one worker, which is the
-    // clash this mode exists to avoid. A listener this application does NOT serve keeps the
-    // name the modeller typed, for the reason a connector's job type keeps its: renaming it
-    // would rename something this application does not own
-    model
-        .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskListener.class)
-        .forEach(listener -> scopeListenerJobType(
-            listener.getType(),
-            listener::setType,
-            listener,
-            workflowModuleId,
-            adapterId,
-            scoping,
-            servedListenerJobTypes));
-    model
-        .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeExecutionListener.class)
-        .forEach(listener -> scopeListenerJobType(
-            listener.getType(),
-            listener::setType,
-            listener,
-            workflowModuleId,
-            adapterId,
-            scoping,
-            servedListenerJobTypes));
+    // every value this adapter prefixes, each with the prefix of its own place, and each
+    // written back by the one rule: an expression gets the prefix inside it, anything else
+    // gets it in front
+    forEveryPrefixedValue(
+        model,
+        workflowModuleId,
+        adapterId,
+        scoping,
+        allowConnectorsResolver,
+        servedListenerJobTypes,
+        prefixed -> prefixed.write().accept(prefixed.withThePrefix(workflowModuleId)));
 
-    // task definitions are scoped per PROCESS, so they are rewritten while the
-    // process ids are still the plain ones
-    model
-        .getModelElementsByType(ZeebeTaskDefinition.class)
-        .forEach(taskDefinition -> {
-          if (isServedByAnotherRuntime(taskDefinition, workflowModuleId, allowConnectorsResolver)) {
-            return;
-          }
-          taskDefinition.setType(
-              scoping.scopedTaskDefinition(
-                  workflowModuleId,
-                  owningProcessId(taskDefinition),
-                  taskDefinition.getType(),
-                  adapterId));
-        });
-    model
-        .getModelElementsByType(ZeebeFormDefinition.class)
-        .forEach(formDefinition -> {
-          final var externalReference = formDefinition.getExternalReference();
-          if ((externalReference == null) || externalReference.isBlank()) {
-            return;
-          }
-          if (isServedByAnotherRuntime(formDefinition, workflowModuleId, allowConnectorsResolver)) {
-            return;
-          }
-          formDefinition.setExternalReference(
-              scoping.scopedTaskDefinition(
-                  workflowModuleId,
-                  owningProcessId(formDefinition),
-                  externalReference,
-                  adapterId));
-        });
-
-    model
-        .getModelElementsByType(Message.class)
-        .forEach(message -> message.setName(
-            scoping.scopedIdentifier(workflowModuleId, message.getName(), adapterId)));
-    model
-        .getModelElementsByType(Signal.class)
-        .forEach(signal -> signal.setName(
-            scoping.scopedIdentifier(workflowModuleId, signal.getName(), adapterId)));
-    model
-        .getModelElementsByType(Escalation.class)
-        .forEach(escalation -> escalation.setEscalationCode(
-            scoping.scopedIdentifier(workflowModuleId, escalation.getEscalationCode(), adapterId)));
-    // an error code carries the prefix of the module whose model declares it, and so does
-    // the code a TaskException raises (Camunda8JobHandler). Both sides of a throw and its
-    // catcher are therefore the same module, which they are: a called element below gets this
-    // module's prefix, and a called element carries no tenant of its own, so the cluster
-    // resolves it in the tenant of the calling instance. A call activity cannot leave its
-    // workflow module here
-    model
-        .getModelElementsByType(Error.class)
-        .forEach(error -> error.setErrorCode(
-            scoping.scopedIdentifier(workflowModuleId, error.getErrorCode(), adapterId)));
-
-    // call activities address another process BY ID - rewrite before the ids change. A
-    // process named as an expression (it starts with '=') gets the prefix inside the
-    // expression, like the decision id below: the expression takes up the whole value, so a
-    // prefix in front of it would make a string which names no process and is no expression
-    // either
-    final var prefix = prefixOf(workflowModuleId, adapterId, scoping);
-    model
-        .getModelElementsByType(ZeebeCalledElement.class)
-        .forEach(calledElement -> {
-          final var processId = calledElement.getProcessId();
-          if (namesNothing(processId)) {
-            return;
-          }
-          calledElement
-              .setProcessId(
-                  isWrittenAsFeel(processId)
-                      ? withThePrefixInside(processId, prefix, workflowModuleId)
-                      : scoping.scopedProcessId(workflowModuleId, processId, adapterId));
-        });
-
-    // a business rule task addresses a decision BY ID, and the decisions this module
-    // deploys were renamed the same way while their files were read. An id given as an
-    // expression gets the prefix inside it, for the reason the called process does
-    model
-        .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision.class)
-        .forEach(calledDecision -> {
-          final var decisionId = calledDecision.getDecisionId();
-          if (namesNothing(decisionId)) {
-            return;
-          }
-          calledDecision
-              .setDecisionId(
-                  isWrittenAsFeel(decisionId)
-                      ? withThePrefixInside(decisionId, prefix, workflowModuleId)
-                      : scoping.scopedIdentifier(workflowModuleId, decisionId, adapterId));
-        });
-
-    // ... and the process ids last
+    // ... and the process ids last. Everything above is scoped per process or addresses a
+    // process by id, and all of it has read the plain ids while it ran. A process id is the id
+    // of an XML element and can never be an expression, so the rule above has nothing to decide
+    // here
     model
         .getModelElementsByType(Process.class)
         .forEach(process -> {
@@ -418,28 +335,174 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Rewrites the job type of one listener where the workflow module serves it and prefixes
-   * its identifiers.
+   * Hands every value of the given model which this adapter writes a prefix into to the given
+   * reader, one by one.
+   * <p>
+   * This is the one list of those places. Both things done with them read it: the rewrite in
+   * {@link #apply} and the refusal of an expression which composes the prefix itself
+   * ({@link #whatAlreadyCarriesThePrefixInAnExpression}). A place added here is therefore
+   * rewritten and guarded in the same change, which is what keeps the two from drifting apart.
+   * <p>
+   * A value the modeller left empty is not handed over. There is nothing in it to prefix, and
+   * the cluster says what it thinks of such a model itself; anything composed around nothing
+   * would only hide what it says.
+   * <p>
+   * The BPMN process ids are not among them, for two reasons which both hold: an id of an XML
+   * element cannot be an expression, and the places above read those ids while they are still
+   * the plain ones. {@link #apply} rewrites them itself, after this walk.
    *
+   * @param model The model of one BPMN file
+   * @param workflowModuleId The workflow module ID
+   * @param adapterId The adapter ID
+   * @param scoping The core's name-clash-avoidance support
+   * @param allowConnectorsResolver What the configuration says about the elements built from an
+   *          element template (may be <code>null</code>: nothing is left out then)
+   * @param servedListenerJobTypes Whether this application serves the listener of the given
+   *          PLAIN process id and job type (may be <code>null</code>: no listener job type is
+   *          among the values then)
+   * @param read What to do with each of them
+   */
+  private static void forEveryPrefixedValue(
+      final BpmnModelInstance model,
+      final String workflowModuleId,
+      final String adapterId,
+      final NameClashAvoidanceSupport scoping,
+      final Camunda8AllowConnectorsResolver allowConnectorsResolver,
+      final BiPredicate<String, String> servedListenerJobTypes,
+      final Consumer<PrefixedValue> read) {
+
+    // the job type of a listener this application serves is a task definition of this
+    // workflow module like any other, so it is scoped like any other: without that, two
+    // modules carrying the same listener job type would share one worker, which is the clash
+    // this mode exists to avoid. A listener this application does NOT serve keeps the name the
+    // modeller typed, for the reason a connector's job type keeps its: renaming it would
+    // rename something this application does not own
+    model
+        .getModelElementsByType(ZeebeTaskListener.class)
+        .forEach(listener -> readTheListenerJobType(
+            "zeebe:taskListener type",
+            listener,
+            listener.getType(),
+            listener::setType,
+            workflowModuleId,
+            adapterId,
+            scoping,
+            servedListenerJobTypes,
+            read));
+    model
+        .getModelElementsByType(ZeebeExecutionListener.class)
+        .forEach(listener -> readTheListenerJobType(
+            "zeebe:executionListener type",
+            listener,
+            listener.getType(),
+            listener::setType,
+            workflowModuleId,
+            adapterId,
+            scoping,
+            servedListenerJobTypes,
+            read));
+
+    // job types are what workers subscribe to, cluster-wide, and they are scoped per PROCESS
+    // as well as per workflow module
+    readScopedPerProcess(
+        model,
+        ZeebeTaskDefinition.class,
+        "zeebe:taskDefinition type",
+        ZeebeTaskDefinition::getType,
+        ZeebeTaskDefinition::setType,
+        taskDefinition -> isServedByAnotherRuntime(taskDefinition, workflowModuleId, allowConnectorsResolver),
+        workflowModuleId,
+        adapterId,
+        scoping,
+        read);
+    // a user task's external form reference IS its task definition and becomes a listener job
+    // type, so it is scoped the same way
+    readScopedPerProcess(
+        model,
+        ZeebeFormDefinition.class,
+        "zeebe:formDefinition externalReference",
+        ZeebeFormDefinition::getExternalReference,
+        ZeebeFormDefinition::setExternalReference,
+        formDefinition -> isServedByAnotherRuntime(formDefinition, workflowModuleId, allowConnectorsResolver),
+        workflowModuleId,
+        adapterId,
+        scoping,
+        read);
+
+    final var modulePrefix = prefixOf(workflowModuleId, adapterId, scoping);
+    final UnaryOperator<String> scopedByTheModule = identifier -> scoping
+        .scopedIdentifier(workflowModuleId, identifier, adapterId);
+
+    // the names the workflow module scopes as a whole: published, correlated or broadcast by
+    // name, and declared by an element of the file rather than by one of its processes
+    readScopedPerModule(
+        model, Message.class, "bpmn:message name", Message::getName, Message::setName, modulePrefix,
+        scopedByTheModule, read);
+    readScopedPerModule(
+        model, Signal.class, "bpmn:signal name", Signal::getName, Signal::setName, modulePrefix,
+        scopedByTheModule, read);
+    readScopedPerModule(
+        model, Escalation.class, "bpmn:escalation escalationCode", Escalation::getEscalationCode,
+        Escalation::setEscalationCode, modulePrefix, scopedByTheModule, read);
+    // an error code carries the prefix of the module whose model declares it, and so does the
+    // code a TaskException raises (Camunda8JobHandler). Both sides of a throw and its catcher are
+    // therefore the same module, which they are: a called element below gets this module's
+    // prefix, and a called element carries no tenant of its own, so the cluster resolves it in
+    // the tenant of the calling instance. A call activity cannot leave its workflow module here
+    readScopedPerModule(
+        model, Error.class, "bpmn:error errorCode", Error::getErrorCode, Error::setErrorCode, modulePrefix,
+        scopedByTheModule, read);
+
+    // a call activity addresses another process BY ID, and a business rule task a decision. Both
+    // of those were renamed the same way, the process by the line above and the decision while
+    // this module's DMN files were read
+    readTargetNamedById(
+        model,
+        ZeebeCalledElement.class,
+        "zeebe:calledElement processId",
+        ZeebeCalledElement::getProcessId,
+        ZeebeCalledElement::setProcessId,
+        modulePrefix,
+        processId -> scoping.scopedProcessId(workflowModuleId, processId, adapterId),
+        read);
+    readTargetNamedById(
+        model,
+        ZeebeCalledDecision.class,
+        "zeebe:calledDecision decisionId",
+        ZeebeCalledDecision::getDecisionId,
+        ZeebeCalledDecision::setDecisionId,
+        modulePrefix,
+        scopedByTheModule,
+        read);
+
+  }
+
+  /**
+   * Hands over the job type of one listener, where this application serves it.
+   *
+   * @param attribute The attribute holding it, as the modeler names it
+   * @param listener The listener element, for the element and the process it belongs to
    * @param jobType What the listener names today
-   * @param setJobType Where the scoped name goes
-   * @param listener The listener element, for the process it belongs to
+   * @param write Where the prefixed name goes
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
    * @param scoping The core's name-clash-avoidance support
    * @param servedListenerJobTypes Whether this application serves that listener, or
    *          <code>null</code>
+   * @param read What to do with the value
    */
-  private static void scopeListenerJobType(
-      final String jobType,
-      final java.util.function.Consumer<String> setJobType,
+  private static void readTheListenerJobType(
+      final String attribute,
       final BpmnModelElementInstance listener,
+      final String jobType,
+      final Consumer<String> write,
       final String workflowModuleId,
       final String adapterId,
       final NameClashAvoidanceSupport scoping,
-      final java.util.function.BiPredicate<String, String> servedListenerJobTypes) {
+      final BiPredicate<String, String> servedListenerJobTypes,
+      final Consumer<PrefixedValue> read) {
 
-    if ((jobType == null) || jobType.isBlank() || (servedListenerJobTypes == null)) {
+    if (namesNothing(jobType) || (servedListenerJobTypes == null)) {
       return;
     }
     final var element = Camunda8Connectors.owningElementOf(listener);
@@ -450,7 +513,212 @@ public final class Camunda8Scoping {
     if (!servedListenerJobTypes.test(bpmnProcessId, jobType)) {
       return;
     }
-    setJobType.accept(scoping.scopedTaskDefinition(workflowModuleId, bpmnProcessId, jobType, adapterId));
+    read
+        .accept(new PrefixedValue(
+            attribute, element.getId(), bpmnProcessId, jobType, taskDefinitionPrefixOf(workflowModuleId, bpmnProcessId,
+                adapterId, scoping), write, plain -> scoping.scopedTaskDefinition(workflowModuleId, bpmnProcessId,
+                    plain, adapterId)));
+
+  }
+
+  /**
+   * Hands over the values of one kind of extension element which are scoped by the workflow
+   * module AND by the BPMN process the element belongs to.
+   *
+   * @param <T> The kind of extension element to read
+   * @param model The model of one BPMN file
+   * @param kind The extension element holding the value
+   * @param attribute The attribute holding it, as the modeler names it
+   * @param valueOf What that element says today
+   * @param write Where the prefixed value goes
+   * @param servedByAnotherRuntime Whether this one belongs to a runtime somebody else deployed
+   * @param workflowModuleId The workflow module ID
+   * @param adapterId The adapter ID
+   * @param scoping The core's name-clash-avoidance support
+   * @param read What to do with each value
+   */
+  private static <T extends BpmnModelElementInstance> void readScopedPerProcess(
+      final BpmnModelInstance model,
+      final Class<T> kind,
+      final String attribute,
+      final Function<T, String> valueOf,
+      final BiConsumer<T, String> write,
+      final Predicate<T> servedByAnotherRuntime,
+      final String workflowModuleId,
+      final String adapterId,
+      final NameClashAvoidanceSupport scoping,
+      final Consumer<PrefixedValue> read) {
+
+    model
+        .getModelElementsByType(kind)
+        .forEach(extensionElement -> {
+          final var value = valueOf.apply(extensionElement);
+          if (namesNothing(value) || servedByAnotherRuntime.test(extensionElement)) {
+            return;
+          }
+          final var bpmnProcessId = owningProcessId(extensionElement);
+          final var element = Camunda8Connectors.owningElementOf(extensionElement);
+          read
+              .accept(new PrefixedValue(
+                  attribute, element == null
+                      ? null
+                      : element.getId(), bpmnProcessId, value, taskDefinitionPrefixOf(workflowModuleId, bpmnProcessId,
+                          adapterId, scoping), prefixed -> write.accept(extensionElement, prefixed), plain -> scoping
+                              .scopedTaskDefinition(workflowModuleId, bpmnProcessId, plain, adapterId)));
+        });
+
+  }
+
+  /**
+   * Hands over the names which an element of the FILE declares and the workflow module scopes as
+   * a whole.
+   *
+   * @param <T> The kind of element to read
+   * @param model The model of one BPMN file
+   * @param kind The element declaring the name
+   * @param attribute The attribute holding it, as the modeler names it
+   * @param valueOf What that element says today
+   * @param write Where the prefixed name goes
+   * @param prefix The prefix of the workflow module, separator included
+   * @param scopedByTheModule How the core spells a prefixed name of this workflow module
+   * @param read What to do with each name
+   */
+  private static <T extends BaseElement> void readScopedPerModule(
+      final BpmnModelInstance model,
+      final Class<T> kind,
+      final String attribute,
+      final Function<T, String> valueOf,
+      final BiConsumer<T, String> write,
+      final String prefix,
+      final UnaryOperator<String> scopedByTheModule,
+      final Consumer<PrefixedValue> read) {
+
+    model
+        .getModelElementsByType(kind)
+        .forEach(element -> {
+          final var value = valueOf.apply(element);
+          if (namesNothing(value)) {
+            return;
+          }
+          read
+              .accept(new PrefixedValue(
+                  attribute, element
+                      .getId(), null, value, prefix, prefixed -> write.accept(element, prefixed), scopedByTheModule));
+        });
+
+  }
+
+  /**
+   * Hands over the values of one kind of extension element which name what the element calls or
+   * evaluates, scoped by the workflow module.
+   *
+   * @param <T> The kind of extension element to read
+   * @param model The model of one BPMN file
+   * @param kind The extension element naming the target
+   * @param attribute The attribute holding it, as the modeler names it
+   * @param valueOf What that element says the call points at
+   * @param write Where the prefixed value goes
+   * @param prefix The prefix of the workflow module, separator included
+   * @param scopedByTheCore How the core spells the prefixed form of such an identifier
+   * @param read What to do with each value
+   */
+  private static <T extends BpmnModelElementInstance> void readTargetNamedById(
+      final BpmnModelInstance model,
+      final Class<T> kind,
+      final String attribute,
+      final Function<T, String> valueOf,
+      final BiConsumer<T, String> write,
+      final String prefix,
+      final UnaryOperator<String> scopedByTheCore,
+      final Consumer<PrefixedValue> read) {
+
+    model
+        .getModelElementsByType(kind)
+        .forEach(extensionElement -> {
+          final var value = valueOf.apply(extensionElement);
+          if (namesNothing(value)) {
+            return;
+          }
+          final var element = Camunda8Connectors.owningElementOf(extensionElement);
+          read
+              .accept(new PrefixedValue(
+                  attribute, element == null
+                      ? null
+                      : element.getId(), element == null
+                          ? null
+                          : owningProcessId(element), value, prefix, prefixed -> write.accept(extensionElement,
+                              prefixed), scopedByTheCore));
+        });
+
+  }
+
+  /**
+   * One value of a model which this adapter writes a prefix into.
+   * <p>
+   * It carries what both readers of {@link #forEveryPrefixedValue} need: where the value stands,
+   * what it says, which prefix belongs at this place, where a prefixed value goes and how the
+   * core spells a prefixed identifier of this kind.
+   *
+   * @param attribute The attribute holding the value, as the modeler names it
+   * @param elementId The BPMN element it belongs to, which for a name of the whole file is the
+   *          element declaring that name
+   * @param bpmnProcessId The BPMN process the element belongs to, as it stands in the model, and
+   *          <code>null</code> for a name the workflow module scopes as a whole
+   * @param value What the modeller wrote
+   * @param prefix The prefix THIS place gets, separator included: the workflow module's for most
+   *          of them, and the module's plus the process' for a job type
+   * @param write Where the prefixed value goes
+   * @param prefixedByTheCore How the core spells the prefixed form of a plain identifier of this
+   *          kind
+   */
+  private record PrefixedValue(
+                               String attribute,
+                               String elementId,
+                               String bpmnProcessId,
+                               String value,
+                               String prefix,
+                               Consumer<String> write,
+                               UnaryOperator<String> prefixedByTheCore) {
+
+    /**
+     * THE RULE, and the only one: a value written as FEEL gets the prefix INSIDE the expression,
+     * and every other value gets it in front.
+     * <p>
+     * It is asked at every place a prefix is written, without asking first whether Camunda 8
+     * evaluates an expression at that place today. A list of those places would age with every
+     * Camunda release, while this rule cannot be wrong: where no expression is evaluated, a
+     * value starting with {@code =} does not appear, and where one is evaluated later, nothing
+     * here has to change.
+     *
+     * @param workflowModuleId The workflow module, for the log line
+     * @return What this place is deployed with
+     */
+    String withThePrefix(
+        final String workflowModuleId) {
+
+      return isWrittenAsFeel(value)
+          ? withThePrefixInside(value, prefix, workflowModuleId)
+          : prefixedByTheCore.apply(value);
+
+    }
+
+    /**
+     * Whether the modeller's own expression composes a prefix of this workflow module, which the
+     * rule above would give a second one.
+     * <p>
+     * Both prefixes are looked for. A job type is prefixed by the module AND by its process, so
+     * an expression may compose either the whole thing or the module's part of it, and both of
+     * those end up doubled.
+     *
+     * @param modulePrefix The prefix of the workflow module, separator included
+     * @return Whether the deployment has to refuse this value
+     */
+    boolean alreadyCarriesThePrefix(
+        final String modulePrefix) {
+
+      return isWrittenAsFeel(value) && (value.contains(prefix) || value.contains(modulePrefix));
+
+    }
 
   }
 
@@ -484,12 +752,12 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Whether the given name of a called process or decision names nothing at all. Two forms do:
-   * one the modeller left empty, and one holding nothing but <code>=</code>, which is an
-   * expression with no expression in it. The cluster refuses both itself, and anything composed
-   * around them would only hide what it refuses.
+   * Whether the given value of a model names nothing at all. Two forms do: one the modeller left
+   * empty, and one holding nothing but <code>=</code>, which is an expression with no expression
+   * in it. The cluster refuses both itself, and anything composed around them would only hide
+   * what it refuses.
    *
-   * @param identifier What the model says the call points at
+   * @param identifier What the model says at that place
    * @return Whether there is nothing to rewrite
    */
   private static boolean namesNothing(
@@ -500,11 +768,11 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Whether the given name of a called process or decision is FEEL rather than an identifier,
-   * which it is where it starts with <code>=</code>. Such a name is code: it takes up the
-   * WHOLE attribute value, so the prefix goes inside it.
+   * Whether the given value is FEEL rather than an identifier, which it is where it starts with
+   * <code>=</code>. Such a value is code: it takes up the WHOLE attribute, so the prefix goes
+   * inside it.
    *
-   * @param identifier What the model says the call points at
+   * @param identifier What the model says at that place
    * @return Whether it is an expression
    */
   private static boolean isWrittenAsFeel(
@@ -515,8 +783,11 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * The given expression with the workflow module's prefix written into it, so that what it
-   * yields at runtime is the id the cluster knows.
+   * The given expression with the prefix of its place written into it, so that what it yields at
+   * runtime is the identifier the cluster knows.
+   * <p>
+   * The one frame, used by every place a prefix is written. A second shape of it would be a
+   * second thing to get right, and the error cases below are what makes this one the shape.
    * <p>
    * The frame is a concatenation of two strings, which Camunda's FEEL does with
    * <code>+</code>, and {@code string(...)} around the application's part makes the
@@ -534,10 +805,12 @@ public final class Camunda8Scoping {
    * {@code Camunda8PrefixInsideAnExpressionCanaryIT} holding the result: the frame resolves
    * the called process respectively the called decision, and where the application's part
    * yields <code>null</code> the cluster raises an incident naming the missing variable AND
-   * this frame.
+   * this frame. Those two are the places Camunda 8 evaluated an expression at on that day. The
+   * frame is written at every place a prefix is written all the same, because what the cluster
+   * evaluates is a list which ages while this rule cannot be wrong, see {@link PrefixedValue}.
    *
    * @param expression The expression as the modeller wrote it, <code>=</code> included
-   * @param prefix The prefix of the workflow module, separator included
+   * @param prefix The prefix of this place, separator included
    * @param workflowModuleId The workflow module, for the log line
    * @return The expression to deploy
    */
@@ -560,9 +833,6 @@ public final class Camunda8Scoping {
   /**
    * The prefix the scoped identifiers of the given workflow module start with, separator
    * included.
-   * <p>
-   * Read off a scoped identifier rather than composed here: the core owns how a prefix is
-   * built, and a second way of spelling it out could produce something the core never writes.
    *
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
@@ -574,8 +844,46 @@ public final class Camunda8Scoping {
       final String adapterId,
       final NameClashAvoidanceSupport scoping) {
 
-    final var marker = "TheProcessYouCall";
-    final var scoped = scoping.scopedProcessId(workflowModuleId, marker, adapterId);
+    return prefixWrittenBy(marker -> scoping.scopedProcessId(workflowModuleId, marker, adapterId));
+
+  }
+
+  /**
+   * The prefix a job type of the given BPMN process starts with, separator included. It is
+   * longer than {@link #prefixOf}, because a task definition is scoped by the process as well as
+   * by the workflow module.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process id as it stands in the model
+   * @param adapterId The adapter ID
+   * @param scoping The core's name-clash-avoidance support
+   * @return The prefix, and the empty string where nothing is prefixed
+   */
+  private static String taskDefinitionPrefixOf(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String adapterId,
+      final NameClashAvoidanceSupport scoping) {
+
+    return prefixWrittenBy(
+        marker -> scoping.scopedTaskDefinition(workflowModuleId, bpmnProcessId, marker, adapterId));
+
+  }
+
+  /**
+   * The prefix of a scoped identifier, read off one the core wrote.
+   * <p>
+   * Read rather than composed here: the core owns how a prefix is built, and a second way of
+   * spelling it out could produce something the core never writes.
+   *
+   * @param scopedByTheCore How the core spells the scoped form of a plain identifier
+   * @return The prefix, and the empty string where nothing is prefixed
+   */
+  private static String prefixWrittenBy(
+      final UnaryOperator<String> scopedByTheCore) {
+
+    final var marker = "TheIdentifierYouWrote";
+    final var scoped = scopedByTheCore.apply(marker);
     return scoped.endsWith(marker)
         ? scoped.substring(0, scoped.length() - marker.length())
         : scoped;
@@ -648,71 +956,93 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * The elements of one BPMN FILE whose expression already carries the given prefix.
+   * The values of one BPMN FILE whose expression already carries a prefix of the given workflow
+   * module.
    * <p>
-   * Such an expression composes the scoped id itself, which is what an earlier VanillaBP 2
-   * snapshot asked an application to do. Writing the prefix into it a second time would deploy
-   * an expression yielding the prefix twice, and every call of it would fail once a workflow
-   * reached the element. So the deployment refuses the file and says what to take out, which
-   * is a boot a developer can act on instead of an incident per instance.
+   * Such an expression composes the scoped identifier itself, which is what an earlier VanillaBP 2
+   * snapshot asked an application to do. Writing the prefix into it a second time would deploy an
+   * expression yielding the prefix twice, and every use of it would fail once a workflow reached
+   * the element. So the deployment refuses the file and says what to take out, which is a boot a
+   * developer can act on instead of an incident per instance.
    * <p>
-   * Read BEFORE {@link #apply} runs over the model, because afterwards every expression
-   * carries the prefix by design.
+   * Every place {@link #forEveryPrefixedValue} knows is asked, because every one of them gets the
+   * prefix written into its expression. The two never drift apart: one list answers both.
+   * <p>
+   * Read BEFORE {@link #apply} runs over the model, because afterwards every expression carries
+   * the prefix by design.
    *
    * @param model The BPMN model of one file, as the modeller wrote it
-   * @param prefix The prefix of the workflow module, separator included
-   * @return One entry per element, empty where no expression mentions the prefix
+   * @param workflowModuleId The workflow module ID
+   * @param adapterId The adapter ID
+   * @param scoping The core's name-clash-avoidance support
+   * @param allowConnectorsResolver What the configuration says about the elements built from an
+   *          element template (may be <code>null</code>: nothing is left out then)
+   * @param servedListenerJobTypes Whether this application serves the listener of the given PLAIN
+   *          process id and job type (may be <code>null</code>: no listener job type is asked
+   *          about then)
+   * @return One entry per value, empty where no expression mentions the prefix and where nothing
+   *         is prefixed at all
    */
-  public static List<NamedByAnExpression> targetsWhoseExpressionAlreadyCarriesThePrefix(
+  public static List<ExpressionCarryingThePrefix> whatAlreadyCarriesThePrefixInAnExpression(
       final BpmnModelInstance model,
-      final String prefix) {
+      final String workflowModuleId,
+      final String adapterId,
+      final NameClashAvoidanceSupport scoping,
+      final Camunda8AllowConnectorsResolver allowConnectorsResolver,
+      final BiPredicate<String, String> servedListenerJobTypes) {
 
-    final var found = new ArrayList<NamedByAnExpression>();
-    collectExpressionsCarrying(
-        prefix, model, ZeebeCalledElement.class, ZeebeCalledElement::getProcessId, found);
-    collectExpressionsCarrying(
-        prefix,
+    final var modulePrefix = prefixOf(workflowModuleId, adapterId, scoping);
+    if (modulePrefix.isEmpty()) {
+      return List.of();
+    }
+    final var found = new ArrayList<ExpressionCarryingThePrefix>();
+    forEveryPrefixedValue(
         model,
-        io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision.class,
-        io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision::getDecisionId,
-        found);
-    return found;
+        workflowModuleId,
+        adapterId,
+        scoping,
+        allowConnectorsResolver,
+        servedListenerJobTypes,
+        prefixed -> {
+          if (!prefixed.alreadyCarriesThePrefix(modulePrefix)) {
+            return;
+          }
+          found
+              .add(new ExpressionCarryingThePrefix(
+                  prefixed.attribute(), prefixed.elementId(), prefixed.bpmnProcessId(), prefixed.value()));
+        });
+    return List.copyOf(found);
 
   }
 
   /**
-   * Adds the elements of one kind whose expression already carries the prefix.
+   * One value of a model which is written as FEEL and composes the workflow module's prefix
+   * itself.
    *
-   * @param <T> The kind of extension element to read
-   * @param prefix The prefix of the workflow module, separator included
-   * @param model The BPMN model of one file
-   * @param kind The extension element naming the target
-   * @param identifierOf What that element says the call points at
-   * @param found Where the entries go
+   * @param attribute The attribute holding it, as the modeler names it
+   * @param elementId The BPMN element it belongs to
+   * @param bpmnProcessId The BPMN process that element belongs to, as it stands in the model, and
+   *          <code>null</code> for a name the workflow module scopes as a whole
+   * @param expression The expression, <code>=</code> included
    */
-  private static <T extends BpmnModelElementInstance> void collectExpressionsCarrying(
-      final String prefix,
-      final BpmnModelInstance model,
-      final Class<T> kind,
-      final java.util.function.Function<T, String> identifierOf,
-      final Collection<NamedByAnExpression> found) {
+  public record ExpressionCarryingThePrefix(
+                                            String attribute,
+                                            String elementId,
+                                            String bpmnProcessId,
+                                            String expression) {
 
-    if (prefix.isEmpty()) {
-      return;
+    /**
+     * The entry in one line, which is how the refusal names it.
+     *
+     * @return Where the expression stands and what it says
+     */
+    public String describe() {
+
+      return bpmnProcessId == null
+          ? "%s of '%s' (%s)".formatted(attribute, elementId, expression)
+          : "%s of '%s' in BPMN process '%s' (%s)".formatted(attribute, elementId, bpmnProcessId, expression);
+
     }
-    model
-        .getModelElementsByType(kind)
-        .forEach(extensionElement -> {
-          final var identifier = identifierOf.apply(extensionElement);
-          if (namesNothing(identifier) || !isWrittenAsFeel(identifier) || !identifier.contains(prefix)) {
-            return;
-          }
-          final var element = Camunda8Connectors.owningElementOf(extensionElement);
-          if (element == null) {
-            return;
-          }
-          found.add(new NamedByAnExpression(element.getId(), owningProcessId(element), identifier));
-        });
 
   }
 
@@ -753,7 +1083,9 @@ public final class Camunda8Scoping {
         name-clash avoidance 'use-prefix' (%s) deploys such an expression with the prefix \
         written INSIDE it, as ="%s" + string(<your expression>). So an expression quoted above \
         is longer than the one you wrote, and a column counted in it starts at the opening \
-        quote rather than at your own text. The elements are: %s.""")
+        quote rather than at your own text. The elements are: %s. Every other identifier this \
+        mode prefixes is framed the same way where you wrote it as an expression, a job type \
+        and a message name included, so a quote may be about one of those instead.""")
         .formatted(
             elementsPerBpmnProcess
                 .values()
@@ -778,20 +1110,6 @@ public final class Camunda8Scoping {
                         perProcess.getKey()))
                 .collect(java.util.stream.Collectors.joining(", ")));
 
-  }
-
-  /**
-   * One element naming the process it calls or the decision it evaluates by a FEEL
-   * expression.
-   *
-   * @param elementId The call activity respectively the business rule task
-   * @param bpmnProcessId The BPMN process it belongs to, as it stands in the model
-   * @param expression The expression, <code>=</code> included
-   */
-  public record NamedByAnExpression(
-                                    String elementId,
-                                    String bpmnProcessId,
-                                    String expression) {
   }
 
   /**

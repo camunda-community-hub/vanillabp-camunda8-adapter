@@ -1252,11 +1252,12 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               Camunda8Scoping.taskDefinitionsOf(model, workflowModuleId, allowConnectorsResolver));
       Camunda8Scoping
           .apply(
-              model, workflowModuleId, adapterId, scoping, allowConnectorsResolver, (
-                  processOfTheListener,
-                  jobType) -> listenersAllowedFor(workflowModuleId, processOfTheListener)
-                      .allowed() && workflowTaskInvoker
-                          .workflowTaskHandlerExists(workflowModuleId, processOfTheListener, jobType));
+              model,
+              workflowModuleId,
+              adapterId,
+              scoping,
+              allowConnectorsResolver,
+              servedListenerJobTypesOf(workflowModuleId));
     }
     context.addResource(filename, model);
     context.recordDeployedProcess(bpmnProcessId);
@@ -2622,22 +2623,28 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     }
     final var prefix = Camunda8Scoping.prefixOf(workflowModuleId, adapterId, scoping);
     final var carryingItAlready = Camunda8Scoping
-        .targetsWhoseExpressionAlreadyCarriesThePrefix(model, prefix);
+        .whatAlreadyCarriesThePrefixInAnExpression(
+            model,
+            workflowModuleId,
+            adapterId,
+            scoping,
+            allowConnectorsResolver,
+            servedListenerJobTypesOf(workflowModuleId));
     if (carryingItAlready.isEmpty()) {
       return;
     }
     throw new IllegalStateException(
         """
             Camunda 8 adapter '%s' does not deploy BPMN file '%s' of workflow module '%s': %d \
-            element(s) of it name the process they call or the decision they evaluate by a FEEL \
-            expression which composes the prefix '%s' itself: %s. Name-clash avoidance \
-            'use-prefix' (%s) writes that prefix INTO such an expression, so what reached the \
-            cluster would carry it twice ('%s%sTheProcessYouCall' for an expression yielding \
-            'TheProcessYouCall') and the call would fail the moment a workflow reached the \
-            element. Take the prefix out of the expression(s) named above and let them yield the \
-            id your own model declares, the one without any prefix. An earlier VanillaBP 2 \
-            snapshot asked for the opposite and warned about every such element; this adapter \
-            writes the prefix itself now."""
+            value(s) of it are written as a FEEL expression which composes the prefix '%s' \
+            itself: %s. Name-clash avoidance 'use-prefix' (%s) writes that prefix INTO such an \
+            expression, so what reached the cluster would carry it twice \
+            ('%s%sTheIdentifierYouWrote' for an expression yielding 'TheIdentifierYouWrote') and \
+            whatever reads it would fail the moment a workflow reached the element. Take the \
+            prefix out of the expression(s) named above and let them yield the identifier your own \
+            model declares, the one without any prefix. An earlier VanillaBP 2 snapshot asked for \
+            the opposite and warned about every such element; this adapter writes the prefix itself \
+            now."""
             .formatted(
                 adapterId,
                 filename,
@@ -2646,12 +2653,31 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
                 prefix,
                 carryingItAlready
                     .stream()
-                    .map(named -> "'%s' of BPMN process '%s' (%s)"
-                        .formatted(named.elementId(), named.bpmnProcessId(), named.expression()))
+                    .map(Camunda8Scoping.ExpressionCarryingThePrefix::describe)
                     .collect(Collectors.joining(", ")),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "name-clash-avoidance"),
                 prefix,
                 prefix));
+
+  }
+
+  /**
+   * Whether this application serves the listener of the given PLAIN BPMN process id and job type,
+   * which is what decides whether that job type is a task definition of the workflow module.
+   * <p>
+   * Asked by the rewrite and by the refusal of an expression which carries the prefix already, so
+   * that both of them cover exactly the job types the rewrite reaches.
+   *
+   * @param workflowModuleId The workflow module
+   * @return The question, answered for one BPMN process and one job type at a time
+   */
+  private java.util.function.BiPredicate<String, String> servedListenerJobTypesOf(
+      final String workflowModuleId) {
+
+    return (
+        bpmnProcessId,
+        jobType) -> listenersAllowedFor(workflowModuleId, bpmnProcessId).allowed() && workflowTaskInvoker
+            .workflowTaskHandlerExists(workflowModuleId, bpmnProcessId, jobType);
 
   }
 

@@ -2062,7 +2062,8 @@ what reaches the handler.
 Under `use-prefix` the decision ids are rewritten like the process ids, and the
 `decisionId` of the business rule tasks is rewritten with them, so both name the same
 decision (`Camunda8DeploymentServiceTest#aBusinessRuleTaskFindsItsRenamedDecision`). A
-`decisionId` given as a FEEL expression stays untouched. What this mode cannot follow is a
+`decisionId` given as a FEEL expression gets the prefix written inside it, like every other value
+of a prefixed module. What this mode cannot follow is a
 reference to a decision the module does not deploy: that one is renamed here and not in the
 cluster.
 
@@ -2091,15 +2092,30 @@ left an upgraded version-1 application deploying into no tenant while its workfl
 theirs. While `none` applies, a WARN per workflow module names the alternatives
 until `accept-unscoped-identifiers` acknowledges that the identifiers are unique.
 
-**A name written as FEEL gets the prefix inside the expression.** Two attributes can hold one:
-the `processId` of a `zeebe:calledElement` and the `decisionId` of a `zeebe:calledDecision`. An
-expression takes up the whole attribute, so a prefix in front of it lands in the expression's
-text rather than in the id it yields, and `loan-approval__=whichProcess` names no process and
-parses as no expression. `Camunda8Scoping` therefore writes the prefix into the expression:
-`=whichProcess` is deployed as `="loan-approval__" + string(whichProcess)`, and the application
-writes no prefix anywhere. Camunda's FEEL concatenates two strings with `+`, `string(...)` makes
-that work whatever the application's part returns, and the parentheses carry every shape such a
-part can have, an `if ... then ... else ...` and a `get value(...)` included.
+**A value written as FEEL gets the prefix inside the expression, at every place a prefix is
+written.** An expression takes up the whole attribute, so a prefix in front of it lands in the
+expression's text rather than in the identifier it yields, and `loan-approval__=whichProcess`
+names no process and parses as no expression. `Camunda8Scoping` therefore writes the prefix into
+the expression: `=whichProcess` is deployed as `="loan-approval__" + string(whichProcess)`, and
+the application writes no prefix anywhere. Camunda's FEEL concatenates two strings with `+`,
+`string(...)` makes that work whatever the application's part returns, and the parentheses carry
+every shape such a part can have, an `if ... then ... else ...` and a `get value(...)` included.
+
+The rule is one rule and the places are one list. `Camunda8Scoping#forEveryPrefixedValue` hands
+over every value this adapter prefixes, each with the prefix of its own place, and the rule above
+is a method on what it hands over. A job type is the place where that prefix is more than the
+module's, because a task definition is scoped by its BPMN process as well, so its frame reads
+`="loan-approval__LoanApproval__" + string(...)`. The same list answers the refusal below, which
+is what keeps the two from drifting apart: a place added to it is rewritten and guarded in one
+change.
+
+Whether Camunda 8 evaluates an expression at a given place is deliberately not asked. Such a list
+ages with every Camunda release, while this rule cannot be wrong: where no expression is
+evaluated, a value starting with `=` does not appear and the rule costs nothing, and where one is
+evaluated later, nothing here has to change. What is watched instead is that the cluster still
+ACCEPTS a model carrying the frame at those places, which
+`Camunda8PrefixInsideAnExpressionCanaryIT` does by deploying one model twice, once plain and once
+framed.
 
 The price is that the cluster holds an expression nobody typed. Camunda 8 parses the FEEL while it
 deploys, so a syntax error in the application's part refuses the deployment quoting the framed
@@ -2108,9 +2124,11 @@ module says what such a quote includes and names the elements it can be about
 (`Camunda8Scoping#whatAQuotedExpressionIncludes`). Nothing is said while a deployment goes
 through. An expression which composes the prefix ITSELF ends the boot instead of being given a
 second one (`refuseAnExpressionWhichAlreadyCarriesThePrefix`), which is the model an earlier 2.0
-snapshot asked for while it left the expression alone. What the forms deploy to is held by
-`Camunda8CalledProcessScopingTest`, the refused boot by `Camunda8PrefixInsideAnExpressionTest`,
-and the cluster by `Camunda8PrefixInsideAnExpressionCanaryIT` on every release line.
+snapshot asked for while it left the expression alone, and that refusal covers every place of the
+list. What the two forms deploy to is held by `Camunda8CalledProcessScopingTest` for a called
+process and a called decision and by `Camunda8PrefixInEveryPlaceTest` for the rest, the refused
+boot by `Camunda8PrefixInsideAnExpressionTest`, and the cluster by
+`Camunda8PrefixInsideAnExpressionCanaryIT` on every release line.
 
 **A BPMN error code belongs to one workflow module, and so does its catcher.** The code a
 `TaskException` raises is composed from the module of the process whose job raised it
