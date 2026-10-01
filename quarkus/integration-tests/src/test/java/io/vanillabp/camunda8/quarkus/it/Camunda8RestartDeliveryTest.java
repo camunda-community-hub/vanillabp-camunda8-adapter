@@ -10,8 +10,10 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * other feature: this scenario owns the application's lifecycle, so it cannot share the
  * application every other Quarkus test uses. Testcontainers removes the containers when
  * the JVM of the test run exits.
+ * <p>
+ * <b>Why the drain assertion below is safer here than in the Spring Boot half.</b> Both
+ * halves wait for the cluster to answer the activation requests their closed workers
+ * parked, and that wait is what the Spring Boot class ran out of twice on 2026-10-01. It
+ * opens 119 workers, because the module it belongs to deploys thirty-five processes into
+ * one application, and its shutdown ends only once the cluster has answered the request of
+ * every one of them. This application deploys one process into a cluster nobody else uses,
+ * so its shutdown has a handful of requests to sit out. The assertion is the same bet on
+ * the cluster; the stake is a fraction of the size.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -221,17 +232,17 @@ public class Camunda8RestartDeliveryTest {
     final var shutdownLog = applicationLog();
     final var drainedAt = shutdownLog.indexOf("no activation request of theirs left at the cluster");
     final var clientClosedAt = shutdownLog.indexOf("Closing Camunda 8 client");
-    assertTrue(drainedAt >= 0, "the drain reported a module which is quiet: "
-        + shutdownLog);
+    assertTrue(drainedAt >= 0, "the drain reported a module which is quiet, and this is what it said instead: "
+        + whatTheShutdownSaid(shutdownLog));
     assertTrue(clientClosedAt >= 0, "and the client was closed: "
-        + shutdownLog);
+        + whatTheShutdownSaid(shutdownLog));
     assertTrue(
         drainedAt < clientClosedAt,
         "the workers of the module were closed and released BEFORE its client went down");
     assertFalse(
         shutdownLog.contains("did not stop workflow processing"),
         "the Quarkus shutdown event reaches the adapter, so the backstop of the client factory stays silent: "
-            + shutdownLog);
+            + whatTheShutdownSaid(shutdownLog));
 
     TimeUnit.MILLISECONDS.sleep(GAP.toMillis());
 
@@ -257,5 +268,43 @@ public class Camunda8RestartDeliveryTest {
             + ")");
 
   }
+
+  /**
+   * The sentences of the application's log which this test is about.
+   * <p>
+   * The log of a whole run is a few thousand lines, and a failing assertion which dumps all
+   * of it buries the one line it is about.
+   *
+   * @param logged What the application wrote
+   * @return The lines about the shutdown, or a note that there were none
+   */
+  private static String whatTheShutdownSaid(
+      final String logged) {
+
+    final var aboutTheShutdown = logged
+        .lines()
+        .filter(
+            line -> WHAT_A_SHUTDOWN_WRITES
+                .stream()
+                .anyMatch(line::contains))
+        .collect(Collectors.joining(System.lineSeparator()));
+    return aboutTheShutdown.isEmpty()
+        ? "nothing at all about its shutdown"
+        : System.lineSeparator() + aboutTheShutdown;
+
+  }
+
+  /**
+   * How a line about the shutdown is recognized: the words the drain reports with, and the
+   * one the client factory writes when the client goes down.
+   */
+  private static final List<String> WHAT_A_SHUTDOWN_WRITES = List
+      .of(
+          "drained after",
+          "was stopped after",
+          "was still running after the shutdown waited",
+          "did not stop workflow processing",
+          "Workflow processing stopped",
+          "Closing Camunda 8 client");
 
 }

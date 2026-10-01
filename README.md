@@ -100,6 +100,17 @@ such a change through unread. That is `.github/workflows/client-api-changes.yaml
 `bin/client-api-changes.sh`, and `Camunda8UnknownClientEnumsTest` holds what the adapter does
 with a literal it has never seen.
 
+A pin which names a pre-release waits for a person as well. Renovate reads the step from the
+last candidate of a minor to its release as a patch, because only the qualifier falls away, so
+the automerge of a patch would have moved such a pin on its own. That pin is the small part of
+the step. A line pins a pre-release while it is the preview line, and arriving at the release is
+the moment that line becomes a GA line, which also moves the table above, the
+`camunda8.line.preview` property of the line profile, the line table of the wiki and the release
+of the line. Renovate therefore opens the pull request, labels it `camunda8-pre-release-pin` and
+leaves the merge to whoever does the rest. `renovate/verify-pin-automerge.js` holds the
+configuration to that with Renovate's own classifier and rule engine, and the step from
+`8.10.0-rc3` to `8.10.0` is one of its cases.
+
 The 8.10 line is pinned to `8.10.0`. Two cluster defects had kept it on a pre-release, and
 both of them are measured on the release rather than read off a changelog.
 
@@ -455,7 +466,10 @@ A release of one line consists of:
 7. One real `renovate --dry-run` against the published artifacts. The gating is proven
    today by `renovate/verify-line-gating.js`, which asks Renovate's own versioning module
    what it would offer a consumer of each line; a full dry run needs versions in a
-   datasource, and until the first release there are none.
+   datasource, and until the first release there are none. The pin rules of this repository
+   stand on the same footing: `renovate/verify-pin-automerge.js` lays them over an update
+   with Renovate's own rule engine, and which updates Renovate finds is what the dry run
+   would add.
 
 Rotating the lines when a minor goes GA touches four places: the `line-*` profiles and the
 pin properties of the parent POM, the boundary rule of `renovate.json`, the table above,

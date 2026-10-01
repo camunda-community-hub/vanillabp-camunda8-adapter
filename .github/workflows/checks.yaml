@@ -227,8 +227,9 @@ jobs:
           }
 
   # The Renovate configuration is not read, it is run: the validator on the repository
-  # configuration and on the shareable preset, and the gating check which proves that a
-  # consumer of one line is never offered another one.
+  # configuration and on the shareable preset, and two checks which ask Renovate's own code
+  # what the configuration does. One of them proves that a consumer of one line is never
+  # offered another one. The other says which proposed update merges itself here.
   renovate-configuration:
     runs-on: ubuntu-latest
     steps:
@@ -249,6 +250,8 @@ jobs:
           (cd target/preset && npx --no-install renovate-config-validator --strict)
       - name: A consumer of one line is never offered another
         run: node renovate/verify-line-gating.js
+      - name: A pin on a pre-release does not move itself
+        run: node renovate/verify-pin-automerge.js
 
   # Every pull request builds every line, so this job gates nothing any more. It stays
   # because a moved pin is worth a sentence in the run: a client patch which merges itself

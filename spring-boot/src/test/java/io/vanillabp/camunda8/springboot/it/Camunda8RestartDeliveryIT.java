@@ -8,7 +8,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -92,6 +94,25 @@ public class Camunda8RestartDeliveryIT extends TestOnTheSharedCluster {
    * Twenty-five seconds and not more: from thirty on, the adapter warns that the grace
    * reaches into the shutdown budget Spring Boot and Kubernetes default to, and that warning
    * would be right.
+   * <p>
+   * <b>What raising it to twenty-five bought, measured on 2026-10-01.</b> Nothing. The same
+   * shutdown ran out of the same grace twice that day: the publish run of {@code 443a32d}
+   * (36871927557) stopped after 25049 ms, the run of pull request 231 (36889710683) after
+   * 25012 ms. Both were the FIRST application of this test, with 119 closed workers of which
+   * at least one had not been released and no handler left inside the application. The
+   * second application of each of those runs drained in 10123 ms. So this number is not what
+   * decides it, and the next number would not be either.
+   * <p>
+   * What the wait hangs on was measured locally the same day, by reading every closed worker
+   * while the drain ran. All 119 of them sit on the activation request they had in flight
+   * when they were closed: no job in their hands, no poll scheduled, nothing but a request
+   * the cluster has not answered yet. They come back within a second of each other, one
+   * {@link #REQUEST_TIMEOUT} after the shutdown began, which is where the 10 to 12 seconds of
+   * an idle machine come from. Squeezing the cluster into four tenths of a core reproduces
+   * the red runs on demand: the gateway answers so few of those requests that 105 of the 119
+   * are still open when the grace runs out. The floor of this wait is therefore the cluster
+   * answering 119 parked requests, and no grace this test may configure covers a cluster
+   * slow enough.
    */
   private static final Duration SHUTDOWN_GRACE = Duration.ofSeconds(25);
 
@@ -239,23 +260,68 @@ public class Camunda8RestartDeliveryIT extends TestOnTheSharedCluster {
     final var logged = output.getOut() + output.getErr();
     final var drainedAt = logged.indexOf("no activation request of theirs left at the cluster");
     final var clientClosedAt = logged.indexOf("Closing Camunda 8 client");
-    assertTrue(drainedAt >= 0, "the drain reported a module which is quiet: "
-        + logged);
+    assertTrue(drainedAt >= 0, "the drain reported a module which is quiet, and this is what it said instead: "
+        + whatTheShutdownSaid(logged));
     assertTrue(clientClosedAt >= 0, "and the client was closed: "
-        + logged);
+        + whatTheShutdownSaid(logged));
     assertTrue(
         drainedAt < clientClosedAt,
         "the workers of the module were closed and released BEFORE its client went down");
+
+    // read over the running test, because a sentence which is absent is only absent for
+    // the test which says so. Over the whole class it would speak for every other test of
+    // it as well, and nothing orders them
+    final var ofThisTest = output.getAllOfThisTest();
     assertFalse(
-        logged.contains("still holding an activation request at the cluster"),
+        ofThisTest.contains("still holding an activation request at the cluster"),
         "and nothing was left parked when the client was closed: "
-            + logged);
+            + whatTheShutdownSaid(ofThisTest));
     assertFalse(
-        logged.contains("did not stop workflow processing"),
+        ofThisTest.contains("did not stop workflow processing"),
         "the ordinary Spring Boot shutdown reaches the adapter, so the backstop of the client factory stays "
             + "silent: "
-            + logged);
+            + whatTheShutdownSaid(ofThisTest));
 
   }
+
+  /**
+   * The sentences of the log which the two shutdowns of this test are about.
+   * <p>
+   * The whole captured log is a few thousand lines of two application starts, and a
+   * failing assertion which dumps all of it buries the one line it is about. Both red runs
+   * of 2026-10-01 read that way: the drain had written down what it did, and the reader had
+   * to search a log of 6000 lines to find it.
+   *
+   * @param logged What was printed
+   * @return The lines about the shutdown, or a note that there were none
+   */
+  private static String whatTheShutdownSaid(
+      final String logged) {
+
+    final var aboutTheShutdown = logged
+        .lines()
+        .filter(
+            line -> WHAT_A_SHUTDOWN_WRITES
+                .stream()
+                .anyMatch(line::contains))
+        .collect(Collectors.joining(System.lineSeparator()));
+    return aboutTheShutdown.isEmpty()
+        ? "nothing at all about its shutdown"
+        : System.lineSeparator() + aboutTheShutdown;
+
+  }
+
+  /**
+   * How a line about the shutdown is recognized: the words the drain reports with, and the
+   * one the client factory writes when the client goes down.
+   */
+  private static final List<String> WHAT_A_SHUTDOWN_WRITES = List
+      .of(
+          "drained after",
+          "was stopped after",
+          "was still running after the shutdown waited",
+          "did not stop workflow processing",
+          "Workflow processing stopped",
+          "Closing Camunda 8 client");
 
 }
