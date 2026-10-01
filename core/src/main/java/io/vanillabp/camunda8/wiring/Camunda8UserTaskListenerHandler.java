@@ -358,9 +358,12 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
       if (multiInstanceRegistry == null) {
         return Map.of();
       }
-      return Camunda8MultiInstance.valuesOf(
-          multiInstanceRegistry.chainOf(job.getBpmnProcessId(), job.getElementId()),
-          job.getVariablesAsMap());
+      return Camunda8MultiInstance
+          .valuesOf(
+              multiInstanceRegistry,
+              job.getBpmnProcessId(),
+              job.getElementId(),
+              job.getVariablesAsMap());
 
     }
 

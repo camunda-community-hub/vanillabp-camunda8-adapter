@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -280,6 +282,58 @@ public class Camunda8MultiInstanceTest {
         .getAttribute("propagateAllParentVariables");
 
   }
+
+  /**
+   * A caller which names the process it calls by an expression, in the four shapes the
+   * deployment has to tell apart: inside an iteration and multi-instance itself, statically
+   * named, with the caller's context switched off, and outside any iteration at all.
+   */
+  private static final String NAMED_BY_AN_EXPRESSION = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="D" targetNamespace="http://bpmn.io/schema/bpmn">
+        <bpmn:process id="FeelCaller" isExecutable="true">
+          <bpmn:subProcess id="PerGroup">
+            <bpmn:multiInstanceLoopCharacteristics>
+              <bpmn:extensionElements>
+                <zeebe:loopCharacteristics inputCollection="=groups" inputElement="group" />
+              </bpmn:extensionElements>
+            </bpmn:multiInstanceLoopCharacteristics>
+            <bpmn:callActivity id="CallWhateverTheDataSays">
+              <bpmn:extensionElements>
+                <zeebe:calledElement processId="=whichProcess" />
+              </bpmn:extensionElements>
+              <bpmn:multiInstanceLoopCharacteristics>
+                <bpmn:extensionElements>
+                  <zeebe:loopCharacteristics inputCollection="=positions" inputElement="position" />
+                </bpmn:extensionElements>
+              </bpmn:multiInstanceLoopCharacteristics>
+            </bpmn:callActivity>
+            <bpmn:callActivity id="CallTheOneWeKnow">
+              <bpmn:extensionElements>
+                <zeebe:calledElement processId="TheOneWeKnow" />
+              </bpmn:extensionElements>
+            </bpmn:callActivity>
+            <bpmn:callActivity id="CallWithoutTheCallersContext">
+              <bpmn:extensionElements>
+                <zeebe:calledElement processId="=whichProcess" propagateAllParentVariables="false" />
+              </bpmn:extensionElements>
+            </bpmn:callActivity>
+          </bpmn:subProcess>
+          <bpmn:callActivity id="CallOutsideAnyIteration">
+            <bpmn:extensionElements>
+              <zeebe:calledElement processId="=whichProcess" />
+            </bpmn:extensionElements>
+          </bpmn:callActivity>
+        </bpmn:process>
+        <bpmn:process id="TheOneWeKnow" isExecutable="true">
+          <bpmn:serviceTask id="KnownTask">
+            <bpmn:extensionElements>
+              <zeebe:taskDefinition type="known" />
+            </bpmn:extensionElements>
+          </bpmn:serviceTask>
+        </bpmn:process>
+      </bpmn:definitions>
+      """;
 
   private static BpmnModelInstance model(
       final String xml) {
@@ -835,6 +889,260 @@ public class Camunda8MultiInstanceTest {
     assertTrue(exception.getMessage().contains("vanillabpMiIndex_Ship"), exception.getMessage());
     assertTrue(exception.getMessage().contains("=myOwnCounter"), exception.getMessage());
     assertTrue(exception.getMessage().contains("=loopCounter"), exception.getMessage());
+
+  }
+
+
+  /**
+   * One level of a handed-down entry, as the Java client builds it out of the JSON: a
+   * {@code LinkedHashMap} whose numbers arrive as {@code Integer} while they fit into 32
+   * bits.
+   */
+  private static Map<String, Object> reportedLevel(
+      final String elementId,
+      final Object index,
+      final Object total,
+      final Object item) {
+
+    final var level = new LinkedHashMap<String, Object>();
+    level.put("element", elementId);
+    level.put("index", index);
+    level.put("total", total);
+    level.put("item", item);
+    return level;
+
+  }
+
+  /** One entry of the handed-down chain: a caller and its levels, outermost first. */
+  private static Map<String, Object> reportedCaller(
+      final String callerBpmnProcessId,
+      final Object... levels) {
+
+    final var caller = new LinkedHashMap<String, Object>();
+    caller.put("process", callerBpmnProcessId);
+    caller.put("levels", new ArrayList<>(List.of(levels)));
+    return caller;
+
+  }
+
+  /**
+   * A job whose only variable is the handed-down chain, the way a worker of this adapter gets
+   * it: the fetch list names that variable, and the values of the caller's levels are in the
+   * list rather than in variables of their own.
+   */
+  private static Map<String, Object> jobCarrying(
+      final Object handedDown) {
+
+    final var variables = new LinkedHashMap<String, Object>();
+    variables.put("vanillabpMiParents", handedDown);
+    return variables;
+
+  }
+
+  @Test
+  @DisplayName("a call activity naming its process by an expression hands its chain down in a variable")
+  public void theChainOfAnExpressionIsHandedDown() {
+
+    final var model = model(NAMED_BY_AN_EXPRESSION);
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model, "FeelCaller", registry);
+
+    final var expression = Camunda8MultiInstance
+        .handTheChainDown(model, "FeelCaller", "CallWhateverTheDataSays", registry);
+
+    assertEquals(
+        "=append(if is defined(vanillabpMiParents) then vanillabpMiParents else [], "
+            + "{process: \"FeelCaller\", levels: ["
+            + "{element: \"PerGroup\", index: vanillabpMiIndex_PerGroup, "
+            + "total: vanillabpMiTotal_PerGroup, item: vanillabpMiElement_PerGroup}, "
+            + "{element: \"CallWhateverTheDataSays\", index: loopCounter, "
+            + "total: count(positions), item: position}]})",
+        expression,
+        "an enclosing level reads the variables of its own mappings, while the call activity's "
+            + "own round reads what the cluster offers every multi-instance element");
+    assertTrue(
+        inputsOf(model, "CallWhateverTheDataSays").contains("vanillabpMiParents="
+            + expression),
+        "and that expression is what the deployed model carries");
+
+  }
+
+  @Test
+  @DisplayName("a statically named call activity gets no extra variable at all")
+  public void aStaticallyNamedCallActivityIsLeftAlone() {
+
+    final var model = model(NAMED_BY_AN_EXPRESSION);
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model, "FeelCaller", registry);
+
+    assertNull(
+        Camunda8MultiInstance.handTheChainDown(model, "FeelCaller", "CallTheOneWeKnow", registry),
+        "which is not even asked for it: the deployment links the two models instead");
+    assertTrue(
+        inputsOf(model, "CallTheOneWeKnow").isEmpty(),
+        "so such a call activity pays nothing for this");
+
+  }
+
+  @Test
+  @DisplayName("nothing is handed down where the model keeps the caller's variables out")
+  public void theCallersContextStaysSwitchedOff() {
+
+    final var model = model(NAMED_BY_AN_EXPRESSION);
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model, "FeelCaller", registry);
+
+    assertNull(
+        Camunda8MultiInstance
+            .handTheChainDown(model, "FeelCaller", "CallWithoutTheCallersContext", registry),
+        "the modeller switched the caller's context off on purpose, and an input mapping would "
+            + "travel all the same and undo that");
+    assertTrue(inputsOf(model, "CallWithoutTheCallersContext").isEmpty());
+
+  }
+
+  @Test
+  @DisplayName("nothing is handed down where no iteration encloses the call")
+  public void thereIsNothingToHandDownWithoutAnIteration() {
+
+    final var model = model(NAMED_BY_AN_EXPRESSION);
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model, "FeelCaller", registry);
+
+    assertNull(
+        Camunda8MultiInstance.handTheChainDown(model, "FeelCaller", "CallOutsideAnyIteration", registry),
+        "an empty entry would be payload saying nothing");
+    assertTrue(inputsOf(model, "CallOutsideAnyIteration").isEmpty());
+
+  }
+
+  @Test
+  @DisplayName("what a caller inherited is handed down too, so a static call above an expression still counts")
+  public void theInheritedLevelsTravelWithTheExpression() {
+
+    final var model = model(CALL_GRAPH);
+    final var registry = linkedCallGraph();
+
+    final var expression = Camunda8MultiInstance
+        .handTheChainDown(model, "Child", "CallWhateverTheDataSays", registry);
+
+    assertTrue(
+        expression.contains("{element: \"Outer\", index: vanillabpMiIndex_Outer"),
+        "the iteration is in the caller's caller, and its variables are in reach here because "
+            + "the cluster copied them into this instance: "
+            + expression);
+    assertTrue(
+        expression.contains("{process: \"Child\""),
+        "the entry names the process writing it, which is what the reader checks the aggregate "
+            + "against");
+
+  }
+
+  @Test
+  @DisplayName("a handed-down chain reports the caller's iteration like any other level")
+  public void theHandedDownChainIsReported() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    registry.registerCallByExpression("FeelCaller", "TheCalled");
+
+    final var values = Camunda8MultiInstance
+        .valuesOf(
+            registry,
+            "TheCalled",
+            "CalledTask",
+            jobCarrying(
+                new ArrayList<>(
+                    List
+                        .of(
+                            reportedCaller(
+                                "FeelCaller",
+                                reportedLevel("PerGroup", 2, 2, "g2"),
+                                reportedLevel("CallWhateverTheDataSays", 1, 3, "p1"))))));
+
+    assertEquals(
+        List.of("PerGroup", "CallWhateverTheDataSays"),
+        List.copyOf(values.keySet()),
+        "outermost first, and both levels belong to another BPMN process");
+    assertEquals(1, values.get("PerGroup").index(), "the SPI counts from 0, the cluster from 1");
+    assertEquals(2, values.get("PerGroup").total());
+    assertEquals("g2", values.get("PerGroup").element());
+    assertEquals(0, values.get("CallWhateverTheDataSays").index());
+    assertEquals(3, values.get("CallWhateverTheDataSays").total());
+    assertEquals("p1", values.get("CallWhateverTheDataSays").element());
+
+  }
+
+  @Test
+  @DisplayName("a number too large for an int still counts, because the client hands it over as a Long")
+  public void aLongIsANumberToo() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    registry.registerCallByExpression("FeelCaller", "TheCalled");
+
+    final var values = Camunda8MultiInstance
+        .valuesOf(
+            registry,
+            "TheCalled",
+            "CalledTask",
+            jobCarrying(
+                new ArrayList<>(
+                    List.of(reportedCaller("FeelCaller", reportedLevel("PerGroup", 3L, 7L, "g3"))))));
+
+    assertEquals(2, values.get("PerGroup").index());
+    assertEquals(7, values.get("PerGroup").total());
+
+  }
+
+  @Test
+  @DisplayName("an entry naming a caller of another workflow aggregate is left out")
+  public void anEntryOfAnotherAggregateIsLeftOut() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    registry.registerCallByExpression("FeelCaller", "TheCalled");
+
+    final var values = Camunda8MultiInstance
+        .valuesOf(
+            registry,
+            "TheCalled",
+            "CalledTask",
+            jobCarrying(
+                new ArrayList<>(
+                    List
+                        .of(
+                            reportedCaller("SomebodyElse", reportedLevel("TheirLoop", 1, 1, "x")),
+                            reportedCaller("FeelCaller", reportedLevel("PerGroup", 1, 1, "g1"))))));
+
+    assertEquals(
+        List.of("PerGroup"),
+        List.copyOf(values.keySet()),
+        "a process this adapter never wired, or one with an aggregate of its own, is not guessed "
+            + "at");
+
+  }
+
+  @Test
+  @DisplayName("a level the called process iterates itself beats the one handed down")
+  public void theCalledProcessWinsOverTheCaller() {
+
+    final var model = model(NESTED);
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model, "MiProcess", registry);
+    registry.registerCallByExpression("FeelCaller", "MiProcess");
+
+    final var variables = jobCarrying(
+        new ArrayList<>(List.of(reportedCaller("FeelCaller", reportedLevel("Flat", 9, 9, "theCallers")))));
+    variables.put("vanillabpMiIndex_Flat", 1);
+    variables.put("vanillabpMiTotal_Flat", 2);
+    variables.put("vanillabpMiElement_Flat", "a");
+
+    final var values = Camunda8MultiInstance.valuesOf(registry, "MiProcess", "Flat", variables);
+
+    assertEquals(List.of("Flat"), List.copyOf(values.keySet()), "one level, not two");
+    assertEquals(
+        "a",
+        values.get("Flat").element(),
+        "both write the same variables, the inner scope overwrites the outer one, and the job "
+            + "carries the inner values");
 
   }
 

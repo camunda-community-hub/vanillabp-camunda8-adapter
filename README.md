@@ -2515,12 +2515,61 @@ BPMN process does not say who calls it. The call activities of the callers are r
 file of a workflow module is wired, and the chain of an element in a called process becomes the
 chain of the call site followed by its own, outermost first.
 
-A call activity only counts where its `zeebe:calledElement processId` is a plain id and where
-the called process works on the same workflow aggregate. An id given as an expression is
-decided per instance, and a process with an aggregate of its own runs a business case of its
-own. A task in either of those reports no iteration of its caller, although the cluster still
-copies the values into the instance, so a `@TaskParam` naming one of the variables would
-find it.
+A call activity is linked that way where its `zeebe:calledElement processId` is a plain id and
+where the called process works on the same workflow aggregate. A process with an aggregate of
+its own runs a business case of its own: a task in it reports no iteration of its caller,
+although the cluster still copies the values into the instance, so a `@TaskParam` naming one of
+the variables would find it.
+
+An id given as an EXPRESSION is decided per instance, so there are no two models to link. The
+chain is handed down instead. Such a call activity gets one more input mapping while it is
+deployed, writing the caller's levels into the called instance:
+
+```
+vanillabpMiParents = append(
+   if is defined(vanillabpMiParents) then vanillabpMiParents else [],
+   { process: "loan-approval__orderProcess",
+     levels: [ { element: "perGroup",
+                 index: vanillabpMiIndex_perGroup,
+                 total: vanillabpMiTotal_perGroup,
+                 item:  vanillabpMiElement_perGroup },
+               { element: "callCheck",
+                 index: loopCounter,
+                 total: count(positions),
+                 item:  position } ] })
+```
+
+Everything in it is known while deploying. An enclosing level reads the variables of its own
+mappings, and the call activity's own round reads what the cluster offers every multi-instance
+element, because one input mapping of an element must not depend on another one of the same
+element. The values are in the entry rather than named by it, because a worker has ONE fetch
+list, fixed at registration: it cannot read the variable, look inside and then ask for the
+names it finds.
+
+The cluster evaluates an input mapping in the same record which creates the called instance, so
+there is no window in which the variable is still missing. It also evaluates it per
+multi-instance instance, so a multi-instance call activity hands each called instance its own
+round. A second call activity further down appends its own entry to the list, which is how a
+chain several processes long comes about - the entries are then outermost first.
+
+Two call activities get nothing of this. A statically named one is linked model to model and
+pays not one byte more payload. One saying `propagateAllParentVariables="false"` is left alone,
+because the modeller switched the caller's context off on purpose and a mapping would travel all
+the same and undo that.
+
+What is left for the runtime is the workflow aggregate, and only the lookup of it. While
+deploying, every process of the module is held against the caller, and the ones sharing its
+aggregate are recorded as processes which may use that chain. A job then carries the variable,
+and an entry whose caller is not one of those is dropped rather than guessed at: a call across
+the boundary of a workflow module ends up there, because this adapter never saw that caller's
+model, and so does a call reaching a process with an aggregate of its own. A DEBUG line says so.
+
+The chain counts against the cluster's `MAX_MESSAGE_SIZE`, and the adapter cannot catch that
+limit: it arrives as an incident on the call activity rather than as a refused command. There is
+a lot of room. Three levels carrying 1 KB element values cost about 3.3 KB, while the limit bites
+somewhere between 1000 and 2000 such entries, so what gets expensive is the element VALUE and not
+the depth: a multi-instance element iterating 100 KB objects needs only ten levels. Keep
+collections to identifiers, which is what `inputCollection` should hold anyway.
 
 Where the attribute is missing, the adapter writes `propagateAllParentVariables="true"` at
 such a call activity. That is what it already means today, and writing it says what the chain
@@ -2570,14 +2619,20 @@ committing last puts back what it read, so an iteration should write a row of it
 [workflow aggregates](https://github.com/vanillabp/adapter-platform-integration/wiki/Workflow-aggregates).
 
 `Camunda8MultiInstanceTest` covers the injection, its idempotency, the ambiguous element ids,
-the chain across a call activity, the union over call sites and the recursion stop.
+the chain across a call activity, the union over call sites and the recursion stop. It also
+covers the chain handed down by an expression: the expression written into the model and the
+three call activities which get none.
 `Camunda8FetchVariablesTest#theListFollowsTheChainAcrossTheProcessBoundary` holds that the
 fetch list follows the chain without a change of its own, and
 `#aProcessOfItsOwnStaysOutsideTheChain` that a called process with a workflow aggregate of its
 own gets none of it. What a handler really sees is
 `Camunda8MultiInstanceIT#theIterationIsReported` with its Quarkus twin
 `Camunda8WorkflowLifecycleTest#multiInstanceBindsElementIndexAndTotal`, and across a call
-activity `Camunda8MultiInstanceIT#theIterationCrossesTheCallActivity`. The parallel tokens of
+activity `Camunda8MultiInstanceIT#theIterationCrossesTheCallActivity`. Across a call activity
+naming its process by an expression it is
+`Camunda8MultiInstanceIT#theIterationCrossesACallActivityNamedByAnExpression`. The three
+cluster properties all of this rests on are
+`Camunda8CallActivityVariablesCanaryIT`. The parallel tokens of
 the paragraph above are `Camunda8ConcurrentTokensTest#parallelMultiInstance`, and that the
 index reaches the application counting from 0 is `Camunda8MultiInstanceTest#valuesAreTranslated`.
 That this engine offers no loop cardinality is an assumption about Camunda 8, disproved by a

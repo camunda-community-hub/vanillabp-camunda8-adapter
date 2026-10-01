@@ -2678,12 +2678,16 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * to the multi-instance registry so an element of a called process gets the chain of its
    * call site in front of its own.
    * <p>
-   * Two call activities are left out. One whose <code>zeebe:calledElement processId</code>
-   * is an expression names its process per instance, which a deployment cannot resolve.
-   * One calling a process with a workflow aggregate of its own is not decomposition: such a
-   * process runs a business case of its own and is not told the iteration of whoever
-   * started it, which is what the core answers with
-   * {@code workflowsShareTheWorkflowAggregate}.
+   * One call activity is left out of the graph: one calling a process with a workflow
+   * aggregate of its own is not decomposition, because such a process runs a business case of
+   * its own and is not told the iteration of whoever started it, which is what the core
+   * answers with {@code workflowsShareTheWorkflowAggregate}.
+   * <p>
+   * A call activity whose <code>zeebe:calledElement processId</code> is an EXPRESSION is left
+   * out of the graph too, and for a reason no deployment can remove: which process it reaches
+   * is decided per instance. It is not left without a chain, though - see
+   * {@link #handTheChainDownWhereTheProcessIsNamedByAnExpression}, which runs right after the
+   * graph is linked.
    * <p>
    * Where the call activity is kept, the model is also told that the caller's variables
    * travel, unless the model already said they do not. That is
@@ -2734,6 +2738,93 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       }
     }
     multiInstanceRegistry.linkCalledProcesses();
+    // what is left over are the call activities naming their process by an expression. They
+    // cannot be linked model to model, so they hand their chain down instead - which needs the
+    // graph above to be linked already, because a caller passes on what IT inherited too
+    handTheChainDownWhereTheProcessIsNamedByAnExpression(workflowModuleId, bpmsProcessingContext);
+
+  }
+
+  /**
+   * Writes the iteration chain of every call activity naming its process by an expression into
+   * the instance it calls, as the input mapping
+   * {@link Camunda8MultiInstance#CHAIN_VARIABLE}.
+   * <p>
+   * Such a call activity is the one case the paragraph above cannot wire: which process it
+   * reaches is decided per instance. The model knowledge is complete on the CALLER's side all
+   * the same, so the caller writes it down and the reader of the job puts those levels in
+   * front of its own. Nothing is written where the caller encloses the call activity in no
+   * iteration at all, nor where the model keeps the caller's variables out of the called
+   * instance.
+   * <p>
+   * The workflow aggregate is the one question left for the runtime, and it is asked HERE as
+   * far as it can be: every process of this module is held against the caller, and the ones
+   * sharing its aggregate are recorded as processes which may use that chain. At runtime the
+   * reader only looks up whether the pair in front of it is one of them, so a call reaching a
+   * process with an aggregate of its own, or a process of another workflow module, is dropped
+   * rather than guessed.
+   *
+   * @param workflowModuleId The workflow module being deployed
+   * @param bpmsProcessingContext Everything of it, as wired
+   */
+  private void handTheChainDownWhereTheProcessIsNamedByAnExpression(
+      final String workflowModuleId,
+      final Camunda8ProcessingContext bpmsProcessingContext) {
+
+    final var namedByAnExpression = bpmsProcessingContext.getElementsNamingTheirTargetByExpression();
+    if (namedByAnExpression.isEmpty()) {
+      return;
+    }
+    final var processesOfThisModule = new ArrayList<String>();
+    for (final var model : bpmsProcessingContext.getResources().values()) {
+      model
+          .getModelElementsByType(Process.class)
+          .stream()
+          .filter(Process::isExecutable)
+          .map(Process::getId)
+          .forEach(processesOfThisModule::add);
+    }
+    for (final var model : bpmsProcessingContext.getResources().values()) {
+      for (final var process : model.getModelElementsByType(Process.class)) {
+        if (!process.isExecutable()) {
+          continue;
+        }
+        final var scopedCallerId = process.getId();
+        final var plainCallerId = plainProcessId(workflowModuleId, scopedCallerId);
+        var somethingWasHandedDown = false;
+        for (final var elementId : namedByAnExpression.getOrDefault(plainCallerId, List.of())) {
+          final var expression = Camunda8MultiInstance
+              .handTheChainDown(model, scopedCallerId, elementId, multiInstanceRegistry);
+          if (expression == null) {
+            continue;
+          }
+          somethingWasHandedDown = true;
+          log
+              .debug(
+                  "Camunda8[{}]: the call activity '{}' of BPMN process '{}' names the process it "
+                      + "calls by an expression, so no deployment can say which process that is. "
+                      + "Its iteration chain travels into the called instance in the variable "
+                      + "'{}' instead: {}",
+                  adapterId,
+                  elementId,
+                  plainCallerId,
+                  Camunda8MultiInstance.CHAIN_VARIABLE,
+                  expression);
+        }
+        if (!somethingWasHandedDown) {
+          continue;
+        }
+        for (final var scopedCalledId : processesOfThisModule) {
+          if (workflowTaskWiring
+              .workflowsShareTheWorkflowAggregate(
+                  workflowModuleId,
+                  plainCallerId,
+                  plainProcessId(workflowModuleId, scopedCalledId))) {
+            multiInstanceRegistry.registerCallByExpression(scopedCallerId, scopedCalledId);
+          }
+        }
+      }
+    }
 
   }
 
@@ -3246,8 +3337,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (element.elementId() == null) {
         // the workflow-end listener: it reports a process rather than an element, and a
         // @WorkflowEnded method cannot declare a @TaskParam at all (the core rejects one),
-        // so the aggregate's id is the complete answer here
-        Camunda8FetchVariables.collect(variables, aggregateIdName, List.of());
+        // so the aggregate's id is the complete answer here. It is also the one worker which
+        // reports no iteration, so it asks for no multi-instance variable either
+        variables.add(aggregateIdName);
         continue;
       }
       Camunda8FetchVariables.collect(

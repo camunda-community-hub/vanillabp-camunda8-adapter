@@ -261,7 +261,7 @@ public class Camunda8FetchVariablesTest {
 
     assertFalse(selection.all(), "the derivation covers both processes, so nothing has to be fetched blindly");
     assertEquals(
-        List.of("cardId", "loanId"),
+        List.of("cardId", "loanId", "vanillabpMiParents"),
         selection.names(),
         "fetchVariables is a list, so two processes disagreeing about the name is no conflict - and the "
             + "order is sorted, because the gateway compares the list of two job streams");
@@ -285,7 +285,7 @@ public class Camunda8FetchVariablesTest {
             new Camunda8DeploymentService.ServedElement("Loans", "ApproveLoan", "approve"));
 
     assertEquals(
-        List.of("cardId", "loanId"),
+        List.of("cardId", "loanId", "vanillabpMiParents"),
         deploymentService.fetchVariablesOf(MODULE, served).names(),
         "the other order of the same processes produces the same list - job streams stay equivalent");
 
@@ -310,6 +310,7 @@ public class Camunda8FetchVariablesTest {
                 "vanillabpMiElement_Outer",
                 "vanillabpMiIndex_Inner",
                 "vanillabpMiIndex_Outer",
+                "vanillabpMiParents",
                 "vanillabpMiTotal_Inner",
                 "vanillabpMiTotal_Outer"),
         selection.names(),
@@ -326,12 +327,14 @@ public class Camunda8FetchVariablesTest {
     wire(deploymentService, TWO_PROCESSES);
 
     assertEquals(
-        List.of("id"),
+        List.of("id", "vanillabpMiParents"),
         deploymentService
             .fetchVariablesOf(
                 MODULE,
                 List.of(new Camunda8DeploymentService.ServedElement("Loans", "ApproveLoan", "approve")))
-            .names());
+            .names(),
+        "plus the chain a caller naming its process by an expression hands down, which every "
+            + "worker serving an element asks for because no deployment knows who can reach it");
 
   }
 
@@ -397,7 +400,7 @@ public class Camunda8FetchVariablesTest {
         List.of(new Camunda8DeploymentService.ServedElement("Declaring", "Rate", "rate")));
 
     assertEquals(
-        List.of("id", "ratingProvider"),
+        List.of("id", "ratingProvider", "vanillabpMiParents"),
         selection.names(),
         "the handler reads one of the values this model computes, and the other three are the "
             + "model's own business - reading them off the model would fetch all four");
@@ -417,7 +420,7 @@ public class Camunda8FetchVariablesTest {
     wire(deploymentService, TWO_PROCESSES);
 
     assertEquals(
-        List.of("amount", "id", "region"),
+        List.of("amount", "id", "region", "vanillabpMiParents"),
         deploymentService
             .fetchVariablesOf(
                 MODULE,
@@ -442,7 +445,7 @@ public class Camunda8FetchVariablesTest {
     wire(deploymentService, TWO_PROCESSES);
 
     assertEquals(
-        List.of("bigPayload", "id"),
+        List.of("bigPayload", "id", "vanillabpMiParents"),
         deploymentService
             .fetchVariablesOf(
                 MODULE,
@@ -468,7 +471,7 @@ public class Camunda8FetchVariablesTest {
     wire(deploymentService, TWO_PROCESSES);
 
     assertEquals(
-        List.of("bigPayload", "id"),
+        List.of("bigPayload", "id", "vanillabpMiParents"),
         deploymentService
             .fetchVariablesOf(
                 MODULE,
@@ -662,7 +665,13 @@ public class Camunda8FetchVariablesTest {
     deploymentService.wireTheProcessesThisModuleCalls(MODULE, context);
 
     assertEquals(
-        List.of("id", "vanillabpMiElement_PerItem", "vanillabpMiIndex_PerItem", "vanillabpMiTotal_PerItem"),
+        List
+            .of(
+                "id",
+                "vanillabpMiElement_PerItem",
+                "vanillabpMiIndex_PerItem",
+                "vanillabpMiParents",
+                "vanillabpMiTotal_PerItem"),
         deploymentService
             .fetchVariablesOf(
                 MODULE,
@@ -681,13 +690,14 @@ public class Camunda8FetchVariablesTest {
     wire(deploymentService, CALLER_AND_CALLED);
 
     assertEquals(
-        List.of("id"),
+        List.of("id", "vanillabpMiParents"),
         deploymentService
             .fetchVariablesOf(
                 MODULE,
                 List.of(new Camunda8DeploymentService.ServedElement("Delivery", "Pack", "pack")))
             .names(),
-        "which is what this adapter did before the chain crossed the boundary");
+        "which is what this adapter did before the chain crossed the boundary, apart from the "
+            + "one name every worker serving an element carries");
 
   }
 
@@ -714,12 +724,31 @@ public class Camunda8FetchVariablesTest {
         "the cluster still copies the caller's variables into the instance, and this adapter "
             + "reports none of them - which is the only place the line can honestly be drawn");
     assertEquals(
-        List.of("id"),
+        List.of("id", "vanillabpMiParents"),
         deploymentService
             .fetchVariablesOf(
                 MODULE,
                 List.of(new Camunda8DeploymentService.ServedElement("Delivery", "Pack", "pack")))
-            .names());
+            .names(),
+        "and the chain variable brings nothing either, because the reader drops an entry whose "
+            + "caller does not share this aggregate");
+
+  }
+
+  @Test
+  @DisplayName("a worker reporting a whole process rather than an element asks for the aggregate id alone")
+  public void theWorkflowEndListenerAsksForOneName() {
+
+    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    wire(deploymentService, TWO_PROCESSES);
+
+    assertEquals(
+        List.of("id"),
+        deploymentService
+            .fetchVariablesOf(MODULE, List.of(new Camunda8DeploymentService.ServedElement("Loans", null, null)))
+            .names(),
+        "a @WorkflowEnded method reports no iteration and cannot declare a @TaskParam, so the "
+            + "chain of a caller would be payload it never reads");
 
   }
 

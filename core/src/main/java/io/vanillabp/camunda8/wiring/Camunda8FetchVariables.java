@@ -33,7 +33,10 @@ import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
  * the index, the total and the element of every iteration enclosing it,
  * in the variables {@link Camunda8MultiInstance} injects while the model is deployed.
  * Which ones those are depends on the element, which is why this list is not a
- * constant;</li>
+ * constant. The one part of it which IS a constant is
+ * {@link Camunda8MultiInstance#CHAIN_VARIABLE}: a caller naming the process it calls by an
+ * expression writes its iteration chain there, and no deployment can say which process that
+ * call reaches;</li>
  * <li>every variable a {@code @TaskParam} of the served tasks reads
  * ({@code WorkflowTaskInvoker#taskParameterNames}). Those names live on the
  * handler methods, and the core reads them off the annotations while the application
@@ -254,8 +257,15 @@ public final class Camunda8FetchVariables {
   }
 
   /**
-   * The variables one served element contributes: the workflow aggregate's ID plus the
-   * multi-instance context of the iterations enclosing that element.
+   * The variables one served element contributes: the workflow aggregate's ID, the
+   * multi-instance context of the iterations enclosing that element, and the chain a caller
+   * naming its process by an expression hands down.
+   * <p>
+   * That last name is a constant, and every worker serving an element asks for it. No
+   * deployment knows who can be reached by an expression, so there is no list to derive: the
+   * chain is model knowledge of the CALLER, and the called process learns it from that
+   * variable alone. Where the variable is absent the key does not even reach the job, so a
+   * worker of a process nobody calls that way pays nothing for it.
    *
    * @param variables Where the names are collected
    * @param aggregateIdName The name of the aggregate's ID variable of the element's
@@ -271,6 +281,7 @@ public final class Camunda8FetchVariables {
     if (aggregateIdName != null) {
       variables.add(aggregateIdName);
     }
+    variables.add(Camunda8MultiInstance.CHAIN_VARIABLE);
     for (final var element : chain) {
       variables.add(element.indexVariable());
       if (element.totalVariable() != null) {

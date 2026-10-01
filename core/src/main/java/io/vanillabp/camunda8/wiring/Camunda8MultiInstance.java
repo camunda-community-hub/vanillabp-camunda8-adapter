@@ -72,6 +72,14 @@ import lombok.extern.slf4j.Slf4j;
  * {@link Registry#linkCalledProcesses()}.
  * </p>
  * <p>
+ * Where the caller names the process it calls by an EXPRESSION, there is no link to read: the
+ * process reached is decided per instance. The model knowledge is complete on the caller's
+ * side all the same, so the caller hands its chain down in the variable
+ * {@link #CHAIN_VARIABLE}, written by an input mapping of the call activity itself, see
+ * {@link #handTheChainDown}. The reading side puts those levels in front of the ones the
+ * deployment knew and cannot tell them apart afterwards.
+ * </p>
+ * <p>
  * Why the adapter puts input mappings into the deployed model, why they are idempotent, and why
  * that costs a new process version, is decision 5 in the repository's DECISIONS.md. The rules
  * the chain of a called process follows are decision 30 in the repository's DECISIONS.md.
@@ -81,6 +89,39 @@ public final class Camunda8MultiInstance {
 
   /** Prefix of every variable this class injects. */
   static final String VARIABLE_PREFIX = "vanillabpMi";
+
+  /**
+   * The variable a called process is handed the iteration chain of its caller in, where the
+   * caller names the called process by an expression. Which process such a call activity
+   * reaches is decided per instance, so no deployment can put the two models together; what
+   * the deployment CAN do is write the caller's chain into the called instance while it is
+   * created.
+   */
+  public static final String CHAIN_VARIABLE = VARIABLE_PREFIX
+      + "Parents";
+
+  /**
+   * The keys of one entry of {@link #CHAIN_VARIABLE}: the calling process and the levels of
+   * it. The names are the ones a reader sees in Operate, which is where somebody looks when
+   * they want to know why an index is missing. Short keys would save about two percent of an
+   * entry and cost that.
+   */
+  private static final String CALLER_KEY = "process";
+
+  /** The levels of one caller, outermost first. */
+  private static final String LEVELS_KEY = "levels";
+
+  /** The BPMN id of one multi-instance element, which is the key the SPI uses. */
+  private static final String ELEMENT_KEY = "element";
+
+  /** One level's iteration counter, as the CLUSTER counts it, so from 1. */
+  private static final String INDEX_KEY = "index";
+
+  /** The size of one level's collection, left out where the element has none. */
+  private static final String TOTAL_KEY = "total";
+
+  /** One level's current element, left out where the model names no input element. */
+  private static final String ITEM_KEY = "item";
 
   /**
    * The attribute of {@code zeebe:calledElement} which decides whether the variables of
@@ -193,6 +234,57 @@ public final class Camunda8MultiInstance {
       callSites
           .computeIfAbsent(calledBpmnProcessId, called -> ConcurrentHashMap.newKeySet())
           .add(new CallSite(callerBpmnProcessId, callActivityId));
+
+    }
+
+    /**
+     * Which callers a process accepts a handed-down chain from, by called process. A call
+     * activity naming its process by an expression hands its chain to whatever process it
+     * reaches, and the question whether that process is decomposition of the caller or a
+     * business case of its own is answered HERE, while the module is deployed: the deployment
+     * cannot say which process is reached, but it can say which of its own processes would be
+     * allowed to use the chain.
+     */
+    private final Map<String, Set<String>> callersNamingTheirProcessByExpression = new ConcurrentHashMap<>();
+
+    /**
+     * Remembers that one process of a workflow module may be handed the chain of a caller
+     * which names the process it calls by an expression. Recorded for every process of the
+     * module sharing the caller's workflow aggregate, because which one is reached is decided
+     * per instance.
+     *
+     * @param callerBpmnProcessId The calling process, as the CLUSTER knows it
+     * @param calledBpmnProcessId A process the call may reach, as the CLUSTER knows it
+     */
+    public void registerCallByExpression(
+        final String callerBpmnProcessId,
+        final String calledBpmnProcessId) {
+
+      callersNamingTheirProcessByExpression
+          .computeIfAbsent(calledBpmnProcessId, called -> ConcurrentHashMap.newKeySet())
+          .add(callerBpmnProcessId);
+
+    }
+
+    /**
+     * Whether a process may use the chain one caller handed it down.
+     * <p>
+     * An unknown caller is answered <code>false</code> rather than guessed. Two ways lead
+     * there: the call crossed the boundary of a workflow module, where this adapter never saw
+     * the caller's model, or the caller works on a workflow aggregate of its own, which is not
+     * decomposition. An application writing the variable itself ends up here as well.
+     *
+     * @param bpmnProcessId The process reading the variable, as the CLUSTER knows it
+     * @param callerBpmnProcessId The caller the entry names
+     * @return Whether the levels of that entry describe iterations of this process
+     */
+    boolean acceptsTheChainOf(
+        final String bpmnProcessId,
+        final String callerBpmnProcessId) {
+
+      return callersNamingTheirProcessByExpression
+          .getOrDefault(bpmnProcessId, Set.of())
+          .contains(callerBpmnProcessId);
 
     }
 
@@ -363,10 +455,14 @@ public final class Camunda8MultiInstance {
      * missing. So a chain may name more levels than the instance at hand ran in, and a
      * handler still sees exactly the iterations it is inside of.
      * <p>
-     * A call activity naming its process by an expression is not part of this, and neither
-     * is one calling a process with a workflow aggregate of its own. A task in such a
-     * process reports no iteration of its caller, although the cluster copies the values
-     * into the instance.
+     * A call activity naming its process by an expression is not part of this, because the
+     * process it reaches is decided per instance and no deployment can resolve that. Such a
+     * caller writes its chain into the called instance instead, and
+     * {@link Camunda8MultiInstance#valuesOf(Registry, String, String, Map)} puts those levels
+     * in front of what this method answers. A call activity calling a process with a workflow
+     * aggregate of its own is in neither half: that process runs a business case of its own
+     * and reports no iteration of its caller, although the cluster copies the values into its
+     * instance.
      *
      * @param bpmnProcessId The BPMN process ID as the CLUSTER knows it
      * @param elementId The BPMN element ID the job reports
@@ -543,26 +639,201 @@ public final class Camunda8MultiInstance {
       final String bpmnProcessId,
       final String callActivityId) {
 
-    for (final var callActivity : model.getModelElementsByType(CallActivity.class)) {
-      if (!callActivityId.equals(callActivity.getId()) || !bpmnProcessId.equals(owningProcessId(callActivity))) {
-        continue;
-      }
-      final var calledElement = callActivity.getSingleExtensionElement(ZeebeCalledElement.class);
-      if (calledElement == null) {
-        // no process is named at all, so this call activity reaches nothing the cluster
-        // would deploy
-        return false;
-      }
-      final var asModelled = calledElement
-          .getDomElement()
-          .getAttribute(PROPAGATE_ALL_PARENT_VARIABLES);
-      if (asModelled == null) {
-        calledElement.setPropagateAllParentVariablesEnabled(true);
-        return true;
-      }
-      return !"false".equalsIgnoreCase(asModelled.trim());
+    final var callActivity = callActivityOf(model, bpmnProcessId, callActivityId);
+    if (callActivity == null) {
+      return false;
     }
-    return false;
+    final var calledElement = callActivity.getSingleExtensionElement(ZeebeCalledElement.class);
+    if (calledElement == null) {
+      // no process is named at all, so this call activity reaches nothing the cluster
+      // would deploy
+      return false;
+    }
+    final var asModelled = calledElement
+        .getDomElement()
+        .getAttribute(PROPAGATE_ALL_PARENT_VARIABLES);
+    if (asModelled == null) {
+      calledElement.setPropagateAllParentVariablesEnabled(true);
+      return true;
+    }
+    return !"false".equalsIgnoreCase(asModelled.trim());
+
+  }
+
+  /**
+   * One call activity of one BPMN process, or <code>null</code> where that process has no
+   * element of that id. A model file may hold several processes, so the owning process is part
+   * of the question.
+   */
+  private static CallActivity callActivityOf(
+      final BpmnModelInstance model,
+      final String bpmnProcessId,
+      final String callActivityId) {
+
+    for (final var callActivity : model.getModelElementsByType(CallActivity.class)) {
+      if (callActivityId.equals(callActivity.getId()) && bpmnProcessId.equals(owningProcessId(callActivity))) {
+        return callActivity;
+      }
+    }
+    return null;
+
+  }
+
+  /**
+   * Writes the iteration chain of one call activity into the instance it calls, as an input
+   * mapping into {@link #CHAIN_VARIABLE}.
+   * <p>
+   * This is what a call activity naming its process by an EXPRESSION needs. A statically named
+   * one is linked model to model and gets nothing of this, not one byte more payload. Here
+   * there is no model to link, because the process reached is decided per instance - but the
+   * levels themselves are known, and every value they need is in reach where the mapping
+   * stands: an enclosing level has its variables from the mappings of decision 5 in the
+   * repository's DECISIONS.md, and the call activity's own round has <code>loopCounter</code>,
+   * its input collection and its input element, like any other multi-instance element.
+   * <p>
+   * An input mapping rather than a start listener. The cluster evaluates the mapping in the
+   * same record which creates the called instance, so there is no window in which the variable
+   * is still missing, and a listener would cost a job per instance for nothing but
+   * bookkeeping.
+   * <p>
+   * The expression appends to whatever is already there, which is how a chain several call
+   * activities long comes about: the cluster copies the caller's variable into the called
+   * instance, and the next mapping appends its own entry. The guard
+   * <code>is defined(...)</code> is what makes the first call work, and it is also all the
+   * protection there is: a value of another shape makes the whole chain
+   * <code>null</code> without an incident, which the reading side has to survive rather than
+   * trust.
+   * <p>
+   * Nothing is written at a STATICALLY named call activity, nothing where there is nothing to
+   * hand down, and nothing where the model keeps
+   * the caller's variables out of the called instance with
+   * <code>propagateAllParentVariables="false"</code>. The modeller switched the caller's
+   * context off on purpose there, and a mapping would travel all the same and undo that.
+   *
+   * @param model The BPMN model, about to be deployed
+   * @param bpmnProcessId The calling process, as the cluster will know it
+   * @param callActivityId The call activity naming its process by an expression
+   * @param registry Where the chains of this module are recorded, linked already
+   * @return The expression written into the model, or <code>null</code> where nothing was
+   *         written
+   */
+  public static String handTheChainDown(
+      final BpmnModelInstance model,
+      final String bpmnProcessId,
+      final String callActivityId,
+      final Registry registry) {
+
+    final var callActivity = callActivityOf(model, bpmnProcessId, callActivityId);
+    if (callActivity == null) {
+      // a business rule task naming its decision by an expression is read off the same list,
+      // and it calls no process
+      return null;
+    }
+    if (staticallyCalledProcessId(callActivity) != null) {
+      // a statically named call activity is linked model to model and is told nothing here,
+      // which is what keeps it at not one byte more payload
+      return null;
+    }
+    final var chain = registry.chainOf(bpmnProcessId, callActivityId);
+    if (chain.isEmpty()) {
+      // no iteration of this caller encloses the call activity, so there is nothing to write
+      // down. What an outer caller handed to THIS process travels on by itself, because the
+      // cluster copies that variable into the called instance like every other one
+      return null;
+    }
+    if (!theCallersVariablesReachTheCalledProcess(model, bpmnProcessId, callActivityId)) {
+      return null;
+    }
+    final var ownLoop = callActivity.getLoopCharacteristics() instanceof MultiInstanceLoopCharacteristics loop
+        ? loop.getSingleExtensionElement(ZeebeLoopCharacteristics.class)
+        : null;
+    final var expression = theChainAsAnExpression(bpmnProcessId, chain, callActivityId, ownLoop);
+    addInput(callActivity, CHAIN_VARIABLE, expression);
+    return expression;
+
+  }
+
+  /**
+   * The expression appending one entry to {@link #CHAIN_VARIABLE}: this caller and its levels,
+   * outermost first.
+   */
+  private static String theChainAsAnExpression(
+      final String bpmnProcessId,
+      final List<MultiInstanceElement> chain,
+      final String callActivityId,
+      final ZeebeLoopCharacteristics ownLoop) {
+
+    final var levels = chain
+        .stream()
+        .map(level -> theLevelAsAnExpression(level, level.elementId().equals(callActivityId), ownLoop))
+        .collect(Collectors.joining(", "));
+    return "=append(if is defined(%s) then %s else [], {%s: %s, %s: [%s]})"
+        .formatted(CHAIN_VARIABLE, CHAIN_VARIABLE, CALLER_KEY, quoted(bpmnProcessId), LEVELS_KEY, levels);
+
+  }
+
+  /**
+   * One level of the entry. A level enclosing the call activity reads the variables the
+   * mappings of that element wrote; the call activity's OWN round reads what the cluster
+   * offers every multi-instance element, because its own mappings are written on the same
+   * element and one input mapping of an element must not depend on another.
+   */
+  private static String theLevelAsAnExpression(
+      final MultiInstanceElement level,
+      final boolean isTheCallActivitysOwnRound,
+      final ZeebeLoopCharacteristics ownLoop) {
+
+    final var keys = new ArrayList<String>();
+    keys.add(ELEMENT_KEY
+        + ": "
+        + quoted(level.elementId()));
+    keys
+        .add(
+            INDEX_KEY
+                + ": "
+                + (isTheCallActivitysOwnRound
+                    ? "loopCounter"
+                    : level.indexVariable()));
+    // a level carries a total exactly where its element has an input collection and an item
+    // exactly where it names an input element, both read off the same zeebe:loopCharacteristics
+    // this level was described from - so that element is there wherever they are
+    if (level.totalVariable() != null) {
+      keys
+          .add(
+              TOTAL_KEY
+                  + ": "
+                  + (isTheCallActivitysOwnRound
+                      ? "count(%s)".formatted(withoutFeelPrefix(ownLoop.getInputCollection()))
+                      : level.totalVariable()));
+    }
+    if (level.elementVariable() != null) {
+      keys
+          .add(
+              ITEM_KEY
+                  + ": "
+                  + (isTheCallActivitysOwnRound
+                      ? ownLoop.getInputElement()
+                      : level.elementVariable()));
+    }
+    return "{"
+        + String.join(", ", keys)
+        + "}";
+
+  }
+
+  /**
+   * One value as a FEEL string literal. A BPMN process id or element id is unlikely to hold a
+   * quote, and an expression broken by one would be refused by the cluster with our text in
+   * the message rather than the application's.
+   */
+  private static String quoted(
+      final String value) {
+
+    return "\""
+        + value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+        + "\"";
 
   }
 
@@ -757,6 +1028,175 @@ public final class Camunda8MultiInstance {
     final var outermostFirst = new ArrayList<>(innermostFirst);
     Collections.reverse(outermostFirst);
     return outermostFirst;
+
+  }
+
+  /**
+   * Builds what the SPI asks for out of the variables a job carries, from BOTH sources of the
+   * chain: the levels the deployment knows about, and the ones a caller naming its process by
+   * an expression handed down in {@link #CHAIN_VARIABLE}.
+   * <p>
+   * The handed-down levels go in FRONT, because they belong to processes further out, and a
+   * level whose id the called process uses itself is dropped: both write the same variable
+   * names, the inner scope overwrites the outer one, and the job therefore carries the inner
+   * values. That is the rule {@link Registry#chainOf} follows for a static call, and it is the
+   * reason the two sources are indistinguishable once they are together.
+   *
+   * @param registry The chains of this module, linked already
+   * @param bpmnProcessId The BPMN process id the job reports, as the cluster knows it
+   * @param elementId The BPMN element id the job reports
+   * @param variables The job's variables
+   * @return The multi-instance contexts, keyed by the ID of the multi-instance element,
+   *         outermost first
+   */
+  public static Map<String, MultiInstanceValue> valuesOf(
+      final Registry registry,
+      final String bpmnProcessId,
+      final String elementId,
+      final Map<String, Object> variables) {
+
+    final var own = registry.chainOf(bpmnProcessId, elementId);
+    final var handedDown = theChainHandedDown(registry, bpmnProcessId, variables, own);
+    if (handedDown.levels().isEmpty()) {
+      return valuesOf(own, variables);
+    }
+    final var complete = new ArrayList<>(handedDown.levels());
+    complete.addAll(own);
+    // a value the job really carries wins over the copy in the list, so a level of the called
+    // process itself is never read out of what a caller wrote down
+    final var withWhatWasHandedDown = new LinkedHashMap<>(handedDown.values());
+    withWhatWasHandedDown.putAll(variables);
+    return valuesOf(complete, withWhatWasHandedDown);
+
+  }
+
+  /**
+   * The levels one or more callers handed down, together with the values under the names those
+   * levels refer to.
+   *
+   * @param levels The multi-instance elements, outermost first
+   * @param values What a job would carry if the deployment had known these levels
+   */
+  private record HandedDownChain(
+                                 List<MultiInstanceElement> levels,
+                                 Map<String, Object> values) {
+  }
+
+  /** What a job without a usable {@link #CHAIN_VARIABLE} hands to the reading side. */
+  private static final HandedDownChain NOTHING_HANDED_DOWN = new HandedDownChain(List.of(), Map.of());
+
+  /**
+   * Reads {@link #CHAIN_VARIABLE} out of a job.
+   * <p>
+   * A value which is not a list of entries of the expected shape is read as if the variable
+   * were not there, and an entry which does not describe a level of this process is left out.
+   */
+  private static HandedDownChain theChainHandedDown(
+      final Registry registry,
+      final String bpmnProcessId,
+      final Map<String, Object> variables,
+      final List<MultiInstanceElement> own) {
+
+    final var handedDown = variables.get(CHAIN_VARIABLE);
+    if (handedDown == null) {
+      return NOTHING_HANDED_DOWN;
+    }
+    if (!(handedDown instanceof List<?> entries)) {
+      return NOTHING_HANDED_DOWN;
+    }
+    final var ownVariables = own
+        .stream()
+        .map(MultiInstanceElement::indexVariable)
+        .collect(Collectors.toSet());
+    // keyed by the index variable, which is the one name two levels cannot share: ids differing
+    // only in characters a variable name may not hold mean one level, and the later of the two
+    // is the one the job carries
+    final var levels = new LinkedHashMap<String, MultiInstanceElement>();
+    final var values = new LinkedHashMap<String, Object>();
+    for (final var entry : entries) {
+      if (!(entry instanceof Map<?, ?> caller)) {
+        continue;
+      }
+      if (!(caller.get(CALLER_KEY) instanceof String callerBpmnProcessId) || callerBpmnProcessId.isBlank()) {
+        continue;
+      }
+      if (!registry.acceptsTheChainOf(bpmnProcessId, callerBpmnProcessId)) {
+        log
+            .debug(
+                "Camunda8: a job of BPMN process '{}' was handed the iteration chain of '{}', "
+                    + "which is not a process of the same workflow module working on the same "
+                    + "workflow aggregate, so that entry is left out. A call activity naming its "
+                    + "process by an expression hands its chain to whatever process it reaches: "
+                    + "across the boundary of a workflow module this adapter never saw the "
+                    + "caller's model, and a process with a workflow aggregate of its own runs a "
+                    + "business case of its own and is told no iteration of whoever called it.",
+                bpmnProcessId,
+                callerBpmnProcessId);
+        continue;
+      }
+      if (!(caller.get(LEVELS_KEY) instanceof List<?> reportedLevels)) {
+        continue;
+      }
+      for (final var reportedLevel : reportedLevels) {
+        if (!(reportedLevel instanceof Map<?, ?> reported)) {
+          continue;
+        }
+        if (!(reported.get(ELEMENT_KEY) instanceof String levelElementId) || levelElementId.isBlank()) {
+          continue;
+        }
+        final var level = asReported(levelElementId, reported);
+        if (ownVariables.contains(level.indexVariable())) {
+          // this process iterates an element of that id itself, so the caller's values are
+          // overwritten in a scope further in and the job carries the inner ones
+          continue;
+        }
+        // the same id twice along the chain is nesting rather than a choice, so the later level
+        // replaces the earlier one and takes its place at the end - what appendLevel does while
+        // deploying
+        levels.remove(level.indexVariable());
+        levels.put(level.indexVariable(), level);
+        values.put(level.indexVariable(), reported.get(INDEX_KEY));
+        if (level.totalVariable() != null) {
+          values.put(level.totalVariable(), reported.get(TOTAL_KEY));
+        }
+        if (level.elementVariable() != null) {
+          values.put(level.elementVariable(), reported.get(ITEM_KEY));
+        }
+      }
+    }
+    return levels.isEmpty()
+        ? NOTHING_HANDED_DOWN
+        : new HandedDownChain(List.copyOf(levels.values()), values);
+
+  }
+
+  /**
+   * One handed-down level, described the way the deployment describes one it knows: the
+   * variable names are derived from the element id, which is what makes the two sources
+   * indistinguishable afterwards.
+   * <p>
+   * A key which is absent and a key whose value is <code>null</code> are the same thing here.
+   * The two cannot be told apart in a job - the entry leaves the total out where the element
+   * has no input collection, and an expression which reached into nothing writes the same
+   * <code>null</code> - and both mean the value is not reported.
+   */
+  private static MultiInstanceElement asReported(
+      final String elementId,
+      final Map<?, ?> reported) {
+
+    final var suffix = variableSuffix(elementId);
+    return new MultiInstanceElement(
+        elementId, VARIABLE_PREFIX
+            + "Index_"
+            + suffix, reported.get(TOTAL_KEY) == null
+                ? null
+                : VARIABLE_PREFIX
+                    + "Total_"
+                    + suffix, reported.get(ITEM_KEY) == null
+                        ? null
+                        : VARIABLE_PREFIX
+                            + "Element_"
+                            + suffix);
 
   }
 

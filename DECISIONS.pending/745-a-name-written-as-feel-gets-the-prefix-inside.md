@@ -68,9 +68,10 @@ case now, so decision 2 holds as it is written and needs neither an edit nor a s
 > which says it is cheaper than one incident per instance.
 >
 > What this does NOT reach is the model knowledge behind such a call. Which process the expression
-> names is known at execution time, so a call activity naming it by FEEL stays outside the iteration
-> chain the caller hands down and outside what the workflow viewer can draw. Both read the attribute
-> the same way and both still see an expression.
+> names is known at execution time, so a call activity naming it by FEEL stays outside the call graph
+> the deployment links and outside what the workflow viewer can draw. Both read the attribute the same
+> way and both still see an expression. The iteration chain is not lost with it: the caller writes its
+> own levels into the called instance instead, which is the addendum to decision 30 of story 767.
 >
 > Where the mode is not `use-prefix` there is no prefix, so nothing of this applies and nothing is
 > said.

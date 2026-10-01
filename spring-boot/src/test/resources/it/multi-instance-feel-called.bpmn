@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_multi_instance_feel_called" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!--
+    The process the three call activities of the caller reach, named by an expression every
+    time. Its task reports which case it ran in and what it was told about the iterations it
+    runs in - all of which belong to the caller's model, which this process never sees.
+  -->
+  <bpmn:process id="MiFeelCalledProcess" isExecutable="true">
+    <bpmn:startEvent id="MIF_CalledStart">
+      <bpmn:outgoing>MIF_CalledToTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MIF_CalledToTask" sourceRef="MIF_CalledStart" targetRef="MIF_CalledTask" />
+    <bpmn:serviceTask id="MIF_CalledTask">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="collectWhatTheCallerHandedDown" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIF_CalledToTask</bpmn:incoming>
+      <bpmn:outgoing>MIF_CalledToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MIF_CalledToEnd" sourceRef="MIF_CalledTask" targetRef="MIF_CalledEnd" />
+    <bpmn:endEvent id="MIF_CalledEnd">
+      <bpmn:incoming>MIF_CalledToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

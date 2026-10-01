@@ -22,6 +22,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * CALLED process was reached in.
  *
  * <p>
+ * A called process named by an EXPRESSION is here too, and it is the one case the deployment
+ * cannot link: which process such a call activity reaches is decided per instance. The caller
+ * writes its chain into the called instance instead.
+ * </p>
+ *
+ * <p>
  * That last part is what this engine cannot answer by itself. It puts the index of
  * an iteration into the variable {@code loopCounter} and the element into whatever
  * {@code inputElement} names, so an inner iteration shadows an outer one, and it has
@@ -49,6 +55,12 @@ public class Camunda8MultiInstanceIT extends SpringBootTestOnTheSharedCluster {
 
   @Autowired
   private MiCallDockerAggregateRepository callRepository;
+
+  @Autowired
+  private MiFeelDockerWorkflowService feelWorkflowService;
+
+  @Autowired
+  private MiFeelDockerAggregateRepository feelRepository;
 
   @Autowired
   private TransactionTemplate transactionTemplate;
@@ -140,6 +152,38 @@ public class Camunda8MultiInstanceIT extends SpringBootTestOnTheSharedCluster {
         "g1#0/2,g2#1/2",
         aggregate.getTwoLevelsDown(),
         "two call activities away from the subprocess, the iteration is still reported");
+
+  }
+
+
+  @Test
+  @DisplayName("a called process named by an expression is told the iteration of its caller too")
+  public void theIterationCrossesACallActivityNamedByAnExpression() throws Exception {
+
+    final var aggregateId = transactionTemplate.execute(status -> feelWorkflowService.startWorkflow().getId());
+    assertNotNull(aggregateId);
+
+    awaitUntil(
+        () -> feelRepository
+            .findById(aggregateId)
+            .map(MiFeelDockerAggregate::getReported)
+            .filter(reported -> reported.split(",").length == 4)
+            .isPresent(),
+        "all four calls of the subprocess to have run");
+
+    final var reported = feelRepository
+        .findById(aggregateId)
+        .orElseThrow()
+        .getReported();
+
+    assertEquals(
+        "clean=MIF_Clean:c1#0/2>MIF_CallClean:p1#0/2,"
+            + "clean=MIF_Clean:c1#0/2>MIF_CallClean:p2#1/2,"
+            + "clean=MIF_Clean:c2#1/2>MIF_CallClean:p1#0/2,"
+            + "clean=MIF_Clean:c2#1/2>MIF_CallClean:p2#1/2",
+        reported,
+        "the two levels of the first case belong to a model the called process never sees, and "
+            + "the deployment could not say which process the call reaches");
 
   }
 
