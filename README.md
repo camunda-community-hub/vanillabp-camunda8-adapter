@@ -95,36 +95,45 @@ such a change through unread. That is `.github/workflows/client-api-changes.yaml
 `bin/client-api-changes.sh`, and `Camunda8UnknownClientEnumsTest` holds what the adapter does
 with a literal it has never seen.
 
-The preview line runs against `8.10.0-rc1`, and that pin is what makes it usable again. Up
-to `8.10.0-alpha5` the REST gateway of that line dropped a whole activate-jobs batch when it
-met a task-listener job whose event carried no user task action in its headers, and the two
-events without one are `creating` and `canceling`. Every Camunda-managed user task this
-adapter deploys carries a `creating` listener, so on that alpha the application never heard
-that the task existed. The bug is `camunda/camunda#58193`: the engine writes the action header
-only where the command carried an action, creation and cancelation carry none, and the
-gateway's response mapper demanded one anyway and threw a `NullPointerException`, which lost
-the whole batch and not just the one job.
+The 8.10 line is pinned to `8.10.0`. Two cluster defects had kept it on a pre-release, and
+both of them are measured on the release rather than read off a changelog.
 
-Camunda closed the issue on 2026-09-01, a day after `8.10.0-alpha5` was built, and the fix is
-in the candidate. Measured against `camunda/camunda:8.10.0-rc1` on 2026-09-25: a user task with
-a `creating` listener hands its job out, `Camunda8UserTaskStillCreatingIT` and
-`Camunda8UserTaskProbeIT` pass, and the tests which create such a task run on this line again.
-The exclusions the alpha needed are gone from the `line-8.10` profile, and so is the tag which
-carried them.
+The first one hid the job of a `creating` task listener. Up to `8.10.0-alpha5` the REST gateway
+of that line dropped a whole activate-jobs batch when it met a task-listener job whose event
+carried no user task action in its headers, and the two events without one are `creating` and
+`canceling`. Every Camunda-managed user task this adapter deploys carries a `creating`
+listener, so on that alpha the application never heard that the task existed. The bug is
+`camunda/camunda#58193`: the engine writes the action header only where the command carried an
+action, creation and cancelation carry none, and the gateway's response mapper demanded one
+anyway and threw a `NullPointerException`, which lost the whole batch and not just the one job.
 
-The second defect this pin was moved for is SUPPORT-34723, the worker which stopped asking for
-work after its first empty poll while a job of it was still in a handler. Camunda's fix is
-`#59633` and it is in the candidate as well, and our own run met it from the other side: with four
-execution slots and one handler blocked, the cluster handed the same job back to the same
-worker as soon as its lock ran out, four times over. That has a consequence worth knowing. The
-adapter hands the client an executor as wide as `worker-threads` and the client answers its own
-requests on it, so a handler which occupies every slot also stops the client from completing a
-request of that same application. `Camunda8JobLeaseIT` blocks a handler on purpose and now
-sends its second activation with a client of its own for that reason.
+Camunda closed the issue on 2026-09-01, a day after `8.10.0-alpha5` was built, and the fix was
+in the first candidate. It is in the release as well. Measured against
+`camunda/camunda:8.10.0` on 2026-10-01: the 27 cases of `Camunda8TaskProcessingIT` pass,
+`userTaskCreatedAndCompleted`, `userTaskCanceledOnInstanceCancellation` and
+`cancelUserTaskUnsupportedGuiding` among them, and `Camunda8TaskListenerVariablesCanaryIT`
+gets its `creating` job in five seconds. Nothing is excluded for this bug on any line, and
+nothing has been since the pin moved to `8.10.0-rc1`.
 
-Two things changed with the candidate which an alpha bump never asked for. The client renamed
-the lease API to `getJobLeaseToken()` and `withJobLeaseToken(...)`, which is the delta source
-of this line and nothing else. And the cluster now refuses the answer to a leased job which
+The second defect is SUPPORT-34723, the worker which stopped asking for work after its first
+empty poll while a job of it was still in a handler. Camunda's fix is `#59633`, shipped in
+`8.8.37` and `8.9.18`, and for 8.10 we were told only that the line would follow. It did, and
+that was measured twice on 2026-10-01 against `camunda/camunda:8.10.0`:
+`Camunda8KeepsAskingWhileAHandlerRunsIT` passes, which is this adapter's own worker asking
+again while one of its handlers blocks a slot, and the bare-client reproduction outside this
+repository passes with client `8.10.0` in nine seconds.
+
+That defect taught us something about the executor which still holds. The adapter hands the
+client an executor as wide as `worker-threads` and the client answers its own requests on it,
+so a handler which occupies every slot also stops the client from completing a request of that
+same application. `Camunda8JobLeaseIT` blocks a handler on purpose and sends its second
+activation with a client of its own for that reason. The run which found it measured four
+redeliveries of the same job to the same worker, once per free slot, as soon as its lock ran
+out.
+
+Two things changed with the first candidate which an alpha bump never asked for. The client
+renamed the lease API to `getJobLeaseToken()` and `withJobLeaseToken(...)`, which is the delta
+source of this line and nothing else. And the cluster refuses the answer to a leased job which
 carries no token, with `409 INVALID_STATE`; the adapter always sent one, a test which used the
 raw client did not.
 
@@ -1596,12 +1605,11 @@ Whether the second run happens at all depends on the client. Up to `8.8.36` and 
 which still held a job stopped asking for work, so its own expired job could only be picked up
 somewhere else, in practice by a second pod. From `8.8.37` and `8.9.18` on the worker keeps asking
 while its handler runs, and the measurement above is that case: the same worker activated its own
-expired job again about a second after the lock had run out. This build pins `8.8.39` and `8.9.21`,
-so both GA lines behave that way. The 8.10 client still carries the old behaviour up to
-`8.10.0-alpha5`, and 8.10 is the only line which has a lease at all: measured there on 2026-09-21,
-a single worker holding its job saw no second activation for 120 seconds, with the lease and
-without it. So on the line which can lease, the race a lease decides still needs a second worker
-today. Only a repaired 8.10 client has both halves at once.
+expired job again about a second after the lock had run out. Every pin of this build has that
+behaviour now, `8.8.40`, `8.9.21` and `8.10.0` alike, the last one measured on 2026-10-01. The
+8.10 alphas did not: a single worker holding its job saw no second activation for 120 seconds
+there on 2026-09-21, with the lease and without it, so on the only line which can lease at all the
+race a lease decides needed a second worker. Both halves are now in one client.
 
 The workers which lease are the ones which hold their job from the activation to the answer: the
 user-task listeners, the listeners somebody modelled, the cancel listeners VanillaBP writes, the

@@ -117,14 +117,14 @@
          newer, the lowest cluster version the artifacts accept. Every line is built from
          THIS source tree, so a fix exists on every line the moment it is committed.
          The properties below are what Renovate maintains, one per line, and what the
-         line-* profiles select. Their values are the pins the CI matrix runs, and a pull
-         request which moves one of them builds every line instead of the current GA
-         alone (the job 'pin-change' in .github/workflows/checks.yaml). -->
-    <camunda8.line>8.9</camunda8.line>
-    <camunda8.version>${camunda8.version.line-8.9}</camunda8.version>
+         line-* profiles select. Their values are the pins the CI matrix runs. Every pull
+         request builds every line, so a moved pin buys nothing extra; the job 'pin-change'
+         in .github/workflows/checks.yaml only says in the log that one moved. -->
+    <camunda8.line>8.10</camunda8.line>
+    <camunda8.version>${camunda8.version.line-8.10}</camunda8.version>
     <camunda8.version.line-8.8>8.8.40</camunda8.version.line-8.8>
     <camunda8.version.line-8.9>8.9.21</camunda8.version.line-8.9>
-    <camunda8.version.line-8.10>8.10.0-rc3</camunda8.version.line-8.10>
+    <camunda8.version.line-8.10>8.10.0</camunda8.version.line-8.10>
     <!-- optional: the adapter's own meters are published where the application brings
          Micrometer (see MicrometerCamunda8Metrics). Pinned to the OLDER of both
          platforms, like the platform integration does it (Quarkus 3.37.1 manages 1.16.6,
@@ -602,7 +602,8 @@
          Rotating the lines means editing these profiles, the pin properties, the Renovate
          boundary rule and the line table of the README. -->
     <profile>
-      <!-- previous GA: bugfixes only, ends when the next minor goes GA -->
+      <!-- a bugfix line: it takes fixes and nothing which needs a newer cluster. It did not
+           end when 8.10 went GA, see the README, section "How long a line lives" -->
       <id>line-8.8</id>
       <properties>
         <camunda8.line>8.8</camunda8.line>
@@ -611,12 +612,12 @@
              its tests pay for a second container beside every cluster they start. Moving it
              onto the embedded database the newer lines use would change what this line is
              tested against,
-             which is the one thing a previous-GA line may not do -->
+             which is the one thing a bugfix line may not do -->
         <camunda8.cluster.secondary-storage>elasticsearch</camunda8.cluster.secondary-storage>
       </properties>
     </profile>
     <profile>
-      <!-- current GA: everything lands here, and it is what a plain build produces -->
+      <!-- a bugfix line: it takes fixes and nothing which needs a newer cluster -->
       <id>line-8.9</id>
       <properties>
         <camunda8.line>8.9</camunda8.line>
@@ -624,17 +625,14 @@
       </properties>
     </profile>
     <profile>
-      <!-- preview: built against a pre-release of the next minor, first its alphas and
-           then its release candidates, and published as a pre-release itself, so a feature
-           only the new cluster can do is deliverable before that cluster is GA -->
+      <!-- current GA: everything lands here, and it is what a plain build produces. It was
+           the preview line until Camunda released 8.10.0 on 2026-09-29. No profile carries
+           'camunda8.line.preview' now, and the next one to carry it is the line of the first
+           8.11 pre-release -->
       <id>line-8.10</id>
       <properties>
         <camunda8.line>8.10</camunda8.line>
         <camunda8.version>${camunda8.version.line-8.10}</camunda8.version>
-        <!-- read by the client-api-changes workflow, which turns what a client bump added
-             into a red check on the GA lines and into a comment here: a pre-release changes
-             its classes all the time and must not hold up a pull request of the GA lines -->
-        <camunda8.line.preview>true</camunda8.line.preview>
       </properties>
     </profile>
   </profiles>
