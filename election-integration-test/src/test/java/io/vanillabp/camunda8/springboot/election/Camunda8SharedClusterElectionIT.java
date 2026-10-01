@@ -169,11 +169,26 @@ public class Camunda8SharedClusterElectionIT {
         "the message reached the workflow started before the migration - without the scope check it is "
             + "published under the prefixed name into a cluster where nobody subscribes to it");
 
-    final var logged = output.getOut() + output.getErr();
-    assertTrue(
-        logged.contains("Camunda8[c8-plain]: published message"),
-        "and the adapter holding the workflow is the one which published it: "
-            + logged);
+    // The latch and the line are two events and nothing orders them. The latch counts down
+    // in the job worker. The line which names the publishing adapter is written by the
+    // thread which published, after the cluster acknowledged the command, and the cluster
+    // correlates the message and creates the job in the same step which answers that
+    // command. The job can therefore be on its way to the worker while the publishing
+    // thread has not reached its log statement yet. On an idle machine the line was 23 to
+    // 43 ms ahead of the handler over four runs, and that head start was the whole of the
+    // assertion. A pause of the JVM or a busy build server eats it, and that is how this
+    // test went red once without anybody touching it: the message had reached the workflow,
+    // the line had not reached the buffer. So the test waits for the line it judges by.
+    // Delay that line on purpose and the test fails without this wait and passes with it.
+    awaitInOutput(
+        output,
+        "Camunda8[c8-plain]: published message",
+        "the adapter holding the workflow to report that IT published the message - the one in first "
+            + "priority publishing instead is what the scope check prevents");
+
+    // over the running test, because a sentence which is absent is only absent for the
+    // test which says so
+    final var logged = output.getAllOfThisTest();
     assertFalse(
         logged.contains("Camunda8[c8-prefix]: published message"),
         "the adapter of the new deployment must not answer for a workflow of the old one: "
