@@ -144,8 +144,14 @@ because it sits in a file next to a process you do serve, and what it contains i
 demands about, so one WARN per process names the elements and the boot goes on.
 
 Both messages say how many tasks are open on the elements right now, and only the count of elements
-is certain: they come from the model this boot deploys, while the open tasks are a search, and a
-cluster which is not up yet costs you that count.
+is certain. The elements come from the model this boot deploys. The open tasks are a search of the
+cluster's index: it is asked how many jobs of that element's job type the process has, and how many
+of those it has already seen end, and the message names the difference. That is the number which
+falls to zero as you work the tasks off, which the plain total of the search never did. It is near
+rather than exact, because an exporter feeds that index and the index runs behind the engine: a task
+which finished a moment ago can still be counted, and one which opened a moment ago can still be
+missing. A cluster which is not up yet costs you the number altogether, and the message says that
+instead of writing a zero.
 
 ### A task your cockpit showed while a check answered 404
 

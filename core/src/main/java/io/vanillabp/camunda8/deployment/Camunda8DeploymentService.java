@@ -37,6 +37,7 @@ import io.vanillabp.camunda8.client.Camunda8Drain;
 import io.vanillabp.camunda8.client.Camunda8InstanceIdentity;
 import io.vanillabp.camunda8.client.Camunda8SearchableClusterCheck;
 import io.vanillabp.camunda8.client.Camunda8TenantCheck;
+import io.vanillabp.camunda8.client.Camunda8UnservedUserTaskJobs;
 import io.vanillabp.camunda8.client.Camunda8WorkerConnections;
 import io.vanillabp.camunda8.client.Camunda8Workers;
 import io.vanillabp.camunda8.health.Camunda8Health;
@@ -2296,9 +2297,12 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * finds it, while the cluster does exactly the same with it.
    * <p>
    * Two numbers are said and only the first one is certain. The elements come from the model
-   * this boot deploys and are what has to reach zero; the count of open tasks is a search, and
-   * this runs while the module is wired, which is before the start has waited for its cluster -
-   * so a cluster which is not up yet costs the number.
+   * this boot deploys and are what has to reach zero. The count of open tasks is a search of the
+   * cluster's index, and {@link Camunda8UnservedUserTaskJobs} says what that answer is worth:
+   * the index leaves out the jobs it has seen finish and runs behind the engine at both ends,
+   * so the number is near rather than exact and the message says so. It can also be missing
+   * altogether, because this runs while the module is wired, which is before the start has
+   * waited for its cluster.
    *
    * @param workflowModuleId The workflow module id
    * @param bpmnProcessId The plain BPMN process id
@@ -2320,10 +2324,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // workflow aggregate of it, which is the same question the start listener and the
     // refusal of a file without a correlation key ask
     final var theApplicationClaimsTheProcess = aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null;
-    final var openTasks = countOpenUnservedUserTasks(scopedBpmnProcessId);
-    final var howManyAreOpen = openTasks == null
-        ? "The cluster did not answer how many of them are open right now."
-        : "Open right now: %d.".formatted(openTasks);
+    final var howManyAreOpen = Camunda8UnservedUserTaskJobs
+        .howManyAreOpen(whatTheIndexHoldsOfTheUnservedUserTasks(scopedBpmnProcessId));
     if (theApplicationClaimsTheProcess) {
       throw new IllegalStateException(
           """
@@ -2532,29 +2534,21 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * How many jobs of the plain user task's job type the cluster still holds for one process -
-   * the number which goes to zero as those tasks are finished. It covers both shapes the
-   * report names, because the cluster serves both with a job of that one type.
+   * What the cluster's index holds about the jobs of the plain user task's type for one
+   * process. It covers both shapes the message names, because the cluster serves both with a
+   * job of that one type.
+   * <p>
+   * Why two numbers come back rather than one, and why neither of them is exact, is
+   * {@link Camunda8UnservedUserTaskJobs}.
    *
    * @param scopedBpmnProcessId The process id as the cluster knows it
-   * @return The count, or <code>null</code> where the cluster did not answer
+   * @return What the index answered, or <code>null</code> where the cluster did not answer
    */
-  private Long countOpenUnservedUserTasks(
+  private Camunda8UnservedUserTaskJobs.Count whatTheIndexHoldsOfTheUnservedUserTasks(
       final String scopedBpmnProcessId) {
 
     try {
-      // the TOTAL rather than the page which came back, and one item fetched because
-      // only the number is wanted
-      final var found = clientFactory
-          .getClient()
-          .newJobSearchRequest()
-          .filter(filter -> filter
-              .processDefinitionId(scopedBpmnProcessId)
-              .type(Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1))
-          .page(page -> page.limit(1))
-          .send()
-          .join();
-      return found.page().totalItems();
+      return Camunda8UnservedUserTaskJobs.countFor(clientFactory.getClient(), scopedBpmnProcessId);
     } catch (final RuntimeException e) {
       // a diagnostic never fails a deployment, and a cluster which cannot answer
       // says so in the message instead

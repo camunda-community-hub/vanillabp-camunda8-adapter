@@ -1475,10 +1475,22 @@ that process, and this element is where the promise breaks. The message names th
 elements per shape and the two ways out. Where nobody claims the process, the WARN it always had
 is written and the boot goes on, without the sentences which asked the reader to change
 something: the model travels to the cluster because of the file it sits in, and whoever owns it
-may serve such a job with a worker of their own. Both messages carry how many tasks are open on
-the elements right now, counted from the jobs of that type.
+may serve such a job with a worker of their own.
 `Camunda8UnservedUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
 reader.
+
+Both messages carry how many tasks are open on the elements right now, and that number used to
+count the finished ones with it. It was the total of one job search by process and job type, and
+the index keeps a job after it is over, so it was every such job the process ever had and it never
+fell. `Camunda8UnservedUserTaskJobs` is the number now: two searches, all jobs of that type and
+those of them the index holds in a state a job does not leave again, and the difference between
+them. The end states are named rather than the open ones because the client grows that enum inside
+a release line, and a state this build has no literal for then counts as open rather than
+disappearing. What the number is worth is in that class and in every message carrying it: the index
+runs behind the engine at both ends. `Camunda8UnservedUserTaskJobsTest` holds the two searches and
+the arithmetic, and `Camunda8CountOfOpenUnservedUserTasksIT` reads one open and one finished job of
+the same type in the same process against a real cluster and writes down which states each line
+names.
 
 The wiring and the V1 order of the listeners are `Camunda8UserTaskWiringTest`. The
 lifecycle against a cluster is `Camunda8TaskProcessingIT#userTaskCreatedAndCompleted`,
