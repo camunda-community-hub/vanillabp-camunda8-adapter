@@ -14,8 +14,8 @@ import io.vanillabp.camunda8.Camunda8ReleaseLine;
  * An application decides this number, not the adapter. The platform BOM an application
  * imports manages <code>protobuf-java</code>, and an imported BOM beats every version a
  * dependency brings, so the pin in this repository's parent POM covers our own build and
- * reaches nobody else. Measured in September 2026: on the preview line both platforms hand
- * an application a runtime OLDER than the client's gencode, on the GA lines a newer one,
+ * reaches nobody else. Measured in September 2026: on the 8.10 line both platforms hand an
+ * application a runtime OLDER than the client's gencode, on the two older lines a newer one,
  * which protobuf allows. The README's section "Release lines" carries the table.
  * <p>
  * So the adapter asks the question itself, at startup, where a message can name the fix: it

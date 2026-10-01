@@ -31,8 +31,8 @@ import io.vanillabp.spi.service.TaskEvent;
  * seconds, so the cluster hands that job to the worker again shortly after the boundary event
  * fired.
  * <p>
- * Nothing in this is about the preview line. It runs wherever the module runs, which is what
- * keeps it from being read as an 8.10 feature.
+ * Nothing in this is about one line. It runs wherever the module runs, which is what keeps it
+ * from being read as an 8.10 feature.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
