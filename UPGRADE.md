@@ -516,9 +516,7 @@ own model declares. There is nothing to change in your model and nothing to chan
 One model does not boot: an expression which composes the prefix itself. It would be given a second
 one, the cluster would be asked for `loan-approval__loan-approval__PaymentHandling`, and every call
 of that element would fail once a workflow reached it. The boot ends instead, naming the file, the
-element and the expression to take the prefix out of. This is owed to an earlier 2.0 snapshot, which
-left the expression alone and asked you to compose the prefix; if you followed that advice, remove
-the prefix again.
+element and the expression to take the prefix out of.
 
 What the rewrite costs you is worth knowing before you read a message about it. Camunda 8 parses the
 FEEL of a model while it deploys it, so a syntax error in your own part refuses the deployment and
