@@ -2220,18 +2220,43 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     if (depth > MAX_SCOPE_DEPTH) {
       return false;
     }
-    final var children = clientFactory
-        .getClient()
-        .newElementInstanceSearchRequest()
-        .filter(filter -> filter.elementInstanceScopeKey(scope.key()))
-        .send()
-        .join()
-        .items();
+    // every child of the scope, not the first page of them: a multi-instance over 100
+    // items puts more children into one scope than a search hands out without being
+    // asked, and the task of the 101st iteration would be a task below no scope at all.
+    // Reading stops on the page the wanted element instance is on, because the children
+    // after it are not walked into either
+    final var read = Camunda8SearchPages
+        .pagesUntil(
+            child -> elementInstanceKey.equals(child.getElementInstanceKey()),
+            Camunda8SearchPages.MAX_PAGES,
+            cursor -> clientFactory
+                .getClient()
+                .newElementInstanceSearchRequest()
+                .filter(filter -> filter.elementInstanceScopeKey(scope.key()))
+                .page(page -> {
+                  page.limit(Integer.valueOf(Camunda8SearchPages.PAGE_SIZE));
+                  if (cursor != null) {
+                    page.after(cursor);
+                  }
+                })
+                .send()
+                .join());
+    final var children = read.items();
     for (final var child : children) {
       if (elementInstanceKey.equals(child.getElementInstanceKey())) {
         path.add(scope);
         return true;
       }
+    }
+    if (read.theClusterHadMore()) {
+      log.warn(
+          "Camunda8[{}]: stopped after {} children of element instance '{}' while looking for the scope "
+              + "of element instance '{}', so that scope is reported as unknown although the cluster may "
+              + "hold it",
+          adapterId,
+          Integer.valueOf(children.size()),
+          scope.key(),
+          elementInstanceKey);
     }
     for (final var child : children) {
       if (findScopePath(

@@ -17,6 +17,7 @@ import io.camunda.client.api.search.filter.ProcessDefinitionFilter;
 import io.camunda.client.api.search.response.ProcessDefinition;
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
+import io.vanillabp.camunda8.processservice.Camunda8SearchPages;
 import io.vanillabp.camunda8.processservice.Camunda8Searches;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ModelIdentifier;
 import io.vanillabp.integration.adapter.spi.version.CachingProcessVersionCatalog;
@@ -615,6 +616,9 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
           Camunda8Searches.scopedTo(filter, scopedProcessId, tenantId);
           filter.version(Integer.valueOf(version));
         })
+        // one process, one tenant, one version: the cluster holds a single definition
+        // under those three, so one entry is the whole answer
+        .page(page -> page.limit(Integer.valueOf(1)))
         .send()
         .join()
         .items()
@@ -719,25 +723,52 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
 
     final var scopedProcessId = scopedProcessIds.apply(workflowModuleId, bpmnProcessId);
     final var tenantId = tenants.apply(workflowModuleId);
-    final var definitions = client
-        .get()
-        .newProcessDefinitionSearchRequest()
-        .filter(filter -> {
-          onlyDefinitionsWhichStillCount(filter);
-          Camunda8Searches.scopedTo(filter, scopedProcessId, tenantId);
-        })
-        .sort(sort -> sort.version().asc())
-        .send()
-        .join()
-        .items();
+    // every version the cluster holds is the answer here, not the first page of them: a
+    // process redeployed with every release of an application passes 100 versions, and the
+    // page a search hands out without being asked holds 100. Newest first, so the bound of
+    // the paging can only cut versions nobody asks about any more - the questions put to
+    // this list are about the versions around the one just deployed
+    final var read = Camunda8SearchPages
+        .everyPage(
+            cursor -> client
+                .get()
+                .newProcessDefinitionSearchRequest()
+                .filter(filter -> {
+                  onlyDefinitionsWhichStillCount(filter);
+                  Camunda8Searches.scopedTo(filter, scopedProcessId, tenantId);
+                })
+                .sort(sort -> sort.version().desc())
+                .page(page -> {
+                  page.limit(Integer.valueOf(Camunda8SearchPages.PAGE_SIZE));
+                  if (cursor != null) {
+                    page.after(cursor);
+                  }
+                })
+                .send()
+                .join());
+    final var definitions = read.items();
+    if (read.theClusterHadMore()) {
+      log
+          .warn(
+              "Camunda8[{}]: read {} versions of BPMN process '{}' (workflow module '{}') and stopped there, "
+                  + "so VanillaBP says nothing about versions older than those. The newest ones are the ones "
+                  + "it was asked about, so this only shows where a cluster keeps every version a release ever "
+                  + "deployed - deleting the definitions nothing runs on any more ends it",
+              adapterId,
+              Integer.valueOf(definitions.size()),
+              bpmnProcessId,
+              workflowModuleId);
+    }
     // this one search holds what every later question about an older version needs, and
     // keeping the keys is what spares those questions a search each
     definitions.forEach(definition -> remember(workflowModuleId, bpmnProcessId, definition));
+    // the catalog is answered oldest first, and the search ran the other way round
     return definitions
         .stream()
         .map(definition -> DeployedProcessVersion
             .of(String.valueOf(definition.getVersion()), definition.getVersionTag()))
-        .toList();
+        .toList()
+        .reversed();
 
   }
 

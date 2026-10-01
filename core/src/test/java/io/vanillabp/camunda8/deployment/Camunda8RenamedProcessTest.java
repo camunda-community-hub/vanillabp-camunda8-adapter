@@ -124,7 +124,11 @@ public class Camunda8RenamedProcessTest {
         .when(search.send())
         .thenAnswer(invocation -> future(response(java.util.Arrays
             .stream(heldVersions)
-            .mapToObj(Camunda8RenamedProcessTest::definition)
+            .boxed()
+            // the adapter asks for the newest version first, so this cluster answers that
+            // way round - what the catalog hands on is turned back into oldest first
+            .sorted(java.util.Comparator.reverseOrder())
+            .map(Camunda8RenamedProcessTest::definition)
             .toList())));
     when(client.newProcessDefinitionSearchRequest()).thenReturn(search);
 
@@ -158,13 +162,13 @@ public class Camunda8RenamedProcessTest {
   }
 
   private static ProcessDefinition definition(
-      final int version) {
+      final Integer version) {
 
     final var definition = mock(ProcessDefinition.class);
     Mockito
         .lenient()
         .when(definition.getProcessDefinitionKey())
-        .thenReturn(Long.valueOf(1000 + version));
+        .thenReturn(Long.valueOf(1000 + version.intValue()));
     Mockito.lenient().when(definition.getVersion()).thenReturn(version);
     return definition;
 
