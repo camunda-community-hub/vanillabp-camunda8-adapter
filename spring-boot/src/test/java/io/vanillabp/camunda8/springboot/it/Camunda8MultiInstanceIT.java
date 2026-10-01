@@ -3,6 +3,7 @@ package io.vanillabp.camunda8.springboot.it;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 import org.junit.jupiter.api.DisplayName;
@@ -24,7 +25,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * A called process named by an EXPRESSION is here too, and it is the one case the deployment
  * cannot link: which process such a call activity reaches is decided per instance. The caller
- * writes its chain into the called instance instead.
+ * writes its chain into the called instance instead, which also makes the variable it uses
+ * something an application can overwrite - so the three cases of that are in this class as
+ * well.
  * </p>
  *
  * <p>
@@ -167,9 +170,9 @@ public class Camunda8MultiInstanceIT extends SpringBootTestOnTheSharedCluster {
         () -> feelRepository
             .findById(aggregateId)
             .map(MiFeelDockerAggregate::getReported)
-            .filter(reported -> reported.split(",").length == 4)
+            .filter(reported -> reported.split(",").length == 6)
             .isPresent(),
-        "all four calls of the subprocess to have run");
+        "all six calls of the three subprocesses to have run");
 
     final var reported = feelRepository
         .findById(aggregateId)
@@ -180,10 +183,49 @@ public class Camunda8MultiInstanceIT extends SpringBootTestOnTheSharedCluster {
         "clean=MIF_Clean:c1#0/2>MIF_CallClean:p1#0/2,"
             + "clean=MIF_Clean:c1#0/2>MIF_CallClean:p2#1/2,"
             + "clean=MIF_Clean:c2#1/2>MIF_CallClean:p1#0/2,"
-            + "clean=MIF_Clean:c2#1/2>MIF_CallClean:p2#1/2",
+            + "clean=MIF_Clean:c2#1/2>MIF_CallClean:p2#1/2,"
+            + "text=nothing,"
+            + "list=MIF_List:l1#0/1",
         reported,
         "the two levels of the first case belong to a model the called process never sees, and "
             + "the deployment could not say which process the call reaches");
+
+  }
+
+  @Test
+  @DisplayName("a chain variable the application wrote itself costs the chain and nothing else")
+  public void theApplicationMayWriteTheChainVariableItself() throws Exception {
+
+    final var aggregateId = transactionTemplate.execute(status -> feelWorkflowService.startWorkflow().getId());
+    assertNotNull(aggregateId);
+
+    awaitUntil(
+        () -> feelRepository
+            .findById(aggregateId)
+            .map(MiFeelDockerAggregate::getReported)
+            .filter(reported -> reported.split(",").length == 6)
+            .isPresent(),
+        "all six calls of the three subprocesses to have run");
+
+    final var lines = List
+        .of(
+            feelRepository
+                .findById(aggregateId)
+                .orElseThrow()
+                .getReported()
+                .split(","));
+
+    assertEquals(
+        "text=nothing",
+        lines.get(4),
+        "a text makes append() return null, the cluster writes that null without an incident, "
+            + "and the task runs with no iteration rather than with a wrong one");
+
+    assertEquals(
+        "list=MIF_List:l1#0/1",
+        lines.get(5),
+        "a list of texts is appended to, and the two entries which describe no level are left "
+            + "out while the one VanillaBP wrote still counts");
 
   }
 

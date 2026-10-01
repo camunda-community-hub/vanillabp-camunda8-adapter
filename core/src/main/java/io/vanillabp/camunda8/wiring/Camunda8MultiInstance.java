@@ -1088,8 +1088,12 @@ public final class Camunda8MultiInstance {
   /**
    * Reads {@link #CHAIN_VARIABLE} out of a job.
    * <p>
-   * A value which is not a list of entries of the expected shape is read as if the variable
-   * were not there, and an entry which does not describe a level of this process is left out.
+   * Nothing here trusts the value. The name is not protected: a start variable, an output
+   * mapping or the write-back of the workflow aggregate can all set it, and a FEEL expression
+   * which reaches into nothing becomes <code>null</code> which the cluster writes without an
+   * incident. So a value which is not a list of entries of the expected shape is read as if
+   * the variable were not there, and an entry which does not describe a level of this process
+   * is left out. Nothing of this reaches a <code>&#64;WorkflowTask</code> as an exception.
    */
   private static HandedDownChain theChainHandedDown(
       final Registry registry,
@@ -1102,6 +1106,9 @@ public final class Camunda8MultiInstance {
       return NOTHING_HANDED_DOWN;
     }
     if (!(handedDown instanceof List<?> entries)) {
+      somethingWasDiscarded(bpmnProcessId, "it holds a "
+          + handedDown.getClass().getSimpleName()
+          + " rather than a list of callers");
       return NOTHING_HANDED_DOWN;
     }
     final var ownVariables = own
@@ -1115,9 +1122,11 @@ public final class Camunda8MultiInstance {
     final var values = new LinkedHashMap<String, Object>();
     for (final var entry : entries) {
       if (!(entry instanceof Map<?, ?> caller)) {
+        somethingWasDiscarded(bpmnProcessId, "one of its entries does not describe a caller");
         continue;
       }
       if (!(caller.get(CALLER_KEY) instanceof String callerBpmnProcessId) || callerBpmnProcessId.isBlank()) {
+        somethingWasDiscarded(bpmnProcessId, "one of its entries names no calling BPMN process");
         continue;
       }
       if (!registry.acceptsTheChainOf(bpmnProcessId, callerBpmnProcessId)) {
@@ -1135,13 +1144,21 @@ public final class Camunda8MultiInstance {
         continue;
       }
       if (!(caller.get(LEVELS_KEY) instanceof List<?> reportedLevels)) {
+        somethingWasDiscarded(bpmnProcessId, "the entry of caller '%s' lists no levels"
+            .formatted(callerBpmnProcessId));
         continue;
       }
       for (final var reportedLevel : reportedLevels) {
         if (!(reportedLevel instanceof Map<?, ?> reported)) {
+          somethingWasDiscarded(
+              bpmnProcessId,
+              "something in the levels of caller '%s' does not describe a level"
+                  .formatted(callerBpmnProcessId));
           continue;
         }
         if (!(reported.get(ELEMENT_KEY) instanceof String levelElementId) || levelElementId.isBlank()) {
+          somethingWasDiscarded(bpmnProcessId, "a level of caller '%s' names no BPMN element"
+              .formatted(callerBpmnProcessId));
           continue;
         }
         final var level = asReported(levelElementId, reported);
@@ -1197,6 +1214,28 @@ public final class Camunda8MultiInstance {
                         : VARIABLE_PREFIX
                             + "Element_"
                             + suffix);
+
+  }
+
+  /**
+   * Says at DEBUG that something of {@link #CHAIN_VARIABLE} was left out. A WARN per job would
+   * repeat itself for every job of an application which uses the name on purpose, and there is
+   * nothing it could do about a job which already ran.
+   */
+  private static void somethingWasDiscarded(
+      final String bpmnProcessId,
+      final String why) {
+
+    log
+        .debug(
+            "Camunda8: part of the variable '{}' of a job of BPMN process '{}' is read as if it "
+                + "were not there, because {}. VanillaBP hands the iteration chain of a call "
+                + "activity naming its process by an expression down in that variable, and "
+                + "nothing stops an application from writing that name itself. Where it does, no "
+                + "iteration of the caller is reported.",
+            CHAIN_VARIABLE,
+            bpmnProcessId,
+            why);
 
   }
 

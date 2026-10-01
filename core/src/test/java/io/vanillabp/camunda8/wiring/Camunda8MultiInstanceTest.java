@@ -1146,4 +1146,88 @@ public class Camunda8MultiInstanceTest {
 
   }
 
+  @Test
+  @DisplayName("a chain variable the application wrote itself is read as if it were not there")
+  public void aValueOfAnotherShapeIsDiscarded() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    registry.registerCallByExpression("FeelCaller", "TheCalled");
+
+    assertTrue(
+        Camunda8MultiInstance
+            .valuesOf(registry, "TheCalled", "CalledTask", jobCarrying("something of the application"))
+            .isEmpty(),
+        "a text is what the cluster leaves behind when append() got one, and it raises no "
+            + "incident");
+    assertTrue(
+        Camunda8MultiInstance
+            .valuesOf(registry, "TheCalled", "CalledTask", jobCarrying(42))
+            .isEmpty(),
+        "and nothing else is cast either");
+
+  }
+
+  @Test
+  @DisplayName("entries of another shape are left out while the real ones still count")
+  public void foreignEntriesAreLeftOut() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    registry.registerCallByExpression("FeelCaller", "TheCalled");
+
+    final var withoutLevels = new LinkedHashMap<String, Object>();
+    withoutLevels.put("process", "FeelCaller");
+    final var levelWithoutAnElement = new LinkedHashMap<String, Object>();
+    levelWithoutAnElement.put("index", 1);
+
+    final var values = Camunda8MultiInstance
+        .valuesOf(
+            registry,
+            "TheCalled",
+            "CalledTask",
+            jobCarrying(
+                new ArrayList<>(
+                    List
+                        .of(
+                            "one",
+                            "two",
+                            withoutLevels,
+                            reportedCaller("FeelCaller", levelWithoutAnElement),
+                            reportedCaller("FeelCaller", reportedLevel("PerGroup", 1, 1, "g1"))))));
+
+    assertEquals(
+        List.of("PerGroup"),
+        List.copyOf(values.keySet()),
+        "an application appending to the variable loses nothing of what VanillaBP wrote");
+
+  }
+
+  @Test
+  @DisplayName("a level whose index reached into nothing is not reported")
+  public void aLevelWithoutAnIndexIsNotReported() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    registry.registerCallByExpression("FeelCaller", "TheCalled");
+
+    final var values = Camunda8MultiInstance
+        .valuesOf(
+            registry,
+            "TheCalled",
+            "CalledTask",
+            jobCarrying(
+                new ArrayList<>(
+                    List
+                        .of(
+                            reportedCaller(
+                                "FeelCaller",
+                                reportedLevel("NeverRan", null, null, null),
+                                reportedLevel("PerGroup", 1, 1, "g1"))))));
+
+    assertEquals(
+        List.of("PerGroup"),
+        List.copyOf(values.keySet()),
+        "a key with a null cannot say whether the model names nothing there or the expression "
+            + "reached into nothing, and both mean the value is not reported");
+
+  }
+
 }

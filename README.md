@@ -2564,6 +2564,15 @@ and an entry whose caller is not one of those is dropped rather than guessed at:
 the boundary of a workflow module ends up there, because this adapter never saw that caller's
 model, and so does a call reaching a process with an aggregate of its own. A DEBUG line says so.
 
+`vanillabpMiParents` is not a protected name. VanillaBP refuses an input mapping of it, like of
+every name it writes, but a start variable, an output mapping or the write-back of the workflow
+aggregate can all set it, and nothing in the cluster objects. A value which is not a list is
+read as if the variable were not there, and an entry which describes no level is left out while
+the real ones still count. Nothing of this reaches a `@WorkflowTask` as an exception, and the
+DEBUG line names the variable and the process. What such an application loses is the chain
+itself: `append` on a text results in `null`, the cluster writes that `null` without an
+incident, and a task then reports no iteration rather than a wrong one.
+
 The chain counts against the cluster's `MAX_MESSAGE_SIZE`, and the adapter cannot catch that
 limit: it arrives as an incident on the call activity rather than as a refused command. There is
 a lot of room. Three levels carrying 1 KB element values cost about 3.3 KB, while the limit bites
@@ -2620,8 +2629,8 @@ committing last puts back what it read, so an iteration should write a row of it
 
 `Camunda8MultiInstanceTest` covers the injection, its idempotency, the ambiguous element ids,
 the chain across a call activity, the union over call sites and the recursion stop. It also
-covers the chain handed down by an expression: the expression written into the model and the
-three call activities which get none.
+covers the chain handed down by an expression: the expression written into the model, the three
+call activities which get none, and the reading side against a value of another shape.
 `Camunda8FetchVariablesTest#theListFollowsTheChainAcrossTheProcessBoundary` holds that the
 fetch list follows the chain without a change of its own, and
 `#aProcessOfItsOwnStaysOutsideTheChain` that a called process with a workflow aggregate of its
@@ -2630,8 +2639,9 @@ own gets none of it. What a handler really sees is
 `Camunda8WorkflowLifecycleTest#multiInstanceBindsElementIndexAndTotal`, and across a call
 activity `Camunda8MultiInstanceIT#theIterationCrossesTheCallActivity`. Across a call activity
 naming its process by an expression it is
-`Camunda8MultiInstanceIT#theIterationCrossesACallActivityNamedByAnExpression`. The three
-cluster properties all of this rests on are
+`Camunda8MultiInstanceIT#theIterationCrossesACallActivityNamedByAnExpression`, with
+`#theApplicationMayWriteTheChainVariableItself` for the two ways an application can take the
+chain away from itself. The three cluster properties all of this rests on are
 `Camunda8CallActivityVariablesCanaryIT`. The parallel tokens of
 the paragraph above are `Camunda8ConcurrentTokensTest#parallelMultiInstance`, and that the
 index reaches the application counting from 0 is `Camunda8MultiInstanceTest#valuesAreTranslated`.

@@ -19,7 +19,7 @@
     <bpmn:sequenceFlow id="MIF_ToClean" sourceRef="MIF_Start" targetRef="MIF_Clean" />
     <bpmn:subProcess id="MIF_Clean">
       <bpmn:incoming>MIF_ToClean</bpmn:incoming>
-      <bpmn:outgoing>MIF_ToEnd</bpmn:outgoing>
+      <bpmn:outgoing>MIF_ToText</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true">
         <bpmn:extensionElements>
           <zeebe:loopCharacteristics inputCollection="=[&#34;c1&#34;,&#34;c2&#34;]" inputElement="group" />
@@ -49,7 +49,73 @@
         <bpmn:incoming>MIF_CleanToEnd</bpmn:incoming>
       </bpmn:endEvent>
     </bpmn:subProcess>
-    <bpmn:sequenceFlow id="MIF_ToEnd" sourceRef="MIF_Clean" targetRef="MIF_End" />
+    <bpmn:sequenceFlow id="MIF_ToText" sourceRef="MIF_Clean" targetRef="MIF_Text" />
+    <bpmn:subProcess id="MIF_Text">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;something of the application&#34;" target="vanillabpMiParents" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIF_ToText</bpmn:incoming>
+      <bpmn:outgoing>MIF_ToList</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[&#34;t1&#34;]" inputElement="group" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="MIF_TextStart">
+        <bpmn:outgoing>MIF_TextToCall</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="MIF_TextToCall" sourceRef="MIF_TextStart" targetRef="MIF_CallText" />
+      <bpmn:callActivity id="MIF_CallText">
+        <bpmn:extensionElements>
+          <zeebe:calledElement processId="=whichProcess" />
+          <zeebe:ioMapping>
+            <zeebe:input source="=&#34;text&#34;" target="whichCase" />
+          </zeebe:ioMapping>
+        </bpmn:extensionElements>
+        <bpmn:incoming>MIF_TextToCall</bpmn:incoming>
+        <bpmn:outgoing>MIF_TextToEnd</bpmn:outgoing>
+      </bpmn:callActivity>
+      <bpmn:sequenceFlow id="MIF_TextToEnd" sourceRef="MIF_CallText" targetRef="MIF_TextEnd" />
+      <bpmn:endEvent id="MIF_TextEnd">
+        <bpmn:incoming>MIF_TextToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="MIF_ToList" sourceRef="MIF_Text" targetRef="MIF_List" />
+    <bpmn:subProcess id="MIF_List">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="=[&#34;one&#34;,&#34;two&#34;]" target="vanillabpMiParents" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIF_ToList</bpmn:incoming>
+      <bpmn:outgoing>MIF_ToEnd</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[&#34;l1&#34;]" inputElement="group" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="MIF_ListStart">
+        <bpmn:outgoing>MIF_ListToCall</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="MIF_ListToCall" sourceRef="MIF_ListStart" targetRef="MIF_CallList" />
+      <bpmn:callActivity id="MIF_CallList">
+        <bpmn:extensionElements>
+          <zeebe:calledElement processId="=whichProcess" />
+          <zeebe:ioMapping>
+            <zeebe:input source="=&#34;list&#34;" target="whichCase" />
+          </zeebe:ioMapping>
+        </bpmn:extensionElements>
+        <bpmn:incoming>MIF_ListToCall</bpmn:incoming>
+        <bpmn:outgoing>MIF_ListToEnd</bpmn:outgoing>
+      </bpmn:callActivity>
+      <bpmn:sequenceFlow id="MIF_ListToEnd" sourceRef="MIF_CallList" targetRef="MIF_ListEnd" />
+      <bpmn:endEvent id="MIF_ListEnd">
+        <bpmn:incoming>MIF_ListToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="MIF_ToEnd" sourceRef="MIF_List" targetRef="MIF_End" />
     <bpmn:endEvent id="MIF_End">
       <bpmn:incoming>MIF_ToEnd</bpmn:incoming>
     </bpmn:endEvent>

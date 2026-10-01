@@ -79,6 +79,18 @@ maintainer would rather have a second entry, these paragraphs are one.
 > variable names and the inner scope overwrites the outer one - the same rule the graph follows. Once
 > the two sources are together, nothing tells them apart.
 >
+> `vanillabpMiParents` is not a protected name, and the reading side is where that is survived. An
+> input mapping of it is refused like every name VanillaBP writes, but a start variable, an output
+> mapping or the write-back of the workflow aggregate can all set it and nothing in the cluster
+> objects. Measured on 2026-10-01 against `camunda/camunda:8.8.40`, `8.9.21` and `8.10.0-rc3`: a FEEL
+> expression which reaches into nothing becomes `null`, the cluster writes that `null` without an
+> incident, `append` on a text results in `null` as well, and a foreign list is appended to. So a
+> value which is not a list is read as if the variable were not there, an entry which describes no
+> level is left out while the real ones still count, and nothing of it reaches a `@WorkflowTask` as an
+> exception. A DEBUG line names the variable and the process; a WARN would repeat itself for every job
+> of an application which uses the name on purpose, and it could change nothing about a job which
+> already ran.
+>
 > The chain counts against the cluster's `MAX_MESSAGE_SIZE` and the adapter cannot catch that limit:
 > it arrives as an incident on the call activity rather than as a refused command, so there is nothing
 > to classify and nothing to refuse. It is documented instead. Three levels with 1 KB element values
@@ -86,10 +98,11 @@ maintainer would rather have a second entry, these paragraphs are one.
 > magnitude of room. What gets expensive is the element VALUE and not the depth.
 >
 > `Camunda8MultiInstanceTest` holds the expression written into the model, the three call activities
-> which get nothing and the inherited level of a caller travelling on. `Camunda8FetchVariablesTest`
-> holds that every worker serving an element carries the
+> which get nothing, the inherited level of a caller travelling on, and the reading side against a
+> foreign value. `Camunda8FetchVariablesTest` holds that every worker serving an element carries the
 > one name and that the worker of a whole process does not.
 > `Camunda8MultiInstanceIT#theIterationCrossesACallActivityNamedByAnExpression` is what a handler
-> really sees. `Camunda8CallActivityVariablesCanaryIT` holds the cluster to the
+> really sees, and `#theApplicationMayWriteTheChainVariableItself` what it sees once the application
+> took the chain away from itself. `Camunda8CallActivityVariablesCanaryIT` holds the cluster to the
 > three properties all of this rests on.
 
