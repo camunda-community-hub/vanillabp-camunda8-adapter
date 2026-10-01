@@ -57,8 +57,9 @@ public class Camunda8OldProcessVersionsIT extends TestOnTheSharedCluster {
 
       // the workflow of version 1 walks through both tasks - what matters for the
       // next boot is that the cluster holds the version and the exporter saw it
-      // generous on purpose: in a full build this class needs some 80 seconds of cluster
-      // time, and a deadline close to that fails on a loaded machine while nothing is wrong
+      // this one waits for the engine and for a worker, and a loaded build runner is
+      // slower at both. The whole class took 20,0 seconds in the full run of 2026-10-01,
+      // so the number below is not a figure anything ordinary comes near
       final var deadline = System.currentTimeMillis() + 180_000;
       while (repository.findById(aggregate.getId()).orElseThrow().getServedBy() == null) {
         if (System.currentTimeMillis() > deadline) {
@@ -162,9 +163,11 @@ public class Camunda8OldProcessVersionsIT extends TestOnTheSharedCluster {
   private static void awaitTheQueryApiKnowingBothVersions() throws Exception {
 
     try (var client = testClient()) {
-      // generous for the same reason the other cases are: the export pipeline is the
-      // slowest part of this class, and a loaded machine makes it slower still
-      final var deadline = System.currentTimeMillis() + 240_000;
+      // what is waited out here is the export pipeline and nothing else, now that the
+      // search names the process: it was never slower than 1,1 seconds in the
+      // measurement below, whatever the cluster already held, and the minute is the
+      // headroom a loaded build runner gets on top of that
+      final var deadline = System.currentTimeMillis() + THE_EXPORT_PIPELINE_CATCHES_UP_WITHIN;
       while (versionsKnownToTheCluster(client) < 2) {
         if (System.currentTimeMillis() > deadline) {
           throw new AssertionError(
@@ -177,9 +180,42 @@ public class Camunda8OldProcessVersionsIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * The versions of the test's process the cluster answers with - the process id carries
-   * the workflow module as a prefix (name-clash avoidance), so the search matches on the
-   * end of it.
+   * How long a deployment or a deletion of this class may take to reach the query API.
+   * <p>
+   * Four minutes stood here before, after two raises, and the class kept falling: what it
+   * waited for could not happen at all on a cluster this full. See
+   * {@link #THE_TESTS_PROCESS_AS_THE_CLUSTER_KNOWS_IT} for what that was.
+   */
+  private static final long THE_EXPORT_PIPELINE_CATCHES_UP_WITHIN = 60_000;
+
+  /**
+   * The test's process under the id the CLUSTER knows it by: this module runs with
+   * {@code name-clash-avoidance: use-prefix}, so the plain id of the model carries the
+   * workflow module in front of it.
+   * <p>
+   * Every search of this class names it, rather than reading what the cluster holds and
+   * keeping whatever ends in the plain id. A search which names nothing answers with one
+   * page, oldest definition first, and that page has a ceiling.
+   * <p>
+   * That is what used to make this class fall, and only in a full run. Measured on
+   * 2026-10-01 against {@code camunda/camunda:8.10.0}: the module's shared cluster held
+   * 106 process definitions by the time this class started, a search naming nothing
+   * answered with 100 of them, and the two versions of this test were not among the 100.
+   * This class deploys them last and the page starts at the oldest, so they sat in the
+   * tail the page never reaches. No deadline can bring an entry onto a page it is not on,
+   * and four minutes of waiting per run is what that cost.
+   * <p>
+   * The export pipeline, which the deadline above is for, was never the slow part: 262 to
+   * 1056 milliseconds at every fill level from 2 definitions to 254 in that measurement,
+   * and 5 milliseconds in the full run once the search named the process.
+   * <p>
+   * The adapter's own definition searches name the process the same way, so this test
+   * now waits for exactly the answer the check under test will read.
+   */
+  private static final String THE_TESTS_PROCESS_AS_THE_CLUSTER_KNOWS_IT = "test-app__OldProcessVersionsProcess";
+
+  /**
+   * The versions of the test's process the cluster answers with.
    */
   private static long versionsKnownToTheCluster(
       final CamundaClient client) {
@@ -205,7 +241,7 @@ public class Camunda8OldProcessVersionsIT extends TestOnTheSharedCluster {
           .send()
           .join();
 
-      final var deadline = System.currentTimeMillis() + 240_000;
+      final var deadline = System.currentTimeMillis() + THE_EXPORT_PIPELINE_CATCHES_UP_WITHIN;
       while (activeDefinitionsOfTheTestsProcess(client) > 1) {
         if (System.currentTimeMillis() > deadline) {
           throw new AssertionError("the query API kept answering with the deleted version 1");
@@ -216,16 +252,21 @@ public class Camunda8OldProcessVersionsIT extends TestOnTheSharedCluster {
 
   }
 
+  /**
+   * Every version of the test's process the cluster holds, deleted ones included. The
+   * filter bounds the answer to the versions of one process, which is two here, so there
+   * is no second page to ask for.
+   */
   private static Stream<ProcessDefinition> definitionsOfTheTestsProcess(
       final CamundaClient client) {
 
     return client
         .newProcessDefinitionSearchRequest()
+        .filter(filter -> filter.processDefinitionId(THE_TESTS_PROCESS_AS_THE_CLUSTER_KNOWS_IT))
         .send()
         .join()
         .items()
-        .stream()
-        .filter(definition -> definition.getProcessDefinitionId().endsWith("OldProcessVersionsProcess"));
+        .stream();
 
   }
 
@@ -238,13 +279,14 @@ public class Camunda8OldProcessVersionsIT extends TestOnTheSharedCluster {
 
     return client
         .newProcessDefinitionSearchRequest()
-        .filter(filter -> filter.state(ProcessDefinitionState.ACTIVE))
+        .filter(filter -> {
+          filter.processDefinitionId(THE_TESTS_PROCESS_AS_THE_CLUSTER_KNOWS_IT);
+          filter.state(ProcessDefinitionState.ACTIVE);
+        })
         .send()
         .join()
         .items()
-        .stream()
-        .filter(definition -> definition.getProcessDefinitionId().endsWith("OldProcessVersionsProcess"))
-        .count();
+        .size();
 
   }
 

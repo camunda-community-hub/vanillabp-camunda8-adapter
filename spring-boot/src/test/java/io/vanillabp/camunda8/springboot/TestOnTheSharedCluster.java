@@ -40,6 +40,18 @@ import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
  * aggregate their own database never held. That is why every class starts by ending what is
  * still running.
  * <p>
+ * What the cluster remembers also decides what a class can FIND on it. A search which names
+ * nothing answers with ONE page, oldest entry first, and that page has a ceiling. Measured on
+ * 2026-10-01 against {@code camunda/camunda:8.10.0}: this module's cluster held 106 process
+ * definitions halfway through a run, a search naming nothing answered with 100 of them, and the
+ * two deployed last were not among those 100. An explicit {@code page(limit(1000))} answered
+ * with all 106, which is what the searches below rely on.
+ * <p>
+ * So a class names what it is asking about in the filter instead of keeping the entries of an
+ * unnamed page whose id ends the right way. A class running late in the module finds nothing of
+ * its own that way, and the failure reads like an exporter which never caught up.
+ * {@code Camunda8OldProcessVersionsIT} spent two raised deadlines on exactly that.
+ * <p>
  * What a class reads and what it cancels are two different things. The workflows come from the
  * search, which answers out of the secondary storage, and the cancellation goes to the engine.
  * A class which only sent its cancellations went on while the engine still held them, and that
