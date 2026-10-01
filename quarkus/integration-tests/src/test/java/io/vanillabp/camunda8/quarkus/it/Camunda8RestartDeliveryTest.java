@@ -50,14 +50,17 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * application every other Quarkus test uses. Testcontainers removes the containers when
  * the JVM of the test run exits.
  * <p>
- * <b>Why the drain assertion below is safer here than in the Spring Boot half.</b> Both
+ * <b>Which ending of the drain counts, and why this half has the easier one.</b> Both
  * halves wait for the cluster to answer the activation requests their closed workers
  * parked, and that wait is what the Spring Boot class ran out of twice on 2026-10-01. It
  * opens 119 workers, because the module it belongs to deploys thirty-five processes into
  * one application, and its shutdown ends only once the cluster has answered the request of
  * every one of them. This application deploys one process into a cluster nobody else uses,
- * so its shutdown has a handful of requests to sit out. The assertion is the same bet on
- * the cluster; the stake is a fraction of the size.
+ * so its shutdown has a handful of requests to sit out, and nobody has seen it end any way
+ * but quiet. Both halves take either ending all the same, for the reason
+ * {@link #THE_CLUSTER_STILL_OWED_AN_ANSWER} gives: how fast the cluster answers is not
+ * something this adapter promises. Everything the adapter does promise is still asserted
+ * here, and a failure names the ending it read.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -230,15 +233,27 @@ public class Camunda8RestartDeliveryTest {
     prodModeTest.stop();
 
     final var shutdownLog = applicationLog();
-    final var drainedAt = shutdownLog.indexOf("no activation request of theirs left at the cluster");
+    // named here and reported further down, because the test takes both endings and the
+    // report is the only place a passing run says which one it took
+    final var theDrainOfTheFirstRun = whichEndingTheDrainTook(shutdownLog);
+    final var drainedAt = whereTheDrainReported(shutdownLog);
     final var clientClosedAt = shutdownLog.indexOf("Closing Camunda 8 client");
-    assertTrue(drainedAt >= 0, "the drain reported a module which is quiet, and this is what it said instead: "
+    assertTrue(drainedAt >= 0, "the drain said what it did with this module, and this is what it said instead: "
         + whatTheShutdownSaid(shutdownLog));
     assertTrue(clientClosedAt >= 0, "and the client was closed: "
         + whatTheShutdownSaid(shutdownLog));
     assertTrue(
         drainedAt < clientClosedAt,
-        "the workers of the module were closed and released BEFORE its client went down");
+        "the workers of the module were closed and drained BEFORE its client went down. Its drain "
+            + theDrainOfTheFirstRun
+            + ": "
+            + whatTheShutdownSaid(shutdownLog));
+    assertFalse(
+        shutdownLog.contains(A_HANDLER_WAS_CUT_OFF),
+        "and no handler was still running when the client was closed. The drain "
+            + theDrainOfTheFirstRun
+            + ": "
+            + whatTheShutdownSaid(shutdownLog));
     assertFalse(
         shutdownLog.contains("did not stop workflow processing"),
         "the Quarkus shutdown event reaches the adapter, so the backstop of the client factory stays silent: "
@@ -255,8 +270,8 @@ public class Camunda8RestartDeliveryTest {
     // and this number is the whole point of the test
     report(
         reporter,
-        "the first job of a workflow started %s after a restart was delivered after %d ms (job timeout %s)"
-            .formatted(GAP, deliveredAfterMillis, JOB_TIMEOUT));
+        "the first job of a workflow started %s after a restart was delivered after %d ms (job timeout %s, and the drain of the first run %s)"
+            .formatted(GAP, deliveredAfterMillis, JOB_TIMEOUT, theDrainOfTheFirstRun));
 
     assertTrue(deliveredAfterMillis >= 0, "the job reached the handler at all");
     assertTrue(
@@ -291,6 +306,72 @@ public class Camunda8RestartDeliveryTest {
     return aboutTheShutdown.isEmpty()
         ? "nothing at all about its shutdown"
         : System.lineSeparator() + aboutTheShutdown;
+
+  }
+
+  /**
+   * What the drain writes when the module went quiet inside the grace: no handler left in
+   * the application and no activation request of its closed workers left at the cluster.
+   * This is the normal ending, and the only one this half has ever written.
+   */
+  private static final String THE_MODULE_WENT_QUIET = "no activation request of theirs left at the cluster";
+
+  /**
+   * What the drain warns with when the grace ran out while the cluster still owed it an
+   * answer for a request one of the closed workers had parked.
+   * <p>
+   * This test takes that ending too, which keeps it the twin of the Spring Boot half. The
+   * javadoc of {@code Camunda8RestartDeliveryIT#SHUTDOWN_GRACE} carries the measurement:
+   * the wait ends when the cluster answers the parked requests, so demanding the quiet
+   * ending would be a claim about the speed of the machine the test runs on. Nothing about
+   * the adapter is given up with it. The drain still runs before the client is closed and
+   * still says what it did, and the delivery this test is named after is asserted either
+   * way. What the two endings are not is equally good: this one is the drain's own warning,
+   * so the assertions above name which one they saw.
+   */
+  private static final String THE_CLUSTER_STILL_OWED_AN_ANSWER = "still holding an activation request at the cluster";
+
+  /**
+   * What the drain warns with, once per job, about a handler which was still running when
+   * the grace passed. No run of this test may contain it: the one workflow of this test is
+   * served long before the application stops, so a cut handler is a defect of the adapter
+   * and not a slow cluster.
+   */
+  private static final String A_HANDLER_WAS_CUT_OFF = "is being cut off";
+
+  /**
+   * @param logged What the application wrote
+   * @return Where the drain reported about its module, whichever of its two endings it
+   *         wrote, or -1 if it reported nothing
+   */
+  private static int whereTheDrainReported(
+      final String logged) {
+
+    final var wentQuietAt = logged.indexOf(THE_MODULE_WENT_QUIET);
+    return wentQuietAt >= 0
+        ? wentQuietAt
+        : logged.indexOf(THE_CLUSTER_STILL_OWED_AN_ANSWER);
+
+  }
+
+  /**
+   * Names the ending the drain took, so that a failing assertion says which of the two it
+   * read and a later reader does not take the one for the other.
+   *
+   * @param logged What the application wrote
+   * @return The ending, as a half sentence about the drain
+   */
+  private static String whichEndingTheDrainTook(
+      final String logged) {
+
+    if (logged.contains(THE_MODULE_WENT_QUIET)) {
+      return "ended quiet, which is the normal case";
+    }
+    if (logged.contains(THE_CLUSTER_STILL_OWED_AN_ANSWER)) {
+      return "ran out of its grace with a request still parked at the cluster, which is its own warning and "
+          + "accepted here";
+    }
+    return "wrote neither of its two endings";
 
   }
 
