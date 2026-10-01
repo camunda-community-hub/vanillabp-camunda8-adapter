@@ -2,6 +2,7 @@ package io.vanillabp.camunda8.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -40,6 +41,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * framework code. What the model does not say out loud is reported instead: the subprocess
  * can put more than one token into the workflow, and the flavour expecting a job worker of
  * its own is served by nothing here.
+ * <p>
+ * Who claims the process decides what happens about that flavour. A process a
+ * {@code @WorkflowService} class of the application claims does not deploy, because the
+ * application stands in for it and nothing of it serves the element. A process nobody claims
+ * keeps the WARN it always had.
  * <p>
  * The cluster is an address nothing listens on. Everything asserted below is read from the
  * model.
@@ -172,6 +178,22 @@ public class Camunda8AdHocSubProcessTest {
   }
 
   /**
+   * The same core answering that no {@code @WorkflowService} class of the application claims
+   * the process - the answer the core gives by not knowing a workflow aggregate for it.
+   */
+  private static class ReportedForAProcessNobodyClaims extends Reported {
+
+    @Override
+    public String resolveWorkflowAggregateIdName(
+        final String workflowModuleId,
+        final String bpmnProcessId) {
+      throw new IllegalStateException(
+          "no @WorkflowService class of this application claims '%s'".formatted(bpmnProcessId));
+    }
+
+  }
+
+  /**
    * Wires one model and hands back what the core was told plus what the boot wrote.
    */
   private static String wire(
@@ -182,11 +204,25 @@ public class Camunda8AdHocSubProcessTest {
 
     // what THIS case logged: the capture spans the whole class
     final var before = output.getAll().length();
-    final var service = adapterServedBy(core, connectorsAreAllowed);
-    final var context = service.prepareBpmn(MODULE, null, FILE, PROCESS, model);
-    service.wireBpmn(MODULE, FILE, PROCESS, model, context);
-    service.reportWhatConnectorsCost(MODULE, context);
+    wiringOf(core, connectorsAreAllowed, model).run();
     return output.getAll().substring(before);
+
+  }
+
+  /**
+   * Preparing and wiring one model, unrun, so a test can catch what it refused.
+   */
+  private static Runnable wiringOf(
+      final Reported core,
+      final boolean connectorsAreAllowed,
+      final BpmnModelInstance model) {
+
+    final var service = adapterServedBy(core, connectorsAreAllowed);
+    return () -> {
+      final var context = service.prepareBpmn(MODULE, null, FILE, PROCESS, model);
+      service.wireBpmn(MODULE, FILE, PROCESS, model, context);
+      service.reportWhatConnectorsCost(MODULE, context);
+    };
 
   }
 
@@ -219,9 +255,9 @@ public class Camunda8AdHocSubProcessTest {
 
   /**
    * The sentence which tells the job worker flavour apart from everything else this boot
-   * may say.
+   * may say. The refusal and the WARN both carry it.
    */
-  private static final String THE_UNSERVED_FLAVOUR = "ad-hoc subprocess(es) of BPMN process";
+  private static final String THE_UNSERVED_FLAVOUR = "carry a 'zeebe:taskDefinition' of their own";
 
   @Test
   @DisplayName("The activities inside the element are wired and the element itself is not asked for")
@@ -296,27 +332,55 @@ public class Camunda8AdHocSubProcessTest {
   }
 
   @Test
-  @DisplayName("An element expecting a job worker of its own is named once, with what it costs")
-  public void theJobWorkerFlavourIsNamed(
+  @DisplayName("An element expecting a job worker of its own ends the boot of a claimed process")
+  public void theJobWorkerFlavourEndsTheBootOfAClaimedProcess() {
+
+    final var refused = assertThrows(
+        IllegalStateException.class,
+        () -> wiringOf(new Reported(), false, modelActivatedByAWorker()).run()).getMessage();
+
+    assertTrue(
+        refused.contains(THE_UNSERVED_FLAVOUR),
+        () -> "the boot says which flavour it is about: "
+            + refused);
+    assertTrue(
+        refused.contains("'AdHoc_AgentTools'"),
+        () -> "it names the element: "
+            + refused);
+    assertTrue(
+        refused.contains("@WorkflowService"),
+        () -> "and that the application stands in for this process, which is why the boot ends: "
+            + refused);
+    assertTrue(
+        refused.contains("zeebe:adHoc activeElementsCollection"),
+        () -> "and the way out through the model: "
+            + refused);
+    assertTrue(
+        refused.contains("incident"),
+        () -> "and what a workflow reaching it would cost: "
+            + refused);
+
+  }
+
+  @Test
+  @DisplayName("The same element in a process nobody claims keeps its warning, and the boot goes on")
+  public void theJobWorkerFlavourOfAnUnclaimedProcessOnlyWarns(
       final CapturedOutput output) {
 
-    final var logged = wire(output, new Reported(), false, modelActivatedByAWorker());
+    final var logged = wire(
+        output, new ReportedForAProcessNobodyClaims(), false, modelActivatedByAWorker());
 
     assertTrue(
-        logged.contains(THE_UNSERVED_FLAVOUR),
-        () -> "the boot says the element is not served: "
+        logged.contains(THE_UNSERVED_FLAVOUR) && logged.contains("'AdHoc_AgentTools'"),
+        () -> "a reader still has to learn that the element is there: "
             + logged);
     assertTrue(
-        logged.contains("'AdHoc_AgentTools'"),
-        () -> "it names the element: "
+        logged.contains("No @WorkflowService class of this application claims this process"),
+        () -> "and why this one is a warning: "
             + logged);
-    assertTrue(
+    assertFalse(
         logged.contains("zeebe:adHoc activeElementsCollection"),
-        () -> "and the way out through the model: "
-            + logged);
-    assertTrue(
-        logged.contains("incident"),
-        () -> "and what a workflow reaching it costs: "
+        () -> "nothing asks the reader to change a model which is none of ours: "
             + logged);
 
   }

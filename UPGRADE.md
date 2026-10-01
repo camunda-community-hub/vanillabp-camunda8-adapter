@@ -347,11 +347,8 @@ never served on Camunda 8 at all.
 
 If your models carry such a listener and a `@WorkflowTask` method of yours names its job type, this is
 the entry to act on. This version does not serve it unless you say so, and a model carrying one ends
-the boot with a message naming the elements, the key and what it costs. A listener whose job type no
-method of yours names is left alone: a worker you run yourself may well be the answer. The boot names
-it all the same, because the cluster creates that job either way and a workflow reaching the element
-stands there. Say so per adapter, per workflow module or per workflow, and the most specific
-configured value wins in both directions:
+the boot with a message naming the elements, the key and what it costs. Say so per adapter, per
+workflow module or per workflow, and the most specific configured value wins in both directions:
 
 ```yaml
 vanillabp:
@@ -383,6 +380,20 @@ it. Every boot of a workflow module whose listeners are served writes a framed W
 each listener and the way back, and no key silences it. Where you can, move what the listener does
 into a task of the model with a `@WorkflowTask` method behind it, which is the way back the report
 names.
+
+**A listener whose job type NO method of yours names ends the boot as well, where one of your
+`@WorkflowService` classes claims the process.** Version 1 said nothing about such a listener at
+all. The cluster creates the job the moment it reaches the listener,
+so a workflow stands inside the element until something takes that job, with no incident and nothing
+in any log. A class claiming the process says your application stands in for it, which is why that
+silence ends the boot now.
+
+If a worker of yours answers that job beside VanillaBP, say so in the model: give the ELEMENT a
+`zeebe:modelerTemplate`. That attribute is how this adapter is told that an element belongs to the
+runtime which owns it, the same way it is told about a connector, and such a listener is named in a
+WARN instead. A process none of your `@WorkflowService` classes claims keeps its WARN as well,
+because that model reaches the cluster because of the file it sits in and there is nothing in it for
+you to change.
 
 A `zeebe:executionListener` is served as well now. Any element may carry one, so the door is wider
 than version 1's, and the key is what keeps it shut by default. One placement is refused whatever the
@@ -445,7 +456,7 @@ multi-instance element, so a handler which only counts needs no change to its mo
 Nothing else is refused. An element without an `inputElement` still deploys where no handler asks
 for its item.
 
-### An ad-hoc subprocess in your model earns two warnings
+### An ad-hoc subprocess in your model earns a warning, or ends the boot
 
 Version 1 said nothing about the element and neither executed nor reported it. This version serves
 the flavour whose activities the model names through `zeebe:adHoc activeElementsCollection`, and it
@@ -454,10 +465,15 @@ says two things about a model carrying an ad-hoc subprocess which version 1 kept
 The element is named as a source of a second token, so a workflow aggregate without a version
 attribute earns the warning about two writers on one aggregate, whichever flavour the model uses.
 
-The flavour carrying a `zeebe:taskDefinition` of its own earns one WARN per BPMN process saying that
-nothing serves it. That was true in version 1 as well; the difference is that it is said now.
-Nothing is said about an element which also carries a `zeebe:modelerTemplate`, because a connector
-runtime owns that one.
+The flavour carrying a `zeebe:taskDefinition` of its own is served by nothing here: a worker would
+have to complete its job with a result naming the activities to activate, and a `@WorkflowTask`
+method has no way to say that. **Where one of your `@WorkflowService` classes claims the process,
+your application does not boot.** A workflow would reach the element and stop there, and the job
+ends in an incident once its retries are used up. The message names the element and the two ways
+out: let the model say which activities to run and fill the aggregate attribute that expression
+reads, or leave the element to a runtime which does serve it. A process none of your classes claims
+earns one WARN per process instead, and the boot goes on. Nothing is said at all about an element
+which also carries a `zeebe:modelerTemplate`, because a connector runtime owns that one.
 
 ### Two workflow modules with the same BPMN process id end the boot
 

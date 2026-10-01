@@ -1732,10 +1732,23 @@ A listener is served only where a `@WorkflowTask` method names its job type, and
 task definition such a method names. A job type is a name in the cluster which anybody may subscribe
 to, so a model carrying one says nothing about who serves it while a method naming it does. Only the
 task-definition route counts: `@WorkflowTask(id = ...)` names the ELEMENT, and one element may carry a
-task and a listener at once. A listener no method names is not refused and not passed over in silence
-either: `sayWhichListenerJobsNothingServes` names it and the boot goes on, the way
-`reportUnservedAdHocSubProcesses` does, because a worker the application runs itself may be the answer
-while the cluster creates the job either way.
+task and a listener at once. A listener no method names is not passed over in silence, and who claims the
+process decides the rest, in `refuseOrReportListenerJobsNothingServes`. Where a `@WorkflowService`
+class claims the process, the boot ends: the class says the application stands in for the process,
+and the cluster creates that job the moment it reaches the listener, so a workflow would stand inside
+the element with no incident and nothing in any log. Where nobody claims the process, the WARN it
+always had is written and the boot goes on, without the sentences which asked the reader to change a
+model which is none of ours.
+
+The job type cannot say who answers it, which is why the ELEMENT is asked instead. A worker somebody
+else runs and a worker the application runs beside VanillaBP look exactly the same in a model, so a
+developer who answers such a job elsewhere needs a way of saying so. The way is the marker this
+adapter already reads for the same question: an element built from an element template belongs to the
+runtime which owns it, see [decision 23](./DECISIONS.md#23-connectors-are-allowed-per-adapter-and-every-boot-says-what-they-cost)
+and [decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on).
+A listener on such an element is named in a WARN of its own and the boot goes on, whoever claims the
+process. What that costs is one miss: a developer who meant VanillaBP to serve the listener of a
+templated element and forgot the method reads a warning rather than a refusal.
 
 `Camunda8Listeners#listenersOf` is what reads a model, and it is asked while the BPMN file is
 PREPARED rather than while a process of it is wired. Two things follow from the moment. The job
@@ -1845,10 +1858,16 @@ ad-hoc subprocess carrying a `zeebe:taskDefinition` of its own expects a worker 
 by round which activities to activate, by completing the job with
 `newCompleteJobCommand(key).withResult(r -> r.forAdHocSubProcess().activateElement(...))`. Neither
 the `@WorkflowTask` contract nor the adapter SPI can express that outcome, so no worker is opened,
-the workflow stops at the element and the job ends in an incident once its retries are used up. One
-WARN per BPMN process says so, and the boot goes on, see
-[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on).
-An element carrying a `zeebe:modelerTemplate` as well is left out of that report, through
+the workflow stops at the element and the job ends in an incident once its retries are used up.
+Nothing later in the boot sees it, because the element produces no task spec and no validation
+misses a method.
+
+Who claims the process decides the rest, in `refuseOrReportUnservedAdHocSubProcesses` and in the
+shape of the user task a job worker serves. Where a `@WorkflowService` class claims the process, the
+boot ends, naming the element, what it costs and the two ways out. Where nobody claims the process,
+one WARN per BPMN process says so and the boot goes on, which is the half of
+[decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on)
+that still holds. An element carrying a `zeebe:modelerTemplate` as well is left out of both, through
 `Camunda8Connectors#elementTemplateOf`: the Camunda AI agent is an element template on exactly this
 element, and a connector runtime fetches its job.
 
