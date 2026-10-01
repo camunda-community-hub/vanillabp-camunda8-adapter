@@ -241,9 +241,29 @@ What that costs is CI. Three lines are three cluster runs per pull request, and 
 preview line will make it four. The work per line is close to nothing, because every line is
 built from this one source tree, so the matrix is the whole bill.
 
-How long a bugfix line is carried is not answered yet. Ending one needs a statement about
-that, and the statement is worth more than the saved build. Until it exists, a line ends
-when somebody decides it ends.
+A line is carried as long as Camunda keeps its minor in standard maintenance, and it ends
+on that date and not earlier. The date is Camunda's own, published per minor in its
+[release policy](https://docs.camunda.io/docs/reference/announcements-release-notes/release-policy/),
+so while Camunda still fixes your cluster this project still fixes the adapter for it:
+
+| Line |  Carried until  |
+|------|-----------------|
+| 8.8  | 13 April 2027   |
+| 8.9  | 12 October 2027 |
+| 8.10 | 11 April 2028   |
+
+Camunda maintains a minor for 18 months and releases one every six months, so three minors
+are in maintenance at any moment. A preview line sits beside them from the first pre-release
+of the next minor until its GA, which is what makes the matrix four columns for most of a
+cycle. The dates line up as well: 8.8 leaves maintenance in April 2027 and the next minor is
+due in the same April, so the column 8.11 adds is the one 8.8 gives back.
+
+This says when a line ends, not which lines exist. 8.7 is maintained until October 2026 and
+never got a line here, and the rule above does not open one for it.
+
+A line stays in the POM and in this matrix until its date, and it gets its last release
+before that date. Afterwards its `line-*` profile goes, which takes the line out of the
+matrix on its own, and what was published stays in the registry.
 
 ### How the lines are built
 
