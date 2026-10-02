@@ -1410,10 +1410,13 @@ per module:
 
 Three modules one after another reached past the thirty seconds the runtime grants a
 shutdown, and one module of that run gave up after the whole grace with its workers still
-holding a request, which is the case the wait exists to prevent. The two readings per row are
-the same case read twice: what a module pays depends on where in its request cycle it was
-when its workers were closed. Waiting once does not depend on it, because the requests of
-every module are parked at the same time and come back at the same time.
+holding a request. The give-up says that a module drained while the others still poll needs
+more than the grace. It does not say that a job could then be delivered into a parked
+request: giving up means the grace was waited out, so the window the wait exists to close
+was closed in that ending too. The two readings per row are the same case read twice: what a
+module pays depends on where in its request cycle it was when its workers were closed. Waiting
+once does not depend on it, because the requests of every module are parked at the same time
+and come back at the same time.
 
 So the grace is the budget of the whole shutdown. Each module closes its workers as it is
 stopped, and the module stopped last waits for all of them at once. A booted application with
