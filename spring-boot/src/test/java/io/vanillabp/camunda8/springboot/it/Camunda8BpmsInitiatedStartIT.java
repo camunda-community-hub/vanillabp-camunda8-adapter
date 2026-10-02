@@ -93,7 +93,7 @@ public class Camunda8BpmsInitiatedStartIT {
   public void timerStartCreatesTheAggregate() throws Exception {
 
     // the timer fires a second after the deployment; the start execution listener
-    // gates the instance until VanillaBP built the aggregate
+    // gates the instance until the application's method has built the aggregate
     awaitUntil(() -> !repository.findAll().isEmpty(), "the timer to fire and the aggregate to be created");
 
     final var aggregates = repository.findAll();
