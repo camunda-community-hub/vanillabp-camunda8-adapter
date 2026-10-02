@@ -12,6 +12,7 @@ import io.vanillabp.camunda8.client.Camunda8Drain;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.adapter.spi.workflowtask.MultiInstanceValue;
 import io.vanillabp.integration.adapter.spi.workflowtask.TaskInvocationContext;
+import io.vanillabp.integration.adapter.spi.workflowtask.TaskKind;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
 import io.vanillabp.spi.service.TaskEvent;
@@ -418,6 +419,17 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
     public String getTaskId() {
 
       return userTaskKey;
+
+    }
+
+    @Override
+    public TaskKind getTaskKind() {
+
+      // this handler serves the listeners of a user task and nothing else, so the id above
+      // is a user-task key. The cluster takes it back through UpdateUserTask and
+      // CompleteUserTask. The job commands of the same cluster find nothing under a
+      // user-task key, and saying exactly that is what the record is read for
+      return TaskKind.USER_TASK;
 
     }
 

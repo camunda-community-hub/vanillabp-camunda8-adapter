@@ -18,6 +18,7 @@ import io.vanillabp.camunda8.processservice.Camunda8ProcessService;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.adapter.spi.workflowtask.MultiInstanceValue;
 import io.vanillabp.integration.adapter.spi.workflowtask.TaskInvocationContext;
+import io.vanillabp.integration.adapter.spi.workflowtask.TaskKind;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
 import lombok.Builder;
@@ -713,6 +714,17 @@ public class Camunda8JobHandler implements JobHandler {
 
       // the job key identifies the open job - used by ProcessService#completeTask
       return String.valueOf(job.getKey());
+
+    }
+
+    @Override
+    public TaskKind getTaskKind() {
+
+      // this handler serves jobs and nothing else, so the id above is a job key. The
+      // cluster takes it back through UpdateJob and CompleteJob. The user-task commands of
+      // the same cluster find nothing under a job key, and saying exactly that is what the
+      // record is read for
+      return TaskKind.TASK;
 
     }
 

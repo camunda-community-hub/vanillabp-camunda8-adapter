@@ -238,7 +238,14 @@ jobs:
         with:
           node-version: 24
       - name: Install Renovate
-        run: npm install --no-save --no-audit --no-fund renovate
+        # The version is named rather than left open, because this step installs whatever
+        # the registry calls newest and that is not always installable: 44.131.1 and
+        # 44.131.2 both ended with npm exit code 1 on 2026-10-02, measured here and in
+        # this container, while 44.131.0 installs. An open version turns this check red on
+        # every branch for something nobody in this repository changed. Renovate raises
+        # the number here like any other dependency, and story 858 is the fuller answer:
+        # the two scripts below also import internal paths of this package.
+        run: npm install --no-save --no-audit --no-fund renovate@44.131.0
       - name: Validate renovate.json
         run: npx --no-install renovate-config-validator --strict
       - name: Validate the shareable preset
