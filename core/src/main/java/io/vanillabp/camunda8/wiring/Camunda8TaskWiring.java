@@ -1159,18 +1159,25 @@ public final class Camunda8TaskWiring {
    * A catch element of a process together with the message element it points at. The
    * message belongs to the FILE rather than to the process, so two processes of one file
    * can point at the same one.
+   *
+   * @param elementId The intermediate catch event, boundary event or receive task waiting
+   * @param message The message it points at
    */
-  private record MessageCatchElement(
-                                     String elementId,
-                                     Message message) {
+  record MessageCatchElement(
+                             String elementId,
+                             Message message) {
   }
 
   /**
    * Every element of the given executable process which waits for a message: an
    * intermediate catch event, a boundary event or a receive task. A message START event
    * is not one of them, it correlates by name and needs no key.
+   *
+   * @param model The BPMN model of one file
+   * @param bpmnProcessId The process id as it stands in the model
+   * @return One entry per catch element, in the order the model declares them
    */
-  private static Stream<MessageCatchElement> messageCatchElementsOf(
+  static Stream<MessageCatchElement> messageCatchElementsOf(
       final BpmnModelInstance model,
       final String bpmnProcessId) {
 
