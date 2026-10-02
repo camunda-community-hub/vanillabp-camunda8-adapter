@@ -2280,11 +2280,10 @@ tree, so what a line costs is the matrix and not the maintenance.
 `2.0.0-8.10` is published with the 2.0 release, like the other two. The line is GA, and a user who
 runs 8.10 should not have to point at a pre-release to get the adapter built for their cluster.
 
-How long a bugfix line is carried is not said here. It is said in
-`DECISIONS.pending/830-how-long-a-bugfix-line-is-carried.md`: a line is carried as long as Camunda
-keeps its minor in standard maintenance, and it ends on that date and not earlier. The Renovate
-boundary rule asks the question at the moment it matters: a minor bump of a pin waits for approval
-and its body asks whether the oldest line is still carried.
+How long a bugfix line is carried is not said here. It is said in decision 60: a line is carried as
+long as Camunda keeps its minor in standard maintenance, and it ends on that date and not earlier.
+The Renovate boundary rule asks the question at the moment it matters: a minor bump of a pin waits
+for approval and its body asks whether the oldest line is still carried.
 
 See [Release lines](./README.md#release-lines).
 
@@ -2569,3 +2568,228 @@ in changes the sentence, not the outcome, because an outcome which depended on i
 election behave differently for a migrating application than for any other.
 
 `Camunda8A404AboutAJobKeyTest` holds the sentences and the unchanged outcomes.
+
+### 58. A search whose answer is a set reads every page, and the paging stops at 10000 entries
+
+A Camunda 8 search which says nothing about the page it wants is answered with 100 entries and
+nothing in the answer says that there were more. Three searches of this adapter could have more
+than 100 hits and read that one page: the versions a process has, the element instances of a
+workflow history, and the children of a scope the walk for a task's own scope reads. None of them
+failed at the ceiling. The startup check named the 100 oldest versions and missed the one just
+deployed, the history showed the beginning of a workflow as the whole of it, and the aggregate of
+a task in the 101st iteration of a multi-instance was written nowhere.
+
+So a search whose answer is a SET reads every page, through `Camunda8SearchPages`, and a search
+whose answer is ONE hit names its limit at the call site with a sentence saying why that number is
+enough. Both halves are the decision: the second one is what keeps a search for a single workflow
+from paging through a cluster.
+
+The paging stops at 100 pages, which is 10000 entries. A reader which never stops is worse than
+one which says where it stopped, and a set that large is a sign of a caller which should ask a
+narrower question. Where the bound is reached, the caller writes a log line, because the records
+these answers travel in have no field for "and there was more": the history record cannot say it,
+and the version list cannot either. The version search therefore runs NEWEST first and is turned
+back into oldest first afterwards, so the bound can only cut versions nobody asks about any more.
+
+What this costs is one request per page while a workflow is being served. The scope walk reads
+pages while an aggregate is pushed, and it stops on the page its element instance is on, so the
+common case pays for one page. The walk itself still costs one search per element instance below
+the scope, which is what it cost before.
+
+### 59. A job type written as an expression is refused in a claimed process, and warned about in one nobody claims
+
+A job type is the NAME a worker subscribes to. This adapter opens one worker per job type it reads
+out of a model and subscribes exactly the string the model says, so a job type written as a FEEL
+expression leaves the element unserved. Both answers Camunda 8 can give lead there. Where it
+evaluates the expression, the job carries the result while the worker waits for the expression;
+where it does not, the job carries the expression and no `@WorkflowTask` method can be named after
+it. Measured on 2026-10-01 against `camunda/camunda:8.10.0` and `camunda/camunda:8.9.21`: the job
+carried the result on both, and nothing answered under the expression itself
+(`Camunda8JobTypeWrittenAsAnExpressionCanaryIT`, which the 8.8 line runs in the pull request's
+matrix).
+
+The refusal does not rest on that measurement, which is why the message says both. Decision 55 says
+why no list of the places Camunda evaluates an expression at is written down in this adapter, and a
+refusal built on such a list would age the same way. What the measurement would change is the
+sentence about what a workflow reaching the element costs, not whether the model deploys.
+
+**Two attributes say a job type**, and both of them are asked: the `zeebe:taskDefinition` type of a
+service-like task and the type of a listener somebody modelled. The question is the shape of the
+value and nothing else, the way decision 53 asks about the shape of a user task. Nothing asks
+whether some worker somewhere would fetch such a job, and nothing asks whether the listeners of the
+process were allowed: an expression is a name this adapter cannot subscribe to whatever a property
+says.
+
+Who claims the process decides what happens, which is where decisions 53 and 54 already stand. A
+`@WorkflowService` class claiming the process says that this application stands in for it, so the
+deployment refuses it. A process nobody claims reaches the cluster because of the file it sits in,
+so it keeps a WARN naming what was found and asking nothing of the reader.
+
+An element built from an element template is left out, which is the marker of decision 23 and
+decision 24. Its job type names a runtime somebody else deployed, and such a runtime is free to
+compose that name by expression.
+
+**What the message had to stop saying.** The boot ended over such a model before this entry as
+well, and it ended in the wrong place: the reader of a claimed process handed the core a task
+definition which was the expression, `validateTaskWiring` found no `@WorkflowTask` method of that
+name, and the message asked for a method nobody can write. A served listener was worse, because its
+job type passed the same validation where a method happened to name it and the worker then waited
+for a name no job carries. So the finding is named while the file is prepared, before the rewrite
+and before the wiring validation, and the message quotes the expression as the modeller typed it
+rather than the frame `use-prefix` writes around it.
+
+**The two ways out** are in the message. Write a job type which is a fixed name and a
+`@WorkflowTask` method of that name, and let the method branch on the workflow aggregate it is
+handed where the work differs from workflow to workflow, which is where the data the expression
+reads comes from anyway. Or leave the element to the runtime which does serve it: give the element a
+`zeebe:modelerTemplate` and allow such elements with `allow-connectors`. An application which
+cannot change its models at once has the way out every deployment failure has: a non-primary adapter
+configured with `deployment-failure: warn` logs the failure instead of ending the boot.
+
+`Camunda8JobTypeWrittenAsAnExpressionTest` holds the refusal, the WARN of an unclaimed process, the
+listener half, the element template and that the quote is the expression the modeller typed.
+`Camunda8JobTypeWrittenAsAnExpressionCanaryIT` holds the cluster to what was measured.
+
+### 60. A bugfix line ends when Camunda stops maintaining its minor, and not before
+
+Decision 52 says why there are three lines and why 8.8 did not end on the day 8.10 went GA. What it
+did not say is when a line does end, so until now a line ended when somebody ended it on purpose.
+That was no promise. Whoever picks `2.0.0-8.8` could read nowhere how long a fix will still reach
+them, and the matrix grew by a column with every minor because nothing ever took one away.
+
+A line is carried as long as Camunda keeps its minor in standard maintenance. It ends on that date
+and not earlier.
+
+The date is Camunda's own and not one invented here. Camunda's release policy says that it "provides
+a standard support policy of 18 months for a particular minor version from the date it is released",
+that a minor arrives in April and in October, and that at least the last three released minors get
+patch releases. Read on 2026-10-01 at
+`https://docs.camunda.io/docs/reference/announcements-release-notes/release-policy/` and at
+`https://camunda.com/release-policy/`. The date per minor is a table of its own, in the release
+notes overview of the 8.10 documentation, read on the same day at
+`https://docs.camunda.io/docs/next/reference/announcements-release-notes/overview/`:
+
+| Minor |    Released     | End of standard maintenance |
+|-------|-----------------|-----------------------------|
+| 8.7   | 8 April 2025    | 13 October 2026             |
+| 8.8   | 14 October 2025 | 13 April 2027               |
+| 8.9   | 14 April 2026   | 12 October 2027             |
+| 8.10  | 13 October 2026 | 11 April 2028               |
+
+One thing about that table matters before anybody reads a date off it. It names the planned release
+date of a minor, not the day the artifact appeared. Camunda published `8.10.0` on 2026-09-29, which
+is the date the `README.md` gives for the GA, and the table says 13 October 2026. The end of
+maintenance is a date read out of that table and never one computed from a release, so the two never
+have to be made to agree.
+
+Why the rule has this shape comes from decision 11: the client an artifact was compiled against is
+the lowest cluster version that artifact accepts. The other direction really does fail, which the
+blueprints measured by running a build against `camunda/camunda:8.8.34` with the adapter compiled
+against the 8.9 client, where every job activation came back with `Request property [tenantFilter]
+cannot be parsed`. One artifact therefore cannot serve two minors, and decision 52 draws the
+conclusion from it: a VanillaBP bugfix has to be deliverable without a Camunda cluster upgrade. So a
+line ends at the moment the cluster it serves stops being a cluster anybody has to be able to get a
+fix for, and Camunda's date is that moment. While Camunda still fixes your cluster, this project
+still fixes the adapter for it.
+
+**This says when a line ends, not which lines exist.** Which lines exist stays decision 52 and
+whatever a release decides. 8.7 is maintained until 13 October 2026 and never got a line here, and
+this rule does not open one for it.
+
+Our side of it is one column per maintained minor. Camunda maintains three, and a preview line sits
+beside them from the first pre-release of the next minor until its GA, so the matrix is three
+columns for a short while after a GA and four for most of a cycle. 8.10 was the preview line from
+its first alpha on 2026-05-11 to its release on 2026-09-29, which is about four and a half months
+out of every six.
+
+What that column costs is measured. Over the three nightly runs up to 2026-10-01 a line took about
+33 minutes of a runner, and the lines run at the same time, so one run of the matrix costs about 100
+runner minutes and about 35 minutes of waiting. How often that is paid is the other half of the
+bill: `checks.yaml` calls the matrix for every pull request without a condition and the night calls
+it once more, which was 55 pull request runs and 7 nights in the seven days up to 2026-10-01, so
+about 103 runner hours in a week. A fourth line makes that about 137, and it adds nothing to the
+waiting unless it is the slowest one. What a line costs in work is close to nothing, because every
+line is built from this one source tree: the delta is `core/src/main/java-line-<id>`, the same five
+class names on every line, 340 lines on 8.8 and on 8.9 and 382 lines on 8.10. So the bill of a line
+is the matrix, and nothing else about a line is expensive.
+
+The dates line up on top of that. 8.8 leaves maintenance on 13 April 2027 and the next minor is due
+in the same April, so the column 8.11 adds is the column 8.8 gives back.
+
+**Why not a number of our own.** A line ending once it is no longer one of the three newest GA lines
+would cap our side by construction, whatever Camunda does with its cadence, and the cap is all that
+way buys: today it picks the same 8.8, 8.9 and 8.10 that Camunda's dates pick. The user side is
+weaker, because a date is something somebody can plan with while a count has to be worked out by
+watching our releases. The two rules also part company as soon as Camunda changes something. A
+faster cadence would have us drop a line Camunda still patches, which is what decision 52 refused to
+do, and a longer maintenance would have us keep a line Camunda has stopped patching.
+
+A line stays in the POM and in the matrix until its date, and it gets its last release before that
+date. After the date its `line-*` profile goes, which takes the line out of the matrix on its own,
+and what was published stays in the registry.
+
+See [How long a line lives](./README.md#how-long-a-line-lives).
+
+### 61. The restart test takes both endings of the drain, and says which one it saw
+
+`Camunda8RestartDeliveryIT` measures the one thing a restart can get wrong on Camunda 8. A workflow
+started right afterwards waits a whole job timeout for its first job, because an activation request
+of the application before is still parked at the cluster and the job is activated into it. The
+adapter closes that window by draining its workers before the client goes down, and until now the
+test read that drain by one sentence: the one the drain writes when the module went quiet inside the
+grace.
+
+That is not the only sentence the drain writes. It has two endings. Either the module is quiet, or
+the grace runs out while the cluster still owes an answer for a request one of the closed workers
+parked, and then the drain warns about exactly that. The second ending is no defect of the adapter.
+It is a slow cluster, and the test was asserting that the cluster was not slow.
+
+What that assertion cost is measured. Two runs of 2026-10-01 went red on it, word for word the same.
+The publish run of `443a32d` (36871927557) stopped the first application of the test after 25049 ms
+and the run of pull request 231 (36889710683) after 25012 ms, both with 119 closed workers of which
+at least one had not been released, and both with no handler left inside the application. The second
+application of each of those runs drained in 10123 ms.
+
+The number the test exists for held in both of them: the first job after the restart came in 1.2
+seconds and under, against a lock of 20 seconds. It holds whenever the drain gives up, because
+giving up means it waited the whole grace, so the window the parked request could have swallowed the
+job through was closed long before the second application started.
+
+Raising the grace from 20 to 25 seconds after the finding of 2026-09-27 bought nothing, and the
+measurement says why no further number would. Reading every closed worker while the drain ran showed
+all 119 of them sitting on the activation request they had in flight when they were closed. They
+come back within a second of each other, one request timeout after the shutdown began, which is
+where the 10 to 12 seconds of an idle machine come from. Squeezing the cluster into four tenths of a
+core reproduces the red runs on demand, with 105 of the 119 requests still open when the grace runs
+out. So the floor of that wait is the cluster answering 119 parked requests, and the grace is a
+number the test may configure while the floor is not.
+
+**What the test demands now** is everything it ever claimed about the adapter. The drain runs before
+the client is closed and says what it did, in either of its two endings. Nothing cuts a running
+handler off. The ordinary platform shutdown reaches the adapter, so the backstop of the client
+factory stays silent. And the first job after the restart arrives in milliseconds instead of in a
+job timeout, which is the point of the test and is untouched. What it no longer demands is that the
+cluster answers every parked activation request inside the grace. That is the cluster's promise, not
+the adapter's. A drain which does nothing still fails the test, because it writes neither of the two
+sentences, so the first assertion takes it and the delivery assertion takes it as well.
+
+**The two endings are not equally good.** The quiet ending is the normal case and the other one is
+the drain's own warning, so nothing here may read as if both were fine. Every assertion about the
+shutdown names the ending it read, and the measurement the test writes down after a green run names
+it too. A reader of a failure therefore sees whether the drain was quiet or warned, and nobody has
+to take this entry as a weakened assertion.
+
+`shutdown-grace` stays at 25 seconds in that test. It is still the budget of the whole shutdown,
+which is what decision 51 made it, and it still bounds the wait. It is only no longer the thing an
+assertion reads.
+
+**Why not the two other ways.** Giving the drain fewer workers to wait for would have meant an
+application of its own for this test, with one process instead of the thirty-five its module
+deploys. This test is also the module's evidence for `max-http-connections: 256`, measured with 115
+workers, and that evidence would have gone with it. Halving the window, with a request timeout of
+five seconds and a gap of three, would have kept the ratio and widened the margin under the grace
+from 15 to 20 seconds. It would have left the same bet running on a wider margin.
+
+**What this leaves open.** The test no longer notices a drain which runs into the grace on every
+run. The ending in the written measurement is what makes such a drift readable, and it has to be
+read to be noticed.
