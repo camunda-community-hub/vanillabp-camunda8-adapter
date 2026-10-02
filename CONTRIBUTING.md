@@ -165,6 +165,13 @@ and answers in seconds, because a comment which javadoc drops is not worth forty
 waiting. A red check is a finding about your change. Read the log and fix what it says rather than
 pushing again to see whether it goes away.
 
+`main` carries a ruleset, and it requires six green checks before a merge: `publish`, the build of
+the current GA line; `orphaned-javadoc-check`; `api-identity`, which holds the public API the same
+on every line; `line-pins-verified`, which reads the GA lines out of the matrix;
+`renovate-configuration`, which runs the Renovate validator over the configuration of this
+repository and over the shared preset; and `client-api-changes`, which says on the pull request what
+a client bump added. While one of them is red, GitHub does not offer the merge.
+
 ## License
 
 VanillaBP is published under the [Apache License, Version 2.0](./LICENSE), and by contributing you
