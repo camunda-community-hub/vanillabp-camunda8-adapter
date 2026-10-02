@@ -53,6 +53,7 @@ import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8JobHandler;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Listeners;
+import io.vanillabp.camunda8.wiring.Camunda8ModelExpressions;
 import io.vanillabp.camunda8.wiring.Camunda8ModelledListenerHandler;
 import io.vanillabp.camunda8.wiring.Camunda8MultiInstance;
 import io.vanillabp.camunda8.wiring.Camunda8OpenTaskProbe;
@@ -1384,6 +1385,17 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             workflowModuleId,
             bpmnProcessId,
             Camunda8TaskWiring.compensationOf(model, scopedBpmnProcessId));
+
+    // What the model reads the workflow's data with, which the core judges: an expression
+    // reading more than the name of one variable binds the model to the shape of the
+    // application's data and to FEEL. Asked HERE, before the correlation keys and the
+    // multi-instance mappings below are written into the model, so what goes over is the
+    // modeller's expressions and not this adapter's
+    workflowTaskWiring
+        .reportModelExpressions(
+            workflowModuleId,
+            bpmnProcessId,
+            Camunda8ModelExpressions.of(model, scopedBpmnProcessId));
 
     // a user task without 'zeebe:userTask' is a user task a job worker serves, and this
     // adapter does not accept that shape. Where a workflow service claims the process, the
