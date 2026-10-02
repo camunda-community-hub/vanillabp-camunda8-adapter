@@ -22,7 +22,7 @@ import lombok.extern.slf4j.Slf4j;
  * event, the plain one included. The listener gates the workflow: nothing of the
  * process runs before this job is completed, which is exactly the window VanillaBP needs to
  * decide what this start is and, where nobody started the workflow through VanillaBP, to
- * build its workflow aggregate and write its id into the instance.
+ * ask the application for its workflow aggregate and write its id into the instance.
  * <p>
  * The name the cluster holds for a workflow is the process variable called after the
  * workflow aggregate's id attribute, which is where every other part of this adapter reads
