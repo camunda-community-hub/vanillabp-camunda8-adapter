@@ -2149,8 +2149,11 @@ what the last worker needs to report itself closed.
 `shutdown-grace` defaults to `PT20S` at a `request-timeout` of `PT10S`, which is two rounds exactly,
 and nothing held the two against each other. On 2026-09-27 that cost a red integration test: an
 application with 115 workers on a pool of 100 gave up after 20045 ms with its workers still holding
-a request, which is exactly what the wait exists to prevent. The application was over the pool, the
-pool check warned about the delivery of its jobs, and about its shutdown nobody said anything.
+a request. The give-up is the finding, and what it says is that the pool was too small for the
+workers of that application. What it does not say is that a job could then be delivered into a
+parked request: giving up means the drain waited the whole grace out, so the window it exists to
+close was closed in that ending too, which decision 61 measured. The application was over the pool,
+the pool check warned about the delivery of its jobs, and about its shutdown nobody said anything.
 
 Measured on 2026-09-28 with `Camunda8WhatADrainWaitsForIT` against the cluster of the current GA
 line, a client pool of 30 and a request timeout of `PT10S`: 15 workers released after 6272 ms and 30
@@ -2158,6 +2161,11 @@ after 5566 ms, which is one round; 60 workers after 15424 ms, which is two; 90 w
 ms, which is three. Where inside its last round a shutdown lands depends on how far that round had
 got when the workers were closed, so the floor takes the whole round. The two seconds on top come
 from the run which ran OUT rather than from these readings.
+
+**The number of workers is the part of this under review.** One worker per process and per kind is
+what fills the pool. Task definitions shaped so that fewer workers carry the same work would need
+fewer connections, and every number in this entry moves with them. Until they are shaped that way,
+the rounds of the pool are what a drain costs.
 
 **It warns, like the rest of this entry.** The adapter could raise the grace itself, and for the
 same reason it does not raise the pool it does not raise the grace: the grace has to stay under the
@@ -2402,7 +2410,10 @@ goes inside; anything else, the prefix goes in front. The places are the `proces
 `zeebe:formDefinition` external reference and the job type of a listener this application serves.
 `Camunda8Scoping#forEveryPrefixedValue` is that list, and both the rewrite and the refusal below
 read it, so a place added to it is covered by both in one change. A job type carries the prefix of
-its BPMN process as well, so its frame is `="loan-approval__LoanApproval__" + string(...)`.
+its BPMN process as well, so its frame is `="loan-approval__LoanApproval__" + string(...)`. That
+frame only ever reaches a process nobody claims. A job type written as an expression is refused in a
+process the application claims, which is decision 59, so the model left for the rewrite to frame is
+one which reaches the cluster because of the file it sits in.
 
 **Whether Camunda 8 evaluates an expression at a given place is not asked.** The maintainer decided
 that on 2026-10-01: a list of the places Camunda evaluates ages with every Camunda release, and

@@ -2208,9 +2208,10 @@ The rule is one rule and the places are one list. `Camunda8Scoping#forEveryPrefi
 over every value this adapter prefixes, each with the prefix of its own place, and the rule above
 is a method on what it hands over. A job type is the place where that prefix is more than the
 module's, because a task definition is scoped by its BPMN process as well, so its frame reads
-`="loan-approval__LoanApproval__" + string(...)`. The same list answers the refusal below, which
-is what keeps the two from drifting apart: a place added to it is rewritten and guarded in one
-change.
+`="loan-approval__LoanApproval__" + string(...)`. Such a frame only reaches a process nobody
+claims, because a job type written as an expression is refused in a process the application
+claims. The same list answers the refusal below, which is what keeps the two from drifting apart:
+a place added to it is rewritten and guarded in one change.
 
 Whether Camunda 8 evaluates an expression at a given place is deliberately not asked. Such a list
 ages with every Camunda release, while this rule cannot be wrong: where no expression is
