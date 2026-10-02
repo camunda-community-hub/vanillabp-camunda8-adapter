@@ -602,6 +602,30 @@ named with both sides, because under `none` and under one adapter-wide `tenant-i
 one name where you mean two. The same is said where a version the cluster still holds carries such a name,
 which is the clash a workflow module deployed years ago leaves behind.
 
+### What the outbox costs where version 1 sent from your thread
+
+Version 1 sent its commands to the cluster from the thread which had just committed your
+transaction, through a transaction aspect, and retried them in memory with `spring-retry`. Nothing
+was written down, so an operation whose process died between your commit and the cluster's answer
+was gone. Version 2 writes an outbox entry in your transaction and sends it afterwards. What that
+costs is written once for every adapter, in the platform's
+[upgrade notes](https://github.com/vanillabp/adapter-platform-integration/blob/main/UPGRADE.md#what-the-upgrade-costs-under-load).
+What is special here is that it is one transaction more than version 1 needed, for the start and for
+every other operation, and that the thread which talks to the cluster is no longer yours.
+
+The threads are the sizing difference. Version 1 was as wide as the threads of your application
+which committed, so a burst of requests became a burst of commands. Version 2 dispatches on four
+threads, `vanillabp.outbox.dispatch-threads`. Count them into the connection pool of the database
+your workflow aggregates live in. What the cluster side costs is on the wiki page
+[Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing).
+
+There is no factor for how much slower or faster this is, and there cannot be one yet. A run which
+puts version 1 beside version 2 needs one cluster version both accept, and the lowest cluster each
+side takes is the client it was built against. Version 1's last release, 1.10.0, was built against
+the Camunda client 8.8.33, so only the 8.8 line of version 2 shares a cluster generation with it.
+Against the 8.9 and the 8.10 line there is no such cluster, and a number from a run which gave each
+side a cluster of its own would say something about Camunda rather than about VanillaBP.
+
 ### A restart waits a few seconds longer, and the application after it does not
 
 No new property, and nothing to configure. What changes is how long a shutdown takes and how quickly
