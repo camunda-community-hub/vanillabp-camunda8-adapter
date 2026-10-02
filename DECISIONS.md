@@ -2793,3 +2793,42 @@ from 15 to 20 seconds. It would have left the same bet running on a wider margin
 **What this leaves open.** The test no longer notices a drain which runs into the grace on every
 run. The ending in the written measurement is what makes such a drift readable, and it has to be
 read to be noticed.
+
+### 62. The expressions of a model are reported for the model being deployed, not for the versions the cluster still holds
+
+The core is told the expressions of a process while that process is wired, so what it hears is the
+model this application version brings. The cluster keeps the older versions, workflows are still
+running on them, and those models are not read for this.
+
+The way to read them is there. `Camunda8ProcessVersions` walks the models of the picture this
+adapter has of what the cluster holds, which is how `concurrentTokenElementsOfVersion` answers, and
+the same walk would answer this question. So the question here is what such a message would be
+worth.
+
+An old model says nothing new. An expression which reads a path reads the same path in every version
+which carries it, and the message names the element, the place and the expression. What differs is
+that nobody can act on an old model. A model in the cluster cannot be edited, the deployed one is
+where a developer writes the plain getter the message asks for, and the workflows on the old version
+run out on their own. A warning about them would ask for work nobody can do.
+
+There is a second reason, and it is the count. The message ends with how many of the expressions of
+this process name a variable and nothing else, which is what tells a developer how far their model
+is. Counting the held versions as well would count the same expression once per version, and the
+number would stop meaning what it says.
+
+`ConcurrentTokenCheck` asks about held versions for a reason this check has not got. A parallel
+gateway the newest model dropped keeps forking every workflow which started before it, so the
+finding only exists in the old version. An expression is not like that. It is read where the model
+carries it, and the model carrying it is the one being deployed.
+
+Whoever wants the held versions in the message gets a story of their own, and the place to hook it
+is `Camunda8ProcessVersions`.
+
+### 63. The expressions are read from the model before this adapter writes into it
+
+`Camunda8DeploymentService.wireBpmn` asks for the expressions right after it reports compensation,
+and that is before `wireMessageSubscriptions` and `Camunda8MultiInstance.wire` run. Both of those
+write FEEL into the model: a message which carries no correlation key gets the one VanillaBP
+correlates by, and a multi-instance element gets the input mappings this adapter needs. Reading
+later would report those as the modeller's expressions, and the message would ask a developer to
+simplify something they never wrote.
