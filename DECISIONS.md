@@ -2225,9 +2225,12 @@ moves with the phase the close falls into:
 | 3       | 32743 and 15424 ms        | 5242 ms                                  |
 
 Three modules one after another reached past the thirty seconds the runtime grants, and one module
-of that run gave up after the whole grace with its workers still holding a request, which is the
-case the wait exists to prevent. Waiting once stayed at about half a request timeout whether there
-were two modules or three, and every module was quiet.
+of that run gave up after the whole grace with its workers still holding a request. The give-up is
+the finding, and what it says is that a module drained while the others still poll needs more than
+the grace. What it does not say is that a job could then be delivered into a parked request: giving
+up means the drain waited the whole grace out, so the window the wait exists to close was closed in
+that ending too, which decision 61 measured. Waiting once stayed at about half a request timeout
+whether there were two modules or three, and every module was quiet.
 
 So the grace is spent once. Each module closes its workers as it is stopped and waits for nothing
 yet; the module stopped last, which is the one leaving no registration of this adapter behind,
