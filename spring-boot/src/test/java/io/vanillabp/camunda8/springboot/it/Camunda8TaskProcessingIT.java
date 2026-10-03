@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+import javax.sql.DataSource;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +45,8 @@ import io.vanillabp.integration.adapter.spi.WorkflowScope;
 import io.vanillabp.integration.spi.PhaseOperation;
 import io.vanillabp.integration.spi.PhaseTwoCall;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
+import io.vanillabp.integration.test.utils.delivery.TaskDeliveryLogReader;
+import io.vanillabp.integration.test.utils.delivery.TaskDeliveryLogReader.Delivery;
 import io.vanillabp.spi.process.TaskNotFoundException;
 
 /**
@@ -62,7 +66,9 @@ import io.vanillabp.spi.process.TaskNotFoundException;
  * <li>the job timeout resolves through all four configuration levels from the
  * real application configuration;</li>
  * <li>a {@code retryBackoff} task header in the model decides the backoff of its own
- * element, without a new process version and without configuration.</li>
+ * element, without a new process version and without configuration;</li>
+ * <li>the start of a workflow leaves its process instance key in the delivery log, in the
+ * form a delivery of its tasks names it, whether it was started directly or by message.</li>
  * </ul>
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -102,6 +108,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
   @Autowired
   private VanillaBpCamunda8Properties overlay;
+
+  @Autowired
+  private DataSource dataSource;
 
   /**
    * Borrowed from the aggregateChanged fixture, whose PRIMARY process parks in a
@@ -259,6 +268,78 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     return counter != null
         ? counter.get()
         : 0;
+
+  }
+
+  /**
+   * Waits for the row the start of a workflow leaves behind, and checks that its workflow id
+   * is the process instance key a delivered task of the same workflow names.
+   *
+   * @param aggregateId The workflow aggregate this test started
+   * @param bpmnProcessId The process the workflow was started of
+   */
+  private void assertTheStartLeftTheKeyOfItsWorkflow(
+      final Long aggregateId,
+      final String bpmnProcessId) throws InterruptedException {
+
+    // the row is written after the transaction of the start committed, so it is awaited
+    // rather than read right away
+    final var started = new AtomicReference<List<Delivery>>(List.of());
+    awaitUntil(
+        () -> {
+          started.set(workflowStartsOf(aggregateId, bpmnProcessId));
+          return !started.get().isEmpty();
+        },
+        60000,
+        "the start of %s to be written down".formatted(bpmnProcessId),
+        () -> deliveryLog().workflowStarts().toString());
+    assertEquals(1, started.get().size(), "one row per workflow of one aggregate");
+    final var workflowId = started.get().getFirst().workflowId();
+
+    // a task of that workflow names its workflow through the invocation context. Both
+    // land in the same column, so the two have to be the same text for the same instance
+    awaitUntil(
+        () -> deliveryLog()
+            .deliveries()
+            .stream()
+            .filter(delivery -> String.valueOf(aggregateId).equals(delivery.aggregateId()))
+            .anyMatch(delivery -> workflowId.equals(delivery.workflowId())),
+        60000,
+        "a task of the started workflow to be delivered under process instance key '%s'".formatted(workflowId),
+        () -> deliveryLog().deliveries().toString());
+
+  }
+
+  /**
+   * The delivery log of this application. The reader belongs to the platform, so this
+   * class names neither the table nor its columns.
+   *
+   * @return The reader
+   */
+  private TaskDeliveryLogReader deliveryLog() {
+
+    return TaskDeliveryLogReader.of(dataSource);
+
+  }
+
+  /**
+   * The rows the start of one workflow left behind. Read by aggregate AND by process:
+   * the classes of this module share one in-memory database, and their aggregate ids
+   * overlap.
+   *
+   * @param aggregateId The workflow aggregate this test started
+   * @param bpmnProcessId The process the workflow was started of
+   * @return Those rows, empty while the log holds none
+   */
+  private List<Delivery> workflowStartsOf(
+      final Long aggregateId,
+      final String bpmnProcessId) {
+
+    return deliveryLog()
+        .workflowStartsOfAggregate(String.valueOf(aggregateId))
+        .stream()
+        .filter(row -> row.bpmnProcessId().endsWith(bpmnProcessId))
+        .toList();
 
   }
 
@@ -743,6 +824,16 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
     // the throwing handler's mutation committed, the boundary path ran
     assertEquals("happy|error-raised|handled", results(aggregateId));
+
+  }
+
+  @Test
+  @DisplayName("The start of a workflow leaves the process instance key behind, as a delivery names it")
+  public void theStartLeavesTheProcessInstanceKeyBehind() throws Exception {
+
+    final var aggregateId = start("TaskProcess");
+
+    assertTheStartLeftTheKeyOfItsWorkflow(aggregateId, "TaskProcess");
 
   }
 
@@ -1510,6 +1601,11 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         },
         60000,
         "the message start event to start the instance");
+
+    // the answer to a published message names the message and not the instance it started.
+    // The key reaches the log anyway, through the worker of the message start event, and it
+    // has to be the one a task of that instance names
+    assertTheStartLeftTheKeyOfItsWorkflow(aggregateId, "MessageStartProcess");
 
   }
 

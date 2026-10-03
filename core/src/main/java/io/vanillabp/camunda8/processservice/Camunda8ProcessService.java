@@ -2324,6 +2324,10 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (startTimeToLive != null) {
         startCommand = startCommand.timeToLive(startTimeToLive);
       }
+      // nothing is reported to request.reportStartedWorkflow here: the answer to a published
+      // message carries the key of the message, not of the instance it started. The key
+      // still gets written down, by the worker of the start event, which reports it as the
+      // native instance id of the start it was handed
       startCommand
           .send()
           .join();
@@ -2375,11 +2379,16 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void startWorkflow(
       final PhaseTwoRequest<A> request) {
 
-    createProcessInstance(
+    final var started = createProcessInstance(
         scopedProcessId(request.workflowModuleId(), request.bpmnProcessId()),
         variablesOf(request.aggregatePersistence(), request.workflowAggregateId()),
         request.workflowAggregateId(),
         tenantIdOf(request.workflowModuleId()));
+
+    // the key in the same form a task delivery reports as its workflow id. A started
+    // instance is always the root, so it is the instance the aggregate belongs to, and
+    // nobody has to search the cluster for it while its search index still lags behind
+    request.reportStartedWorkflow(String.valueOf(started.getProcessInstanceKey()));
 
   }
 
