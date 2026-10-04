@@ -2908,7 +2908,12 @@ answer. Reading what VanillaBP itself wrote down about the start is the cheaper 
 The measurement can be repeated: `analysis/895/bin/run.sh` builds the cluster, runs the load, takes the read model
 away and prints whether every workflow ended exactly once.
 
+*Superseded in part on 2026-10-04: the three cases under "Where it does not hold yet" are closed for every workflow which has a start row. A planned operation is no longer dropped after a restart (`897`), waiting for the copy spends time and not attempts on every store (`898`, `902`), and a task-scoped push waits for its scope (`899`), into a user task as well (`903`, decision 66). A workflow without a start row, such as one started under version 1, still has the gaps described there.*
+
 ### 65. A task-scoped push which cannot find its scope asks the engine before it gives up
+
+*Replaced in part by decision 66: the engine is asked only about a task the row of the
+delivery log says rests. Without such a row the push waits for the read model.*
 
 `aggregateChanged(aggregate, taskId)` writes into the scope the task runs in. Camunda 8 has no command which names
 that scope, so the adapter reads it from the query API: first the job behind the task id, then the scopes from the
@@ -2959,3 +2964,67 @@ met a task the read model did not know, their pushes were repeated 90 times in a
 scope of its subprocess once the exporter was back, and no entry used more than 8 attempts. `Camunda8AggregateChangedIT`
 holds the case against the test cluster: it pauses the exporter, pushes into a task created after that, and waits
 for the value. Without this change that test runs into its timeout.
+
+### 66. A task-scoped push finds its task through the row of the delivery log, and asks the engine only about a task which rests
+
+`aggregateChanged(aggregate, taskId)` writes into the scope the task runs in. Until now the adapter found that scope
+through the job behind the task id. The id of a user task is a user-task key and no job key, so the job search found
+nothing, the engine answered `404` to `UpdateJobTimeout`, and the push was skipped with the WARN "task ... is
+completed". Measured on 2026-10-04 against `camunda/camunda:8.10.0` with `Camunda8AggregateChangedIT`: a push into
+an open user task directly in its process, one into a user task in an iteration of a multi-instance subprocess, and
+one into a user task while the exporter stood still. All three were skipped, and no value arrived. A user-task form
+which calls `aggregateChanged` with its task id lost every push.
+
+**The row of the task.** When the adapter leaves a task open, the core writes a row into the delivery log. Phase two of
+a task-scoped push gets that row from the core as `PhaseTwoRequest#taskRecord()`, where the row names this adapter. The row names the process instance of the task (`workflowId`), its element
+(`bpmnElementId`), its kind (`taskKind`) and the version of its process (`processVersion`). The adapter reads three
+things from it:
+
+- **Where the task runs.** Where the version is the one this application deployed, the deployed model says what
+  encloses the element. A task directly in its process runs in the process instance of the row, so the push writes
+  there without a search. That works while the exporter stands still. A task directly in an iteration of a
+  multi-instance subprocess runs in that iteration. Every iteration carries the variable the adapter maps its index
+  into (decision 5 in this log), and that variable is local to the iteration. So for a user task the adapter reads that one
+  variable from the variables the user task sees, and the scope the cluster reports for it is the iteration. That is
+  one search instead of the walk down from the process instance. Everything else is searched for as decision 65
+  says: a deeper scope, a service task in an iteration (a job has no variable search), and a row of a version this
+  application did not deploy, whose model may enclose the element differently.
+- **Which kind of key the id is.** A user task is found by the user-task search, a service task by the job search.
+  Without a row the job is looked for first and then the user task. Both kinds of key are unique within a cluster.
+- **Whether the engine may be asked.** See below.
+
+**The engine is asked only about a task which rests.** The probe of decision 65 is no harmless question. An
+`UpdateJobTimeout` sets the lock of an activated job to `async-task-lock-renewal`, and so it can cut short the lock
+of a job a handler is working on. A task rests where the adapter left it open: every user task, and a service task
+whose method asked for the task id. Its job is renewed by the adapter to that same value anyway. The row says that
+the task rests: it exists only for a task left open (`COMPLETION_PENDING`), and `taskClosedAt` stays empty until the
+application closed it. So the engine is asked when the read model does not know the scope within the window and the
+row says the task rests. A user task is asked with the empty `UpdateUserTask` of its awareness probe, a service task
+with `UpdateJobTimeout`. `404` lets the push go with the WARN, any other refusal throws `PhaseTwoRetryLater`.
+
+Without such a row nothing is asked, and the push throws `PhaseTwoRetryLater` until the read model knows the task.
+That replaces the part of decision 65 which asked the engine about every task the search did not find. The read
+model also reports a completed job and a completed scope, so such a push either finds its scope once the exporter
+caught up, or meets the `404` of the write and is skipped there. The core counts such a wait in time and not in
+attempts, and `vanillabp.outbox.wait-for-visibility-at-most` ends it. A task id which never existed in
+this cluster is therefore blocked after that time instead of being skipped at once. That is accepted: nobody can
+tell such an id from a task the exporter has not written yet without asking the engine, and the engine may not be
+asked about a task nobody says rests.
+
+**What was not chosen.**
+
+- A column for the key of the scope in the delivery log. The job of a user-task listener carries the element
+  instance of the task, but not the one of the scope around it, so there is nothing to write. It would also be a
+  schema change for the one case the model and the row already answer.
+- Deriving the iteration from the job of the task alone. The context of a multi-instance can be nested (an iteration
+  inside an iteration) and does not come from this one task, so the adapter reads the variable it writes for every
+  iteration instead.
+- Asking the engine with a longer `UpdateJobTimeout` for a job which does not rest. It would lengthen the lock of a
+  handler instead of cutting it short, but it would still change a job nobody asked the adapter to change.
+
+Measured after the change on 2026-10-04 with the same three tests against `camunda/camunda:8.10.0`: all three values
+arrived. The push into the user task directly in its process was written while the exporter still stood. The push
+into the iteration was answered by the variable search alone, checked once with the walk switched off. The three
+older tests of `Camunda8AggregateChangedIT` stayed green. `Camunda8TaskScopedPushWaitsForItsScopeTest` holds the
+rules without a cluster: no row or a closed row asks nothing, a user task is asked as a user task, a task directly in
+its process is written without a search, a row of another version is searched for.

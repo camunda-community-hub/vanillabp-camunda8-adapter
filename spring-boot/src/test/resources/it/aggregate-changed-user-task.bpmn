@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_AggregateChangedUserTask"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- A user task directly in the process: its scope is the process instance itself. -->
+  <bpmn:process id="AggregateChangedUserTaskProcess" isExecutable="true">
+    <bpmn:startEvent id="UT_Start">
+      <bpmn:outgoing>UT_ToTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="UT_ToTask" sourceRef="UT_Start" targetRef="UT_Task" />
+    <bpmn:userTask id="UT_Task">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="awaitPushIntoUserTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>UT_ToTask</bpmn:incoming>
+      <bpmn:outgoing>UT_ToEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="UT_ToEnd" sourceRef="UT_Task" targetRef="UT_End" />
+    <bpmn:endEvent id="UT_End">
+      <bpmn:incoming>UT_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <!-- A user task in each iteration of a multi-instance subprocess: its scope is the one
+       iteration it runs in. -->
+  <bpmn:process id="AggregateChangedUserTaskMultiInstanceProcess" isExecutable="true">
+    <bpmn:startEvent id="UTMI_Start">
+      <bpmn:outgoing>UTMI_ToSub</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="UTMI_ToSub" sourceRef="UTMI_Start" targetRef="UTMI_Sub" />
+    <bpmn:subProcess id="UTMI_Sub">
+      <bpmn:incoming>UTMI_ToSub</bpmn:incoming>
+      <bpmn:outgoing>UTMI_ToEnd</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[1,2]" inputElement="item" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="UTMI_SubStart">
+        <bpmn:outgoing>UTMI_SubToTask</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="UTMI_SubToTask" sourceRef="UTMI_SubStart" targetRef="UTMI_Task" />
+      <bpmn:userTask id="UTMI_Task">
+        <bpmn:extensionElements>
+          <zeebe:userTask />
+          <zeebe:formDefinition externalReference="awaitPushIntoUserTaskPerInstance" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>UTMI_SubToTask</bpmn:incoming>
+        <bpmn:outgoing>UTMI_TaskToEnd</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:sequenceFlow id="UTMI_TaskToEnd" sourceRef="UTMI_Task" targetRef="UTMI_SubEnd" />
+      <bpmn:endEvent id="UTMI_SubEnd">
+        <bpmn:incoming>UTMI_TaskToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="UTMI_ToEnd" sourceRef="UTMI_Sub" targetRef="UTMI_End" />
+    <bpmn:endEvent id="UTMI_End">
+      <bpmn:incoming>UTMI_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>
