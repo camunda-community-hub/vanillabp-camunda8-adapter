@@ -57,6 +57,10 @@ vanillabp:
             - '*'
         EventSubprocessProcess:
           allow-full-sync-with-bpms: true
+        MessageStartProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         MiCallProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:

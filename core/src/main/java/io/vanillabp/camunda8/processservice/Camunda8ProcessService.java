@@ -2387,8 +2387,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
     // the key in the same form a task delivery reports as its workflow id. A started
     // instance is always the root, so it is the instance the aggregate belongs to, and
-    // nobody has to search the cluster for it while its search index still lags behind
-    request.reportStartedWorkflow(String.valueOf(started.getProcessInstanceKey()));
+    // nobody has to search the cluster for it while its search index still lags behind.
+    // The version is the one of the process definition, counted the way a job reports
+    // it, so the start and every later delivery of this workflow name the same version
+    request
+        .reportStartedWorkflow(
+            String.valueOf(started.getProcessInstanceKey()),
+            String.valueOf(started.getVersion()));
 
   }
 

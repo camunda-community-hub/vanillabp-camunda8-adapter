@@ -35,8 +35,7 @@ import io.vanillabp.spi.service.WorkflowTask;
                     bpmnProcessId = "UserTaskProcess"), @BpmnProcess(
                         bpmnProcessId = "SilentUserTaskProcess"), @BpmnProcess(
                             bpmnProcessId = "MessageProcess"), @BpmnProcess(
-                                bpmnProcessId = "MessageStartProcess"), @BpmnProcess(
-                                    bpmnProcessId = "SyncProcess"), @BpmnProcess(bpmnProcessId = "FetchProcess")
+                                bpmnProcessId = "SyncProcess"), @BpmnProcess(bpmnProcessId = "FetchProcess")
     })
 public class TaskDockerWorkflowService {
 
@@ -258,15 +257,6 @@ public class TaskDockerWorkflowService {
 
     countInvocation("c8MessageArrived", aggregate);
     aggregate.appendResult("message-arrived");
-
-  }
-
-  @WorkflowTask
-  public void c8OrderPlaced(
-      final TaskDockerAggregate aggregate) {
-
-    countInvocation("c8OrderPlaced", aggregate);
-    aggregate.appendResult("order-placed");
 
   }
 

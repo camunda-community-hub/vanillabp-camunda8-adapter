@@ -1058,7 +1058,29 @@ public class Camunda8WorkflowLifecycleTest {
         .get("id")
         .toString();
 
-    await(() -> "order-placed".equals(resultsOf(aggregateId)), "MessageStartProcess to run through");
+    await(
+        () -> "order-placed".equals(text("introspect/message-start/aggregates/%s/results".formatted(aggregateId))),
+        "MessageStartProcess to run through");
+
+  }
+
+  @Test
+  @DisplayName("startWorkflowByMessage refuses a message which starts another process")
+  public void startWorkflowByMessageRefusesTheMessageOfAnotherProcess() {
+
+    // 'C8OrderPlaced' starts MessageStartProcess. Publishing it names no process, so the
+    // cluster would start that process for the aggregate of TaskProcess. The core refuses
+    // it before phase one, from the message names this adapter read out of the model
+    final var refused = post("introspect/messages/C8OrderPlaced/start-task-process");
+
+    assertEquals("IllegalArgumentException", refused.get("rootException"), () -> "but got: "
+        + refused);
+    assertTrue(
+        String
+            .valueOf(refused.get("rootMessage"))
+            .contains("Message 'C8OrderPlaced' does not start BPMN process 'TaskProcess'"),
+        () -> "the message names the message and the process of the caller: "
+            + refused);
 
   }
 
