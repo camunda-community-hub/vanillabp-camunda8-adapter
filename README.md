@@ -1647,6 +1647,13 @@ default; a redelivery after the TTL could correlate again - the documented
 uniqueness window). WITHOUT one, deduplication is deliberately absent.
 `startWorkflowByMessage` publishes with an empty correlation key, the start's
 idempotency key as `messageId` and ONLY the aggregate-ID variable.
+A publish names no process, so the cluster starts every process whose start event waits for that
+message. What keeps a message from starting a process other than the one of the calling
+`ProcessService` is the check of the core. The adapter feeds it at boot: `wireBpmn` reports the
+plain names of the message start events of each process through `reportStartMessages`, and it
+reports nothing for a process where one of those names is a FEEL expression.
+`Camunda8StartMessagesReportTest` holds the report and
+`Camunda8TaskProcessingIT#startWorkflowByMessageRefusesTheMessageOfAnotherProcess` the refusal.
 `awarenessOfWorkflow` locates the workflow with a process-instance search, which is
 one of the reasons the adapter requires a cluster it can search, see
 [What needs a cluster which can be searched](#what-needs-a-cluster-which-can-be-searched).
