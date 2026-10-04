@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_ReadModel895"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_Proceed" name="Proceed895" />
+  <bpmn:process id="ReadModelProcess" isExecutable="true">
+    <bpmn:startEvent id="RM_Start">
+      <bpmn:outgoing>RM_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="RM_f1" sourceRef="RM_Start" targetRef="RM_Work" />
+    <bpmn:serviceTask id="RM_Work">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="work" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RM_f1</bpmn:incoming>
+      <bpmn:outgoing>RM_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RM_f2" sourceRef="RM_Work" targetRef="RM_Delay" />
+    <bpmn:intermediateCatchEvent id="RM_Delay">
+      <bpmn:incoming>RM_f2</bpmn:incoming>
+      <bpmn:outgoing>RM_f2b</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="RM_DelayDef">
+        <bpmn:timeDuration>=delay</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="RM_f2b" sourceRef="RM_Delay" targetRef="RM_Review" />
+    <bpmn:subProcess id="RM_Review">
+      <bpmn:incoming>RM_f2b</bpmn:incoming>
+      <bpmn:outgoing>RM_f3</bpmn:outgoing>
+      <bpmn:startEvent id="RM_ReviewStart">
+        <bpmn:outgoing>RM_r1</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="RM_r1" sourceRef="RM_ReviewStart" targetRef="RM_Check" />
+      <bpmn:serviceTask id="RM_Check">
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="check" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>RM_r1</bpmn:incoming>
+        <bpmn:outgoing>RM_r2</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:sequenceFlow id="RM_r2" sourceRef="RM_Check" targetRef="RM_Approve" />
+      <bpmn:userTask id="RM_Approve">
+        <bpmn:extensionElements>
+          <zeebe:userTask />
+          <zeebe:formDefinition externalReference="approve" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>RM_r2</bpmn:incoming>
+        <bpmn:outgoing>RM_r3</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:sequenceFlow id="RM_r3" sourceRef="RM_Approve" targetRef="RM_ReviewEnd" />
+      <bpmn:endEvent id="RM_ReviewEnd">
+        <bpmn:incoming>RM_r3</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="RM_f3" sourceRef="RM_Review" targetRef="RM_Proceed" />
+    <bpmn:intermediateCatchEvent id="RM_Proceed">
+      <bpmn:incoming>RM_f3</bpmn:incoming>
+      <bpmn:outgoing>RM_f4</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="RM_ProceedDef" messageRef="Msg_Proceed" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="RM_f4" sourceRef="RM_Proceed" targetRef="RM_Wait" />
+    <bpmn:intermediateCatchEvent id="RM_Wait">
+      <bpmn:incoming>RM_f4</bpmn:incoming>
+      <bpmn:outgoing>RM_f5</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="RM_WaitDef">
+        <bpmn:timeDuration>PT3S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="RM_f5" sourceRef="RM_Wait" targetRef="RM_Finish" />
+    <bpmn:serviceTask id="RM_Finish">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="finish" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RM_f5</bpmn:incoming>
+      <bpmn:outgoing>RM_f6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RM_f6" sourceRef="RM_Finish" targetRef="RM_End" />
+    <bpmn:endEvent id="RM_End">
+      <bpmn:incoming>RM_f6</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>
