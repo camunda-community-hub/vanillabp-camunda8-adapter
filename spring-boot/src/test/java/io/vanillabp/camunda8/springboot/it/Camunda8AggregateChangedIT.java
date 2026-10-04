@@ -26,6 +26,7 @@ import io.camunda.client.api.search.response.Variable;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.camunda8.test.ClusterUnderTest;
+import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -149,6 +150,176 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
    * searchable and before the task exists.
    */
   private static final String THE_PUSH_AFTER_TIMER_PROCESS = "test-app__AggregateChangedAfterTimerProcess";
+
+  /**
+   * The process of the tests which push into a user task directly in the process, as the
+   * cluster knows it.
+   */
+  private static final String THE_USER_TASK_PUSH_PROCESS = "test-app__AggregateChangedUserTaskProcess";
+
+  /**
+   * The process of the test which pushes into a user task of one iteration, as the cluster
+   * knows it.
+   */
+  private static final String THE_MULTI_INSTANCE_USER_TASK_PUSH_PROCESS = "test-app__AggregateChangedUserTaskMultiInstanceProcess";
+
+  /**
+   * The element instance of a user task itself - the scope a push must NOT write into.
+   */
+  private Long elementInstanceKeyOfUserTask(
+      final String userTaskKey) {
+
+    return client()
+        .newUserTaskSearchRequest()
+        .filter(filter -> filter.userTaskKey(Long.parseLong(userTaskKey)))
+        .send()
+        .join()
+        .items()
+        .getFirst()
+        .getElementInstanceKey();
+
+  }
+
+  /**
+   * Starts one of the user-task processes against the cluster and waits until the
+   * application was told about as many user tasks as the process creates.
+   *
+   * @return The aggregate id and the process instance key
+   */
+  private long[] startAndAwaitUserTasks(
+      final String bpmnProcessId,
+      final int userTasks) throws Exception {
+
+    final var aggregateId = transactionTemplate
+        .execute(status -> workflowService.saveAggregate().getId());
+    assertNotNull(aggregateId);
+    client()
+        .newCreateInstanceCommand()
+        .bpmnProcessId(bpmnProcessId)
+        .latestVersion()
+        .variables(Map.of("id", String.valueOf(aggregateId), "note", "before"))
+        .send()
+        .join();
+    awaitUntil(
+        () -> {
+          final var taskIds = PushDockerWorkflowService.USER_TASK_IDS.get(aggregateId);
+          return (taskIds != null) && (taskIds.split(",").length == userTasks);
+        },
+        "the application to be told about every user task");
+    awaitUntil(() -> processInstanceKeyOf(bpmnProcessId, aggregateId) != null, "the query API to know the instance");
+    return new long[]{
+        aggregateId, processInstanceKeyOf(bpmnProcessId, aggregateId)
+    };
+
+  }
+
+  @Test
+  @DisplayName("a task-scoped push into a user task directly in the process lands at the process instance")
+  public void aTaskScopedPushIntoAUserTaskReachesTheProcessInstance() throws Exception {
+
+    final var started = startAndAwaitUserTasks(THE_USER_TASK_PUSH_PROCESS, 1);
+    final var aggregateId = started[0];
+    final var processInstanceKey = started[1];
+    final var userTaskKey = PushDockerWorkflowService.USER_TASK_IDS.get(aggregateId);
+
+    transactionTemplate
+        .executeWithoutResult(
+            status -> workflowService.pushInto(aggregateId, "pushed-into-the-user-task", userTaskKey));
+
+    awaitUntil(
+        () -> notesOf(processInstanceKey)
+            .stream()
+            .anyMatch(variable -> variable.getValue().contains("pushed-into-the-user-task")),
+        "the pushed value to arrive at the cluster");
+    final var pushed = notesOf(processInstanceKey)
+        .stream()
+        .filter(variable -> variable.getValue().contains("pushed-into-the-user-task"))
+        .toList();
+    assertEquals(1, pushed.size(), "exactly ONE scope may see the pushed value");
+    assertEquals(
+        processInstanceKey,
+        pushed.getFirst().getScopeKey(),
+        "the user task runs directly in the process, so the process instance is its scope");
+
+  }
+
+  @Test
+  @DisplayName("a task-scoped push into a user task of one iteration lands in that iteration")
+  public void aTaskScopedPushIntoAUserTaskReachesItsIteration() throws Exception {
+
+    final var started = startAndAwaitUserTasks(THE_MULTI_INSTANCE_USER_TASK_PUSH_PROCESS, 2);
+    final var aggregateId = started[0];
+    final var processInstanceKey = started[1];
+    final var userTaskKey = PushDockerWorkflowService.USER_TASK_IDS.get(aggregateId).split(",")[0];
+
+    transactionTemplate
+        .executeWithoutResult(
+            status -> workflowService.pushInto(aggregateId, "pushed-into-one-iteration", userTaskKey));
+
+    awaitUntil(
+        () -> notesOf(processInstanceKey)
+            .stream()
+            .anyMatch(variable -> variable.getValue().contains("pushed-into-one-iteration")),
+        "the pushed value to arrive at the cluster");
+    final var notes = notesOf(processInstanceKey);
+    final var pushed = notes
+        .stream()
+        .filter(variable -> variable.getValue().contains("pushed-into-one-iteration"))
+        .toList();
+    assertEquals(1, pushed.size(), "exactly ONE scope may see the pushed value");
+    assertNotEquals(
+        processInstanceKey,
+        pushed.getFirst().getScopeKey(),
+        "a task-scoped push may not land at the workflow's scope");
+    assertNotEquals(
+        elementInstanceKeyOfUserTask(userTaskKey),
+        pushed.getFirst().getScopeKey(),
+        "and not in the user task's own element instance, which disappears with the task");
+    assertTrue(
+        notes
+            .stream()
+            .anyMatch(variable -> (variable.getScopeKey().equals(processInstanceKey)) && variable.getValue()
+                .contains("before")),
+        "the workflow's global value stays as it was");
+
+  }
+
+  @Test
+  @DisplayName("a task-scoped push into a user task directly in the process needs no read model")
+  public void aTaskScopedPushIntoAUserTaskNeedsNoReadModel(
+      final CapturedOutput output) throws Exception {
+
+    final var started = startAndAwaitUserTasks(THE_USER_TASK_PUSH_PROCESS, 1);
+    final var aggregateId = started[0];
+    final var processInstanceKey = started[1];
+    final var userTaskKey = PushDockerWorkflowService.USER_TASK_IDS.get(aggregateId);
+
+    exporting("pause");
+    try {
+      transactionTemplate
+          .executeWithoutResult(
+              status -> workflowService.pushInto(aggregateId, "pushed-without-a-read-model", userTaskKey));
+      // the row of the user task names its process instance, and the engine takes the
+      // write by key: nothing has to be searched, so the push is done while the exporter
+      // still stands
+      awaitUntil(
+          () -> output
+              .getAll()
+              .contains(
+                  "pushed the changed aggregate '%s' into element instance '%s' (task '%s')"
+                      .formatted(aggregateId, processInstanceKey, userTaskKey)),
+          "the push to be written while the exporter stands still");
+    } finally {
+      exporting("resume");
+    }
+
+    awaitUntil(
+        () -> notesOf(processInstanceKey)
+            .stream()
+            .anyMatch(variable -> variable.getValue().contains("pushed-without-a-read-model")),
+        "the pushed value to be reported once the exporter caught up");
+
+  }
 
   /**
    * The element instance of the task itself - the scope a push must NOT write into.

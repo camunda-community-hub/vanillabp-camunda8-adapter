@@ -2421,6 +2421,20 @@ cluster (a key does not say which of them deployed the process), and where the e
 `404` because the instance is gone. Why a stopped exporter may slow a push down but not lose
 it is decision 64 in the repository's `DECISIONS.md`.
 
+The push into the scope of a task does not search where the row of the task says enough. The
+core hands in that row as `PhaseTwoRequest#taskRecord()` where this adapter left the task open:
+every user task, and a service task whose method asked for the task id. Where the row names the
+version this application deployed, the model says what encloses the task. A task directly in
+its process is written into the process instance the row names, without a search, also while
+the exporter stands still. A user task directly in an iteration of a multi-instance subprocess
+is found by one search: the variable holding the index of that iteration is local to it. Every
+other task is searched for as above, a user task by its user-task key and a service task by its
+job key. When the search does not find the scope, the adapter asks the engine only about a task
+the row says rests, because the question cuts the lock of a job a handler holds short.
+`Camunda8AggregateChangedIT` pushes into both shapes of user task, and
+`Camunda8TaskScopedPushWaitsForItsScopeTest` holds the rules. The reasons are the decision in
+`DECISIONS.pending/903.md`.
+
 Independent of the annotations the workflow aggregate's ID is written as a process variable
 named after the aggregate's ID attribute, and always as a string. That variable is what
 VanillaBP reads a workflow back by, the business id below is not, and a string is what a

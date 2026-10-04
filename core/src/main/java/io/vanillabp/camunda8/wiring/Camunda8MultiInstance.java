@@ -912,17 +912,15 @@ public final class Camunda8MultiInstance {
         : zeebeLoopCharacteristics.getInputCollection();
 
     return new MultiInstanceElement(
-        elementId, VARIABLE_PREFIX
-            + "Index_"
-            + suffix, isBlank(inputCollection)
-                ? null
-                : VARIABLE_PREFIX
-                    + "Total_"
-                    + suffix, isBlank(inputElement)
-                        ? null
-                        : VARIABLE_PREFIX
-                            + "Element_"
-                            + suffix);
+        elementId, indexVariableOf(elementId), isBlank(inputCollection)
+            ? null
+            : VARIABLE_PREFIX
+                + "Total_"
+                + suffix, isBlank(inputElement)
+                    ? null
+                    : VARIABLE_PREFIX
+                        + "Element_"
+                        + suffix);
 
   }
 
@@ -1305,6 +1303,23 @@ public final class Camunda8MultiInstance {
       }
     }
     return null;
+
+  }
+
+  /**
+   * The variable the deployment makes every iteration of a multi-instance element write its
+   * own index into. It is a local variable of that iteration, so the scope the cluster reports
+   * for it IS the iteration.
+   *
+   * @param elementId The BPMN ID of the multi-instance element
+   * @return The name of the variable
+   */
+  public static String indexVariableOf(
+      final String elementId) {
+
+    return VARIABLE_PREFIX
+        + "Index_"
+        + variableSuffix(elementId);
 
   }
 

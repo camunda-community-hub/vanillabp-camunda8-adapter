@@ -17,7 +17,12 @@ import io.camunda.client.api.search.enums.ElementInstanceType;
 import io.camunda.client.api.search.enums.ProcessInstanceState;
 import io.camunda.client.api.search.response.Job;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
+import io.camunda.zeebe.model.bpmn.instance.AdHocSubProcess;
+import io.camunda.zeebe.model.bpmn.instance.FlowNode;
 import io.camunda.zeebe.model.bpmn.instance.Message;
+import io.camunda.zeebe.model.bpmn.instance.MultiInstanceLoopCharacteristics;
+import io.camunda.zeebe.model.bpmn.instance.Process;
+import io.camunda.zeebe.model.bpmn.instance.SubProcess;
 import io.vanillabp.camunda8.Camunda8ReleaseLine;
 import io.vanillabp.camunda8.client.Camunda8BusinessId;
 import io.vanillabp.camunda8.client.Camunda8ClientFactory;
@@ -30,6 +35,7 @@ import io.vanillabp.camunda8.client.Camunda8UserTaskProbe;
 import io.vanillabp.camunda8.deployment.Camunda8ModelsTheClusterHolds;
 import io.vanillabp.camunda8.wiring.Camunda8ConfiguredTenant;
 import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
+import io.vanillabp.camunda8.wiring.Camunda8MultiInstance;
 import io.vanillabp.camunda8.wiring.Camunda8Scoping;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.integration.adapter.spi.AggregateSyncMode;
@@ -43,9 +49,11 @@ import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.adapter.spi.WorkflowScope;
 import io.vanillabp.integration.adapter.spi.WorkflowVisibilityDelay;
+import io.vanillabp.integration.adapter.spi.workflowtask.TaskKind;
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import io.vanillabp.integration.spi.PhaseOperation;
 import io.vanillabp.integration.spi.PhaseTwoRetryLater;
+import io.vanillabp.integration.spi.TaskDelivery;
 import io.vanillabp.spi.process.ProcessDefinition;
 import io.vanillabp.spi.process.TaskNotFoundException;
 import io.vanillabp.spi.process.WorkflowHistory;
@@ -2014,19 +2022,28 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       return;
     }
 
-    final var elementInstanceKey = flowScopeKeyOf(request.taskId());
+    final var taskRow = request.taskRecord();
+    final var place = whereTheTaskRuns(request.workflowModuleId(), taskRow);
+    final var elementInstanceKey = place.processInstanceKey() != null
+        ? place.processInstanceKey()
+        : flowScopeKeyOf(request.taskId(), taskRow, place);
     if (elementInstanceKey == null) {
       // the read model does not know the scope, which says nothing about whether the task
       // is still there: an exporter which stands still knows no task created after it
-      // stopped. So the engine is asked, and only its "gone" consumes the entry (see
+      // stopped. The engine is asked only about a task this adapter left open, because the
+      // question shortens the lock of a job a handler may hold right now. Without that row
+      // the push waits for the read model, which knows a completed task as well (see
       // decision 65 in the repository's DECISIONS.md)
-      if (theEngineStillHoldsTheJobOf(request.taskId())) {
-        throw scopeNotVisibleYet(request);
+      if (!theAdapterLeftTheTaskOpen(taskRow)) {
+        throw scopeNotVisibleYet(request, false);
+      }
+      if (theEngineStillHoldsTheTask(request.taskId(), taskRow)) {
+        throw scopeNotVisibleYet(request, true);
       }
       log.warn(
           "Camunda8[{}]: task '{}' of aggregate '{}' is completed - skipping the push of the "
               + "changed aggregate. The query API did not report the scope of the task within {}, "
-              + "and the cluster answered that it holds no job of that key any more. The "
+              + "and the cluster answered that it holds no such task any more. The "
               + "workflow's own scope is deliberately NOT written instead - it is read by every "
               + "branch, and the task asked for its own scope",
           adapterId,
@@ -2143,33 +2160,72 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Asks the ENGINE whether the job behind a task id is still there, which the read model
+   * Whether the row of a task says that this adapter left the task open and the application has
+   * not closed it since. Such a task RESTS: no handler holds its job, so asking the engine about
+   * it disturbs nobody. A user task always rests, a service task rests where its method asked
+   * for the task id and left the completion to the application. Why the engine is asked only
+   * about such a task is the decision in {@code DECISIONS.pending/903.md}.
+   *
+   * @param taskRow The row of the task, or <code>null</code> where there is none
+   * @return Whether the task rests
+   */
+  private static boolean theAdapterLeftTheTaskOpen(
+      final TaskDelivery taskRow) {
+
+    return (taskRow != null) && (taskRow.taskClosedAt() == null);
+
+  }
+
+  /**
+   * Whether the row of a task names a user task, whose id is a user-task key and no job key.
+   *
+   * @param taskRow The row of the task, or <code>null</code> where there is none
+   * @return Whether the row names a user task
+   */
+  private static boolean isAUserTask(
+      final TaskDelivery taskRow) {
+
+    return (taskRow != null) && TaskKind.USER_TASK.name().equals(taskRow.taskKind());
+
+  }
+
+  /**
+   * Asks the ENGINE whether a task this adapter left open is still there, which the read model
    * cannot answer: it knows nothing that happened after its exporter stopped.
    * <p>
-   * The question is an <code>UpdateJobTimeout</code>, the same non-advancing command the
-   * awareness probe of a task sends, and its only effect is the one that probe has as well:
-   * the lock of an activated job is set to <code>async-task-lock-renewal</code>.
+   * A user task is asked with the empty <code>UpdateUserTask</code> the awareness probe of a
+   * user task sends. A service task is asked with an <code>UpdateJobTimeout</code> on the job
+   * key, the command the awareness probe of a task sends. Its only effect is that the lock of an
+   * activated job is set to <code>async-task-lock-renewal</code>, which is what the renewal of a
+   * job the adapter left open does anyway. That is why the caller asks only about a task which
+   * rests: the lock of a job a handler holds right now would be cut short.
    * <p>
-   * A <code>404</code> means the cluster holds no job of that key any more. Any other refusal
-   * is a refusal about a job the cluster HAS: a job nobody activated right now
-   * (<code>400</code>) or one another activation holds (<code>409</code>). A failure which
-   * is no answer of the cluster at all, an outage, is thrown, and the outbox repeats it like
-   * every other outage.
+   * A <code>404</code> means the cluster holds no such task any more. Any other refusal is a
+   * refusal about a task the cluster HAS. A failure which is no answer of the cluster at all,
+   * an outage, is thrown, and the outbox repeats it like every other outage.
    *
-   * @param taskId The task ID reported to the application (the job key)
-   * @return Whether the engine still holds the job
+   * @param taskId The task ID reported to the application
+   * @param taskRow The row of the task, which says its kind
+   * @return Whether the engine still holds the task
    */
-  private boolean theEngineStillHoldsTheJobOf(
-      final String taskId) {
+  private boolean theEngineStillHoldsTheTask(
+      final String taskId,
+      final TaskDelivery taskRow) {
 
     try {
-      updateJobTimeout(taskId);
+      if (isAUserTask(taskRow)) {
+        updateUserTask(taskId);
+      } else {
+        updateJobTimeout(taskId);
+      }
       return true;
     } catch (final Exception e) {
       if (Camunda8Errors.jobAlreadyGone(e)) {
         return false;
       }
-      if (Camunda8Errors.jobIsThereButNotActive(e) || Camunda8Errors.jobHeldByAnotherActivation(e)) {
+      if (isAUserTask(taskRow)
+          ? Camunda8Errors.refusedAboutAUserTaskItHolds(e)
+          : Camunda8Errors.jobIsThereButNotActive(e) || Camunda8Errors.jobHeldByAnotherActivation(e)) {
         return true;
       }
       throw e;
@@ -2178,25 +2234,37 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * What a task-scoped push throws while the engine holds the task and the read model does
-   * not report its scope yet: the entry is worth repeating, and the visibility window is the
-   * time this adapter says its read model may need. Where no window is configured, the
-   * failure is an ordinary one and the outbox repeats it with its own backoff, because a
-   * window of zero would bring the entry back at once.
+   * What a task-scoped push throws while the read model does not report the scope of its task
+   * yet: the entry is worth repeating, and the visibility window is the time this adapter says
+   * its read model may need. Where no window is configured, the failure is an ordinary one and
+   * the outbox repeats it with its own backoff, because a window of zero would bring the entry
+   * back at once.
    *
    * @param request The push
+   * @param theEngineHoldsTheTask Whether the engine said that it holds the task. Where it was
+   *          not asked, the message says what is waited for instead
    * @return The failure to throw
    */
   private RuntimeException scopeNotVisibleYet(
-      final PhaseTwoRequest<A> request) {
+      final PhaseTwoRequest<A> request,
+      final boolean theEngineHoldsTheTask) {
 
     final var delay = workflowVisibilityDelay();
-    final var message = """
-        Camunda8[%s]: the cluster still holds task '%s' of aggregate '%s', but its query API does \
-        not report the scope the task runs in. The push of the changed aggregate is repeated. If \
-        this does not stop, look at the exporter of the cluster first: a read model which stopped \
-        catching up knows no task created after it stopped."""
-        .formatted(adapterId, request.taskId(), request.workflowAggregateId());
+    final var message = theEngineHoldsTheTask
+        ? """
+            Camunda8[%s]: the cluster still holds task '%s' of aggregate '%s', but its query API does \
+            not report the scope the task runs in. The push of the changed aggregate is repeated. If \
+            this does not stop, look at the exporter of the cluster first: a read model which stopped \
+            catching up knows no task created after it stopped."""
+            .formatted(adapterId, request.taskId(), request.workflowAggregateId())
+        : """
+            Camunda8[%s]: the query API of the cluster does not report task '%s' of aggregate '%s' \
+            or the scope it runs in. The push of the changed aggregate is repeated until it does. \
+            The engine is not asked, because no row of the delivery log says that the task rests, \
+            and asking would cut short the lock of a job a handler may hold. If this does not \
+            stop, look at the exporter of the cluster first, and then at the task id the \
+            application passed."""
+            .formatted(adapterId, request.taskId(), request.workflowAggregateId());
     return delay.isWaiting()
         ? new PhaseTwoRetryLater(message, delay.window())
         : new IllegalStateException(message);
@@ -2264,24 +2332,28 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * open, so the waiting costs the entry an attempt rather than a database connection
    * (decision 27 of the platform's DECISIONS.md, which draws that line for the core's
    * election as well). A scope which stays unknown yields
-   * <code>null</code>, and the caller then asks the engine whether the task is still there.
+   * <code>null</code>, and the caller then decides whether the engine may be asked.
    * The process instance is NOT used as a substitute, because writing there is exactly the
    * lost update between the iterations of a multi-instance subprocess this scoping exists to
    * prevent.
    *
-   * @param taskId The task ID reported to the application (the job key)
+   * @param taskId The task ID reported to the application
+   * @param taskRow The row of the task, or <code>null</code> where there is none
+   * @param place What the row and the deployed model say about where the task runs
    * @return The element instance key to write at, or <code>null</code> if the scope
    *         did not become known within the window
    */
   private Long flowScopeKeyOf(
-      final String taskId) {
+      final String taskId,
+      final TaskDelivery taskRow,
+      final WhereTheTaskRuns place) {
 
     final var delay = workflowVisibilityDelay();
     final var deadline = System.currentTimeMillis() + (delay.isWaiting()
         ? delay.window().toMillis()
         : 0);
     while (true) {
-      final var scopeKey = searchFlowScopeKeyOf(taskId);
+      final var scopeKey = searchFlowScopeKeyOf(taskId, taskRow, place);
       if (scopeKey != null) {
         return scopeKey;
       }
@@ -2299,20 +2371,36 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * One attempt of {@link #flowScopeKeyOf(String)}.
+   * One attempt of {@link #flowScopeKeyOf(String, TaskDelivery, WhereTheTaskRuns)}.
+   * <p>
+   * A user task which runs directly in one iteration of a multi-instance subprocess is answered
+   * by one search: the variable holding the index of that iteration is a local variable of the
+   * iteration, and the variables a user task sees are reported together with their scope. Every
+   * other task is found as an element instance and its scope by walking down from its process
+   * instance.
    *
-   * @param taskId The task ID reported to the application (the job key)
+   * @param taskId The task ID reported to the application
+   * @param taskRow The row of the task, or <code>null</code> where there is none
+   * @param place What the row and the deployed model say about where the task runs
    * @return The element instance key to write at, or <code>null</code> if the query
    *         API knows neither the task nor its scope (yet)
    */
   private Long searchFlowScopeKeyOf(
-      final String taskId) {
+      final String taskId,
+      final TaskDelivery taskRow,
+      final WhereTheTaskRuns place) {
 
-    final var job = jobOf(taskId);
-    if (job == null) {
+    if ((place.iterationIndexVariable() != null) && isAUserTask(taskRow)) {
+      final var iteration = iterationOfTheUserTask(taskId, place.iterationIndexVariable());
+      if (iteration != null) {
+        return iteration;
+      }
+    }
+    final var task = elementInstanceOfTheTask(taskId, taskRow);
+    if (task == null) {
       return null;
     }
-    final var scopes = scopePathOf(job.getProcessInstanceKey(), job.getElementInstanceKey());
+    final var scopes = scopePathOf(task.processInstanceKey(), task.elementInstanceKey());
     // innermost first: the scope holding the task, then its own scopes
     for (final var scope : scopes) {
       if (scope.type() != ElementInstanceType.MULTI_INSTANCE_BODY) {
@@ -2320,6 +2408,146 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       }
     }
     return null;
+
+  }
+
+  /**
+   * Where a task runs, as far as its row and the deployed model can say it without a search.
+   *
+   * @param processInstanceKey The process instance, where the task runs directly in it, otherwise
+   *          <code>null</code>
+   * @param iterationIndexVariable The variable holding the index of the iteration, where the task
+   *          runs directly in one iteration of a multi-instance subprocess, otherwise
+   *          <code>null</code>
+   */
+  private record WhereTheTaskRuns(Long processInstanceKey, String iterationIndexVariable) {
+
+    /** Nothing is known, so the scope is searched for. */
+    static final WhereTheTaskRuns UNKNOWN = new WhereTheTaskRuns(null, null);
+
+  }
+
+  /**
+   * Where a task runs, read from the row of the task and the model of its process.
+   * <p>
+   * The row names the process instance of the task, its element and the version of its process.
+   * Where that version is the one this application deployed, the model says what encloses the
+   * element. An element directly in its process runs in the process instance, and the push can
+   * write there without asking the query API, so it works while the exporter stands still. An
+   * element directly in a multi-instance subprocess runs in one iteration, whose key only the
+   * query API knows. Everything else, and every version this application did not deploy, is
+   * searched for as before: an older model may enclose the element differently. Why the row and
+   * not a search is the decision in {@code DECISIONS.pending/903.md}.
+   *
+   * @param workflowModuleId The workflow module of the push
+   * @param taskRow The row of the task, or <code>null</code> where there is none
+   * @return Where the task runs, {@link WhereTheTaskRuns#UNKNOWN} where the row and the model
+   *         do not say
+   */
+  private WhereTheTaskRuns whereTheTaskRuns(
+      final String workflowModuleId,
+      final TaskDelivery taskRow) {
+
+    if ((taskRow == null) || (taskRow.workflowId() == null) || (taskRow.bpmnElementId() == null) || (taskRow
+        .bpmnProcessId() == null) || (taskRow.processVersion() == null)) {
+      return WhereTheTaskRuns.UNKNOWN;
+    }
+    final var deployed = clientFactory
+        .getDeployedProcesses()
+        .deployedVersionOf(workflowModuleId, taskRow.bpmnProcessId());
+    if ((deployed == null) || !String.valueOf(deployed.version()).equals(taskRow.processVersion())) {
+      return WhereTheTaskRuns.UNKNOWN;
+    }
+    if (!(deployed.model().getModelElementById(taskRow.bpmnElementId()) instanceof FlowNode task)) {
+      return WhereTheTaskRuns.UNKNOWN;
+    }
+    final var enclosing = task.getParentElement();
+    if (enclosing instanceof Process) {
+      try {
+        return new WhereTheTaskRuns(Long.valueOf(taskRow.workflowId()), null);
+      } catch (final NumberFormatException e) {
+        return WhereTheTaskRuns.UNKNOWN;
+      }
+    }
+    // an ad-hoc subprocess runs its elements in an inner instance of its own, so its
+    // iteration is not the scope of the task
+    if ((enclosing instanceof SubProcess subProcess) && !(enclosing instanceof AdHocSubProcess) && (subProcess
+        .getLoopCharacteristics() instanceof MultiInstanceLoopCharacteristics)) {
+      return new WhereTheTaskRuns(null, Camunda8MultiInstance.indexVariableOf(subProcess.getId()));
+    }
+    return WhereTheTaskRuns.UNKNOWN;
+
+  }
+
+  /**
+   * The iteration a user task runs in, read from the variables the user task sees: the index
+   * variable of the iteration is local to it, so the scope the cluster reports for that variable
+   * is the iteration.
+   *
+   * @param taskId The user-task key
+   * @param indexVariable The variable holding the index of the enclosing iteration
+   * @return The element instance key of the iteration, or <code>null</code> where the query API
+   *         does not report it (yet)
+   */
+  private Long iterationOfTheUserTask(
+      final String taskId,
+      final String indexVariable) {
+
+    final var found = clientFactory
+        .getClient()
+        .newUserTaskVariableSearchRequest(taskKeyOf(taskId))
+        .filter(filter -> filter.name(indexVariable))
+        .send()
+        .join()
+        .items();
+    return found.isEmpty()
+        ? null
+        : found.getFirst().getScopeKey();
+
+  }
+
+  /**
+   * A task as the query API knows it.
+   *
+   * @param processInstanceKey The process instance the task belongs to
+   * @param elementInstanceKey The element instance of the task itself
+   */
+  private record TaskInstance(Long processInstanceKey, Long elementInstanceKey) {
+  }
+
+  /**
+   * The element instance of a task, from the job behind a job key or from the user task behind
+   * a user-task key. Where no row says which of the two the id is, the job is looked for first.
+   * Both kinds of key are unique within a cluster, so asking the second search after the first
+   * found nothing cannot find somebody else's task.
+   *
+   * @param taskId The task ID reported to the application
+   * @param taskRow The row of the task, or <code>null</code> where there is none
+   * @return The task, or <code>null</code> where the query API does not know it (yet)
+   */
+  private TaskInstance elementInstanceOfTheTask(
+      final String taskId,
+      final TaskDelivery taskRow) {
+
+    if (!isAUserTask(taskRow)) {
+      final var job = jobOf(taskId);
+      if (job != null) {
+        return new TaskInstance(job.getProcessInstanceKey(), job.getElementInstanceKey());
+      }
+      if (taskRow != null) {
+        return null;
+      }
+    }
+    final var found = clientFactory
+        .getClient()
+        .newUserTaskSearchRequest()
+        .filter(filter -> filter.userTaskKey(taskKeyOf(taskId)))
+        .send()
+        .join()
+        .items();
+    return found.isEmpty()
+        ? null
+        : new TaskInstance(found.getFirst().getProcessInstanceKey(), found.getFirst().getElementInstanceKey());
 
   }
 
