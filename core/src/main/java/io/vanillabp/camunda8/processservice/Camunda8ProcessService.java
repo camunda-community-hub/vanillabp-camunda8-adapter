@@ -45,6 +45,7 @@ import io.vanillabp.integration.adapter.spi.WorkflowScope;
 import io.vanillabp.integration.adapter.spi.WorkflowVisibilityDelay;
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import io.vanillabp.integration.spi.PhaseOperation;
+import io.vanillabp.integration.spi.PhaseTwoRetryLater;
 import io.vanillabp.spi.process.ProcessDefinition;
 import io.vanillabp.spi.process.TaskNotFoundException;
 import io.vanillabp.spi.process.WorkflowHistory;
@@ -2012,35 +2013,119 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
     final var elementInstanceKey = flowScopeKeyOf(request.taskId());
     if (elementInstanceKey == null) {
+      // the read model does not know the scope, which says nothing about whether the task
+      // is still there: an exporter which stands still knows no task created after it
+      // stopped. So the engine is asked, and only its "gone" consumes the entry (see
+      // decision 65 in the repository's DECISIONS.md)
+      if (theEngineStillHoldsTheJobOf(request.taskId())) {
+        throw scopeNotVisibleYet(request);
+      }
       log.warn(
-          "Camunda8[{}]: the scope of task '{}' of aggregate '{}' was not found within {} - skipping "
-              + "the push of the changed aggregate. Either the task was completed meanwhile, or the "
-              + "query API did not catch up with it: raise "
-              + "'vanillabp.adapters.{}.workflow-visibility-timeout' if this cluster's exporter "
-              + "regularly needs longer. The workflow's own scope is deliberately NOT written "
-              + "instead - it is read by every branch, and the task asked for its own scope",
+          "Camunda8[{}]: task '{}' of aggregate '{}' is completed - skipping the push of the "
+              + "changed aggregate. The query API did not report the scope of the task within {}, "
+              + "and the cluster answered that it holds no job of that key any more. The "
+              + "workflow's own scope is deliberately NOT written instead - it is read by every "
+              + "branch, and the task asked for its own scope",
           adapterId,
           request.taskId(),
           request.workflowAggregateId(),
-          workflowVisibilityDelay().window(),
-          adapterId);
+          workflowVisibilityDelay().window());
       return;
     }
-    clientFactory
-        .getClient()
-        .newSetVariablesCommand(elementInstanceKey)
-        .variables(variables)
-        // the scope the task RUNS IN - a workflow-wide write would be a lost update
-        // between the iterations of a multi-instance subprocess
-        .local(true)
-        .send()
-        .join();
+    try {
+      clientFactory
+          .getClient()
+          .newSetVariablesCommand(elementInstanceKey)
+          .variables(variables)
+          // the scope the task RUNS IN - a workflow-wide write would be a lost update
+          // between the iterations of a multi-instance subprocess
+          .local(true)
+          .send()
+          .join();
+    } catch (final Exception e) {
+      if (!Camunda8Errors.notFound(e)) {
+        throw e;
+      }
+      // a command is answered by the engine, so this 404 is not a read model which is
+      // behind: the scope ended between the search and the write, together with the task.
+      // Repeating would meet the same answer until the entry is blocked
+      log.warn(
+          "Camunda8[{}]: the scope '{}' of task '{}' of aggregate '{}' ended before the changed "
+              + "aggregate could be written into it - skipping the push. The cluster refused it with {}",
+          adapterId,
+          elementInstanceKey,
+          request.taskId(),
+          request.workflowAggregateId(),
+          Camunda8Errors.rejection(e));
+      return;
+    }
     log.info(
         "Camunda8[{}]: pushed the changed aggregate '{}' into element instance '{}' (task '{}')",
         adapterId,
         request.workflowAggregateId(),
         elementInstanceKey,
         request.taskId());
+
+  }
+
+  /**
+   * Asks the ENGINE whether the job behind a task id is still there, which the read model
+   * cannot answer: it knows nothing that happened after its exporter stopped.
+   * <p>
+   * The question is an <code>UpdateJobTimeout</code>, the same non-advancing command the
+   * awareness probe of a task sends, and its only effect is the one that probe has as well:
+   * the lock of an activated job is set to <code>async-task-lock-renewal</code>.
+   * <p>
+   * A <code>404</code> means the cluster holds no job of that key any more. Any other refusal
+   * is a refusal about a job the cluster HAS: a job nobody activated right now
+   * (<code>400</code>) or one another activation holds (<code>409</code>). A failure which
+   * is no answer of the cluster at all, an outage, is thrown, and the outbox repeats it like
+   * every other outage.
+   *
+   * @param taskId The task ID reported to the application (the job key)
+   * @return Whether the engine still holds the job
+   */
+  private boolean theEngineStillHoldsTheJobOf(
+      final String taskId) {
+
+    try {
+      updateJobTimeout(taskId);
+      return true;
+    } catch (final Exception e) {
+      if (Camunda8Errors.jobAlreadyGone(e)) {
+        return false;
+      }
+      if (Camunda8Errors.jobIsThereButNotActive(e) || Camunda8Errors.jobHeldByAnotherActivation(e)) {
+        return true;
+      }
+      throw e;
+    }
+
+  }
+
+  /**
+   * What a task-scoped push throws while the engine holds the task and the read model does
+   * not report its scope yet: the entry is worth repeating, and the visibility window is the
+   * time this adapter says its read model may need. Where no window is configured, the
+   * failure is an ordinary one and the outbox repeats it with its own backoff, because a
+   * window of zero would bring the entry back at once.
+   *
+   * @param request The push
+   * @return The failure to throw
+   */
+  private RuntimeException scopeNotVisibleYet(
+      final PhaseTwoRequest<A> request) {
+
+    final var delay = workflowVisibilityDelay();
+    final var message = """
+        Camunda8[%s]: the cluster still holds task '%s' of aggregate '%s', but its query API does \
+        not report the scope the task runs in. The push of the changed aggregate is repeated. If \
+        this does not stop, look at the exporter of the cluster first: a read model which stopped \
+        catching up knows no task created after it stopped."""
+        .formatted(adapterId, request.taskId(), request.workflowAggregateId());
+    return delay.isWaiting()
+        ? new PhaseTwoRetryLater(message, delay.window())
+        : new IllegalStateException(message);
 
   }
 
@@ -2105,9 +2190,10 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * open, so the waiting costs the entry an attempt rather than a database connection
    * (decision 27 of the platform's DECISIONS.md, which draws that line for the core's
    * election as well). A scope which stays unknown yields
-   * <code>null</code>: the process instance is NOT used as a substitute, because
-   * writing there is exactly the lost update between the iterations of a
-   * multi-instance subprocess this scoping exists to prevent.
+   * <code>null</code>, and the caller then asks the engine whether the task is still there.
+   * The process instance is NOT used as a substitute, because writing there is exactly the
+   * lost update between the iterations of a multi-instance subprocess this scoping exists to
+   * prevent.
    *
    * @param taskId The task ID reported to the application (the job key)
    * @return The element instance key to write at, or <code>null</code> if the scope

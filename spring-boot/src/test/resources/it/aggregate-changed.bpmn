@@ -54,4 +54,41 @@
       <bpmn:incoming>MI_ToEnd</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
+  <bpmn:process id="AggregateChangedAfterTimerProcess" isExecutable="true">
+    <bpmn:startEvent id="AT_Start">
+      <bpmn:outgoing>AT_ToTimer</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="AT_ToTimer" sourceRef="AT_Start" targetRef="AT_Timer" />
+    <bpmn:intermediateCatchEvent id="AT_Timer">
+      <bpmn:incoming>AT_ToTimer</bpmn:incoming>
+      <bpmn:outgoing>AT_ToSub</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="AT_TimerDef">
+        <bpmn:timeDuration>PT20S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="AT_ToSub" sourceRef="AT_Timer" targetRef="AT_Sub" />
+    <bpmn:subProcess id="AT_Sub">
+      <bpmn:incoming>AT_ToSub</bpmn:incoming>
+      <bpmn:outgoing>AT_ToEnd</bpmn:outgoing>
+      <bpmn:startEvent id="AT_SubStart">
+        <bpmn:outgoing>AT_SubToTask</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="AT_SubToTask" sourceRef="AT_SubStart" targetRef="AT_Task" />
+      <bpmn:serviceTask id="AT_Task">
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="awaitPushPerInstance" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>AT_SubToTask</bpmn:incoming>
+        <bpmn:outgoing>AT_TaskToEnd</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:sequenceFlow id="AT_TaskToEnd" sourceRef="AT_Task" targetRef="AT_SubEnd" />
+      <bpmn:endEvent id="AT_SubEnd">
+        <bpmn:incoming>AT_TaskToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="AT_ToEnd" sourceRef="AT_Sub" targetRef="AT_End" />
+    <bpmn:endEvent id="AT_End">
+      <bpmn:incoming>AT_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
 </bpmn:definitions>
