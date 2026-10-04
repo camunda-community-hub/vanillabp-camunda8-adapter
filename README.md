@@ -2411,6 +2411,16 @@ adapter walks down from the process instance until the task's element instance s
 operation carries no idempotency key at all, because the values are read when the push is
 dispatched and a retry is therefore harmless.
 
+The global push does not search where it does not have to. When the start row VanillaBP wrote
+for the workflow names this adapter, the core hands its process instance key in as
+`PhaseTwoRequest#workflowId()`, and `SetVariables` goes to that key directly. The engine
+answers a command by key, so the push arrives while the exporter stands still, which a search
+cannot do (`Camunda8AnOperationWithoutTheReadModelIT`). The adapter still searches where the
+request carries no key, where the key is not a number, where other adapter ids share the
+cluster (a key does not say which of them deployed the process), and where the engine answers
+`404` because the instance is gone. Why a stopped exporter may slow a push down but not lose
+it is decision 64 in the repository's `DECISIONS.md`.
+
 Independent of the annotations the workflow aggregate's ID is written as a process variable
 named after the aggregate's ID attribute, and always as a string. That variable is what
 VanillaBP reads a workflow back by, the business id below is not, and a string is what a
@@ -2938,10 +2948,15 @@ searches FOR, which is what a reader sizing their cluster needs:
 1. `awarenessOfWorkflow`, the BPMS-election probe, which also carries `completeTask`,
    `cancelTask`, the user-task operations, message correlation, `aggregateChanged` and the
    viewer. Finding a workflow by its aggregate's ID is a search
-   (`newProcessInstanceSearchRequest` filtered by the aggregate-ID variable).
+   (`newProcessInstanceSearchRequest` filtered by the aggregate-ID variable). Where the core
+   hands in the process instance key from the start row of the workflow, the engine answers
+   first (`Camunda8InstanceProbe`), and the search runs only where the engine does not hold
+   the instance or other adapter ids share the cluster.
 2. `aggregateChanged`, which needs the process-instance respectively element-instance key
    `SetVariables` addresses. Camunda 8 has no command addressing a workflow by one of its
-   variables, so a search is the only way from the aggregate's ID to those keys. The business
+   variables, so a search is the only way from the aggregate's ID to those keys, unless the
+   start row of the workflow already names the process instance key (see the section on
+   pushing a changed aggregate). The scope of a task is always searched. The business
    id of 8.9 and later is no way round it: searching by it reads the same index as every
    other search.
 3. Version boundaries naming a `zeebe:versionTag`, since resolving a tag to a version is a

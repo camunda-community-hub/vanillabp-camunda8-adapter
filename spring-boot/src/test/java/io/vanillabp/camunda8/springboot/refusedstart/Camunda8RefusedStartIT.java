@@ -311,8 +311,11 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
 
   private List<DeployedProcess> deployedProcesses() {
 
+    // filtered by the cluster: the shared cluster holds the processes of every class of this
+    // module, more than one page of an unfiltered search, and this one may be beyond it
     return client()
         .newProcessDefinitionSearchRequest()
+        .filter(filter -> filter.processDefinitionId(id -> id.like("*RefusedStartProcess")))
         .send()
         .join()
         .items()

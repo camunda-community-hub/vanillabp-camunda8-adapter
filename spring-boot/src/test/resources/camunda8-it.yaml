@@ -93,6 +93,10 @@ vanillabp:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+        ReadModelStandsStillProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         RestartProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
