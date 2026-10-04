@@ -44,16 +44,15 @@ import jakarta.inject.Inject;
                     bpmnProcessId = "UserTaskProcess"), @BpmnProcess(
                         bpmnProcessId = "SilentUserTaskProcess"), @BpmnProcess(
                             bpmnProcessId = "MessageProcess"), @BpmnProcess(
-                                bpmnProcessId = "MessageStartProcess"), @BpmnProcess(
-                                    bpmnProcessId = "SyncProcess"), @BpmnProcess(
-                                        bpmnProcessId = "FetchProcess"), @BpmnProcess(
-                                            bpmnProcessId = "MultiInstanceProcess"), @BpmnProcess(
-                                                bpmnProcessId = "SignalCatchProcess"), @BpmnProcess(
-                                                    bpmnProcessId = "VersionedProcess"), @BpmnProcess(
-                                                        bpmnProcessId = "ConnectorProcess"), @BpmnProcess(
-                                                            bpmnProcessId = "MiCallProcess"), @BpmnProcess(
-                                                                bpmnProcessId = "MiCalledProcess"), @BpmnProcess(
-                                                                    bpmnProcessId = "MiGrandChildProcess")
+                                bpmnProcessId = "SyncProcess"), @BpmnProcess(
+                                    bpmnProcessId = "FetchProcess"), @BpmnProcess(
+                                        bpmnProcessId = "MultiInstanceProcess"), @BpmnProcess(
+                                            bpmnProcessId = "SignalCatchProcess"), @BpmnProcess(
+                                                bpmnProcessId = "VersionedProcess"), @BpmnProcess(
+                                                    bpmnProcessId = "ConnectorProcess"), @BpmnProcess(
+                                                        bpmnProcessId = "MiCallProcess"), @BpmnProcess(
+                                                            bpmnProcessId = "MiCalledProcess"), @BpmnProcess(
+                                                                bpmnProcessId = "MiGrandChildProcess")
     })
 public class C8E2eWorkflowService {
 
@@ -379,15 +378,6 @@ public class C8E2eWorkflowService {
 
     countInvocation("c8MessageArrived", aggregate);
     aggregate.appendResult("message-arrived");
-
-  }
-
-  @WorkflowTask
-  public void c8OrderPlaced(
-      final C8E2eAggregate aggregate) {
-
-    countInvocation("c8OrderPlaced", aggregate);
-    aggregate.appendResult("order-placed");
 
   }
 

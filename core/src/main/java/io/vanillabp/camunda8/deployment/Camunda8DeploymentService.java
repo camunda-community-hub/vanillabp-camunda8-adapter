@@ -1448,6 +1448,21 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     context.getTasksToWire().addAll(tasks);
     context.getUserTasksToWire().addAll(userTasks);
 
+    // the messages which start this process, so the core can refuse a message passed to
+    // startWorkflowByMessage which would start another process. Publishing a message in
+    // Camunda 8 names no process, so this check is the only thing which stops such a
+    // start. A name the cluster computes from a FEEL expression is unknown here, and a
+    // process which has one is not reported, which tells the core not to check it
+    if (bpmsInitiatedStartInvoker != null) {
+      Camunda8TaskWiring
+          .startMessageNamesOf(
+              model,
+              scopedBpmnProcessId,
+              messageName -> plainIdentifier(workflowModuleId, messageName))
+          .ifPresent(messageNames -> bpmsInitiatedStartInvoker
+              .reportStartMessages(adapterId, workflowModuleId, bpmnProcessId, messageNames));
+    }
+
     // the start of a workflow: the execution listener deciding what a start means is
     // ADDED TO THE MODEL here as well, on every start event the process itself holds.
     // Only for a process this application serves, though - the listener holds the

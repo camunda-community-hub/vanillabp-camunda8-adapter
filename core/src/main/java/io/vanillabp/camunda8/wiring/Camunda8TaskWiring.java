@@ -4,6 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
@@ -617,6 +618,58 @@ public final class Camunda8TaskWiring {
                       bpmnProcessId, startEvent.getId(), kind, signalName));
         });
     return startEvents;
+
+  }
+
+  /**
+   * The names of the messages which start the given executable process, in the form the
+   * application passes them to <code>startWorkflowByMessage</code>. Only the start events
+   * the process itself holds count: a message start event of an event subprocess starts no
+   * workflow.
+   * <p>
+   * The answer is empty where one of the names cannot be known before the message is
+   * published: a message start event without a message or without a name, or a name which
+   * is a FEEL expression (it starts with <code>=</code>). A process like that cannot be
+   * checked, and the caller does not report it at all.
+   *
+   * @param model The BPMN model, already scoped by <code>prepareBpmn</code>
+   * @param bpmnProcessId The SCOPED BPMN process id
+   * @param messageNameResolver Turns the scoped message name of the model into the
+   *          plain one the application modelled
+   * @return The plain message names, or nothing where one of them is unknown
+   */
+  public static Optional<List<String>> startMessageNamesOf(
+      final BpmnModelInstance model,
+      final String bpmnProcessId,
+      final UnaryOperator<String> messageNameResolver) {
+
+    final var messageStartEvents = model
+        .getModelElementsByType(StartEvent.class)
+        .stream()
+        .filter(startEvent -> bpmnProcessId.equals(owningProcessId(startEvent)))
+        .filter(Camunda8TaskWiring::startsTheWorkflow)
+        .flatMap(startEvent -> startEvent
+            .getEventDefinitions()
+            .stream()
+            .filter(MessageEventDefinition.class::isInstance)
+            .map(MessageEventDefinition.class::cast))
+        .toList();
+
+    final var names = new LinkedList<String>();
+    for (final var definition : messageStartEvents) {
+      final var name = definition.getMessage() == null
+          ? null
+          : definition
+              .getMessage()
+              .getName();
+      if ((name == null) || name.isBlank() || name
+          .strip()
+          .startsWith("=")) {
+        return Optional.empty();
+      }
+      names.add(messageNameResolver.apply(name));
+    }
+    return Optional.of(List.copyOf(names));
 
   }
 

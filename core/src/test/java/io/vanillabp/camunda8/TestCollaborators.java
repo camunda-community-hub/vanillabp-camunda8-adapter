@@ -64,10 +64,36 @@ public final class TestCollaborators {
 
   }
 
+  /**
+   * @param <T> A double playing both halves of the task SPI
+   * @param core The double
+   * @param scoping What the test wants the name-clash avoidance to answer
+   * @param bpmsInitiatedStarts The double the test reads the start reports of
+   * @return A complete set built around them
+   */
+  public static <T extends WorkflowTaskWiring & WorkflowTaskInvoker> AdapterCollaborators of(
+      final T core,
+      final NameClashAvoidanceSupport scoping,
+      final BpmsInitiatedStartInvoker bpmsInitiatedStarts) {
+
+    return of(core, scoping, mock(WorkflowEndedInvoker.class), bpmsInitiatedStarts);
+
+  }
+
   private static <T extends WorkflowTaskWiring & WorkflowTaskInvoker> AdapterCollaborators of(
       final T core,
       final NameClashAvoidanceSupport scoping,
       final WorkflowEndedInvoker workflowEnded) {
+
+    return of(core, scoping, workflowEnded, mock(BpmsInitiatedStartInvoker.class));
+
+  }
+
+  private static <T extends WorkflowTaskWiring & WorkflowTaskInvoker> AdapterCollaborators of(
+      final T core,
+      final NameClashAvoidanceSupport scoping,
+      final WorkflowEndedInvoker workflowEnded,
+      final BpmsInitiatedStartInvoker bpmsInitiatedStarts) {
 
     return AdapterCollaborators
         .forAdapter("c8")
@@ -77,7 +103,7 @@ public final class TestCollaborators {
         .workflowAggregateSync(mock(WorkflowAggregateSync.class))
         .preCommitRegistrar(mock(PreCommitRegistrar.class))
         .workflowEndedInvoker(workflowEnded)
-        .bpmsInitiatedStartInvoker(mock(BpmsInitiatedStartInvoker.class))
+        .bpmsInitiatedStartInvoker(bpmsInitiatedStarts)
         .build();
 
   }

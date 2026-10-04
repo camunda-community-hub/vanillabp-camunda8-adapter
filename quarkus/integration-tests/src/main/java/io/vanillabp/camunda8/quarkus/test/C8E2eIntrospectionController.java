@@ -67,6 +67,9 @@ public class C8E2eIntrospectionController {
   C8PushWorkflowService pushWorkflowService;
 
   @Inject
+  C8MessageStartWorkflowService messageStartWorkflowService;
+
+  @Inject
   VanillaBpCamunda8Properties overlay;
 
   @Inject
@@ -422,17 +425,71 @@ public class C8E2eIntrospectionController {
 
   }
 
+  /**
+   * Starts MessageStartProcess through its own process service.
+   *
+   * @param messageName The message to start it with
+   * @return The id of the new aggregate
+   */
   @POST
   @Path("/messages/{messageName}/start")
   @Transactional
   public Map<String, Object> startWorkflowByMessage(
       @PathParam("messageName") final String messageName) {
 
-    final var aggregate = new C8E2eAggregate();
+    final var aggregate = new C8MessageStartAggregate();
+    aggregate.setId("message-start-%s".formatted(java.util.UUID.randomUUID()));
     entityManager.persist(aggregate);
     entityManager.flush();
-    workflowService.startWorkflowByMessage(aggregate, messageName);
-    return Map.of("id", String.valueOf(aggregate.getId()));
+    messageStartWorkflowService.startWorkflowByMessage(aggregate, messageName);
+    return Map.of("id", aggregate.getId());
+
+  }
+
+  /**
+   * Passes a message to the process service of TaskProcess, which may refuse it.
+   *
+   * @param messageName The message to start TaskProcess with
+   * @return The failure, or an empty map where the start was accepted
+   * @throws Exception If the transaction cannot be begun
+   */
+  @POST
+  @Path("/messages/{messageName}/start-task-process")
+  public Map<String, Object> startTaskProcessByMessage(
+      @PathParam("messageName") final String messageName) throws Exception {
+
+    userTransaction.begin();
+    try {
+      final var aggregate = new C8E2eAggregate();
+      entityManager.persist(aggregate);
+      entityManager.flush();
+      workflowService.startWorkflowByMessage(aggregate, messageName);
+    } catch (final Exception e) {
+      userTransaction.rollback();
+      return failure(e);
+    }
+    userTransaction.commit();
+    return Map.of();
+
+  }
+
+  /**
+   * What the workflow of MessageStartProcess recorded.
+   *
+   * @param id The id of its aggregate
+   * @return The results, empty while there are none
+   */
+  @GET
+  @Path("/message-start/aggregates/{id}/results")
+  @Produces(MediaType.TEXT_PLAIN)
+  @Transactional
+  public String messageStartResults(
+      @PathParam("id") final String id) {
+
+    final var aggregate = entityManager.find(C8MessageStartAggregate.class, id);
+    return (aggregate == null) || (aggregate.getResults() == null)
+        ? ""
+        : aggregate.getResults();
 
   }
 
