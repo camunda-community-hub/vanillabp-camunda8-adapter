@@ -2164,7 +2164,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * not closed it since. Such a task RESTS: no handler holds its job, so asking the engine about
    * it disturbs nobody. A user task always rests, a service task rests where its method asked
    * for the task id and left the completion to the application. Why the engine is asked only
-   * about such a task is the decision in {@code DECISIONS.pending/903.md}.
+   * about such a task is decision 66 in the repository's DECISIONS.md.
    *
    * @param taskRow The row of the task, or <code>null</code> where there is none
    * @return Whether the task rests
@@ -2437,7 +2437,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * element directly in a multi-instance subprocess runs in one iteration, whose key only the
    * query API knows. Everything else, and every version this application did not deploy, is
    * searched for as before: an older model may enclose the element differently. Why the row and
-   * not a search is the decision in {@code DECISIONS.pending/903.md}.
+   * not a search is decision 66 in the repository's DECISIONS.md.
    *
    * @param workflowModuleId The workflow module of the push
    * @param taskRow The row of the task, or <code>null</code> where there is none

@@ -2432,8 +2432,8 @@ other task is searched for as above, a user task by its user-task key and a serv
 job key. When the search does not find the scope, the adapter asks the engine only about a task
 the row says rests, because the question cuts the lock of a job a handler holds short.
 `Camunda8AggregateChangedIT` pushes into both shapes of user task, and
-`Camunda8TaskScopedPushWaitsForItsScopeTest` holds the rules. The reasons are the decision in
-`DECISIONS.pending/903.md`.
+`Camunda8TaskScopedPushWaitsForItsScopeTest` holds the rules. The reasons are decision 66 in the
+repository's DECISIONS.md.
 
 Independent of the annotations the workflow aggregate's ID is written as a process variable
 named after the aggregate's ID attribute, and always as a string. That variable is what
