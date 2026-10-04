@@ -9,15 +9,19 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the aggregateChanged integration test: both
- * processes park in an asynchronous task, so the test can push into the workflow's
- * scope and into the scope of ONE instance of a multi-instance activity.
+ * The workflow service of the aggregateChanged integration test: every process parks in
+ * an asynchronous task, so the test can push into the workflow's scope, into the scope of
+ * ONE instance of a multi-instance activity, and into the scope of a subprocess whose task
+ * the read model does not know yet.
  */
 @Service
 @WorkflowService(
     workflowAggregateClass = PushDockerAggregate.class,
     bpmnProcess = @BpmnProcess(bpmnProcessId = "AggregateChangedProcess"),
-    secondaryBpmnProcesses = @BpmnProcess(bpmnProcessId = "AggregateChangedMultiInstanceProcess"))
+    secondaryBpmnProcesses = {
+        @BpmnProcess(bpmnProcessId = "AggregateChangedMultiInstanceProcess"), @BpmnProcess(
+            bpmnProcessId = "AggregateChangedAfterTimerProcess")
+    })
 public class PushDockerWorkflowService {
 
   private final ProcessService<PushDockerAggregate> processService;

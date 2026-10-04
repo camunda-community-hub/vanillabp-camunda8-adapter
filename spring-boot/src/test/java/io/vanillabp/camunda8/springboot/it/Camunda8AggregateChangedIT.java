@@ -5,6 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -21,6 +25,7 @@ import io.camunda.client.api.search.enums.ProcessInstanceState;
 import io.camunda.client.api.search.response.Variable;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
+import io.vanillabp.camunda8.test.ClusterUnderTest;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
@@ -136,6 +141,14 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
    * knows it.
    */
   private static final String THE_MULTI_INSTANCE_PUSH_PROCESS = "test-app__AggregateChangedMultiInstanceProcess";
+
+  /**
+   * The process of the test which pushes into a subprocess whose task was created while the
+   * exporter stood still, as the cluster knows it. A timer of twenty seconds lies between
+   * the start and the subprocess, so the exporter can be stopped after the workflow became
+   * searchable and before the task exists.
+   */
+  private static final String THE_PUSH_AFTER_TIMER_PROCESS = "test-app__AggregateChangedAfterTimerProcess";
 
   /**
    * The element instance of the task itself - the scope a push must NOT write into.
@@ -255,6 +268,95 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
             .anyMatch(variable -> (variable.getScopeKey().equals(processInstanceKey)) && variable.getValue()
                 .contains("before")),
         "the workflow's global value stays as it was - the honest consequence of scoping");
+
+  }
+
+  @Test
+  @DisplayName("a task-scoped push waits for a task the read model does not know yet")
+  public void aTaskScopedPushWaitsWhileTheExporterStandsStill() throws Exception {
+
+    final var aggregateId = transactionTemplate
+        .execute(status -> workflowService.saveAggregate().getId());
+    assertNotNull(aggregateId);
+    client()
+        .newCreateInstanceCommand()
+        .bpmnProcessId(THE_PUSH_AFTER_TIMER_PROCESS)
+        .latestVersion()
+        .variables(Map.of("id", String.valueOf(aggregateId), "note", "before"))
+        .send()
+        .join();
+    awaitUntil(
+        () -> processInstanceKeyOf(THE_PUSH_AFTER_TIMER_PROCESS, aggregateId) != null,
+        "the query API to know the instance");
+    final var processInstanceKey = processInstanceKeyOf(THE_PUSH_AFTER_TIMER_PROCESS, aggregateId);
+
+    exporting("pause");
+    try {
+      awaitUntil(() -> taskIdsOf(aggregateId) != null, "the task behind the timer to park");
+      final var taskId = taskIdsOf(aggregateId);
+      assertTrue(
+          client()
+              .newJobSearchRequest()
+              .filter(filter -> filter.jobKey(Long.parseLong(taskId)))
+              .send()
+              .join()
+              .items()
+              .isEmpty(),
+          "the read model must not know the task yet, otherwise this test proves nothing");
+
+      transactionTemplate
+          .executeWithoutResult(
+              status -> workflowService.pushInto(aggregateId, "pushed-while-the-exporter-stands", taskId));
+
+      // longer than the visibility window of ten seconds: the push used to give up after
+      // it, and the value then never arrived
+      Thread.sleep(25_000);
+    } finally {
+      exporting("resume");
+    }
+
+    awaitUntil(
+        () -> notesOf(processInstanceKey)
+            .stream()
+            .anyMatch(variable -> variable.getValue().contains("pushed-while-the-exporter-stands")),
+        "the pushed value to arrive at the cluster once the exporter caught up");
+    final var pushed = notesOf(processInstanceKey)
+        .stream()
+        .filter(variable -> variable.getValue().contains("pushed-while-the-exporter-stands"))
+        .toList();
+    assertEquals(1, pushed.size(), "exactly ONE scope may see the pushed value");
+    assertNotEquals(
+        processInstanceKey,
+        pushed.getFirst().getScopeKey(),
+        "the value belongs to the subprocess the task runs in, not to the workflow's scope");
+
+  }
+
+  /**
+   * Stops or restarts the exporter of the shared cluster through the management API of its
+   * broker. The engine keeps running either way, only the read model stops following it.
+   *
+   * @param action <code>pause</code> or <code>resume</code>
+   */
+  private static void exporting(
+      final String action) throws Exception {
+
+    final var cluster = ClusterUnderTest.sharedCluster();
+    final var request = HttpRequest
+        .newBuilder(
+            URI
+                .create(
+                    "http://%s:%d/actuator/exporting/%s"
+                        .formatted(cluster.getHost(), cluster.getMappedPort(9600), action)))
+        .POST(HttpRequest.BodyPublishers.noBody())
+        .build();
+    try (var http = HttpClient.newHttpClient()) {
+      final var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+      assertTrue(
+          response.statusCode() < 300,
+          "the broker has to accept '%s' of its exporter: %d %s"
+              .formatted(action, response.statusCode(), response.body()));
+    }
 
   }
 
