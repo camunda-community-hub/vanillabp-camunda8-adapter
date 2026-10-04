@@ -1980,6 +1980,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     final var variables = variablesOf(request.aggregatePersistence(), request.workflowAggregateId());
 
     if (request.taskId() == null) {
+      if (pushedIntoTheInstanceOfTheStartRow(request, variables)) {
+        return;
+      }
       final var processInstanceKey = processInstanceKeyOf(
           WorkflowScope.of(request.workflowModuleId(), request.bpmnProcessId()),
           request.aggregatePersistence(),
@@ -2065,6 +2068,77 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         request.workflowAggregateId(),
         elementInstanceKey,
         request.taskId());
+
+  }
+
+  /**
+   * Pushes the changed aggregate into the process instance the start row of the workflow
+   * names, without asking the query API which instance carries the aggregate.
+   * <p>
+   * The core hands in that key as {@link PhaseTwoRequest#workflowId()} only where the start
+   * row names THIS adapter, so the key belongs to an instance this adapter created. The engine
+   * answers a command by key, so the push no longer depends on an exporter which may stand
+   * still: the search would not find a workflow started after it stopped, and the push used to
+   * be skipped then. A failing read model may hold an application up but must not lose its
+   * work, see decision 64 in the repository's DECISIONS.md.
+   * <p>
+   * The key is not used on a cluster other adapter ids share. An instance key says nothing
+   * about which adapter id deployed the process, and the search below is what keeps one half
+   * of a migration from writing into the other half's instance. A key which is not a number
+   * belongs to another BPMS and is not used either.
+   * <p>
+   * A <code>404</code> means the engine holds no such instance any more. The workflow ended,
+   * or the row is about an instance which is gone, so the caller falls back to the search,
+   * which then reports what it finds.
+   *
+   * @param request The push
+   * @param variables The values to write
+   * @return Whether the values were written, <code>false</code> where the caller has to search
+   */
+  private boolean pushedIntoTheInstanceOfTheStartRow(
+      final PhaseTwoRequest<A> request,
+      final Map<String, Object> variables) {
+
+    final var workflowId = request.workflowId();
+    if ((workflowId == null) || workflowId.isBlank() || clientFactory.sharesItsCluster()) {
+      return false;
+    }
+    final long processInstanceKey;
+    try {
+      processInstanceKey = Long.parseLong(workflowId);
+    } catch (final NumberFormatException e) {
+      return false;
+    }
+    try {
+      clientFactory
+          .getClient()
+          .newSetVariablesCommand(processInstanceKey)
+          .variables(variables)
+          // the workflow's own scope, which is what a gateway behind the current
+          // element and every other branch reads
+          .local(false)
+          .send()
+          .join();
+    } catch (final Exception e) {
+      if (!Camunda8Errors.notFound(e)) {
+        throw e;
+      }
+      log
+          .debug(
+              "Camunda8[{}]: the engine holds no process instance '{}' (named by the start row of "
+                  + "aggregate '{}') any more - searching for the workflow instead",
+              adapterId,
+              processInstanceKey,
+              request.workflowAggregateId());
+      return false;
+    }
+    log
+        .info(
+            "Camunda8[{}]: pushed the changed aggregate '{}' into process instance '{}'",
+            adapterId,
+            request.workflowAggregateId(),
+            processInstanceKey);
+    return true;
 
   }
 
