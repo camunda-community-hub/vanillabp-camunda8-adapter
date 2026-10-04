@@ -2,6 +2,7 @@ package io.vanillabp.camunda8.springboot.it;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -68,7 +69,8 @@ import io.vanillabp.spi.process.TaskNotFoundException;
  * <li>a {@code retryBackoff} task header in the model decides the backoff of its own
  * element, without a new process version and without configuration;</li>
  * <li>the start of a workflow leaves its process instance key in the delivery log, in the
- * form a delivery of its tasks names it, whether it was started directly or by message;</li>
+ * form a delivery of its tasks names it and with the version of the process definition,
+ * whether it was started directly or by message;</li>
  * <li>a message passed to {@code startWorkflowByMessage} which starts another process is
  * refused.</li>
  * </ul>
@@ -281,7 +283,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
   /**
    * Waits for the row the start of a workflow leaves behind, and checks that its workflow id
-   * is the process instance key a delivered task of the same workflow names.
+   * is the process instance key a delivered task of the same workflow names, and its process
+   * version the version that task names.
    *
    * @param aggregateId The workflow aggregate this test started
    * @param bpmnProcessId The process the workflow was started of
@@ -306,15 +309,34 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
     // a task of that workflow names its workflow through the invocation context. Both
     // land in the same column, so the two have to be the same text for the same instance
+    final var delivered = new AtomicReference<Delivery>();
     awaitUntil(
-        () -> deliveryLog()
-            .deliveries()
-            .stream()
-            .filter(delivery -> String.valueOf(aggregateId).equals(delivery.aggregateId()))
-            .anyMatch(delivery -> workflowId.equals(delivery.workflowId())),
+        () -> {
+          deliveryLog()
+              .deliveries()
+              .stream()
+              .filter(delivery -> String.valueOf(aggregateId).equals(delivery.aggregateId()))
+              .filter(delivery -> workflowId.equals(delivery.workflowId()))
+              .findFirst()
+              .ifPresent(delivered::set);
+          return delivered.get() != null;
+        },
         60000,
         "a task of the started workflow to be delivered under process instance key '%s'".formatted(workflowId),
         () -> deliveryLog().deliveries().toString());
+
+    // the same holds for the version of the process definition: the start and the task
+    // write it into the same column, and a reader compares the two
+    final var startedOn = workflowStartsOf(aggregateId, bpmnProcessId)
+        .getFirst()
+        .processVersion();
+    assertNotNull(startedOn, "the start names the version of the process definition it started on");
+    assertEquals(
+        delivered
+            .get()
+            .processVersion(),
+        startedOn,
+        "the start names the version in the form a task of the same workflow names it");
 
   }
 

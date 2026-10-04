@@ -19,11 +19,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import io.camunda.client.api.response.ProcessInstanceEvent;
 import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactory;
 import io.vanillabp.integration.adapter.spi.PhaseTwoRequest;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.adapter.spi.WorkflowScope;
+import io.vanillabp.integration.adapter.spi.workflowstart.WorkflowStartReport;
 import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import io.vanillabp.integration.spi.PhaseOperation;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
@@ -117,12 +119,15 @@ public class Camunda8ProcessServiceTest {
   }
 
   @Test
-  @DisplayName("phase two of a start reports the process instance key the cluster answered")
-  public void phaseTwoOfAStartReportsTheProcessInstanceKey() {
+  @DisplayName("phase two of a start reports the process instance key and the version the cluster answered")
+  public void phaseTwoOfAStartReportsTheProcessInstanceKeyAndTheVersion() {
 
-    // a cluster which answers every create with the same key. On a real cluster the worker
-    // of the start event writes the same key down a moment later, so only a test without
-    // one shows that phase two reports it on its own
+    // a cluster which answers every create with the same instance. On a real cluster the
+    // worker of the start event writes the same key down a moment later, so only a test
+    // without one shows that phase two reports it on its own
+    final var started = mock(ProcessInstanceEvent.class);
+    when(started.getProcessInstanceKey()).thenReturn(2251799813685249L);
+    when(started.getVersion()).thenReturn(3);
     final var clientFactory = mock(Camunda8ClientFactory.class, RETURNS_DEEP_STUBS);
     when(clientFactory
         .getClient()
@@ -131,9 +136,8 @@ public class Camunda8ProcessServiceTest {
         .latestVersion()
         .variables(anyMap())
         .send()
-        .join()
-        .getProcessInstanceKey())
-        .thenReturn(2251799813685249L);
+        .join())
+        .thenReturn(started);
     final var service = new Camunda8ProcessService<Aggregate>(
         "c8", clientFactory, Duration.ofDays(14), (
             aggregateClass,
@@ -145,12 +149,35 @@ public class Camunda8ProcessServiceTest {
         .get(PhaseOperation.START_WORKFLOW)
         .phaseTwo(
             new PhaseTwoRequest<>(
-                "module", "Process", null, "agg-1", Map.of(), reported::add));
+                "module", "Process", null, "agg-1", Map.of(), new WorkflowStartReport() {
+
+                  @Override
+                  public void startedWorkflow(
+                      final String workflowId) {
+
+                    reported.add("without a version: "
+                        + workflowId);
+
+                  }
+
+                  @Override
+                  public void startedWorkflow(
+                      final String workflowId,
+                      final String processVersion) {
+
+                    reported.add(workflowId
+                        + " on version "
+                        + processVersion);
+
+                  }
+
+                }));
 
     assertEquals(
-        List.of("2251799813685249"),
+        List.of("2251799813685249 on version 3"),
         reported,
-        "the key in the form a task delivery names its workflow, and reported once");
+        "the key in the form a task delivery names its workflow, the version in the form a job "
+            + "names it, and both reported once");
 
   }
 
