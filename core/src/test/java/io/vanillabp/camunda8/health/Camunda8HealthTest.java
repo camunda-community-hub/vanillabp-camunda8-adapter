@@ -29,8 +29,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What one Camunda 8 adapter instance answers when the health endpoint asks
  * it. The rules being pinned here are the ones easy to get wrong: a SaaS adapter which is
  * not configured yet must not read as an outage, and every answer has to name the
- * address, because that is what an operator acts on. That includes the client's default
- * address, which an adapter without an address of its own talks to.
+ * address, because that is what an operator acts on. That includes the address of the local
+ * cluster, which an adapter without an address of its own talks to.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8HealthTest {
@@ -128,8 +128,8 @@ public class Camunda8HealthTest {
     assertEquals(
         AdapterHealth.Status.DOWN,
         health.status(),
-        "the client's default address is a real address, so a cluster missing there is an outage");
-    assertEquals(Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS, health.details().get("address"));
+        "the address of the local cluster is a real address, so a cluster missing there is an outage");
+    assertEquals(Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS, health.details().get("address"));
 
   }
 

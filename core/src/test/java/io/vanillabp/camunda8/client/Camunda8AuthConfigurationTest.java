@@ -224,7 +224,7 @@ public class Camunda8AuthConfigurationTest {
     configuration.getAuth().setUsername("demo");
     final var warnings = new java.util.ArrayList<String>();
 
-    Camunda8StartupValidation.reportTheClientDefaultAddress("c8", configuration, warnings::add);
+    Camunda8StartupValidation.reportTheLocalClusterAddress("c8", configuration, warnings::add);
 
     assertTrue(
         warnings.size() == 1 && warnings.getFirst().contains("vanillabp.adapters.c8.rest-address"),

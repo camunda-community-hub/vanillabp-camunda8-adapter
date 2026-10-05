@@ -220,16 +220,16 @@ public class Camunda8ClusterWaitTest {
 
     final var nothingWrittenDown = new Camunda8AdapterConfiguration();
     assertEquals(
-        Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS,
+        Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS,
         nothingWrittenDown.describeAddress(),
-        "an adapter without an address is described by the client's default address");
+        "an adapter without an address is described by the address of the local cluster");
 
     final var grpcWithoutAddress = new Camunda8AdapterConfiguration();
     grpcWithoutAddress.setPreferRestOverGrpc(false);
     assertEquals(
-        Camunda8AdapterConfiguration.CLIENT_DEFAULT_GRPC_ADDRESS,
+        Camunda8AdapterConfiguration.LOCAL_CLUSTER_GRPC_ADDRESS,
         grpcWithoutAddress.describeAddress(),
-        "and one preferring gRPC by the client's default gateway");
+        "and one preferring gRPC by the gateway of the local cluster");
 
     final var saas = new Camunda8AdapterConfiguration();
     saas.setMode(Camunda8AdapterConfiguration.Mode.SAAS);

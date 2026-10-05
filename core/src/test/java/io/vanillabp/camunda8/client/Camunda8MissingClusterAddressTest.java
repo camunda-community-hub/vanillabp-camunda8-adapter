@@ -16,12 +16,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * A self-managed adapter without a cluster address uses the address the Camunda client uses
- * by default, which is a cluster on this machine. The start goes on and warns, and the
- * warning names that address and the key which changes it.
+ * A self-managed adapter without a cluster address uses the address of the local cluster. The
+ * start goes on and warns, and the warning names that address and the key which changes it.
+ * Which address that is depends on the release line, and <code>Camunda8LocalClusterTest</code>
+ * of each line holds it.
  */
 @ExtendWith(SuppressOutputExtension.class)
-public class Camunda8ClientDefaultAddressTest {
+public class Camunda8MissingClusterAddressTest {
 
   private static final String NO_ADDRESS = "Camunda 8 adapter 'c8' has no cluster address, so it connects to the local cluster at";
 
@@ -46,9 +47,10 @@ public class Camunda8ClientDefaultAddressTest {
 
     assertEquals(1, warnings.size(), warnings.toString());
     final var warning = warnings.getFirst();
-    assertTrue(warning.contains(NO_ADDRESS
-        + " 'http://0.0.0.0:8080'"), warning);
-    assertTrue(warning.contains("This is the default address of the Camunda client"), warning);
+    assertTrue(
+        warning.contains(NO_ADDRESS + " '%s'".formatted(Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS)),
+        warning);
+    assertTrue(warning.contains("This address matches Camunda's docker compose for "), warning);
     assertTrue(warning.contains("Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster"), warning);
     assertTrue(warning.contains("vanillabp.adapters.c8.mode"), "and the way to SaaS: "
         + warning);
@@ -70,8 +72,10 @@ public class Camunda8ClientDefaultAddressTest {
     final var warnings = warningsOfTheStart(configuration);
 
     assertEquals(1, warnings.size(), warnings.toString());
-    assertTrue(warnings.getFirst().contains(NO_ADDRESS
-        + " 'http://0.0.0.0:26500'"), warnings.getFirst());
+    assertTrue(
+        warnings.getFirst()
+            .contains(NO_ADDRESS + " '%s'".formatted(Camunda8AdapterConfiguration.LOCAL_CLUSTER_GRPC_ADDRESS)),
+        warnings.getFirst());
     assertTrue(warnings.getFirst().contains("Set 'vanillabp.adapters.c8.grpc-address'"), warnings.getFirst());
 
   }
@@ -87,8 +91,9 @@ public class Camunda8ClientDefaultAddressTest {
 
     assertEquals(1, warnings.size(), warnings.toString());
     final var warning = warnings.getFirst();
-    assertTrue(warning.contains(NO_ADDRESS
-        + " 'http://0.0.0.0:8080'"), warning);
+    assertTrue(
+        warning.contains(NO_ADDRESS + " '%s'".formatted(Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS)),
+        warning);
     assertTrue(
         warning.contains("'vanillabp.adapters.c8.grpc-address' is set, but the client does not talk that protocol"),
         warning);

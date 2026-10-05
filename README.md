@@ -583,18 +583,18 @@ SaaS adapter instance. The adapter-id
 set always comes from the platform's core properties (ids of type `camunda8`); the
 overlay maps are per-known-id lookups only.
 
-|                    Property                     |  Applies to  |              Required               |                                  Description                                  |
-|-------------------------------------------------|--------------|-------------------------------------|-------------------------------------------------------------------------------|
-| `vanillabp.adapters.<id>.mode`                  | both         | no (default `self-managed`)         | `self-managed` or `saas`                                                      |
-| `vanillabp.adapters.<id>.rest-address`          | self-managed | no (default `http://0.0.0.0:8080`)  | REST API address, e.g. `http://localhost:8080`                                |
-| `vanillabp.adapters.<id>.grpc-address`          | self-managed | no (default `http://0.0.0.0:26500`) | gRPC address, e.g. `http://localhost:26500`                                   |
-| `vanillabp.adapters.<id>.prefer-rest-over-grpc` | self-managed | no (default `true`)                 | use the REST API (recommended) or gRPC                                        |
-| `vanillabp.adapters.<id>.cluster-id`            | saas         | yes                                 | SaaS cluster ID                                                               |
-| `vanillabp.adapters.<id>.region`                | saas         | yes                                 | SaaS region                                                                   |
-| `vanillabp.adapters.<id>.client-id`             | saas         | yes                                 | OAuth client ID                                                               |
-| `vanillabp.adapters.<id>.client-secret`         | saas         | yes                                 | OAuth client secret                                                           |
-| `vanillabp.adapters.<id>.tenant-id`             | both         | no                                  | Camunda 8 multi-tenancy tenant, also settable per workflow module             |
-| `vanillabp.adapters.<id>.auth.*`                | both         | no (default: no credentials)        | how the adapter authenticates, see [below](#authenticating-against-a-cluster) |
+|                    Property                     |  Applies to  |                                    Required                                    |                                  Description                                  |
+|-------------------------------------------------|--------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| `vanillabp.adapters.<id>.mode`                  | both         | no (default `self-managed`)                                                    | `self-managed` or `saas`                                                      |
+| `vanillabp.adapters.<id>.rest-address`          | self-managed | no (default `http://localhost:8088` on 8.8, `http://localhost:8080` otherwise) | REST API address, e.g. `http://camunda:8080`                                  |
+| `vanillabp.adapters.<id>.grpc-address`          | self-managed | no (default `http://localhost:26500`)                                          | gRPC address, e.g. `http://camunda:26500`                                     |
+| `vanillabp.adapters.<id>.prefer-rest-over-grpc` | self-managed | no (default `true`)                                                            | use the REST API (recommended) or gRPC                                        |
+| `vanillabp.adapters.<id>.cluster-id`            | saas         | yes                                                                            | SaaS cluster ID                                                               |
+| `vanillabp.adapters.<id>.region`                | saas         | yes                                                                            | SaaS region                                                                   |
+| `vanillabp.adapters.<id>.client-id`             | saas         | yes                                                                            | OAuth client ID                                                               |
+| `vanillabp.adapters.<id>.client-secret`         | saas         | yes                                                                            | OAuth client secret                                                           |
+| `vanillabp.adapters.<id>.tenant-id`             | both         | no                                                                             | Camunda 8 multi-tenancy tenant, also settable per workflow module             |
+| `vanillabp.adapters.<id>.auth.*`                | both         | no (default: no credentials)                                                   | how the adapter authenticates, see [below](#authenticating-against-a-cluster) |
 
 Example (self-managed):
 
@@ -611,9 +611,11 @@ vanillabp:
 **Boot behavior (validated at startup):** Every configured adapter instance's
 connection configuration is validated AT STARTUP:
 
-- self-managed without an address for the protocol the client talks → the client uses its
-  own default address, `http://0.0.0.0:8080` for REST and `http://0.0.0.0:26500` for gRPC.
-  That is a cluster on this machine. The start goes on, and a WARN names the address and the
+- self-managed without an address for the protocol the client talks → the adapter connects
+  to the local cluster, at the address where Camunda's docker compose of the release line
+  publishes it: `http://localhost:8088` for REST on 8.8, `http://localhost:8080` for REST on
+  8.9 and 8.10, and `http://localhost:26500` for gRPC on every line. The start goes on, and a
+  WARN names the address, says that it matches the docker compose of this line, and names the
   key which changes it (e.g. `vanillabp.adapters.myengine.rest-address`). The adapter then
   opens workers like any other, so on the 8.10 line it also needs `job-lease`;
 - inconsistent (e.g. `mode: saas` without `cluster-id`) → the boot FAILS naming the
@@ -623,17 +625,19 @@ connection configuration is validated AT STARTUP:
 - fully configured → the client is built eagerly (building never contacts the
   cluster).
 
-The default addresses are the ones of the Camunda client (`CamundaClientBuilderImpl`), read
-from the client of each release line, so they cannot drift apart. On the 8.8 line the WARN adds one
-sentence: Camunda's docker compose for 8.8 publishes REST on port 8088, so a cluster started with
-it needs `rest-address: http://localhost:8088`. See decision 67 in [`DECISIONS.md`](./DECISIONS.md). Version 1 used the same
-client defaults where neither `camunda.client.rest-address` nor `camunda.client.mode` was set.
+The default addresses sit in `Camunda8LocalCluster` of each line's sources. On 8.9 and 8.10
+Camunda's docker compose takes host port 8080, so an application on the same machine needs another
+`server.port` (Quarkus: `quarkus.http.port`). See decisions 67 and 68 in
+[`DECISIONS.md`](./DECISIONS.md). Version 1 used the client's own defaults, `http://0.0.0.0:8080`
+and `http://0.0.0.0:26500`, where neither `camunda.client.rest-address` nor `camunda.client.mode`
+was set; [`UPGRADE.md`](./UPGRADE.md) has the step.
 
 Messages name property KEYS only - values, especially credentials like
 `client-secret`, are never echoed. Using a degraded adapter at runtime keeps a guiding
 failure message as backstop.
 
-Each of the three outcomes has its test, on both platforms: `Camunda8ClientDefaultAddressTest`,
+Each of the three outcomes has its test, on both platforms: `Camunda8MissingClusterAddressTest`
+and `Camunda8LocalClusterTest` of each line,
 `Camunda8StartupValidationBootTest#anAdapterWithoutAnAddressBootsAndUsesTheLocalCluster`, the
 Quarkus `Camunda8StartupValidationTest` and both `Camunda8AdapterDiscoveryTest` classes for the
 adapter without an address, `Camunda8InconsistentConfigurationTest` together with

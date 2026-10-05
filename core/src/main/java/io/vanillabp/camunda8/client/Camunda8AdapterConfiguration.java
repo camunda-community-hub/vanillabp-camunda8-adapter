@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import io.camunda.client.impl.CamundaClientBuilderImpl;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
@@ -26,9 +25,9 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  *   <li>{@code vanillabp.adapters.<adapter-id>.mode} - {@code self-managed} (default) or
  *       {@code saas}</li>
  *   <li>self-managed: {@code .rest-address} and {@code .grpc-address} (both optional).
- *       Where the address of the protocol in use is missing, the client's default is used,
- *       which is a cluster on this machine, and the start warns about it (see
- *       {@link #usesTheClientDefaultAddress()})</li>
+ *       Where the address of the protocol in use is missing, the adapter uses the address of
+ *       the local cluster, and the start warns about it (see
+ *       {@link #usesTheLocalClusterAddress()})</li>
  *   <li>saas: {@code .cluster-id}, {@code .region}, {@code .client-id},
  *       {@code .client-secret} (all required)</li>
  *   <li>{@code .tenant-id} (optional, both modes) - Camunda 8 multi-tenancy tenant. One
@@ -145,17 +144,17 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The REST address the Camunda client uses where none is configured. It is the client's
-   * own default, read from the client so it cannot drift from the release line's client, and
-   * it means a cluster on this machine.
+   * The REST address a self-managed adapter uses where none is configured. It is a cluster on
+   * this machine, started with Camunda's docker compose of this release line, so the port
+   * depends on the line.
    */
-  public static final String CLIENT_DEFAULT_REST_ADDRESS = CamundaClientBuilderImpl.DEFAULT_REST_ADDRESS.toString();
+  public static final String LOCAL_CLUSTER_REST_ADDRESS = Camunda8LocalCluster.REST_ADDRESS;
 
   /**
-   * The gRPC address the Camunda client uses where none is configured, for the same reason
-   * and with the same meaning as {@link #CLIENT_DEFAULT_REST_ADDRESS}.
+   * The gRPC address a self-managed adapter uses where none is configured, with the same
+   * meaning as {@link #LOCAL_CLUSTER_REST_ADDRESS}.
    */
-  public static final String CLIENT_DEFAULT_GRPC_ADDRESS = CamundaClientBuilderImpl.DEFAULT_GRPC_ADDRESS.toString();
+  public static final String LOCAL_CLUSTER_GRPC_ADDRESS = Camunda8LocalCluster.GRPC_ADDRESS;
 
   /**
    * The REST address of a self-managed cluster.
@@ -242,12 +241,12 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether a self-managed adapter has no address for the protocol its client talks, so the
-   * client uses its own default address, which is a cluster on this machine.
+   * Whether a self-managed adapter has no address for the protocol its client talks, so it
+   * uses the address of the local cluster.
    *
-   * @return Whether the client's default address is used
+   * @return Whether the address of the local cluster is used
    */
-  public boolean usesTheClientDefaultAddress() {
+  public boolean usesTheLocalClusterAddress() {
 
     if (mode == Mode.SAAS) {
       return false;
@@ -260,28 +259,28 @@ public class Camunda8AdapterConfiguration {
 
   /**
    * The REST address the client of a self-managed adapter uses: the configured one, or the
-   * client's default.
+   * address of the local cluster.
    *
    * @return The address, never <code>null</code>
    */
   public String restAddressInUse() {
 
     return isBlank(restAddress)
-        ? CLIENT_DEFAULT_REST_ADDRESS
+        ? LOCAL_CLUSTER_REST_ADDRESS
         : restAddress;
 
   }
 
   /**
    * The gRPC address the client of a self-managed adapter uses: the configured one, or the
-   * client's default.
+   * address of the local cluster.
    *
    * @return The address, never <code>null</code>
    */
   public String grpcAddressInUse() {
 
     return isBlank(grpcAddress)
-        ? CLIENT_DEFAULT_GRPC_ADDRESS
+        ? LOCAL_CLUSTER_GRPC_ADDRESS
         : grpcAddress;
 
   }
@@ -1631,9 +1630,9 @@ public class Camunda8AdapterConfiguration {
    * <code>vanillabp.adapters.&lt;id&gt;.</code> - values are never part of
    * messages). An empty list means the configuration is complete.
    * <p>
-   * Only SaaS requires keys. A self-managed adapter without an address uses the client's
-   * default address, which is a cluster on this machine (see
-   * {@link #usesTheClientDefaultAddress()}).
+   * Only SaaS requires keys. A self-managed adapter without an address uses the address of
+   * the local cluster (see
+   * {@link #usesTheLocalClusterAddress()}).
    *
    * @return The missing property keys
    */
@@ -2028,7 +2027,7 @@ public class Camunda8AdapterConfiguration {
    * Every message about reaching the cluster carries it, because the point of such a
    * message is that somebody can act on it without opening the application's configuration
    * first. A self-managed adapter is described by the address of the protocol its client
-   * talks, and that is the client's default where none is configured.
+   * talks, and that is the address of the local cluster where none is configured.
    *
    * @return The address, or <code>null</code> for a SaaS adapter without cluster and region
    */
