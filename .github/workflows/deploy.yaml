@@ -22,6 +22,9 @@ jobs:
         uses: camunda-community-hub/community-action-maven-release@v2
         with:
           release-version: ${{ github.event.release.tag_name }}
+          # Version 1 lives on this branch. The action commits the next development version
+          # here, not to main, which carries version 2.
+          branch: maintenance/1.x
           nexus-usr: ${{ secrets.NEXUS_USR }}
           nexus-psw: ${{ secrets.NEXUS_PSW }}
           sonatype-central-portal-usr: ${{ secrets.COMMUNITY_HUB_MAVEN_CENTRAL_CP_USR }}
