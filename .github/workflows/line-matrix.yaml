@@ -1,0 +1,335 @@
+name: Release lines
+# What a night of this matrix found is not left in the list of runs: a line which went red
+# gets a GitHub issue, opened by release-lines-issue.yaml, and a release waits for every
+# current line of this matrix. Both are decision 31 in the repository's DECISIONS.md.
+#
+# The preview line is built here like every other line, and it decides nothing: neither
+# 'lines-verified' below nor the pull request which called this. A cluster defect of an alpha
+# must not stop a fix for a released line, and that is decision 42 in the repository's
+# DECISIONS.md. A release waits for it all the same, because the gate of a release is the call
+# of this whole workflow, and a red line fails that call whichever line it is.
+#
+# This matrix is also the nightly build against the platform snapshot. It resolves the platform
+# with '--update-snapshots' every night and it reports a red line as an issue, so a second
+# nightly building the same modules against the same registry would only say the same thing
+# twice under another name. What it needed for that second job is the name of the snapshot it
+# resolved, and the step 'Which platform snapshot this line built against' prints it: without
+# that, a red line does not tell a break of the platform from a break of this adapter.
+"on":
+  schedule:
+    # Early enough to be green or red before anybody starts working. GitHub queues a
+    # scheduled run rather than starting it at the given time, and the wait is long:
+    # asked for 03:00 UTC, the runs of the 10th and 11th of September 2026 started at
+    # 07:58 and 07:54, which is mid-morning in Berlin and right when somebody is
+    # pushing to this repository. So the time here is two hours earlier than the hour
+    # it should run at, and the minute is a crooked one because GitHub's queue is
+    # longest on the hour.
+    - cron: "23 0 * * *"
+  workflow_dispatch:
+  # so the checks of a pull request can run the matrix, and so the release workflow can
+  # gate on it before it publishes anything
+  workflow_call:
+    outputs:
+      broken-ga-lines:
+        description: The GA lines which did not build, separated by blanks, or 'none'.
+          Empty when this matrix did not get far enough to say, which a caller has to
+          read as a failure.
+        value: "${{ jobs.ga-lines.outputs.broken }}"
+permissions:
+  contents: read
+env:
+  # The VanillaBP artifacts are snapshots and live in GitHub Packages until the release.
+  # Reading them needs a token, see github-packages-settings.xml.
+  USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
+  USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
+jobs:
+  # The live lines are not maintained here: they are the line-* profiles of the parent
+  # POM, which also carry the pins. So the matrix cannot fall behind the build.
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      lines: "${{ steps.list.outputs.lines }}"
+    steps:
+      - uses: actions/checkout@v7
+      - id: list
+        name: Collect the release lines
+        run: |
+          list=$(sed -n 's|.*<id>line-\([0-9][^<]*\)</id>.*|\1|p' pom.xml \
+            | jq -R -s -c 'split("\n")[:-1]')
+          echo "lines=${list}" >> "$GITHUB_OUTPUT"
+          echo "Building lines: ${list}"
+
+  # One build per line, against the cluster that line pins, with its own version string.
+  # This is the primary test of the release lines, and the only thing that may appear as
+  # a supported cluster version in the README: a cluster the CI does not run is not
+  # tested.
+  #
+  # A pull request runs this matrix too. It used to run the current GA line alone and
+  # leave the rest to the night, until a night found on 'main' what the pull request of the
+  # same commit had not. See decision 42 in the repository's DECISIONS.md.
+  #
+  # The name of this job is read: release-lines-issue.yaml picks the jobs of a finished run
+  # by the prefix 'line (', which is how GitHub spells a matrix job, and takes the line out
+  # of what stands in the brackets. Renaming it leaves that workflow with nothing to report.
+  line:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        line: "${{ fromJSON(needs.discover.outputs.lines) }}"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          java-version: 25.0.4+101.0.LTS
+          distribution: temurin
+          cache: maven
+      # The Maven cache of this runner can hold a platform jar from a day this build never
+      # asks for again. The step which names the snapshot reads what is newer than this
+      # marker, so it names what Maven fetched tonight.
+      - name: Mark the moment the build starts
+        run: touch "${RUNNER_TEMP}/platform-snapshot-marker"
+      - name: "Build and test line ${{ matrix.line }}"
+        # 'clean', because classes compiled against another client are binary compatible
+        # with nothing, and the revision is the version string this line would publish,
+        # so the build proves the coordinates as well as the code. 'install' without
+        # 'verify': install runs every phase verify has, and naming both compiled each
+        # module twice for nothing.
+        run: mvn -s "$GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml"
+          --batch-mode --no-transfer-progress --update-snapshots
+          -Pline-${{ matrix.line }} -Drevision=2.0.0-${{ matrix.line }}-SNAPSHOT
+          clean install
+      # A nightly line going red used to leave nothing behind, so whoever read the matrix
+      # in the morning saw which test failed and never why. The reports hold what the
+      # test asserted, and the logs hold what the application and the cluster did while
+      # it waited - which is the half a timeout never tells on its own.
+      - name: Upload the test reports of a failed line
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          # one name per line: a matrix uploading twice under one name conflicts
+          name: test-reports-${{ matrix.line }}
+          path: |
+            **/target/surefire-reports/**
+            **/target/failsafe-reports/**
+            **/target/*application*.log
+          retention-days: 30
+          if-no-files-found: ignore
+      # Testcontainers starts a reaper, Ryuk, which removes the containers of a run once
+      # the JVM that started them is gone, and that is the mechanism. This is the belt: a
+      # cluster which serves a whole module lives as long as the module's tests, far longer
+      # than the per-class containers did, so a build which is killed rather than finished
+      # leaves a big one behind. Only what Testcontainers labelled is removed, and the step
+      # runs whatever the build did.
+      - name: Remove the containers this line started
+        if: always()
+        # Same race as in deploy-to-github-packages.yaml: Ryuk removes the same containers,
+        # 'docker rm' then exits 123 on "removal ... is already in progress", and a line
+        # whose tests were green went red on the cleanup. A belt does not decide a build.
+        run: |
+          docker ps -aq --filter label=org.testcontainers=true \
+            | xargs -r docker rm -f \
+            || echo "Some containers were already going away, which is Ryuk doing the same work."
+          exit 0
+      # Which platform this line was built against. The step below says which cluster and
+      # which client it ran with, and this one says the other half. '2.0.0-SNAPSHOT' does not
+      # say it: the platform publishes under that same string several times a day, and a
+      # reader of a red line has to be able to tell a break of the platform from a break of
+      # this adapter. It runs whatever the build did, because the red lines are the ones
+      # which need it.
+      - name: Which platform snapshot this line built against
+        if: always()
+        run: |
+          set -uo pipefail
+          out="${RUNNER_TEMP}/platform-snapshot.md"
+          marker="${RUNNER_TEMP}/platform-snapshot-marker"
+          snapshots="${HOME}/.m2/repository/io/vanillabp"
+          # Maven writes one maven-metadata-<repository id>.xml per remote repository a
+          # snapshot came from, next to the jar it resolved. The ids of the VanillaBP
+          # repositories all begin with 'vanillabp-', see github-packages-settings.xml, so
+          # this reads what came from the platform and skips what this build installed
+          # itself, which carries no such file.
+          mapfile -t metadata < <(find "$snapshots" \
+            -path '*-SNAPSHOT/maven-metadata-vanillabp-*.xml' -newer "$marker" \
+            2>/dev/null | sort)
+          stale=""
+          if [ "${#metadata[@]}" -eq 0 ]; then
+            mapfile -t metadata < <(find "$snapshots" \
+              -path '*-SNAPSHOT/maven-metadata-vanillabp-*.xml' 2>/dev/null | sort)
+            stale="Maven refreshed none of these while this run was going, so they are what
+          the cache of the runner held and not necessarily what was built against."
+          fi
+          : > "$out"
+          for meta in "${metadata[@]}"; do
+            directory=$(dirname "$meta")
+            version=$(basename "$directory")
+            # the path under the local repository is the group and the artifact, and the
+            # artifact alone is not enough: 'core' is the name of several of them
+            coordinates=$(dirname "${directory#"${HOME}/.m2/repository/"}")
+            group=$(dirname "$coordinates" | tr / .)
+            artifact=$(basename "$coordinates")
+            timestamp=$(sed -n 's|.*<timestamp>\(.*\)</timestamp>.*|\1|p' "$meta" | head -1)
+            build=$(sed -n 's|.*<buildNumber>\(.*\)</buildNumber>.*|\1|p' "$meta" | head -1)
+            if [ -n "$timestamp" ] && [ -n "$build" ]; then
+              resolved="${version%-SNAPSHOT}-${timestamp}-${build}"
+            else
+              # a repository which answers without a timestamp still says which version was
+              # asked for, and that is better than leaving the artifact out
+              resolved="${version}, and $(basename "$meta") holds no timestamp"
+            fi
+            printf -- '- `%s:%s` %s\n' "$group" "$artifact" "$resolved" >> "$out"
+          done
+          # Every VanillaBP repository serves every VanillaBP package, so one artifact is
+          # answered by several of the repositories in the settings and written down once per
+          # repository. The same line several times says nothing twice.
+          sort -u -o "$out" "$out"
+          if [ -n "$stale" ]; then
+            printf '\n%s\n' "$stale" >> "$out"
+          fi
+          if [ ! -s "$out" ]; then
+            {
+              echo "No platform snapshot was resolved in this run. Either the build did not"
+              echo "reach its dependencies, or it could not reach the registry."
+            } > "$out"
+          fi
+          {
+            echo "### The platform line ${{ matrix.line }} was built against"
+            echo
+            cat "$out"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$out"
+      # so the issue of a red line can name it too, without reading the log
+      - name: Hand that to the workflow which writes the issue
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          # one name per line, like the test reports above
+          name: platform-snapshot-${{ matrix.line }}
+          path: "${{ runner.temp }}/platform-snapshot.md"
+          retention-days: 30
+          if-no-files-found: ignore
+      - name: The cluster and the client this line was tested against
+        # The properties file moved into 'test-support' when that module was split out, so
+        # this step read a path which no longer exists and failed a line whose build and
+        # tests had passed.
+        run: |
+          cat test-support/target/classes/camunda8-cluster.properties
+          cat core/target/classes/META-INF/vanillabp/adapter-camunda8.properties
+      # What this line did, written down for the job 'ga-lines' below. A matrix cannot
+      # hand one result per line to another job: every job of it writes the same output
+      # and the last one to finish overwrites the rest. So each line leaves a file named
+      # after itself.
+      - name: What this line did
+        if: always()
+        run: |
+          mkdir -p "${RUNNER_TEMP}/line-result"
+          echo "${{ job.status }}" > "${RUNNER_TEMP}/line-result/${{ matrix.line }}"
+      - name: Hand that to the job which sorts the lines
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: line-result-${{ matrix.line }}
+          path: "${{ runner.temp }}/line-result/${{ matrix.line }}"
+
+  # One name that never changes, so branch protection and the release workflow have something to
+  # require while the matrix grows and shrinks with the lines.
+  #
+  # It is decided by the GA lines. The preview line is built and its job is red where it broke,
+  # and a red one is in the summary of 'ga-lines' below and in an issue of its own, so nothing
+  # about it is hidden. It does not decide this name: an alpha is rewritten under us, and a
+  # defect of the cluster it pins must not stop somebody who needs a fix on a released line. See
+  # decision 42 in the repository's DECISIONS.md.
+  #
+  # A release waits for more than this name, the preview line included. Its gate is the call of
+  # this whole workflow, and a red line fails that call, which is decision 31 in the repository's
+  # DECISIONS.md.
+  #
+  # It reads what 'ga-lines' counted rather than the result of the matrix, because the result of
+  # the matrix cannot tell a red GA line from a red alpha. That reading answers the other half
+  # too: a line which never ran and a line which was cancelled leave no result, and no result is
+  # not a line which built.
+  lines-verified:
+    if: always()
+    needs: [line, ga-lines]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every GA line built
+        env:
+          BROKEN: "${{ needs.ga-lines.outputs.broken }}"
+        run: |
+          echo "the matrix says ${{ needs.line.result }}, and the GA lines of it say ${BROKEN:-nothing}"
+          case "$BROKEN" in
+            none)
+              echo "Every GA line built." ;;
+            "")
+              echo "No line was read, so this run says nothing about any GA line. Read the" >&2
+              echo "job 'ga-lines' above." >&2
+              exit 1 ;;
+            *)
+              echo "These GA lines did not build: ${BROKEN}" >&2
+              exit 1 ;;
+          esac
+
+  # The same matrix, counted line by line, without the preview line. That is the answer
+  # 'lines-verified' is decided by and the answer a pull request reads, and this job also writes
+  # the table which says which lines decided the run and which one was only reported.
+  #
+  # This job reports what it found, it does not fail on it. A failed job hands no output
+  # to the caller, so failing here would leave the caller with an empty answer instead of
+  # the names of the broken lines.
+  ga-lines:
+    if: always()
+    needs: [discover, line]
+    runs-on: ubuntu-latest
+    outputs:
+      broken: "${{ steps.read.outputs.broken }}"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: line-result-*
+          merge-multiple: true
+          path: line-results
+      - id: read
+        name: Which lines did not build, and which of them a pull request waits for
+        env:
+          LINES: "${{ needs.discover.outputs.lines }}"
+        run: |
+          set -euo pipefail
+          broken=""
+          counted=0
+          {
+            echo "### The release lines of this run"
+            echo
+            echo "| line | result | decides this run |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for line in $(echo "${LINES:-[]}" | jq -r '.[]'); do
+            counted=$((counted + 1))
+            # a line whose job was cancelled before it could write anything counts as a
+            # line which did not build
+            result=nothing
+            [ ! -f "line-results/${line}" ] || result="$(cat "line-results/${line}")"
+            preview="$(bin/line-preview.sh "$line")"
+            decides=yes
+            [ "$preview" != "true" ] || decides="no, preview line: reported only"
+            echo "line ${line}: ${result}, decides this run: ${decides}"
+            echo "| ${line} | ${result} | ${decides} |" >> "$GITHUB_STEP_SUMMARY"
+            [ "$result" != "success" ] || continue
+            [ "$preview" != "true" ] || continue
+            broken="${broken}${broken:+ }${line}"
+          done
+          {
+            echo
+            echo "The lines marked yes decide \`lines-verified\` and the pull request which"
+            echo "called this. A preview line is built against an alpha which is rewritten"
+            echo "under us, so a defect of that alpha does not stop a fix for a released line."
+            echo "A red preview line gets an issue of its own, and a release still waits for"
+            echo "every line."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$counted" -eq 0 ]; then
+            echo "No line was collected, so this run says nothing about any line." >&2
+            exit 1
+          fi
+          echo "broken=${broken:-none}" >> "$GITHUB_OUTPUT"

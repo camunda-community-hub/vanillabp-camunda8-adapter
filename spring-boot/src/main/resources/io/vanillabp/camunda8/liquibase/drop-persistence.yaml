@@ -1,9 +1,0 @@
-databaseChangeLog:
-  - changeSet:
-      id: drop-persistence
-      author: stephanpelikan
-      changes:
-        - dropTable:
-            tableName: CAMUNDA8_DEPLOYMENTS
-        - dropTable:
-            tableName: CAMUNDA8_RESOURCES

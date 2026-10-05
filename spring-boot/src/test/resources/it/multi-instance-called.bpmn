@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_multi_instance_called" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!--
+    The called process of the decomposition test, and the process IT calls in turn. Three
+    tasks answer three questions: a plain task sees the caller's iteration, a task which
+    is multi-instance itself sees both, and a task two call activities down still sees the
+    outermost one.
+  -->
+  <bpmn:process id="MiCalledProcess" isExecutable="true">
+    <bpmn:startEvent id="MIC_ChildStart">
+      <bpmn:outgoing>MIC_ChildToTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MIC_ChildToTask" sourceRef="MIC_ChildStart" targetRef="MIC_ChildTask" />
+    <bpmn:serviceTask id="MIC_ChildTask">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="collectInCalledProcess" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIC_ChildToTask</bpmn:incoming>
+      <bpmn:outgoing>MIC_ChildToMi</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MIC_ChildToMi" sourceRef="MIC_ChildTask" targetRef="MIC_ChildMiTask" />
+    <bpmn:serviceTask id="MIC_ChildMiTask">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="collectBothChains" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIC_ChildToMi</bpmn:incoming>
+      <bpmn:outgoing>MIC_MiToCall</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[&#34;x&#34;,&#34;y&#34;]" inputElement="item" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MIC_MiToCall" sourceRef="MIC_ChildMiTask" targetRef="MIC_CallGrandChild" />
+    <bpmn:callActivity id="MIC_CallGrandChild">
+      <bpmn:extensionElements>
+        <zeebe:calledElement processId="MiGrandChildProcess" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIC_MiToCall</bpmn:incoming>
+      <bpmn:outgoing>MIC_CallToChildEnd</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:sequenceFlow id="MIC_CallToChildEnd" sourceRef="MIC_CallGrandChild" targetRef="MIC_ChildEnd" />
+    <bpmn:endEvent id="MIC_ChildEnd">
+      <bpmn:incoming>MIC_CallToChildEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="MiGrandChildProcess" isExecutable="true">
+    <bpmn:startEvent id="MIC_GrandStart">
+      <bpmn:outgoing>MIC_GrandToTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MIC_GrandToTask" sourceRef="MIC_GrandStart" targetRef="MIC_GrandChildTask" />
+    <bpmn:serviceTask id="MIC_GrandChildTask">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="collectTwoLevelsDown" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIC_GrandToTask</bpmn:incoming>
+      <bpmn:outgoing>MIC_GrandToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MIC_GrandToEnd" sourceRef="MIC_GrandChildTask" targetRef="MIC_GrandEnd" />
+    <bpmn:endEvent id="MIC_GrandEnd">
+      <bpmn:incoming>MIC_GrandToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

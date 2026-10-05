@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_Decision"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="DecisionProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_Start">
+      <bpmn:outgoing>Flow_ToRate</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToRate" sourceRef="Event_Start" targetRef="Activity_Rate" />
+    <bpmn:businessRuleTask id="Activity_Rate">
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="creditRating" resultVariable="rating" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRate</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToRecord</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:sequenceFlow id="Flow_ToRecord" sourceRef="Activity_Rate" targetRef="Activity_Record" />
+    <bpmn:serviceTask id="Activity_Record">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="recordRating" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=rating" target="rating" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRecord</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_ToEnd" sourceRef="Activity_Record" targetRef="Event_End" />
+    <bpmn:endEvent id="Event_End">
+      <bpmn:incoming>Flow_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

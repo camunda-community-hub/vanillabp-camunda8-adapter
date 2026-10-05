@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_SecondaryStorage"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_C8SecondaryStorage" name="C8SecondaryStorage" />
+  <bpmn:process id="SecondaryStorageProcess" isExecutable="true">
+    <bpmn:startEvent id="SS_Start">
+      <bpmn:outgoing>SS_ToWait</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="SS_ToWait" sourceRef="SS_Start" targetRef="SS_Wait" />
+    <bpmn:intermediateCatchEvent id="SS_Wait">
+      <bpmn:incoming>SS_ToWait</bpmn:incoming>
+      <bpmn:outgoing>SS_ToDone</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="SS_MsgDef" messageRef="Msg_C8SecondaryStorage" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="SS_ToDone" sourceRef="SS_Wait" targetRef="SS_Done" />
+    <bpmn:serviceTask id="SS_Done">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="secondaryStorageMessageArrived" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>SS_ToDone</bpmn:incoming>
+      <bpmn:outgoing>SS_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="SS_ToEnd" sourceRef="SS_Done" targetRef="SS_End" />
+    <bpmn:endEvent id="SS_End">
+      <bpmn:incoming>SS_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

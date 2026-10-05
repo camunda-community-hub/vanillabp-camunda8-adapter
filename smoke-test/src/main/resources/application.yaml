@@ -1,0 +1,12 @@
+vanillabp:
+  adapters:
+    c8:
+      type: camunda8
+      job-lease: use
+  prioritized-adapters:
+    - c8
+  workflow-modules:
+    smoke-app:
+      adapters:
+        c8:
+          resources-location: classpath*:smoke-app/processes

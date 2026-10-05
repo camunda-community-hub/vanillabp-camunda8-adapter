@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_WorkerThreads"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="BlockingProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_BlockingStart">
+      <bpmn:outgoing>Flow_ToBlocking</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToBlocking" sourceRef="Event_BlockingStart" targetRef="Activity_Blocking" />
+    <bpmn:serviceTask id="Activity_Blocking">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="blockingTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToBlocking</bpmn:incoming>
+      <bpmn:outgoing>Flow_BlockingToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_BlockingToEnd" sourceRef="Activity_Blocking" targetRef="Event_BlockingEnd" />
+    <bpmn:endEvent id="Event_BlockingEnd">
+      <bpmn:incoming>Flow_BlockingToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="QuickProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_QuickStart">
+      <bpmn:outgoing>Flow_ToQuick</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToQuick" sourceRef="Event_QuickStart" targetRef="Activity_Quick" />
+    <bpmn:serviceTask id="Activity_Quick">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="quickTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToQuick</bpmn:incoming>
+      <bpmn:outgoing>Flow_QuickToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_QuickToEnd" sourceRef="Activity_Quick" targetRef="Event_QuickEnd" />
+    <bpmn:endEvent id="Event_QuickEnd">
+      <bpmn:incoming>Flow_QuickToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

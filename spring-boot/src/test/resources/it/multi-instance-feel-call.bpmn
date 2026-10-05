@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_multi_instance_feel_call" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!--
+    The caller of the test about a called process named by an expression. Three
+    multi-instance subprocesses in a row, each with a call activity which names the process
+    it calls by '=whichProcess' rather than statically, so no deployment can resolve it. Each
+    call tells the called process which of the three cases it is, because a case which loses
+    the chain cannot be told apart by what it reports.
+
+    The second and the third subprocess write 'vanillabpMiParents' themselves, which nothing
+    stops an application from doing: a text makes append() return null and the chain is lost
+    without an incident, a list of texts is appended to and the reader has to leave those
+    entries out. Sequential on purpose, so the assertion is an exact string.
+  -->
+  <bpmn:process id="MiFeelCallProcess" isExecutable="true">
+    <bpmn:startEvent id="MIF_Start">
+      <bpmn:outgoing>MIF_ToClean</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MIF_ToClean" sourceRef="MIF_Start" targetRef="MIF_Clean" />
+    <bpmn:subProcess id="MIF_Clean">
+      <bpmn:incoming>MIF_ToClean</bpmn:incoming>
+      <bpmn:outgoing>MIF_ToText</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[&#34;c1&#34;,&#34;c2&#34;]" inputElement="group" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="MIF_CleanStart">
+        <bpmn:outgoing>MIF_CleanToCall</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="MIF_CleanToCall" sourceRef="MIF_CleanStart" targetRef="MIF_CallClean" />
+      <bpmn:callActivity id="MIF_CallClean">
+        <bpmn:extensionElements>
+          <zeebe:calledElement processId="=whichProcess" />
+          <zeebe:ioMapping>
+            <zeebe:input source="=&#34;clean&#34;" target="whichCase" />
+          </zeebe:ioMapping>
+        </bpmn:extensionElements>
+        <bpmn:incoming>MIF_CleanToCall</bpmn:incoming>
+        <bpmn:outgoing>MIF_CleanToEnd</bpmn:outgoing>
+        <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+          <bpmn:extensionElements>
+            <zeebe:loopCharacteristics inputCollection="=[&#34;p1&#34;,&#34;p2&#34;]" inputElement="position" />
+          </bpmn:extensionElements>
+        </bpmn:multiInstanceLoopCharacteristics>
+      </bpmn:callActivity>
+      <bpmn:sequenceFlow id="MIF_CleanToEnd" sourceRef="MIF_CallClean" targetRef="MIF_CleanEnd" />
+      <bpmn:endEvent id="MIF_CleanEnd">
+        <bpmn:incoming>MIF_CleanToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="MIF_ToText" sourceRef="MIF_Clean" targetRef="MIF_Text" />
+    <bpmn:subProcess id="MIF_Text">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;something of the application&#34;" target="vanillabpMiParents" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIF_ToText</bpmn:incoming>
+      <bpmn:outgoing>MIF_ToList</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[&#34;t1&#34;]" inputElement="group" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="MIF_TextStart">
+        <bpmn:outgoing>MIF_TextToCall</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="MIF_TextToCall" sourceRef="MIF_TextStart" targetRef="MIF_CallText" />
+      <bpmn:callActivity id="MIF_CallText">
+        <bpmn:extensionElements>
+          <zeebe:calledElement processId="=whichProcess" />
+          <zeebe:ioMapping>
+            <zeebe:input source="=&#34;text&#34;" target="whichCase" />
+          </zeebe:ioMapping>
+        </bpmn:extensionElements>
+        <bpmn:incoming>MIF_TextToCall</bpmn:incoming>
+        <bpmn:outgoing>MIF_TextToEnd</bpmn:outgoing>
+      </bpmn:callActivity>
+      <bpmn:sequenceFlow id="MIF_TextToEnd" sourceRef="MIF_CallText" targetRef="MIF_TextEnd" />
+      <bpmn:endEvent id="MIF_TextEnd">
+        <bpmn:incoming>MIF_TextToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="MIF_ToList" sourceRef="MIF_Text" targetRef="MIF_List" />
+    <bpmn:subProcess id="MIF_List">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="=[&#34;one&#34;,&#34;two&#34;]" target="vanillabpMiParents" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>MIF_ToList</bpmn:incoming>
+      <bpmn:outgoing>MIF_ToEnd</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[&#34;l1&#34;]" inputElement="group" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="MIF_ListStart">
+        <bpmn:outgoing>MIF_ListToCall</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="MIF_ListToCall" sourceRef="MIF_ListStart" targetRef="MIF_CallList" />
+      <bpmn:callActivity id="MIF_CallList">
+        <bpmn:extensionElements>
+          <zeebe:calledElement processId="=whichProcess" />
+          <zeebe:ioMapping>
+            <zeebe:input source="=&#34;list&#34;" target="whichCase" />
+          </zeebe:ioMapping>
+        </bpmn:extensionElements>
+        <bpmn:incoming>MIF_ListToCall</bpmn:incoming>
+        <bpmn:outgoing>MIF_ListToEnd</bpmn:outgoing>
+      </bpmn:callActivity>
+      <bpmn:sequenceFlow id="MIF_ListToEnd" sourceRef="MIF_CallList" targetRef="MIF_ListEnd" />
+      <bpmn:endEvent id="MIF_ListEnd">
+        <bpmn:incoming>MIF_ListToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="MIF_ToEnd" sourceRef="MIF_List" targetRef="MIF_End" />
+    <bpmn:endEvent id="MIF_End">
+      <bpmn:incoming>MIF_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_Election"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_Election" name="ElectionMessage" />
+  <bpmn:process id="ElectionProcess" isExecutable="true">
+    <bpmn:startEvent id="EL_start">
+      <bpmn:outgoing>EL_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="EL_f1" sourceRef="EL_start" targetRef="EL_wait" />
+    <bpmn:intermediateCatchEvent id="EL_wait">
+      <bpmn:incoming>EL_f1</bpmn:incoming>
+      <bpmn:outgoing>EL_f2</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="EL_msgDef" messageRef="Msg_Election" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="EL_f2" sourceRef="EL_wait" targetRef="EL_task" />
+    <bpmn:serviceTask id="EL_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="electionTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>EL_f2</bpmn:incoming>
+      <bpmn:outgoing>EL_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="EL_f3" sourceRef="EL_task" targetRef="EL_end" />
+    <bpmn:endEvent id="EL_end">
+      <bpmn:incoming>EL_f3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

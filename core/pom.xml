@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.camunda.community.vanillabp</groupId>
+    <artifactId>camunda8-adapter-parent</artifactId>
+    <version>${revision}</version>
+  </parent>
+
+  <artifactId>camunda8-adapter</artifactId>
+  <name>VanillaBP Camunda 8 adapter - Core</name>
+  <description>Platform-neutral core of the VanillaBP Camunda 8 adapter</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>vanillabp-adapter-spi</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.camunda</groupId>
+      <artifactId>camunda-client-java</artifactId>
+    </dependency>
+    <!-- optional: this adapter's own meters are published only where the application
+         brings Micrometer (see MicrometerCamunda8Metrics) -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>test-utils</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- for one test and not for a cluster: PublishedPom knows what the POM of a Camunda 8
+         adapter has to promise, and the Business Cockpit's adapter asks the same of its
+         own artifacts. The module holds that one class and needs nothing but the JDK -->
+    <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda8-adapter-published-pom</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <!-- 'adapter-camunda8.properties' carries the versions into the JAR -->
+      <resource>
+        <filtering>true</filtering>
+        <directory>src/main/resources</directory>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <!-- The client's own POM, so Camunda8ProtobufPinTest can read which protobuf
+               gencode this line's client was generated against. The POM rather than the
+               dependency tree: our own dependencyManagement overrides the client's protobuf
+               version, so the tree shows the pin and not what the client asks for. -->
+          <execution>
+            <id>the-clients-own-pom</id>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <phase>generate-test-resources</phase>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>io.camunda</groupId>
+                  <artifactId>camunda-client-java</artifactId>
+                  <version>${camunda8.version}</version>
+                  <type>pom</type>
+                  <destFileName>camunda-client-java.pom</destFileName>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>${project.build.directory}/camunda-client</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

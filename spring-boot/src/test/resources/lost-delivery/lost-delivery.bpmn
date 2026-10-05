@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A Camunda-managed user task whose listener jobs nobody serves.
+
+  This file is NOT under the resources-location of the test application, so no workflow module
+  deploys it and no worker of the application subscribes to its listener job type. That is what
+  lets a test hold such a job itself and answer it the way a gateway answers one it could not
+  deliver. The listeners are not in the file: the test has the adapter write them, so what it
+  measures is the model the deployment really produces.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_lostdelivery" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="LostDeliveryProcess" isExecutable="true">
+    <bpmn:startEvent id="LD_start">
+      <bpmn:outgoing>LD_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="LD_f1" sourceRef="LD_start" targetRef="LD_task" />
+    <bpmn:userTask id="LD_task">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="lostDeliveryApprove" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>LD_f1</bpmn:incoming>
+      <bpmn:outgoing>LD_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="LD_f2" sourceRef="LD_task" targetRef="LD_end" />
+    <bpmn:endEvent id="LD_end">
+      <bpmn:incoming>LD_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

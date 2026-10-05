@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_OtherOpenTasks"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_TakeTaskAway" name="TakeTaskAway" />
+  <bpmn:process id="OtherOpenTasksProcess" isExecutable="true">
+    <bpmn:startEvent id="OtherOpenTasksStart">
+      <bpmn:outgoing>Flow_ToFork</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToFork" sourceRef="OtherOpenTasksStart" targetRef="Gateway_Fork" />
+    <bpmn:parallelGateway id="Gateway_Fork">
+      <bpmn:incoming>Flow_ToFork</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToTaken</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToStaying</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sequenceFlow id="Flow_ToTaken" sourceRef="Gateway_Fork" targetRef="Activity_Taken" />
+    <bpmn:serviceTask id="Activity_Taken">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="theTaskTakenAway" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToTaken</bpmn:incoming>
+      <bpmn:outgoing>Flow_TakenToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_TakeAway" attachedToRef="Activity_Taken" cancelActivity="true">
+      <bpmn:outgoing>Flow_BoundaryToEnd</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="TakeAwayDef" messageRef="Msg_TakeTaskAway" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_BoundaryToEnd" sourceRef="Boundary_TakeAway" targetRef="Event_TakenEnd" />
+    <bpmn:endEvent id="Event_TakenEnd">
+      <bpmn:incoming>Flow_BoundaryToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_TakenToEnd" sourceRef="Activity_Taken" targetRef="Event_TakenNormalEnd" />
+    <bpmn:endEvent id="Event_TakenNormalEnd">
+      <bpmn:incoming>Flow_TakenToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_ToStaying" sourceRef="Gateway_Fork" targetRef="Activity_Staying" />
+    <bpmn:serviceTask id="Activity_Staying">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="theTaskStayingOpen" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToStaying</bpmn:incoming>
+      <bpmn:outgoing>Flow_StayingToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_StayingToEnd" sourceRef="Activity_Staying" targetRef="Event_StayingEnd" />
+    <bpmn:endEvent id="Event_StayingEnd">
+      <bpmn:incoming>Flow_StayingToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_Shutdown"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="ShutdownProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_ShutdownStart">
+      <bpmn:outgoing>Flow_ToShutdown</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToShutdown" sourceRef="Event_ShutdownStart" targetRef="Activity_Shutdown" />
+    <bpmn:serviceTask id="Activity_Shutdown">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="shutdownTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToShutdown</bpmn:incoming>
+      <bpmn:outgoing>Flow_ShutdownToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_ShutdownToEnd" sourceRef="Activity_Shutdown" targetRef="Event_ShutdownEnd" />
+    <bpmn:endEvent id="Event_ShutdownEnd">
+      <bpmn:incoming>Flow_ShutdownToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="ShutdownGraceProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_GraceStart">
+      <bpmn:outgoing>Flow_ToGrace</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToGrace" sourceRef="Event_GraceStart" targetRef="Activity_Grace" />
+    <bpmn:serviceTask id="Activity_Grace">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="gracefulTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToGrace</bpmn:incoming>
+      <bpmn:outgoing>Flow_GraceToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_GraceToEnd" sourceRef="Activity_Grace" targetRef="Event_GraceEnd" />
+    <bpmn:endEvent id="Event_GraceEnd">
+      <bpmn:incoming>Flow_GraceToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,8 +1,26 @@
 name: Publish to GitHub Packages
-on:
+# A pull request builds and tests, a push to main publishes. Both run as the job
+# 'publish', which is the check main requires, so a pull request Renovate opens gets a
+# result like every other one - it did not while this workflow only listened to pushes
+# and ignored renovate/**, and a required check nobody produces waits forever.
+#
+# Publishing from main alone is the second half of it: there is one snapshot version per
+# module, so every branch used to overwrite what main had published in the registry, and
+# whoever pushed last decided what the other repositories compiled against.
+"on":
+  pull_request:
   push:
-    branches-ignore:
-      - 'renovate/**'
+    branches:
+      - main
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  # two pushes to main must not publish at the same time, and the later one has to
+  # finish rather than be cancelled: it carries the newer artifacts
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -13,13 +31,145 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
-          java-version: 25
+          java-version: 25.0.4+101.0.LTS
           distribution: temurin
           cache: maven
-      - name: Publish package
-        run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml --batch-mode deploy
+      # 'install' and not 'install verify': install already runs every phase verify
+      # has, so naming both made Maven walk two lifecycles per module. The tests
+      # skipped their second run, the compiler did not, and every javac warning was
+      # reported twice - once per compilation. It stays 'install' because
+      # the Quarkus tests load modules from the local repository.
+      - name: Build and test
+        if: "${{ github.event_name == 'pull_request' }}"
+        run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml
+          --batch-mode --no-transfer-progress --update-snapshots install
         env:
-          USER_NAME: ${{ secrets.VANILLABP_USER_NAME }}
-          USER_TOKEN: ${{ secrets.VANILLABP_USER_TOKEN }}
-          CAMUNDA_USER_TOKEN: ${{ secrets.CAMUNDA_USER_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
+          USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CI: false
+      - name: Publish package
+        if: "${{ github.event_name == 'push' }}"
+        run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml
+          --batch-mode --no-transfer-progress --update-snapshots deploy
+        env:
+          USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
+          USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CI: false
+      # what a failing test printed is in these reports, and for the Quarkus tests
+      # booting their application in a forked JVM it is ONLY in that application's own
+      # log file. Surefire prints its last line, which is never the interesting one -
+      # a timeout waiting for a notification says nothing about why it never came.
+      #
+      # They are kept for a month because that is how far back somebody reads. The
+      # measurement of story 433 went over thirty days of runs, and the reports of the
+      # red ones were gone for all but the newest: seven days is shorter than the time
+      # between a red run and the day somebody asks what it was. A run of this job
+      # uploads nothing while it is green, so the month costs storage only for the runs
+      # it is kept for.
+      - name: Upload the test reports of a failed build
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            **/target/surefire-reports/**
+            **/target/failsafe-reports/**
+            **/target/*application*.log
+          retention-days: 30
+          if-no-files-found: ignore
+      # Testcontainers starts a reaper, Ryuk, which removes the containers of a run once
+      # the JVM that started them is gone, and that is the mechanism. This is the belt: a
+      # cluster which serves a whole module lives as long as the module's tests, far longer
+      # than the per-class containers did, so a build which is killed rather than finished
+      # leaves a big one behind. Only what Testcontainers labelled is removed, and the step
+      # runs whatever the build did.
+      - name: Remove the containers the tests started
+        if: always()
+        # Ryuk removes the same containers, so the two race: 'docker rm' answers
+        # "removal of container ... is already in progress" and exits 123, which failed a
+        # publish job whose tests were all green. This step is a belt, not a check, so it
+        # reports what it could not remove and leaves the verdict to the build.
+        run: |
+          docker ps -aq --filter label=org.testcontainers=true \
+            | xargs -r docker rm -f \
+            || echo "Some containers were already going away, which is Ryuk doing the same work."
+          exit 0
+      - name: Collect coverage reports
+        if: "${{ github.event_name == 'push' }}"
+        run: |
+          mkdir -p coverage
+          cp -r test-coverage-report/spring-boot/report coverage/spring-boot-report
+          cp -r test-coverage-report/quarkus/report coverage/quarkus-report
+      - name: Upload coverage report files as artifact
+        if: "${{ github.event_name == 'push' }}"
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: coverage
+  native-build:
+    # The one test which cannot run in a JVM: the adapter has to build into a native
+    # image AND start as one. Both halves are needed - the image built long before it
+    # could boot, because the deployment parses BPMN through the Camunda model API and a
+    # native image carries neither that parser's message bundles nor its schema unless
+    # the extension names them. So this job builds the binary and runs it against a real
+    # cluster, which is what the integration test of 'quarkus/native-image-tests' does.
+    # Its own job: the native build takes minutes and must not delay publishing.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          java-version: 25.0.4+101.0.LTS
+          distribution: temurin
+          cache: maven
+      # the deployment module of the extension is named explicitly: an extension's
+      # augmentation part is not a dependency of the application, so '-am' alone would
+      # leave it to be resolved from the registry - and the build steps under test live
+      # in exactly that module
+      - name: Build what the application needs
+        run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml
+          --batch-mode --no-transfer-progress --update-snapshots -DskipTests
+          -pl quarkus/deployment,quarkus/native-image-tests -am install
+        env:
+          USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
+          USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CI: false
+      # 'verify' and not 'package': the image is built in the package phase, and the
+      # integration test which starts the binary against a cluster runs after it
+      - name: Build the native image and run the binary
+        run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml
+          --batch-mode --no-transfer-progress
+          -pl quarkus/native-image-tests -Dnative verify
+        env:
+          USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
+          USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CI: false
+      # what the binary printed is in this file, and for a failing boot it is the only
+      # place it can be read afterwards
+      - name: Upload the log of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-image-application-log
+          path: |
+            quarkus/native-image-tests/target/native-image-application.log
+            quarkus/native-image-tests/target/failsafe-reports/**
+          retention-days: 30
+          if-no-files-found: ignore
+  deploy-coverage-report:
+    if: "${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}"
+    environment:
+      name: github-pages
+      url: "${{ steps.deployment.outputs.page_url }}"
+    runs-on: ubuntu-latest
+    needs: publish
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

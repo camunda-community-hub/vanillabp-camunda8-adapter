@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.camunda.community.vanillabp</groupId>
+    <artifactId>camunda8-adapter-parent</artifactId>
+    <version>${revision}</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>camunda8-adapter-quarkus-native-image-tests</artifactId>
+  <name>VanillaBP Camunda 8 adapter - Quarkus extension - Native image</name>
+  <description>An application with the Camunda 8 adapter, built as a native image and started as one. Building is the smaller half: the deployment parses BPMN through the Camunda model API, which a native image cannot do unless the extension registers what that parser reads, so the binary has to boot, deploy to a cluster and let a job handler run.</description>
+
+  <properties>
+    <!-- test-only module: nothing to publish -->
+    <maven.install.skip>true</maven.install.skip>
+    <maven.deploy.skip>true</maven.deploy.skip>
+    <central.publishing.excluded>${project.artifactId}</central.publishing.excluded>
+    <!-- and no documentation either: what is published is what a javadoc is written for,
+         and this module publishes nothing. The check stays on in every module which does. -->
+    <maven.javadoc.skip>true</maven.javadoc.skip>
+    <!-- the code under test runs in a native binary, which no Java agent instruments:
+         this module measures no coverage and therefore appears in no aggregated report.
+         The empty agent keeps the inherited '@{jacoco.agent}' argLine resolvable. -->
+    <jacoco.skip>true</jacoco.skip>
+    <jacoco.agent/>
+    <!-- the test of this module runs the native binary, so it has nothing to do until
+         one was built - the 'native-image' profile below turns it on. It is still
+         compiled on every build, so it cannot rot unnoticed. -->
+    <skipITs>true</skipITs>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Netty comes from the Quarkus platform here, and it has to: an application
+           imports the Quarkus BOM, so that is the Netty version it runs the adapter's
+           gRPC client on, and Quarkus' Netty extension substitutes classes of exactly
+           that version. The parent of this repository imports the Spring Boot BOM before
+           the Quarkus one, which lifts Netty to the Spring Boot version for every module
+           - right for the Spring Boot modules, wrong for a module which has to reproduce
+           what a Quarkus application sees. With the newer Netty the image build ends in
+           'Could not find target method: Target_io_netty_handler_ssl_JdkSslClientContext'
+           before it starts. Follows the Quarkus platform, not Renovate's newest. -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty.version.quarkus}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>vanillabp-quarkus-integration</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda8-adapter-quarkus</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-config-yaml</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-agroal</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-h2</artifactId>
+    </dependency>
+    <!-- the workflow aggregate is a JPA entity: the platform reads the persistence
+         technology off it to attribute the JDBC phase-two outbox, and Camunda 8 needs
+         that outbox for starting a workflow -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-hibernate-orm</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>test-utils</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda8-adapter-test-support</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!-- the adapter reads a task handler's parameter names -->
+          <parameters>true</parameters>
+        </configuration>
+      </plugin>
+      <!-- augmenting this application is a test of its own: in JVM mode on every build,
+           as a native image where the profile 'native-image' is active -->
+      <plugin>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-maven-plugin</artifactId>
+        <version>${quarkus.version}</version>
+        <extensions>true</extensions>
+        <executions>
+          <execution>
+            <goals>
+              <goal>build</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- the binary exists after 'package', so what runs it is an integration test and
+           not a test -->
+      <plugin>
+        <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <!-- Building the image and booting the binary against a cluster. Both belong
+           together: an image which builds is not an image which runs, and everything
+           this module exists for failed at the second step. Its own profile because the
+           native build takes minutes, which no ordinary build should pay. -->
+      <id>native-image</id>
+      <activation>
+        <property>
+          <name>native</name>
+        </property>
+      </activation>
+      <properties>
+        <quarkus.native.enabled>true</quarkus.native.enabled>
+        <!-- no GraalVM has to be installed: the builder image brings one. Override with
+             -Dquarkus.native.container-build=false where one is at hand -->
+        <quarkus.native.container-build>true</quarkus.native.container-build>
+        <skipITs>false</skipITs>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <systemPropertyVariables>
+                <!-- the test starts the binary the Quarkus plugin just built -->
+                <native.image.runner>${project.build.directory}/${project.artifactId}-${project.version}-runner</native.image.runner>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

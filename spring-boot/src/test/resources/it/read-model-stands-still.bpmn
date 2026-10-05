@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_ReadModelStandsStill"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_C8ReadModelStandsStill" name="C8ReadModelStandsStill" />
+  <bpmn:process id="ReadModelStandsStillProcess" isExecutable="true">
+    <bpmn:startEvent id="RM_Start">
+      <bpmn:outgoing>RM_ToWait</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="RM_ToWait" sourceRef="RM_Start" targetRef="RM_Wait" />
+    <bpmn:intermediateCatchEvent id="RM_Wait">
+      <bpmn:incoming>RM_ToWait</bpmn:incoming>
+      <bpmn:outgoing>RM_ToArrived</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="RM_MsgDef" messageRef="Msg_C8ReadModelStandsStill" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="RM_ToArrived" sourceRef="RM_Wait" targetRef="RM_Arrived" />
+    <bpmn:serviceTask id="RM_Arrived">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="readModelMessageArrived" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RM_ToArrived</bpmn:incoming>
+      <bpmn:outgoing>RM_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RM_ToEnd" sourceRef="RM_Arrived" targetRef="RM_End" />
+    <bpmn:endEvent id="RM_End">
+      <bpmn:incoming>RM_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

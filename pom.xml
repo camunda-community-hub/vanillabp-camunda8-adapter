@@ -1,102 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" child.project.url.inherit.append.path="false" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
+  <!-- The release parent of the Camunda Community Hub. Its profiles are the way a hub
+       extension publishes, and they are the contract with the hub, so this repository takes
+       it rather than the VanillaBP release parent. 'relativePath' is empty because there is
+       no POM beside this one to find it in; without that, Maven looks at '../pom.xml'
+       first. -->
   <parent>
     <groupId>org.camunda.community</groupId>
     <artifactId>community-hub-release-parent</artifactId>
     <version>2.1.0</version>
+    <relativePath/>
   </parent>
 
   <groupId>org.camunda.community.vanillabp</groupId>
-  <artifactId>camunda8-adapter</artifactId>
-
-  <name>VanillaBP SPI adapter for Camunda 8.x</name>
-  <version>1.10.1-SNAPSHOT</version>
+  <artifactId>camunda8-adapter-parent</artifactId>
+  <version>${revision}</version>
   <packaging>pom</packaging>
-  <description>This is an adapter which implements the binding of the VanillaBP SPI in order to run business processes using Camunda 8.</description>
+  <name>VanillaBP Camunda 8 adapter</name>
+  <description>VanillaBP adapter for Camunda 8 (Version 2)</description>
+  <!-- Every artifact of this repository points at the repository itself. A child
+       inherits this address and the three <scm> ones with its own name appended unless it
+       is told not to, so the artifact 'camunda8-adapter' advertised
+       'https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/camunda8-adapter',
+       which is no page. Nobody saw it while the values lived in the parent alone, and since
+       the flatten mode is 'oss' every published POM carries its own resolved copy and
+       prints it. The four 'inherit.append.path' attributes turn the appending off, one on
+       <project> above for the URL and three on <scm> below. The repository root is the
+       same value for every artifact, it survives a module being renamed or moved, and a
+       reader who wants the module is one click away from it. Camunda8PublishedPomTest
+       reads the addresses back out of the published POM. -->
   <url>https://github.com/camunda-community-hub/vanillabp-camunda8-adapter</url>
-
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <version.java>21</version.java>
-  </properties>
-
-  <dependencyManagement>
-    <dependencies>
-      <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-dependencies</artifactId>
-        <version>4.1.1</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
-
-  <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-source-plugin</artifactId>
-          <executions>
-            <execution>
-              <id>attach-sources</id>
-              <goals>
-                <goal>jar</goal>
-              </goals>
-            </execution>
-          </executions>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.16.0</version>
-          <configuration>
-            <release>${version.java}</release>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-deploy-plugin</artifactId>
-          <configuration>
-            <skip>false</skip>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.12.0</version>
-          <configuration>
-            <release>${version.java}</release>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-    <plugins>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>flatten-maven-plugin</artifactId>
-        <version>1.8.0</version>
-        <configuration>
-          <flattenMode>oss</flattenMode>
-        </configuration>
-        <executions>
-          <execution>
-            <id>flatten</id><phase>process-resources</phase><goals><goal>flatten</goal></goals>
-          </execution>
-          <execution>
-            <id>flatten.clean</id><phase>clean</phase><goals><goal>clean</goal></goals>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
-
-  <modules>
-    <module>spring-boot</module>
-  </modules>
 
   <licenses>
     <license>
@@ -114,12 +49,29 @@
     </developer>
   </developers>
 
-  <scm>
+  <modules>
+    <module>core</module>
+    <module>published-pom</module>
+    <module>test-support</module>
+    <module>spring-boot</module>
+    <module>election-integration-test</module>
+    <module>smoke-test</module>
+    <module>quarkus/runtime</module>
+    <module>quarkus/deployment</module>
+    <module>quarkus/integration-tests</module>
+    <module>quarkus/native-image-tests</module>
+    <module>test-coverage-report</module>
+  </modules>
+
+  <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
     <connection>scm:git:https://github.com/camunda-community-hub/vanillabp-camunda8-adapter.git</connection>
     <developerConnection>scm:git:https://github.com/camunda-community-hub/vanillabp-camunda8-adapter.git</developerConnection>
-    <url>http://github.com/camunda-community-hub/vanillabp-camunda8-adapter/tree/main</url>
+    <url>https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/tree/main</url>
   </scm>
 
+  <!-- Where we deploy, which is our business and not a user's: the flatten plugin takes
+       this out of the published POM, see below. It stays here because the deploy needs
+       it. -->
   <distributionManagement>
     <snapshotRepository>
       <id>github</id>
@@ -127,4 +79,620 @@
       <url>https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter</url>
     </snapshotRepository>
   </distributionManagement>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- our snapshots go out through a plain 'mvn deploy', see the deploy plugin below.
+         A module which is not published sets this to true in its own properties. -->
+    <maven.deploy.skip>false</maven.deploy.skip>
+    <!-- The release to Maven Central does not read 'maven.deploy.skip'. A module which is not
+         published names itself here as well, see central-publishing-maven-plugin below. -->
+    <central.publishing.excluded>none</central.publishing.excluded>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <version.java>21</version.java>
+    <jacoco.version>0.8.15</jacoco.version>
+    <!-- where the build breaks, in PERCENT of covered instructions per platform,
+         enforced by test-coverage-report/coverage-gate. The rule stays 90 per platform, which is
+         the number the coverage badges of the README are read against. The gate stands at
+         85, the same number in every VanillaBP repository, because a threshold marks the
+         point where somebody has to look and not the goal to aim at. It is never raised to whatever a
+         suite happens to reach, and never lowered to make a build pass. Every release line
+         is judged by this one number. Line 8.10 is where the distance to the rule was paid
+         for: while that line could not pass the tests of an alpha's cluster bug it excluded
+         them, which cost it about a point and a quarter on either platform, and a gate set
+         to 90 turned that into a red matrix every night over coverage nobody was able to
+         write. The exclusions went with the move to 8.10.0-rc1 and no line excludes anything
+         today, but the gate is not raised on the strength of what a suite happens to
+         reach. -->
+    <coverage.threshold.spring-boot>85</coverage.threshold.spring-boot>
+    <coverage.threshold.quarkus>85</coverage.threshold.quarkus>
+    <!-- the rule, as a number the gate can print: it reports every run against both, so
+         the distance between a passing build and the rule is readable without opening
+         the report -->
+    <coverage.rule>90</coverage.rule>
+    <lombok.version>1.18.48</lombok.version>
+    <spi-for-java.version>2.0.0-SNAPSHOT</spi-for-java.version>
+    <adapter-platform.version>2.0.0-SNAPSHOT</adapter-platform.version>
+    <springboot.version>4.1.1</springboot.version>
+    <quarkus.version>3.40.1</quarkus.version>
+    <!-- The Netty version the Quarkus platform manages, which is the one a Quarkus
+         application runs the adapter on. It is named here because this repository imports
+         the Spring Boot BOM first, so every module otherwise sees Spring Boot's newer
+         Netty - see quarkus/native-image-tests, which has to see what an application
+         sees. Raise it with the Quarkus version, never past it: Quarkus ships GraalVM
+         substitutions written against exactly this Netty, and a newer minor ends the
+         native build with "Could not find target method" while every JVM test stays
+         green. Renovate is turned off for io.netty for that reason. -->
+    <netty.version.quarkus>4.1.137.Final</netty.version.quarkus>
+    <!-- The version of every artifact, resolved into the published POMs by the
+         flatten plugin. A plain 'mvn install' builds 2.0.0-SNAPSHOT of the current GA
+         line, which is what a developer of this repository wants and needs to remember
+         no property for. A release of a line adds the line to it, e.g.
+         '-Pline-8.8 -Drevision=2.1.0-8.8'. See the README, section "Release lines". -->
+    <revision>2.0.0-SNAPSHOT</revision>
+    <!-- The release line this build produces: the Camunda client it is compiled against
+         and, because a client is only promised against clusters of its own version and
+         newer, the lowest cluster version the artifacts accept. Every line is built from
+         THIS source tree, so a fix exists on every line the moment it is committed.
+         The properties below are what Renovate maintains, one per line, and what the
+         line-* profiles select. Their values are the pins the CI matrix runs. Every pull
+         request builds every line, so a moved pin buys nothing extra; the job 'pin-change'
+         in .github/workflows/checks.yaml only says in the log that one moved. -->
+    <camunda8.line>8.10</camunda8.line>
+    <camunda8.version>${camunda8.version.line-8.10}</camunda8.version>
+    <camunda8.version.line-8.8>8.8.40</camunda8.version.line-8.8>
+    <camunda8.version.line-8.9>8.9.22</camunda8.version.line-8.9>
+    <camunda8.version.line-8.10>8.10.0</camunda8.version.line-8.10>
+    <!-- optional: the adapter's own meters are published where the application brings
+         Micrometer (see MicrometerCamunda8Metrics). Pinned to the OLDER of both
+         platforms, like the platform integration does it (Quarkus 3.37.1 manages 1.16.6,
+         Spring Boot 4.1.0 manages 1.17.0) -->
+    <micrometer.version>1.17.1</micrometer.version>
+    <protobuf.version>4.36.2</protobuf.version>
+    <!-- the cluster the integration tests run against follows the pinned client: the
+         client a build was compiled against IS the minimum cluster version of that
+         build, so testing anything newer would prove nothing about it -->
+    <camunda8.cluster.image>camunda/camunda:${camunda8.version}</camunda8.cluster.image>
+    <!-- where that cluster keeps its secondary storage, and with it how many containers a
+         test class starts. 'rdbms' is served by an H2 in the cluster's own JVM, whose
+         driver the image ships, so one container is the whole cluster; 'elasticsearch'
+         needs a second one beside it. This is a property of the line rather than a taste:
+         the storage a line's cluster can do is what its tests may use. It is filtered into
+         'camunda8-cluster.properties' next to the image, see ClusterUnderTest -->
+    <camunda8.cluster.secondary-storage>rdbms</camunda8.cluster.secondary-storage>
+    <testcontainers.version>2.0.5</testcontainers.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Protobuf refuses a runtime older than the generated code linked against it, and
+           the Camunda client brings generated code. The Spring Boot BOM manages
+           protobuf-java itself and would win here, because an imported BOM beats a
+           transitive version, so this entry stands BEFORE that import. The number Spring
+           Boot manages moves with Spring Boot, so it is not repeated here: read it as
+           'protobuf-java.version' in the spring-boot-dependencies POM of the
+           springboot.version pinned above. Quarkus manages one of its own the same way.
+           This number carries the gencode version of the NEWEST pinned client. A runtime
+           may be newer than the gencode, never older, so ONE number serves every line and a
+           number per line would buy nothing: it would only lower what the tests of the older
+           lines run against.
+           It is the classpath of THIS build and nothing else. No application reads it: the
+           published POMs carry no parent and no dependencyManagement, so an application
+           resolves protobuf from its own platform BOM, or from the client when nothing
+           manages it. Measured on 2026-09-20 in a sample project per platform and line.
+           What that means for an application on the 8.10 line is in the README, section
+           "Release lines".
+           Maven cannot take this number from the client's POM: a dependencyManagement
+           version has to be written down before the client is resolved. So it is written
+           down here and CHECKED against the client of the line being built, by
+           Camunda8ProtobufPinTest, which reads the client's own POM and names both numbers
+           and this line when they disagree. It moves when a client pin moves and at no
+           other time, which is why Renovate is turned off for com.google.protobuf. -->
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>${protobuf.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.micrometer</groupId>
+        <artifactId>micrometer-core</artifactId>
+        <version>${micrometer.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${springboot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-bom</artifactId>
+        <version>${quarkus.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>spi-for-java</artifactId>
+        <version>${spi-for-java.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>vanillabp-adapter-spi</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>vanillabp-spring-boot-integration</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>vanillabp-quarkus-integration</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>vanillabp-quarkus-integration-deployment</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vanillabp</groupId>
+        <artifactId>test-utils</artifactId>
+        <version>${adapter-platform.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.camunda</groupId>
+        <artifactId>camunda-client-java</artifactId>
+        <version>${camunda8.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.camunda.community.vanillabp</groupId>
+        <artifactId>camunda8-adapter-published-pom</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.camunda.community.vanillabp</groupId>
+        <artifactId>camunda8-adapter-test-support</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers</artifactId>
+        <version>${testcontainers.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-junit-jupiter</artifactId>
+        <version>${testcontainers.version}</version>
+      </dependency>
+      <!-- 'provided' here and again at every declaration below: Lombok translates the
+           source and has no work left once the class file exists, so no application using
+           our artifacts may find it on its runtime classpath. Writing 'optional' here did
+           not do that. Maven copies a managed version, scope and exclusions into a
+           dependency, but not the optional flag, so the POMs we publish said nothing. -->
+      <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <version>${lombok.version}</version>
+        <scope>provided</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <!-- The hub parent turns the deploy plugin off for everybody, because a hub release
+               goes out through the profiles of that parent and not through a plain deploy.
+               Our snapshots do go out through a plain deploy, into the GitHub Packages
+               registry named in distributionManagement above, and that is what the
+               blueprints and every build downstream of them read. Without this line
+               'mvn deploy' reports success and publishes nothing. -->
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <configuration>
+            <!-- The value, not a literal 'false': a test-only module sets
+                 'maven.deploy.skip' to true in its own properties, and a literal here would
+                 override it, because plugin configuration beats a property. Measured on
+                 2026-10-02: a literal 'false' published the four modules which say in their
+                 own properties that they are not published, 'election-integration-test',
+                 'smoke-test', 'quarkus/integration-tests' and 'quarkus/native-image-tests'.
+                 In the Camunda 7 adapter it also ended the deploy with "did not assign a main
+                 file to the project but it has attachments", on a module which compiles no
+                 main sources. The property cannot be left alone either, because the parent
+                 writes its 'true' as configuration and beats the property the same way. -->
+            <skip>${maven.deploy.skip}</skip>
+          </configuration>
+        </plugin>
+        <plugin>
+          <!-- What the profile 'central-sonatype-publish' of the hub parent runs in the deploy
+               phase instead of the deploy plugin. It gathers every module of the reactor into
+               one bundle for the Central Portal and does not read 'maven.deploy.skip', so
+               without this the test modules and the coverage reports would be published as
+               well. Measured on 2026-10-05 with '-Dskip.central.release=true', which builds the
+               bundle and uploads nothing: 15 modules in the bundle, 8 of them test modules or
+               reports. A version on Central cannot be taken back, so the module set has to be
+               right before the first release. A module which is not published sets
+               'central.publishing.excluded' to its own artifactId. -->
+          <groupId>org.sonatype.central</groupId>
+          <artifactId>central-publishing-maven-plugin</artifactId>
+          <configuration>
+            <excludeArtifacts>
+              <excludeArtifact>${central.publishing.excluded}</excludeArtifact>
+            </excludeArtifacts>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.6.0</version>
+          <configuration>
+            <!-- '@{jacoco.agent}' is resolved lazily per module (late property binding),
+                 forwarding coverage also into forked JVMs -->
+            <argLine>@{jacoco.agent}</argLine>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>3.6.0</version>
+          <configuration>
+            <argLine>@{jacoco.agent}</argLine>
+          </configuration>
+          <executions>
+            <execution>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.16.0</version>
+          <configuration>
+            <release>${version.java}</release>
+            <compilerArgs>
+              <!-- javac is the only javadoc check which reads a package private class and
+                   a per-line source tree. The javadoc plugin below reads what a release
+                   publishes, so it starts at protected, and it never sees the code of the
+                   two lines a build does not select. Every group is checked here except
+                   'missing': a comment which was never written is a warning, not a broken
+                   build. -->
+              <arg>-Xdoclint:all,-missing</arg>
+            </compilerArgs>
+            <annotationProcessorPaths>
+              <path>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+              </path>
+            </annotationProcessorPaths>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.11.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>3.12.0</version>
+          <configuration>
+            <!-- javadoc runs in every build. A goal nobody runs stops working without
+                 anybody noticing, and the release is a bad moment to find that out, because
+                 that is when the javadoc artifact is built.
+                 It breaks on errors, which is a reference javadoc cannot resolve or broken
+                 HTML, and it breaks on warnings too, which is mostly a comment nobody wrote.
+                 What this repository publishes is read by an application and by an
+                 extension of this adapter, so a missing sentence is a gap for them. The gaps
+                 here were written once. Letting a warning pass again would park the next one in a build
+                 which looks green. The modules which publish nothing switch the goal off
+                 instead, see their POMs. -->
+            <doclint>all</doclint>
+            <failOnError>true</failOnError>
+            <failOnWarnings>true</failOnWarnings>
+            <!-- no link into the JDK API: that link is fetched over the network, and the
+                 check should give the same answer on a machine without one. No link into
+                 the javadoc of the other modules either: it is not built at this point,
+                 and every module would report the miss -->
+            <detectJavaApiLink>false</detectJavaApiLink>
+            <detectOfflineLinks>false</detectOfflineLinks>
+            <!-- javadoc stops after 100 warnings per module, and the line it prints
+                 reads like the end of the list. Whoever counts warnings to see how much
+                 work a module still holds counts too few. The number below is high enough
+                 that no module reaches it. The hub parent configures javadoc as well, but
+                 only to switch its checks off, so every option this gate needs stands here.
+                 The run is incremental too: a module whose sources did not move since the
+                 last run is skipped and reports nothing. Delete 'target/reports/apidocs'
+                 before counting, or a clean count only says that nobody recompiled. -->
+            <additionalOptions>
+              <additionalOption>-Xmaxwarns 100000</additionalOption>
+            </additionalOptions>
+          </configuration>
+          <executions>
+            <execution>
+              <id>check-javadoc</id>
+              <goals>
+                <!-- no fork: the sources are there by this phase -->
+                <goal>javadoc-no-fork</goal>
+              </goals>
+              <!-- after the tests, so a javadoc error does not hide a test result, and
+                   still inside a plain 'mvn install' -->
+              <phase>package</phase>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+      </plugin>
+      <!-- the sources jar every build attaches. Without it the snapshots of this
+           repository carried no sources, and an IDE showed decompiled code to everyone
+           developing against one. The hub parent pins an older source plugin and brings an
+           execution with the same id, which merges into this one, so the version stands here
+           to win over it. It is the one the VanillaBP release parent uses for the other
+           repositories, so all of them pack their sources the same way. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>3.4.0</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <phase>package</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- The POM a consumer reads is written here, and it has to stand on its own. The
+           'oss' mode writes every version into it, drops the parent and with it our
+           dependencyManagement, and keeps what a public repository asks for: name,
+           description, license, developers.
+           Standing on its own is what a release line needs. Before, the mode was
+           'resolveCiFriendliesOnly', which copies this source POM and resolves
+           '${revision}' alone. The client version then stayed a property whose value comes
+           from the active line profile, and a consumer activates no profile of ours: every
+           line published a POM asking for the client of the CURRENT GA line. An application
+           on the 8.8 line got the 8.9 client, whose job activations an 8.8 cluster rejects,
+           and an application on the preview line got a client older than the code it runs.
+           Measured on 2026-09-20 and guarded since by Camunda8PublishedPomTest.
+           The other half of the same rule: nothing an application resolves may come out of
+           our dependencyManagement, because what one line needs is no business of another
+           line's users. See decision 39 in DECISIONS.md. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+        <version>1.8.0</version>
+        <configuration>
+          <updatePomFile>true</updatePomFile>
+          <flattenMode>oss</flattenMode>
+          <pomElements>
+            <!-- Where we deploy is nothing a user of the artifact can act on, and on an
+                 artifact which later sits on Maven Central it would point a reader at our
+                 GitHub Packages registry. The source POM keeps it, because the deploy
+                 reads it from there. -->
+            <distributionManagement>remove</distributionManagement>
+          </pomElements>
+        </configuration>
+        <executions>
+          <execution>
+            <id>flatten</id>
+            <goals>
+              <goal>flatten</goal>
+            </goals>
+            <phase>process-resources</phase>
+          </execution>
+          <execution>
+            <id>flatten-clean</id>
+            <goals>
+              <goal>clean</goal>
+            </goals>
+            <phase>clean</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- The per-line delta: code which cannot compile against every supported client,
+           or which uses something only a newer cluster has. Everything else stays
+           shared, which is the whole point of building the lines from one source tree.
+           The directories are usually absent, and that is the intended state. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.2</version>
+        <executions>
+          <execution>
+            <id>per-line-sources</id>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <phase>generate-sources</phase>
+            <configuration>
+              <sources>
+                <source>src/main/java-line-${camunda8.line}</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>per-line-test-sources</id>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <phase>generate-test-sources</phase>
+            <configuration>
+              <sources>
+                <source>src/test/java-line-${camunda8.line}</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <configuration>
+          <propertyName>jacoco.agent</propertyName>
+          <excludes>
+            <exclude>**/it/**</exclude>
+            <exclude>**/test/**</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <goals>
+              <goal>report</goal>
+            </goals>
+            <phase>verify</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>3.10.3</version>
+        <configuration>
+          <pom>
+            <includes>
+              <include>**/pom.xml</include>
+            </includes>
+            <excludes>
+              <exclude>**/target/**/</exclude>
+              <exclude>**/node_modules/**/</exclude>
+              <!-- the workflows carry comments, and the YAML formatter round-trips
+                   through Jackson, which drops them -->
+              <exclude>**/.github/**/</exclude>
+            </excludes>
+            <sortPom>
+              <quiet>true</quiet>
+            </sortPom>
+          </pom>
+          <markdown>
+            <includes>
+              <include>**/*.md</include>
+            </includes>
+            <excludes>
+              <exclude>**/target/**/</exclude>
+              <exclude>**/node_modules/**/</exclude>
+              <!-- the workflows carry comments, and the YAML formatter round-trips
+                   through Jackson, which drops them -->
+              <exclude>**/.github/**/</exclude>
+            </excludes>
+            <flexmark/>
+          </markdown>
+          <yaml>
+            <includes>
+              <include>**/*.yaml</include>
+            </includes>
+            <excludes>
+              <exclude>**/target/**/</exclude>
+              <exclude>**/node_modules/**/</exclude>
+              <!-- the workflows carry comments, and the YAML formatter round-trips
+                   through Jackson, which drops them -->
+              <exclude>**/.github/**/</exclude>
+              <!--
+                Workflow files are excluded on purpose, the same way the blueprints
+                repository does it: the formatter drops comments, and it unquotes version
+                numbers, which turns the release line '8.10' into 8.1 without a word.
+              -->
+              <exclude>.github/workflows/**</exclude>
+            </excludes>
+            <jackson>
+              <yamlFeatures>
+                <MINIMIZE_QUOTES>true</MINIMIZE_QUOTES>
+                <WRITE_DOC_START_MARKER>false</WRITE_DOC_START_MARKER>
+                <INDENT_ARRAYS_WITH_INDICATOR>true</INDENT_ARRAYS_WITH_INDICATOR>
+              </yamlFeatures>
+            </jackson>
+          </yaml>
+          <java>
+            <!-- the per-line delta is code like any other, so the formatter sees it too -->
+            <includes>
+              <include>src/main/java/**/*.java</include>
+              <include>src/test/java/**/*.java</include>
+              <include>src/main/java-line-*/**/*.java</include>
+              <include>src/test/java-line-*/**/*.java</include>
+            </includes>
+            <eclipse>
+              <file>${maven.multiModuleProjectDirectory}/formatting_conventions.xml</file>
+              <version>4.35</version>
+            </eclipse>
+            <removeUnusedImports/>
+            <importOrder>
+              <order>java,javax,org,com,at.phactum</order>
+            </importOrder>
+          </java>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>process-sources</phase>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!-- One profile per release line. It selects the client pin, and with it the cluster
+         the integration tests run against, and it names the line for the runtime message
+         and for the delta source directory. The properties above are the current GA line,
+         so a build without any profile is that line: nothing to remember, and no
+         'activeByDefault' which any other profile on the command line would switch off.
+         Rotating the lines means editing these profiles, the pin properties, the Renovate
+         boundary rule and the line table of the README. -->
+    <profile>
+      <!-- a bugfix line: it takes fixes and nothing which needs a newer cluster. It did not
+           end when 8.10 went GA, see the README, section "How long a line lives" -->
+      <id>line-8.8</id>
+      <properties>
+        <camunda8.line>8.8</camunda8.line>
+        <camunda8.version>${camunda8.version.line-8.8}</camunda8.version>
+        <!-- the cluster of this line keeps its secondary storage in an Elasticsearch, so
+             its tests pay for a second container beside every cluster they start. Moving it
+             onto the embedded database the newer lines use would change what this line is
+             tested against,
+             which is the one thing a bugfix line may not do -->
+        <camunda8.cluster.secondary-storage>elasticsearch</camunda8.cluster.secondary-storage>
+      </properties>
+    </profile>
+    <profile>
+      <!-- a bugfix line: it takes fixes and nothing which needs a newer cluster -->
+      <id>line-8.9</id>
+      <properties>
+        <camunda8.line>8.9</camunda8.line>
+        <camunda8.version>${camunda8.version.line-8.9}</camunda8.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- current GA: everything lands here, and it is what a plain build produces. It was
+           the preview line until Camunda released 8.10.0 on 2026-09-29. No profile carries
+           'camunda8.line.preview' now, and the next one to carry it is the line of the first
+           8.11 pre-release -->
+      <id>line-8.10</id>
+      <properties>
+        <camunda8.line>8.10</camunda8.line>
+        <camunda8.version>${camunda8.version.line-8.10}</camunda8.version>
+      </properties>
+    </profile>
+  </profiles>
 </project>

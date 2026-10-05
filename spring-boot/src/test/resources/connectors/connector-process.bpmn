@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_Connector" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="ConnectorProcess" isExecutable="true">
+    <bpmn:startEvent id="ConnectorStart">
+      <bpmn:outgoing>ConnectorFlow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="ConnectorFlow_1" sourceRef="ConnectorStart" targetRef="Activity_Connector" />
+    <bpmn:serviceTask id="Activity_Connector" name="Fetch the offer" zeebe:modelerTemplate="io.camunda.connectors.HttpJson.v2">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="io.camunda:http-json:1" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>ConnectorFlow_1</bpmn:incoming>
+      <bpmn:outgoing>ConnectorFlow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="ConnectorFlow_2" sourceRef="Activity_Connector" targetRef="Activity_AfterConnector" />
+    <bpmn:serviceTask id="Activity_AfterConnector" name="Record what the connector fetched">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="afterConnector" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>ConnectorFlow_2</bpmn:incoming>
+      <bpmn:outgoing>ConnectorFlow_3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="ConnectorFlow_3" sourceRef="Activity_AfterConnector" targetRef="ConnectorEnd" />
+    <bpmn:endEvent id="ConnectorEnd">
+      <bpmn:incoming>ConnectorFlow_3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

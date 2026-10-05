@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_Native"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="NativeProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_NativeStart">
+      <bpmn:outgoing>Flow_ToNative</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToNative" sourceRef="Event_NativeStart" targetRef="Activity_Native" />
+    <bpmn:serviceTask id="Activity_Native">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="nativeTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToNative</bpmn:incoming>
+      <bpmn:outgoing>Flow_NativeToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_NativeToEnd" sourceRef="Activity_Native" targetRef="Event_NativeEnd" />
+    <bpmn:endEvent id="Event_NativeEnd">
+      <bpmn:incoming>Flow_NativeToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

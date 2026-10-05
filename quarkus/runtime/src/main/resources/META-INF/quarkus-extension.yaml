@@ -1,0 +1,7 @@
+name: vanillabp-camunda8
+artifact: "${project.groupId}:${project.artifactId}:${project.version}"
+dependencies:
+  - vanillabp
+capabilities:
+  provides:
+    - io.vanillabp.adapter.camunda8

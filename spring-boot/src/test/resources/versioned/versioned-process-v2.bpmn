@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The SECOND version of 'VersionedProcess', deployed by the integration test itself
+  while the application runs - the way another node of a rolling deployment does it.
+  The identifiers carry the workflow module's prefix by hand because the test deploys
+  this model directly through the client, bypassing VanillaBP's pipeline (the adapter
+  runs with name-clash-avoidance 'use-prefix' here).
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_VersionedV2"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="test-app__VersionedProcess" isExecutable="true">
+    <bpmn:extensionElements>
+      <zeebe:versionTag value="release-2" />
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="VP_Start">
+      <bpmn:outgoing>VP_ToTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="VP_ToTask" sourceRef="VP_Start" targetRef="VP_Task" />
+    <bpmn:serviceTask id="VP_Task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="test-app__VersionedProcess__versionedTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>VP_ToTask</bpmn:incoming>
+      <bpmn:outgoing>VP_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="VP_ToEnd" sourceRef="VP_Task" targetRef="VP_End" />
+    <bpmn:endEvent id="VP_End">
+      <bpmn:incoming>VP_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

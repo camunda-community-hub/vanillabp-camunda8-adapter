@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_Restart"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="RestartProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_RestartStart">
+      <bpmn:outgoing>Flow_ToRestart</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToRestart" sourceRef="Event_RestartStart" targetRef="Activity_Restart" />
+    <bpmn:serviceTask id="Activity_Restart">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="restartTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRestart</bpmn:incoming>
+      <bpmn:outgoing>Flow_RestartToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_RestartToEnd" sourceRef="Activity_Restart" targetRef="Event_RestartEnd" />
+    <bpmn:endEvent id="Event_RestartEnd">
+      <bpmn:incoming>Flow_RestartToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

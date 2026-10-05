@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_ModelledListeners" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="ListenerProcess" isExecutable="true">
+    <bpmn:startEvent id="ListenerStart">
+      <bpmn:outgoing>ListenerFlow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="ListenerFlow_1" sourceRef="ListenerStart" targetRef="Activity_Work" />
+    <bpmn:serviceTask id="Activity_Work" name="Do the work">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="doTheWork" />
+        <zeebe:executionListeners>
+          <zeebe:executionListener eventType="start" type="prepareTheWork" />
+          <zeebe:executionListener eventType="end" type="auditTheWork" />
+        </zeebe:executionListeners>
+      </bpmn:extensionElements>
+      <bpmn:incoming>ListenerFlow_1</bpmn:incoming>
+      <bpmn:outgoing>ListenerFlow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="ListenerFlow_2" sourceRef="Activity_Work" targetRef="Gateway_WhatTheProcessSaw" />
+    <bpmn:exclusiveGateway id="Gateway_WhatTheProcessSaw" name="Did the audit reach the process?" default="ListenerFlow_Missed">
+      <bpmn:incoming>ListenerFlow_2</bpmn:incoming>
+      <bpmn:outgoing>ListenerFlow_Saw</bpmn:outgoing>
+      <bpmn:outgoing>ListenerFlow_Missed</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="ListenerFlow_Saw" sourceRef="Gateway_WhatTheProcessSaw" targetRef="Activity_ConfirmTheAudit">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=theWorkWasAudited</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="ListenerFlow_Missed" sourceRef="Gateway_WhatTheProcessSaw" targetRef="Activity_ReportTheLoss" />
+    <bpmn:serviceTask id="Activity_ConfirmTheAudit" name="The process saw the audit">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="confirmTheAudit" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>ListenerFlow_Saw</bpmn:incoming>
+      <bpmn:outgoing>ListenerFlow_3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Activity_ReportTheLoss" name="The process missed the audit">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="reportTheLoss" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>ListenerFlow_Missed</bpmn:incoming>
+      <bpmn:outgoing>ListenerFlow_4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="ListenerFlow_3" sourceRef="Activity_ConfirmTheAudit" targetRef="ListenerEnd" />
+    <bpmn:sequenceFlow id="ListenerFlow_4" sourceRef="Activity_ReportTheLoss" targetRef="ListenerEnd" />
+    <bpmn:endEvent id="ListenerEnd">
+      <bpmn:extensionElements>
+        <zeebe:executionListeners>
+          <zeebe:executionListener eventType="end" type="archiveTheOrder" />
+        </zeebe:executionListeners>
+      </bpmn:extensionElements>
+      <bpmn:incoming>ListenerFlow_3</bpmn:incoming>
+      <bpmn:incoming>ListenerFlow_4</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

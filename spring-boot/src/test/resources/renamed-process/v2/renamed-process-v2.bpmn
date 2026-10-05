@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_RenamedProcess_v2"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- the message of the rename's wait state got a NEW name in this generation: the
+       workflow started before the rename waits for 'RenameContinue', a name only the
+       old id's model in the cluster still declares - correlating it is the proof that
+       the message check reads the models the cluster holds rather than the models
+       this application version deployed -->
+  <bpmn:message id="Msg_RenameContinueV2" name="RenameContinueV2" />
+  <!-- the message of the process nobody serves carries the correlation key its modeller
+       wrote: no workflow aggregate of this application can supply one, and Camunda 8
+       demands it of every executable process, so without it the whole file would be
+       rejected and the deployment says so before it is sent -->
+  <bpmn:message id="Msg_NeighbourContinue" name="NeighbourContinue">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=neighbourReference" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <!-- the same model AFTER the rename: only the process id changed -->
+  <bpmn:process id="RenamedProcessNew" isExecutable="true">
+    <bpmn:startEvent id="RN_Start">
+      <bpmn:outgoing>RN_ToStarted</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="RN_ToStarted" sourceRef="RN_Start" targetRef="RN_Started" />
+    <bpmn:serviceTask id="RN_Started">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="renameStarted" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RN_ToStarted</bpmn:incoming>
+      <bpmn:outgoing>RN_ToWait</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RN_ToWait" sourceRef="RN_Started" targetRef="RN_Wait" />
+    <!-- where the workflow stands while the application is upgraded -->
+    <bpmn:intermediateCatchEvent id="RN_Wait">
+      <bpmn:incoming>RN_ToWait</bpmn:incoming>
+      <bpmn:outgoing>RN_ToFinished</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="RN_MsgDef" messageRef="Msg_RenameContinueV2" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="RN_ToFinished" sourceRef="RN_Wait" targetRef="RN_Finished" />
+    <bpmn:serviceTask id="RN_Finished">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="renameFinished" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RN_ToFinished</bpmn:incoming>
+      <bpmn:outgoing>RN_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RN_ToEnd" sourceRef="RN_Finished" targetRef="RN_End" />
+    <bpmn:endEvent id="RN_End">
+      <bpmn:incoming>RN_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <!-- A second executable process which no @WorkflowService class of this application
+       claims: the shape a modeller leaves behind next to the process somebody asked for.
+       It deploys with the process the application does serve, it is reported while the
+       application starts, and it costs the boot nothing as long as its own model is
+       complete for the cluster. -->
+  <bpmn:process id="RenameNeighbour" isExecutable="true">
+    <bpmn:startEvent id="NB_Start">
+      <bpmn:outgoing>NB_ToWork</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="NB_ToWork" sourceRef="NB_Start" targetRef="NB_Work" />
+    <bpmn:serviceTask id="NB_Work">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="neighbourWork" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>NB_ToWork</bpmn:incoming>
+      <bpmn:outgoing>NB_ToWait</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="NB_ToWait" sourceRef="NB_Work" targetRef="NB_Wait" />
+    <bpmn:intermediateCatchEvent id="NB_Wait">
+      <bpmn:incoming>NB_ToWait</bpmn:incoming>
+      <bpmn:outgoing>NB_ToEnd</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="NB_MsgDef" messageRef="Msg_NeighbourContinue" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="NB_ToEnd" sourceRef="NB_Wait" targetRef="NB_End" />
+    <bpmn:endEvent id="NB_End">
+      <bpmn:incoming>NB_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

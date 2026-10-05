@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_EventSubprocess"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="EventSubprocessProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_Start">
+      <bpmn:outgoing>Flow_ToWait</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToWait" sourceRef="Event_Start" targetRef="Event_Wait" />
+    <!-- the workflow waits here until the event subprocess takes it over -->
+    <bpmn:intermediateCatchEvent id="Event_Wait">
+      <bpmn:incoming>Flow_ToWait</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToNotReached</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_Wait">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT1H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="Flow_ToNotReached" sourceRef="Event_Wait" targetRef="Event_NotReached" />
+    <bpmn:endEvent id="Event_NotReached">
+      <bpmn:incoming>Flow_ToNotReached</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:subProcess id="Activity_TakeOver" triggeredByEvent="true">
+      <bpmn:startEvent id="Event_TakeOver" isInterrupting="true">
+        <bpmn:outgoing>Flow_ToRecord</bpmn:outgoing>
+        <bpmn:timerEventDefinition id="TimerEventDefinition_TakeOver">
+          <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT2S</bpmn:timeDuration>
+        </bpmn:timerEventDefinition>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="Flow_ToRecord" sourceRef="Event_TakeOver" targetRef="Activity_Record" />
+      <bpmn:serviceTask id="Activity_Record">
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="recordTakeOver" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_ToRecord</bpmn:incoming>
+        <bpmn:outgoing>Flow_ToEnd</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:sequenceFlow id="Flow_ToEnd" sourceRef="Activity_Record" targetRef="Event_End" />
+      <bpmn:endEvent id="Event_End">
+        <bpmn:incoming>Flow_ToEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+  </bpmn:process>
+</bpmn:definitions>

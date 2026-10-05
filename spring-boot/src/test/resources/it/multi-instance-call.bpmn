@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_multi_instance_call" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!--
+    The caller of the decomposition test: a call activity inside a multi-instance
+    subprocess. The called process lives in a file of its own, which is how an
+    application splits a decomposition, and which is what makes the call graph span more
+    than one model. Sequential on purpose, so the assertion is an exact string.
+  -->
+  <bpmn:process id="MiCallProcess" isExecutable="true">
+    <bpmn:startEvent id="MIC_Start">
+      <bpmn:outgoing>MIC_ToSub</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MIC_ToSub" sourceRef="MIC_Start" targetRef="MIC_PerGroup" />
+    <bpmn:subProcess id="MIC_PerGroup">
+      <bpmn:incoming>MIC_ToSub</bpmn:incoming>
+      <bpmn:outgoing>MIC_ToEnd</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=[&#34;g1&#34;,&#34;g2&#34;]" inputElement="group" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:startEvent id="MIC_SubStart">
+        <bpmn:outgoing>MIC_SubToCall</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="MIC_SubToCall" sourceRef="MIC_SubStart" targetRef="MIC_CallChild" />
+      <bpmn:callActivity id="MIC_CallChild">
+        <bpmn:extensionElements>
+          <zeebe:calledElement processId="MiCalledProcess" />
+        </bpmn:extensionElements>
+        <bpmn:incoming>MIC_SubToCall</bpmn:incoming>
+        <bpmn:outgoing>MIC_CallToSubEnd</bpmn:outgoing>
+      </bpmn:callActivity>
+      <bpmn:sequenceFlow id="MIC_CallToSubEnd" sourceRef="MIC_CallChild" targetRef="MIC_SubEnd" />
+      <bpmn:endEvent id="MIC_SubEnd">
+        <bpmn:incoming>MIC_CallToSubEnd</bpmn:incoming>
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="MIC_ToEnd" sourceRef="MIC_PerGroup" targetRef="MIC_End" />
+    <bpmn:endEvent id="MIC_End">
+      <bpmn:incoming>MIC_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

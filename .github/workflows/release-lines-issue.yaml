@@ -1,0 +1,227 @@
+name: Release lines issue
+# A line which breaks in the night has to be seen. Nobody opens the list of workflow runs
+# in the morning to find out, and a red run scrolls out of sight within a day. So a red
+# line gets a GitHub issue, which stays until somebody has dealt with it. See decision 31
+# in the repository's DECISIONS.md.
+#
+# One issue per line, never a second one for the same break: a line which is still red
+# tomorrow night gets a comment on the issue it already has. The label 'release-lines' and
+# a title which only names the line are what makes that issue findable again.
+#
+# The preview line is in the matrix here, so it gets an issue like any other line. The
+# tests of the cluster defect that line is known for are excluded in the POM, so what is
+# left of it is worth reading, and a break of it is worth knowing about before the line
+# goes GA.
+#
+# This is a workflow of its own rather than a step of the matrix, for two reasons. Writing
+# an issue needs 'issues: write', and the matrix is also called by the pull-request checks,
+# where a called workflow may not ask for more than its caller was granted, so asking for
+# that permission inside the matrix would fail every pull request which moves a pin. And a
+# line which is green again has to be reported by a run which SUCCEEDED, which no step of a
+# failed line can do.
+#
+# 'workflow_run' fires for a RUN of the matrix. A matrix called by another workflow is not
+# a run of its own, it is jobs inside the caller's run, so the pull-request checks never
+# arrive here, and neither will the release gate of decision 31. That is right: their
+# result is read by the person who opened the pull request or dispatched the release, and
+# an issue would tell them nothing they are not already looking at.
+"on":
+  workflow_run:
+    workflows: ["Release lines"]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  issue:
+    # The nightly run of main, and a dispatch of the same matrix on main, which is how
+    # somebody checks that a fix worked. A dispatch on a branch says nothing about main, so
+    # it says nothing about an issue of main either.
+    if: >-
+      github.event.workflow_run.head_branch == 'main'
+      && (github.event.workflow_run.event == 'schedule'
+      || github.event.workflow_run.event == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # the jobs and the logs of the run which triggered this one
+      actions: read
+      issues: write
+    steps:
+      - name: Open or update the issue of every line which broke
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GH_REPO: "${{ github.repository }}"
+          RUN_ID: "${{ github.event.workflow_run.id }}"
+          RUN_URL: "${{ github.event.workflow_run.html_url }}"
+          RUN_CONCLUSION: "${{ github.event.workflow_run.conclusion }}"
+          HEAD_SHA: "${{ github.event.workflow_run.head_sha }}"
+          SERVER_URL: "${{ github.server_url }}"
+        run: |
+          set -euo pipefail
+
+          label=release-lines
+
+          # The label is how an open issue is found again, so it has to exist before the
+          # first issue carries it. Creating a label which is already there is an error and
+          # not a no-op, and that error is the normal case here.
+          gh label create "$label" --color B60205 \
+            --description "A release line which broke in the nightly matrix" \
+            >/dev/null 2>&1 || true
+
+          work=$(mktemp -d)
+
+          # A job of the matrix is called 'line (8.8)'. Nothing else in that workflow is:
+          # 'discover' collects the lines and 'lines-verified' reports what they did.
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[]
+                  | select(.name | startswith("line ("))
+                  | [.name, .conclusion, .id, .html_url]
+                  | @tsv' > "$work/jobs.tsv"
+
+          : > "$work/subjects.tsv"
+          while IFS=$'\t' read -r name conclusion id url; do
+            [ -n "$name" ] || continue
+            line=${name#"line ("}
+            line=${line%")"}
+            case "$conclusion" in
+              success) state=green ;;
+              # 'cancelled' is somebody stopping the run, and 'skipped' is a line the
+              # matrix never reached. Neither says anything about the line.
+              failure | timed_out) state=red ;;
+              *) continue ;;
+            esac
+            printf '%s\t%s\t%s\t%s\n' "line $line" "$state" "$id" "$url" \
+              >> "$work/subjects.tsv"
+          done < "$work/jobs.tsv"
+
+          # The run can fail without a line failing: the job which collects the lines, or a
+          # checkout. A night which proved nothing looks exactly like a night which proved
+          # everything, so it gets an issue under a subject of its own.
+          #
+          # When a line is the reason the run is red, the run is not given a green comment
+          # either. It is not green.
+          if [ "$RUN_CONCLUSION" = "success" ]; then
+            printf '%s\t%s\t%s\t%s\n' "the run itself" green "" "" \
+              >> "$work/subjects.tsv"
+          elif ! cut -f2 "$work/subjects.tsv" | grep -qx red; then
+            printf '%s\t%s\t%s\t%s\n' "the run itself" red "" "" \
+              >> "$work/subjects.tsv"
+          fi
+
+          # The newest text of an issue, which is its last comment or, while it has none,
+          # the body it was opened with. Every text this workflow writes ends in a marker,
+          # so the issue itself says whether the last thing reported was red or green.
+          last_state() {
+            gh issue view "$1" --json body,comments \
+              | jq -r '[.body] + [.comments[].body] | last' \
+              | sed -n 's/.*release-lines-state: \([a-z]*\).*/\1/p' | tail -1
+          }
+
+          while IFS=$'\t' read -r subject state job_id job_url; do
+            [ -n "$subject" ] || continue
+            title="Release lines: $subject is red"
+            number=$(gh issue list --state open --label "$label" --limit 100 \
+              --json number,title \
+              | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')
+
+            if [ "$state" = "red" ]; then
+              {
+                echo "${subject^} broke in the nightly matrix."
+                echo
+                echo "- run: $RUN_URL"
+                echo "- commit: $SERVER_URL/$GH_REPO/commit/$HEAD_SHA"
+                if [ -n "$job_url" ]; then
+                  echo "- job: $job_url"
+                fi
+                if [ -n "$job_id" ]; then
+                  echo
+                  echo "What the log of that job says:"
+                  echo
+                  gh run view --job "$job_id" --log-failed > "$work/job.log" 2>/dev/null \
+                    || true
+                  # Every log line carries the job, the step and a timestamp before what was
+                  # printed, and the step is 'UNKNOWN STEP' for a job of a matrix, so the
+                  # whole log arrives rather than the failed step alone.
+                  sed -E 's/^[^\t]*\t[^\t]*\t[^ ]+ //' "$work/job.log" > "$work/plain.log"
+                  # Maven's own summary, without the six lines it prints after every
+                  # failure about switches to re-run it with.
+                  grep -aE '^\[ERROR\]' "$work/plain.log" \
+                    | grep -avE '^\[ERROR\][[:space:]]*$|-> \[Help|\[Help [0-9]+\] http|To see the full stack trace|Re-run Maven using|For more information about the errors|After correcting the problems|mvn <args> -rf|See dump files|See /home/runner/' \
+                    | head -30 > "$work/excerpt.md" || true
+                  # A line can go red while Maven says nothing at all: both red nights this
+                  # repository had in September 2026 ended in BUILD SUCCESS and failed in the
+                  # step which prints the cluster and the client afterwards. What that step
+                  # printed carries no marker, so the ten lines up to the runner's own error
+                  # are taken. The tail of the log is not those lines: the cleanup of the job
+                  # runs after the failing step and prints another thirty.
+                  if [ ! -s "$work/excerpt.md" ]; then
+                    end=$(grep -anF '##[error]' "$work/plain.log" | tail -1 | cut -d: -f1)
+                    if [ -n "$end" ]; then
+                      start=$(( end > 9 ? end - 9 : 1 ))
+                      sed -n "${start},${end}p" "$work/plain.log" > "$work/excerpt.md"
+                    fi
+                  fi
+                  if [ -s "$work/excerpt.md" ]; then
+                    echo '```'
+                    cat "$work/excerpt.md"
+                    echo '```'
+                  else
+                    echo "Nothing in that log is marked as an error, so there is nothing to"
+                    echo "quote here. The job itself is the place to read."
+                  fi
+                  echo
+                  echo "The test reports and the application logs of that line are attached"
+                  echo "to the run as \`test-reports-${subject#line }\`, and GitHub keeps"
+                  echo "them for seven days. The log of the job above is kept longer."
+                fi
+                # What that line was built against, written down by the matrix. The version
+                # in the POM does not say it: the platform publishes under the same
+                # '2.0.0-SNAPSHOT' several times a day, and the reader of this issue has to
+                # be able to tell a break of the platform from a break of this adapter.
+                snapshot="$work/snapshot-${subject// /-}"
+                if gh run download "$RUN_ID" --name "platform-snapshot-${subject#line }" \
+                     --dir "$snapshot" >/dev/null 2>&1 \
+                   && [ -s "$snapshot/platform-snapshot.md" ]; then
+                  echo
+                  echo "It was built against:"
+                  echo
+                  cat "$snapshot/platform-snapshot.md"
+                fi
+                echo
+                echo "<!-- release-lines-state: red -->"
+              } > "$work/body.md"
+              if [ -n "$number" ]; then
+                gh issue comment "$number" --body-file "$work/body.md"
+              else
+                gh issue create --title "$title" --label "$label" \
+                  --body-file "$work/body.md"
+              fi
+              continue
+            fi
+
+            # Green. Only worth saying where an issue is open and the last thing it was
+            # told was red, otherwise every quiet night would add a comment.
+            if [ -z "$number" ]; then
+              continue
+            fi
+            if [ "$(last_state "$number")" != "red" ]; then
+              continue
+            fi
+            {
+              echo "${subject^} was green again in the nightly matrix."
+              echo
+              echo "- run: $RUN_URL"
+              echo "- commit: $SERVER_URL/$GH_REPO/commit/$HEAD_SHA"
+              echo
+              echo "This issue is not closed by that, on purpose. A line can be green in"
+              echo "one run and red in the next: the defect the Business Cockpit's Camunda 8"
+              echo "adapter found in September 2026 lost a workflow in about one run out of"
+              echo "four, and three nights out of four it would have closed this. Closing and"
+              echo "reopening would also split one break over several issues, which is the"
+              echo "thing this issue exists to avoid. Whoever merged the fix knows it is one,"
+              echo "and closes this."
+              echo
+              echo "<!-- release-lines-state: green -->"
+            } > "$work/body.md"
+            gh issue comment "$number" --body-file "$work/body.md"
+          done < "$work/subjects.tsv"

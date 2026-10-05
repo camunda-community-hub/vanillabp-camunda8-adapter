@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_NameClash"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="NameClashProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_Start">
+      <bpmn:outgoing>Flow_ToApprove</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToApprove" sourceRef="Event_Start" targetRef="Activity_Approve" />
+    <bpmn:serviceTask id="Activity_Approve">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="approveTheLoan" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToApprove</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_ToEnd" sourceRef="Activity_Approve" targetRef="Event_End" />
+    <bpmn:endEvent id="Event_End">
+      <bpmn:incoming>Flow_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

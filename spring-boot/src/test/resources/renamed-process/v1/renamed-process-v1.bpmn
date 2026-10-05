@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_RenamedProcess_v1"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_RenameContinue" name="RenameContinue" />
+  <!-- the process id BEFORE the rename: the workflow of this test is started on it -->
+  <bpmn:process id="RenamedProcessOld" isExecutable="true">
+    <bpmn:startEvent id="RN_Start">
+      <bpmn:outgoing>RN_ToStarted</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="RN_ToStarted" sourceRef="RN_Start" targetRef="RN_Started" />
+    <bpmn:serviceTask id="RN_Started">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="renameStarted" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RN_ToStarted</bpmn:incoming>
+      <bpmn:outgoing>RN_ToWait</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RN_ToWait" sourceRef="RN_Started" targetRef="RN_Wait" />
+    <!-- where the workflow stands while the application is upgraded -->
+    <bpmn:intermediateCatchEvent id="RN_Wait">
+      <bpmn:incoming>RN_ToWait</bpmn:incoming>
+      <bpmn:outgoing>RN_ToFinished</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="RN_MsgDef" messageRef="Msg_RenameContinue" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="RN_ToFinished" sourceRef="RN_Wait" targetRef="RN_Finished" />
+    <bpmn:serviceTask id="RN_Finished">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="renameFinished" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RN_ToFinished</bpmn:incoming>
+      <bpmn:outgoing>RN_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RN_ToEnd" sourceRef="RN_Finished" targetRef="RN_End" />
+    <bpmn:endEvent id="RN_End">
+      <bpmn:incoming>RN_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

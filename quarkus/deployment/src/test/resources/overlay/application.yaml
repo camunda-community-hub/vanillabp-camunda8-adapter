@@ -1,0 +1,69 @@
+vanillabp:
+  adapters:
+    c8:
+      type: camunda8
+      job-lease: use
+      rest-address: http://localhost:65535
+      job-timeout: PT30S
+      retry-backoff: PT30S
+      fetch-variables: derived
+      async-task-lock-renewal: PT2M
+      shutdown-grace: PT5S
+      startup-wait: PT30S
+      worker-threads: virtual
+      worker-threads-bound: 6
+      max-jobs-active: 24
+      poll-interval: PT0.25S
+      request-timeout: PT20S
+      stream-enabled: true
+      stream-timeout: PT30M
+      message-time-to-live: PT6H
+      max-message-size: 8388608
+      keep-alive: PT30S
+      max-http-connections: 64
+      override-authority: gateway.internal
+      tenant-id: one-tenant-for-all
+      allow-connectors: true
+      allow-listeners: true
+      auth:
+        method: basic
+        username: demo
+        password: demo
+  prioritized-adapters:
+    - c8
+  workflow-modules:
+    test-app:
+      adapters:
+        c8:
+          resources-location: classpath:test-app/processes
+          tenant-id: test-app-tenant
+          job-timeout: PT20S
+          retry-backoff: PT20S
+          fetch-variables: all
+          message-time-to-live: PT5H
+          allow-connectors: false
+          allow-listeners: false
+      workflows:
+        TaskProcess:
+          adapters:
+            c8:
+              job-timeout: PT10S
+              retry-backoff: PT10S
+              fetch-variables: derived
+              message-time-to-live: PT4H
+              allow-connectors: true
+              allow-listeners: true
+          tasks:
+            happyTask:
+              adapters:
+                c8:
+                  job-timeout: PT2S
+                  retry-backoff: PT2S
+                  fetch-variables: all
+                  allow-connectors: true
+                  allow-listeners: true
+          messages:
+            OfferRequested:
+              adapters:
+                c8:
+                  message-time-to-live: PT1M

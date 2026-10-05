@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.camunda.community.vanillabp</groupId>
+    <artifactId>camunda8-adapter-parent</artifactId>
+    <version>${revision}</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>camunda8-adapter-quarkus</artifactId>
+  <name>VanillaBP Camunda 8 adapter - Quarkus extension - Runtime</name>
+  <description>Quarkus extension runtime of the VanillaBP Camunda 8 adapter</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-arc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda8-adapter</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>vanillabp-adapter-spi</artifactId>
+    </dependency>
+    <!-- optional: this adapter's own meters are published only where the application
+         brings Micrometer (see MicrometerCamunda8Metrics) -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>vanillabp-quarkus-integration</artifactId>
+    </dependency>
+    <!-- The Camunda client talks gRPC, which brings Netty, and Netty in a native image
+         needs a hand: its logger factory looks for backends nobody put on the classpath,
+         and the direct-buffer cleaner it uses on Java 24 and up cannot be analyzed by
+         the image builder. Quarkus' own Netty extension answers all of it, so the
+         adapter depends on it instead of maintaining a copy of those answers. An
+         application which brings a Quarkus extension using Netty anyway (a REST layer,
+         for instance) had it by accident before, and that is how this gap stayed
+         invisible - see the README, section "Native images". -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-netty</artifactId>
+    </dependency>
+    <!-- compile-time only: it carries the GraalVM substitution annotations, and a
+         substitution is read by the image builder, never by a JVM -->
+    <dependency>
+      <groupId>org.graalvm.sdk</groupId>
+      <artifactId>nativeimage</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-extension-maven-plugin</artifactId>
+        <version>${quarkus.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>extension-descriptor</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <deployment>${project.groupId}:${project.artifactId}-deployment:${project.version}</deployment>
+              <capabilities>
+                <provides>io.vanillabp.adapter.camunda8</provides>
+              </capabilities>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>default-compile</id>
+            <configuration>
+              <release>${version.java}</release>
+              <annotationProcessorPaths>
+                <path>
+                  <groupId>io.quarkus</groupId>
+                  <artifactId>quarkus-extension-processor</artifactId>
+                  <version>${quarkus.version}</version>
+                </path>
+              </annotationProcessorPaths>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

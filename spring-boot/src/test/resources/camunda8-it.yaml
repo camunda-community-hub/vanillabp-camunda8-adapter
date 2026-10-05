@@ -1,0 +1,191 @@
+spring:
+  datasource:
+    generate-unique-name: true
+  jpa:
+    hibernate:
+      ddl-auto: create
+vanillabp:
+  adapters:
+    c8:
+      type: camunda8
+      max-http-connections: 256
+      request-timeout: PT5S
+      job-lease: use
+      name-clash-avoidance: use-prefix
+      job-timeout: PT30S
+      retry-backoff: PT30S
+      async-task-lock-renewal: PT2M
+      message-time-to-live: PT6H
+  prioritized-adapters:
+    - c8
+  workflow-modules:
+    test-app:
+      declared-task-params:
+        - approved
+        - results
+        - secret
+      adapters:
+        c8:
+          resources-location: classpath*:it
+          job-timeout: PT20S
+          retry-backoff: PT20S
+          message-time-to-live: PT5H
+      workflows:
+        AdHocProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        AggregateChangedProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        AuthProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        BlockingProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        CancelableProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        DecisionProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        EventSubprocessProcess:
+          allow-full-sync-with-bpms: true
+        MessageStartProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        MiCallProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        MiFeelCallProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        MultiInstanceProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        OldProcessVersionsProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        OtherOpenTasksProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        QuickProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        RenamedProcessNew:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        RenamedProcessOld:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        ReadModelStandsStillProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        RestartProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        SecondaryStorageProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        ShutdownProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        SignalCatchProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        TestProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        TimerStartProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        VersionedProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+        FailProcess:
+          adapters:
+            c8:
+              retry-backoff: PT5S
+        ModelledBackoffProcess:
+          adapters:
+            c8:
+              retry-backoff: PT1S
+        MessageProcess:
+          messages:
+            C8PaymentReceived:
+              adapters:
+                c8:
+                  message-time-to-live: PT2S
+        TaskProcess:
+          adapters:
+            c8:
+              job-timeout: PT10S
+              retry-backoff: PT10S
+              message-time-to-live: PT4H
+          tasks:
+            happyTask:
+              adapters:
+                c8:
+                  job-timeout: PT2S
+                  retry-backoff: PT2S
+          messages:
+            OfferRequested:
+              adapters:
+                c8:
+                  message-time-to-live: PT1M
+        AsyncProcess:
+          tasks:
+            asyncTask:
+              adapters:
+                c8:
+                  job-timeout: PT2S
+        SyncProcess:
+          tasks:
+            syncApproved:
+              adapters:
+                c8:
+                  fetch-variables: all
+        LeasedProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+          tasks:
+            slowTask:
+              adapters:
+                c8:
+                  job-timeout: PT10S
+        FetchProcess:
+          adapters:
+            c8:
+              retry-backoff: PT5S
+          tasks:
+            fetchAllTask:
+              adapters:
+                c8:
+                  fetch-variables: all
+  outbox:
+    poll-interval: PT0.5S
+    attempt-frequency: PT0.5S

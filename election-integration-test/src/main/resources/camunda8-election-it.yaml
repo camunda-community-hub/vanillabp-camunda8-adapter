@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:election-it;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+vanillabp:
+  adapters:
+    c8-plain:
+      type: camunda8
+      job-lease: use
+      name-clash-avoidance: none
+      job-timeout: PT20S
+      retry-backoff: PT5S
+  prioritized-adapters:
+    - c8-plain
+  workflow-modules:
+    election-app:
+      adapters:
+        c8-plain:
+          resources-location: classpath:it-election
+      workflows:
+        ElectionProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+  outbox:
+    poll-interval: PT0.5S
+    attempt-frequency: PT0.5S

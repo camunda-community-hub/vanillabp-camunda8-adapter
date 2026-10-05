@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_JobLease"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="LeasedProcess" isExecutable="true">
+    <bpmn:startEvent id="LeasedStart">
+      <bpmn:outgoing>Flow_ToSlow</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToSlow" sourceRef="LeasedStart" targetRef="Activity_Slow" />
+    <bpmn:serviceTask id="Activity_Slow">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="slowTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToSlow</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToLeasedEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_ToLeasedEnd" sourceRef="Activity_Slow" targetRef="Event_LeasedEnd" />
+    <bpmn:endEvent id="Event_LeasedEnd">
+      <bpmn:incoming>Flow_ToLeasedEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

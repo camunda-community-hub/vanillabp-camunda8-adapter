@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_taskmatrix" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:error id="ErrPayment" name="PaymentFailed" errorCode="PAYMENT_FAILED" />
+  <bpmn:process id="TaskProcess" isExecutable="true">
+    <bpmn:startEvent id="TP_start">
+      <bpmn:outgoing>TP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="TP_f1" sourceRef="TP_start" targetRef="TP_happy" />
+    <bpmn:serviceTask id="TP_happy">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="happyTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>TP_f1</bpmn:incoming>
+      <bpmn:outgoing>TP_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="TP_f2" sourceRef="TP_happy" targetRef="TP_error" />
+    <bpmn:serviceTask id="TP_error">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="errorTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>TP_f2</bpmn:incoming>
+      <bpmn:outgoing>TP_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="TP_boundary" attachedToRef="TP_error">
+      <bpmn:outgoing>TP_fErr</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="TP_errDef" errorRef="ErrPayment" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="TP_fErr" sourceRef="TP_boundary" targetRef="TP_handle" />
+    <bpmn:serviceTask id="TP_handle">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="errorHandled" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>TP_fErr</bpmn:incoming>
+      <bpmn:outgoing>TP_f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="TP_f3" sourceRef="TP_error" targetRef="TP_end" />
+    <bpmn:sequenceFlow id="TP_f4" sourceRef="TP_handle" targetRef="TP_endHandled" />
+    <bpmn:endEvent id="TP_end">
+      <bpmn:incoming>TP_f3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="TP_endHandled">
+      <bpmn:incoming>TP_f4</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="FailProcess" isExecutable="true">
+    <bpmn:startEvent id="FP_start">
+      <bpmn:outgoing>FP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="FP_f1" sourceRef="FP_start" targetRef="FP_task" />
+    <bpmn:serviceTask id="FP_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="alwaysFails" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>FP_f1</bpmn:incoming>
+      <bpmn:outgoing>FP_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="FP_f2" sourceRef="FP_task" targetRef="FP_end" />
+    <bpmn:endEvent id="FP_end">
+      <bpmn:incoming>FP_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="ModelledBackoffProcess" isExecutable="true">
+    <bpmn:startEvent id="MB_start">
+      <bpmn:outgoing>MB_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MB_f1" sourceRef="MB_start" targetRef="MB_task" />
+    <bpmn:serviceTask id="MB_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="modelledBackoffFails" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="retryBackoff" value="PT12S" />
+        </zeebe:taskHeaders>
+      </bpmn:extensionElements>
+      <bpmn:incoming>MB_f1</bpmn:incoming>
+      <bpmn:outgoing>MB_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="MB_f2" sourceRef="MB_task" targetRef="MB_end" />
+    <bpmn:endEvent id="MB_end">
+      <bpmn:incoming>MB_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="RetryProcess" isExecutable="true">
+    <bpmn:startEvent id="RP_start">
+      <bpmn:outgoing>RP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="RP_f1" sourceRef="RP_start" targetRef="RP_task" />
+    <bpmn:serviceTask id="RP_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="retryTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>RP_f1</bpmn:incoming>
+      <bpmn:outgoing>RP_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="RP_f2" sourceRef="RP_task" targetRef="RP_end" />
+    <bpmn:endEvent id="RP_end">
+      <bpmn:incoming>RP_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="AsyncProcess" isExecutable="true">
+    <bpmn:startEvent id="AP_start">
+      <bpmn:outgoing>AP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="AP_f1" sourceRef="AP_start" targetRef="AP_task" />
+    <bpmn:serviceTask id="AP_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="asyncTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>AP_f1</bpmn:incoming>
+      <bpmn:outgoing>AP_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="AP_f2" sourceRef="AP_task" targetRef="AP_end" />
+    <bpmn:endEvent id="AP_end">
+      <bpmn:incoming>AP_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="AsyncCancelProcess" isExecutable="true">
+    <bpmn:startEvent id="ACP_start">
+      <bpmn:outgoing>ACP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="ACP_f1" sourceRef="ACP_start" targetRef="ACP_task" />
+    <bpmn:serviceTask id="ACP_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="awaitCancelTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>ACP_f1</bpmn:incoming>
+      <bpmn:outgoing>ACP_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="ACP_boundary" attachedToRef="ACP_task">
+      <bpmn:outgoing>ACP_fErr</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ACP_errDef" errorRef="ErrPayment" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="ACP_fErr" sourceRef="ACP_boundary" targetRef="ACP_handle" />
+    <bpmn:serviceTask id="ACP_handle">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cancelHandled" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>ACP_fErr</bpmn:incoming>
+      <bpmn:outgoing>ACP_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="ACP_f2" sourceRef="ACP_task" targetRef="ACP_end" />
+    <bpmn:sequenceFlow id="ACP_f3" sourceRef="ACP_handle" targetRef="ACP_endHandled" />
+    <bpmn:endEvent id="ACP_end">
+      <bpmn:incoming>ACP_f2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="ACP_endHandled">
+      <bpmn:incoming>ACP_f3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="UserTaskProcess" isExecutable="true">
+    <bpmn:startEvent id="UTP_start">
+      <bpmn:outgoing>UTP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="UTP_f1" sourceRef="UTP_start" targetRef="UTP_task" />
+    <bpmn:userTask id="UTP_task">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="approveUser" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>UTP_f1</bpmn:incoming>
+      <bpmn:outgoing>UTP_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="UTP_f2" sourceRef="UTP_task" targetRef="UTP_end" />
+    <bpmn:endEvent id="UTP_end">
+      <bpmn:incoming>UTP_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="SilentUserTaskProcess" isExecutable="true">
+    <bpmn:startEvent id="SUT_start">
+      <bpmn:outgoing>SUT_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="SUT_f1" sourceRef="SUT_start" targetRef="SUT_task" />
+    <bpmn:userTask id="SUT_task">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="silentApprove" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>SUT_f1</bpmn:incoming>
+      <bpmn:outgoing>SUT_f2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="SUT_f2" sourceRef="SUT_task" targetRef="SUT_end" />
+    <bpmn:endEvent id="SUT_end">
+      <bpmn:incoming>SUT_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:message id="Msg_C8Payment" name="C8PaymentReceived" />
+  <bpmn:message id="Msg_C8Order" name="C8OrderPlaced" />
+  <bpmn:process id="MessageProcess" isExecutable="true">
+    <bpmn:startEvent id="CMP_start">
+      <bpmn:outgoing>CMP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="CMP_f1" sourceRef="CMP_start" targetRef="CMP_wait" />
+    <bpmn:intermediateCatchEvent id="CMP_wait">
+      <bpmn:incoming>CMP_f1</bpmn:incoming>
+      <bpmn:outgoing>CMP_f2</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="CMP_msgDef" messageRef="Msg_C8Payment" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="CMP_f2" sourceRef="CMP_wait" targetRef="CMP_done" />
+    <bpmn:serviceTask id="CMP_done">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="c8MessageArrived" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>CMP_f2</bpmn:incoming>
+      <bpmn:outgoing>CMP_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="CMP_f3" sourceRef="CMP_done" targetRef="CMP_end" />
+    <bpmn:endEvent id="CMP_end">
+      <bpmn:incoming>CMP_f3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="MessageStartProcess" isExecutable="true">
+    <bpmn:startEvent id="CMS_start">
+      <bpmn:outgoing>CMS_f1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="CMS_msgDef" messageRef="Msg_C8Order" />
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="CMS_f1" sourceRef="CMS_start" targetRef="CMS_task" />
+    <bpmn:serviceTask id="CMS_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="c8OrderPlaced" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>CMS_f1</bpmn:incoming>
+      <bpmn:outgoing>CMS_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="CMS_f2" sourceRef="CMS_task" targetRef="CMS_end" />
+    <bpmn:endEvent id="CMS_end">
+      <bpmn:incoming>CMS_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="SyncProcess" isExecutable="true">
+    <bpmn:startEvent id="SP_start">
+      <bpmn:outgoing>SP_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="SP_f1" sourceRef="SP_start" targetRef="SP_task" />
+    <bpmn:serviceTask id="SP_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="syncTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>SP_f1</bpmn:incoming>
+      <bpmn:outgoing>SP_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="SP_f2" sourceRef="SP_task" targetRef="SP_gateway" />
+    <bpmn:exclusiveGateway id="SP_gateway" default="SP_fRejected">
+      <bpmn:incoming>SP_f2</bpmn:incoming>
+      <bpmn:outgoing>SP_fApproved</bpmn:outgoing>
+      <bpmn:outgoing>SP_fRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="SP_fApproved" sourceRef="SP_gateway" targetRef="SP_approved">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">=approved = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="SP_fRejected" sourceRef="SP_gateway" targetRef="SP_rejected" />
+    <bpmn:serviceTask id="SP_approved">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="syncApproved" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>SP_fApproved</bpmn:incoming>
+      <bpmn:outgoing>SP_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="SP_rejected">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="syncRejected" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>SP_fRejected</bpmn:incoming>
+      <bpmn:outgoing>SP_f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="SP_f3" sourceRef="SP_approved" targetRef="SP_end" />
+    <bpmn:sequenceFlow id="SP_f4" sourceRef="SP_rejected" targetRef="SP_endRejected" />
+    <bpmn:endEvent id="SP_end">
+      <bpmn:incoming>SP_f3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="SP_endRejected">
+      <bpmn:incoming>SP_f4</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="FetchProcess" isExecutable="true">
+    <bpmn:startEvent id="FE_start">
+      <bpmn:outgoing>FE_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="FE_f1" sourceRef="FE_start" targetRef="FE_all" />
+    <bpmn:serviceTask id="FE_all">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="fetchAllTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>FE_f1</bpmn:incoming>
+      <bpmn:outgoing>FE_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="FE_f2" sourceRef="FE_all" targetRef="FE_derived" />
+    <bpmn:serviceTask id="FE_derived">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="fetchDerivedTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>FE_f2</bpmn:incoming>
+      <bpmn:outgoing>FE_f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="FE_f3" sourceRef="FE_derived" targetRef="FE_end" />
+    <bpmn:endEvent id="FE_end">
+      <bpmn:incoming>FE_f3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>
+

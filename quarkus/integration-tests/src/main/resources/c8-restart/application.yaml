@@ -1,0 +1,31 @@
+quarkus:
+  datasource:
+    db-kind: h2
+    jdbc:
+      url: jdbc:h2:mem:c8-restart;DB_CLOSE_DELAY=-1
+  hibernate-orm:
+    schema-management:
+      strategy: drop-and-create
+vanillabp:
+  outbox:
+    poll-interval: PT0.5S
+    attempt-frequency: PT1S
+  adapters:
+    c8:
+      type: camunda8
+      job-lease: use
+      name-clash-avoidance: use-prefix
+      job-timeout: PT20S
+      retry-backoff: PT20S
+  prioritized-adapters:
+    - c8
+  workflow-modules:
+    c8-e2e:
+      adapters:
+        c8:
+          resources-location: classpath:c8-restart/processes
+      workflows:
+        RestartProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

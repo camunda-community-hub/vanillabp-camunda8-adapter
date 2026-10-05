@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    generate-unique-name: true
+  jpa:
+    hibernate:
+      ddl-auto: create
+vanillabp:
+  adapters:
+    c8:
+      type: camunda8
+      request-timeout: PT5S
+      job-lease: use
+      name-clash-avoidance: use-prefix
+      job-timeout: PT30S
+  prioritized-adapters:
+    - c8
+  workflow-modules:
+    test-app:
+      adapters:
+        c8:
+          resources-location: classpath*:connectors
+      workflows:
+        ConnectorProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+          adapters:
+            c8:
+              allow-connectors: true
+  outbox:
+    poll-interval: PT0.5S
+    attempt-frequency: PT0.5S

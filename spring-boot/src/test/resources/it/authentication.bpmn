@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_Authentication"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="AuthProcess" isExecutable="true">
+    <bpmn:startEvent id="Event_AuthStart">
+      <bpmn:outgoing>Flow_ToAuth</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToAuth" sourceRef="Event_AuthStart" targetRef="Activity_Auth" />
+    <bpmn:serviceTask id="Activity_Auth">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="authTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToAuth</bpmn:incoming>
+      <bpmn:outgoing>Flow_AuthToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_AuthToEnd" sourceRef="Activity_Auth" targetRef="Event_AuthEnd" />
+    <bpmn:endEvent id="Event_AuthEnd">
+      <bpmn:incoming>Flow_AuthToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

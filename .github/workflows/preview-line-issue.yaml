@@ -1,0 +1,175 @@
+name: Preview line issue
+# The preview line is an alpha and it may not stop a pull request. That is decided, and
+# checks.yaml does it: 'line-pins-verified' reads the GA lines of the matrix and leaves the
+# preview line out. What was left over is a red cross with no consequence. The job of the
+# preview line sits on the pull request, and whoever has seen it twice without a reason to
+# act stops reading it. So a break of that line gets an issue of its own, under the label
+# 'preview-line' and a title which names the line, and the issue stays until somebody has
+# dealt with it.
+#
+# One issue, never a second one for the same break. While an issue with that title is open,
+# the next broken run writes a comment on it.
+#
+# This writes for a pull request and for nothing else, and that is the decision behind the
+# file. A preview line which breaks on 'main' already has an issue:
+# release-lines-issue.yaml opens one in the night under the label 'release-lines', and it
+# reports the line going green again as well. An issue here about that same night would be
+# the duplicate the search below prevents, one level up where the search cannot see it.
+# What the night cannot see is a pull request, and a pull request is where the break still
+# has an author: the matrix runs on every pull request, so the change which broke the alpha
+# is in front of the person who proposed it. Without this, that pull request is green, the
+# change is merged, and the night reports the break a day later with nothing pointing back
+# at what caused it.
+#
+# The other reading was considered and dropped: write whenever the preview line breaks,
+# and stay quiet when the night has already written its issue. That asks two workflows
+# which know nothing of each other to agree on what the same break is, and while the
+# night's issue is open for an older break the answer is a guess. A reader must not find
+# two issues about one red line.
+#
+# Checks calls this, and it does not hang on 'workflow_run' like its nightly sibling.
+# 'workflow_run' fires for a RUN of a workflow. A matrix called by the pull-request checks
+# is not a run of its own, it is jobs inside the run of Checks, so no pull request ever
+# arrives there. Hanging this on the run of Checks instead would fire, but a
+# 'workflow_run' workflow only ever runs in the version which is on the default branch, so
+# it could not be tried out on the branch which adds it, and this one had to be tried out.
+#
+# The issue is not written inside the matrix, because writing one needs 'issues: write',
+# and a called workflow may not ask for more than its caller was granted. The matrix is
+# called by the pull-request checks and by the release gate, so asking for that permission
+# in there would make every pull request red. The caller grants it, for this one job.
+#
+# Green stays green. A pull request whose GA lines are fine may not go red over this, so
+# the step below carries 'continue-on-error'. The clearest case is a pull request from a
+# fork, which gets a read-only token and can write nothing at all. That is then a warning
+# in the log and nothing more.
+#
+# The way back is a person. Nothing here closes the issue. A pull-request run builds the
+# branch of that pull request, so a green preview line on the next pull request says
+# nothing about this break. The issue says that, and whoever fixes the line closes it.
+"on":
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    permissions:
+      # the POM, for the client this line pins, and bin/line-preview.sh
+      contents: read
+      # the jobs of this run, which is where the lines of the matrix report
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Open or update the issue of a preview line which broke
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          GH_REPO: "${{ github.repository }}"
+          RUN_ID: "${{ github.run_id }}"
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          PR_URL: "${{ github.event.pull_request.html_url }}"
+          HEAD_SHA: "${{ github.event.pull_request.head.sha || github.sha }}"
+          SERVER_URL: "${{ github.server_url }}"
+        run: |
+          set -euo pipefail
+
+          label=preview-line
+
+          # The label is how an open issue is found again, so it has to exist before the
+          # first issue carries it. Creating a label which is already there is an error and
+          # not a no-op, and that error is the normal case here.
+          gh label create "$label" --color FBCA04 \
+            --description "The preview line broke on a pull request" \
+            >/dev/null 2>&1 || true
+
+          work=$(mktemp -d)
+
+          # A job of the matrix is called 'line (8.10)'. The matrix ran as a job of this
+          # run, so its jobs arrive here as 'lines / line (8.10)'. Nothing else of it ends
+          # that way: 'discover' collects the lines, 'ga-lines' sorts them and
+          # 'lines-verified' reports what they did.
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[]
+                  | select(.name | test("line \\([^()]+\\)$"))
+                  | [(.name | capture("line \\((?<line>[^()]+)\\)$").line),
+                     .conclusion, .html_url]
+                  | @tsv' > "$work/jobs.tsv"
+
+          # Read on a descriptor of its own: 'gh' inside the loop would otherwise take
+          # the rest of the file as its own standard input.
+          while IFS=$'\t' read -r -u 3 line conclusion job_url; do
+            [ -n "$line" ] || continue
+            # 'cancelled' is somebody stopping the run, and 'skipped' is a line the matrix
+            # never reached. Neither says anything about the line.
+            case "$conclusion" in
+              failure | timed_out) ;;
+              *) echo "line ${line}: ${conclusion}"; continue ;;
+            esac
+
+            # Which line is the preview line is in the POM and nowhere else. A reading
+            # which fails says why on stderr, and nobody may pick an answer after it.
+            preview=$(bin/line-preview.sh "$line") || {
+              echo "::warning::Line ${line} broke and nothing here can tell whether it is"\
+                "the preview line. The log of this step says what the reading found."
+              continue
+            }
+            [ "$preview" = "true" ] || {
+              echo "line ${line} broke, and it is a GA line. line-pins-verified has it."
+              continue
+            }
+
+            # The client the line was built against, which is the cluster its integration
+            # tests ran on. Reading it from the POM of this run says what was tested even
+            # when the pin moved in this very pull request.
+            anchor="${line//./\\.}"
+            pin=$(sed -n "s|.*<camunda8\.version\.line-${anchor}>\([^<]*\)<.*|\1|p" \
+              pom.xml | head -1)
+
+            title="Preview line: line $line is red on a pull request"
+            number=$(gh issue list --state open --label "$label" --limit 100 \
+              --json number,title \
+              | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')
+
+            {
+              echo "The preview line did not build on a pull request."
+              echo
+              echo "- line: $line"
+              echo "- client and cluster: ${pin:-not readable in the POM of this run}"
+              if [ -n "$PR_URL" ]; then
+                echo "- pull request: $PR_URL"
+              fi
+              echo "- run: $RUN_URL"
+              echo "- job: $job_url"
+              echo "- commit: $SERVER_URL/$GH_REPO/commit/$HEAD_SHA"
+              echo
+              echo "This does not block the pull request. 'line-pins-verified' reads the"
+              echo "GA lines alone, while the job of the preview line and"
+              echo "'lines / lines-verified' stay red, which is what this issue reports."
+              echo "The preview line is built against an alpha which is rewritten under"
+              echo "us, and a defect of that alpha may cost a night, it may not cost a"
+              echo "pull request. See decision 31 in DECISIONS.md."
+              echo
+              echo "The test reports and the application logs of that line are attached to"
+              echo "the run as \`test-reports-${line}\`, and GitHub keeps them for seven"
+              echo "days. The log of the job above is kept longer."
+            } > "$work/body.md"
+
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --body-file "$work/body.md"
+              echo "Line ${line} is red and issue #${number} already had it."
+              continue
+            fi
+
+            {
+              echo
+              echo "Nothing closes this issue on its own. A pull-request run builds the"
+              echo "branch of that pull request, so a green preview line on the next pull"
+              echo "request says nothing about this break, and the night reports on"
+              echo "\`main\` under its own label \`release-lines\`. Whoever fixes the line"
+              echo "closes this, and while it is open every further break is a comment here"
+              echo "rather than a second issue."
+            } >> "$work/body.md"
+            gh issue create --title "$title" --label "$label" --body-file "$work/body.md"
+          done 3< "$work/jobs.tsv"

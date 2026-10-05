@@ -1,0 +1,30 @@
+quarkus:
+  datasource:
+    db-kind: h2
+    jdbc:
+      url: jdbc:h2:mem:c8-native;DB_CLOSE_DELAY=-1
+  hibernate-orm:
+    schema-management:
+      strategy: drop-and-create
+vanillabp:
+  outbox:
+    poll-interval: PT0.5S
+    attempt-frequency: PT1S
+  adapters:
+    c8:
+      type: camunda8
+      job-lease: use
+      name-clash-avoidance: use-prefix
+      rest-address: "${CAMUNDA_REST_ADDRESS:http://localhost:8080}"
+  prioritized-adapters:
+    - c8
+  workflow-modules:
+    c8-native:
+      adapters:
+        c8:
+          resources-location: classpath:c8-native/processes
+      workflows:
+        NativeProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'

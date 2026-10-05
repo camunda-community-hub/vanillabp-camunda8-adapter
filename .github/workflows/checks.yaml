@@ -1,0 +1,364 @@
+name: Checks
+"on":
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  # One run of the checks per pull request, and the newest run wins. Every pull request
+  # starts the whole line matrix here, which is the most expensive thing this repository
+  # runs, and the run of a commit which has been pushed over answers a question nobody
+  # will ask again.
+  #
+  # Cancelling is right here and wrong for the publish group of
+  # deploy-to-github-packages.yaml. A publish which was stopped halfway cannot be
+  # repeated, a check can. GitHub takes the older runs of a group and never the one which
+  # just arrived, so 'line-pins-verified' reports for the commit somebody will merge.
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  # The VanillaBP artifacts are snapshots and live in GitHub Packages until the release.
+  # Reading them needs a token, see github-packages-settings.xml.
+  USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
+  USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
+jobs:
+  # Javadoc keeps the last block before an element and drops every earlier one without a
+  # word, so a comment somebody wrote and keeps up to date appears nowhere. Neither the
+  # compiler nor javadoc says anything about it, not even with failOnWarnings, which is why
+  # there is a script for it.
+  #
+  # It stands in front of the line matrix below, because it answers in seconds and the
+  # matrix takes about forty minutes. Nobody should wait that long to hear about a comment.
+  orphaned-javadoc-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: No javadoc block stands in front of another one
+        # through 'bash', so the check does not rest on the file mode of a script
+        run: bash bin/check-orphaned-javadoc.sh
+
+  # The ground rule of the release lines: a user must never read the version suffix of an
+  # artifact to find out which methods exist. This job keeps that true, and it needs no
+  # cluster, so it runs on every pull request while the integration tests of the other
+  # lines wait for the nightly matrix.
+  api-identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          java-version: 25.0.4+101.0.LTS
+          distribution: temurin
+          cache: maven
+      - name: The public API is the same on every line
+        env:
+          MAVEN_ARGS: -s ${{ github.workspace }}/.github/workflows/github-packages-settings.xml
+            --update-snapshots
+        run: bin/api-identity.sh
+
+  # A check which reports nothing looks exactly like a quiet week, so the script behind
+  # client-api-changes.yaml is held against three published bumps: two which added what
+  # Camunda does not call breaking, and one which added neither. It reads released
+  # artifacts, so the three answers never change, and it needs no cluster and no
+  # credentials.
+  client-api-changes-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          java-version: 25.0.4+101.0.LTS
+          distribution: temurin
+          cache: maven
+      - name: 8.8.32 to 8.8.33 names the enum it added
+        run: |
+          set -euo pipefail
+          status=0
+          report="$(bin/client-api-changes.sh io.camunda:camunda-client-java 8.8.32 8.8.33)" || status=$?
+          echo "$report"
+          [ "$status" -eq 1 ] || { echo "a find has to leave exit code 1, got ${status}" >&2; exit 1; }
+          echo "$report" | grep -q 'ProcessDefinitionState\.DELETED'
+          echo "$report" | grep -q 'ProcessDefinition: .*getState()'
+      - name: 8.8.3 to 8.8.4 names the literal it added
+        run: |
+          set -euo pipefail
+          status=0
+          report="$(bin/client-api-changes.sh io.camunda:camunda-client-java 8.8.3 8.8.4)" || status=$?
+          echo "$report"
+          [ "$status" -eq 1 ] || { echo "a find has to leave exit code 1, got ${status}" >&2; exit 1; }
+          echo "$report" | grep -q 'BatchOperationState\.FAILED'
+      - name: 8.9.18 to 8.9.19 added neither and says so
+        # the other half of the check: one which always reports something would stop a
+        # patch automerge forever and teach everybody to ignore it
+        run: bin/client-api-changes.sh io.camunda:camunda-client-java 8.9.18 8.9.19
+      # What a find turns into is the second decision of that check, and it went untested
+      # until it broke. An alpha bump is a note, the same bump on a GA line is a red check,
+      # and bin/line-preview.sh is what tells the two apart. That used to be a Maven call.
+      # No pull request here had moved a pin since the check was written, so it never ran,
+      # and in the cockpit adapter it could not work at all: that job has no token for the
+      # snapshot BOM the POM there imports. The branch is held against POMs written in this
+      # step, not against whatever the release lines are this month.
+      - name: A preview line and a GA line are told apart
+        run: |
+          set -euo pipefail
+          fixture="${RUNNER_TEMP}/lines"
+          mkdir -p "$fixture"
+          # the shape of a real parent POM: several lines, one of them with a build block
+          # of its own, so the end of a profile is where the reading stops
+          cat > "$fixture/pom.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile>
+                <id>line-8.8</id>
+                <properties>
+                  <camunda8.line>8.8</camunda8.line>
+                </properties>
+              </profile>
+              <profile>
+                <id>line-8.9</id>
+                <properties>
+                  <camunda8.line>8.9</camunda8.line>
+                </properties>
+              </profile>
+              <profile>
+                <id>line-8.10</id>
+                <properties>
+                  <camunda8.line>8.10</camunda8.line>
+                  <camunda8.line.preview>true</camunda8.line.preview>
+                </properties>
+                <build>
+                  <pluginManagement>
+                    <plugins>
+                      <plugin>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                      </plugin>
+                    </plugins>
+                  </pluginManagement>
+                </build>
+              </profile>
+            </profiles>
+          </project>
+          POM
+          cat > "$fixture/broken.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile>
+                <id>line-8.9</id>
+                <properties>
+                  <camunda8.line.preview>maybe</camunda8.line.preview>
+                </properties>
+              </profile>
+            </profiles>
+          </project>
+          POM
+          # a profile written on one line, with the preview line right after it. A reading
+          # which looks for the end of a profile in the lines BELOW its id runs into the
+          # next profile here and answers 'true' for the GA line, without a word. That was
+          # the state until this fixture was written.
+          cat > "$fixture/oneline.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile><id>line-8.9</id><properties><camunda8.line>8.9</camunda8.line></properties></profile>
+              <profile><id>line-8.10</id><properties><camunda8.line.preview>true</camunda8.line.preview></properties></profile>
+            </profiles>
+          </project>
+          POM
+          # a POM which defines no line at all: whoever calls this has the wrong POM, and
+          # picking an answer for them is the one thing the script may not do
+          cat > "$fixture/nolines.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile>
+                <id>release</id>
+              </profile>
+            </profiles>
+          </project>
+          POM
+          # two profiles claiming the same line: which of them decides is not this
+          # script's to pick either
+          cat > "$fixture/twice.xml" <<'POM'
+          <project>
+            <profiles>
+              <profile><id>line-8.9</id><properties><camunda8.line.preview>true</camunda8.line.preview></properties></profile>
+              <profile><id>line-8.9</id><properties></properties></profile>
+            </profiles>
+          </project>
+          POM
+          says() {
+            got="$(bin/line-preview.sh "$1" "$2")"
+            [ "$got" = "$3" ] || {
+              echo "line $1 of $2 should read $3 and read ${got}" >&2
+              exit 1
+            }
+          }
+          says 8.10 "$fixture/pom.xml" true
+          says 8.9 "$fixture/pom.xml" false
+          says 8.8 "$fixture/pom.xml" false
+          says 8.9 "$fixture/oneline.xml" false
+          says 8.10 "$fixture/oneline.xml" true
+          refuses() {
+            status=0
+            bin/line-preview.sh "$1" "$2" || status=$?
+            [ "$status" -eq 2 ] || {
+              echo "line $1 of $2 cannot be read and has to say so, exit code was ${status}" >&2
+              exit 1
+            }
+          }
+          echo "The five readings below have to fail. Their messages are the point:"
+          refuses 8.11 "$fixture/pom.xml"
+          refuses 8.9 "$fixture/broken.xml"
+          refuses 8.9 "$fixture/gone.xml"
+          refuses 8.9 "$fixture/nolines.xml"
+          refuses 8.9 "$fixture/twice.xml"
+      - name: Every line of this POM is readable
+        # the fixtures say the reading works, this says the POM is still written the way
+        # the reading expects, whatever the lines are called today
+        run: |
+          set -euo pipefail
+          previews=0
+          for line in $(sed -n 's|.*<id>line-\([0-9][^<]*\)</id>.*|\1|p' pom.xml); do
+            answer="$(bin/line-preview.sh "$line")"
+            echo "line ${line}: preview ${answer}"
+            [ "$answer" != "true" ] || previews=$((previews + 1))
+          done
+          [ "$previews" -le 1 ] || {
+            echo "${previews} lines call themselves the preview line, which is one too many" >&2
+            exit 1
+          }
+
+  # The Renovate configuration is not read, it is run: the validator on the repository
+  # configuration and on the shareable preset, and two checks which ask Renovate's own code
+  # what the configuration does. One of them proves that a consumer of one line is never
+  # offered another one. The other says which proposed update merges itself here.
+  renovate-configuration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install Renovate
+        # The version is named rather than left open, because this step installs whatever
+        # the registry calls newest and that is not always installable: 44.131.1 and
+        # 44.131.2 both ended with npm exit code 1 on 2026-10-02, measured here and in
+        # this container, while 44.131.0 installs. An open version turns this check red on
+        # every branch for something nobody in this repository changed. Renovate raises
+        # the number here like any other dependency, and story 858 is the fuller answer:
+        # the two scripts below also import internal paths of this package.
+        run: npm install --no-save --no-audit --no-fund renovate@44.131.0
+      - name: Validate renovate.json
+        run: npx --no-install renovate-config-validator --strict
+      - name: Validate the shareable preset
+        # the validator decides by file name what it is looking at, so the preset is
+        # checked as what a downstream repository will read it as
+        run: |
+          mkdir -p target/preset
+          cp renovate/camunda8-lines.json target/preset/renovate.json
+          (cd target/preset && npx --no-install renovate-config-validator --strict)
+      - name: A consumer of one line is never offered another
+        run: node renovate/verify-line-gating.js
+      - name: A pin on a pre-release does not move itself
+        run: node renovate/verify-pin-automerge.js
+
+  # Every pull request builds every line, so this job gates nothing any more. It stays
+  # because a moved pin is worth a sentence in the run: a client patch which merges itself
+  # looks like every other pull request, and this says which one it was. See decision 42 in
+  # the repository's DECISIONS.md.
+  #
+  # Only the ADDED and REMOVED lines carry that answer. A diff carries three lines of
+  # context around every hunk, so reading the whole diff called every change near a pin a
+  # pin move. The +++/--- file headers never carry the pattern, so the anchor is enough.
+  pin-change:
+    runs-on: ubuntu-latest
+    outputs:
+      pins: "${{ steps.diff.outputs.pins }}"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        name: Does this pull request move a client pin
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "pins=true" >> "$GITHUB_OUTPUT"
+            echo "A run started by hand has no base branch and therefore no diff to read,"
+            echo "so it builds every line instead of guessing that no pin moved."
+            exit 0
+          fi
+          git diff "origin/${{ github.base_ref }}...HEAD" -- pom.xml \
+            > "${RUNNER_TEMP}/pin.diff"
+          # the diff is a file and not a pipe on purpose: a failed 'git diff' has to fail
+          # this step, and in a pipe its exit code is lost behind the one of grep. It was
+          # a pipe, and then a diff which could not be read answered 'no pin moved', which
+          # is the answer that skips the matrix
+          if grep -q '^[+-].*camunda8\.version\.line-' "${RUNNER_TEMP}/pin.diff"; then
+            echo "pins=true" >> "$GITHUB_OUTPUT"
+            echo "A client pin moves, so every line is built."
+          else
+            echo "pins=false" >> "$GITHUB_OUTPUT"
+            echo "No client pin moves, so the nightly matrix keeps the other lines."
+          fi
+
+  # A pull request used to build the current GA line alone and leave the rest to the night.
+  # The night then found what the pull request had not, and the same commit was green in the
+  # morning of one day and red in the night of the same. The matrix now runs here for every
+  # pull request. It costs about forty minutes instead of about twenty, and it costs that
+  # once per wave of stories rather than once per story. See decision 42 in the repository's
+  # DECISIONS.md.
+  lines:
+    needs: orphaned-javadoc-check
+    uses: ./.github/workflows/line-matrix.yaml
+    secrets: inherit
+
+  # One name for branch protection to require. The name is older than the rule above: it was
+  # given while a moved pin was what bought the matrix. It stays, because branch protection
+  # stores the name, and a renamed check is one nobody requires any more.
+  #
+  # It reads the GA lines of the matrix and not the matrix as a whole. The preview line
+  # builds there like every other line and its job is on this pull request to read, but
+  # it does not decide this check: that line is built against an alpha which is rewritten
+  # under us, and a defect of the alpha may cost a night, it may not cost a pull request.
+  # It gets an issue of its own instead, written by the job below, the night opens one for
+  # 'main', and a release still waits for every line, which is decision 31 in the
+  # repository's DECISIONS.md.
+  line-pins-verified:
+    if: always()
+    needs: lines
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every GA line built
+        env:
+          BROKEN: "${{ needs.lines.outputs.broken-ga-lines }}"
+        run: |
+          echo "lines: ${{ needs.lines.result }}"
+          case "$BROKEN" in
+            none)
+              echo "Every GA line built." ;;
+            "")
+              echo "The matrix did not get far enough to say which lines built, so this" >&2
+              echo "pull request has no answer at all. Read the jobs above: a check in" >&2
+              echo "front of the matrix may have stopped it before it started." >&2
+              exit 1 ;;
+            *)
+              echo "These lines did not build: ${BROKEN}" >&2
+              exit 1 ;;
+          esac
+
+  # A preview line which breaks here does not stop this pull request, and it does not pass
+  # unnoticed either. This job opens an issue for it. The head of preview-line-issue.yaml
+  # says why that issue is written for a pull request, and why it cannot be written inside
+  # the matrix.
+  #
+  # 'issues: write' is granted here and nowhere else in this file. The matrix above is
+  # called by the release gate too, and a called workflow may not ask for more than its
+  # caller was granted, so the permission has to sit on the caller.
+  preview-line-issue:
+    if: always()
+    needs: lines
+    permissions:
+      contents: read
+      # the jobs of this run, which is where the lines of the matrix report
+      actions: read
+      issues: write
+    uses: ./.github/workflows/preview-line-issue.yaml

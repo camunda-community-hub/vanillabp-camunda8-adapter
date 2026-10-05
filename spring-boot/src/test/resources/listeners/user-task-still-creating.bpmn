@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_UserTaskStillCreating"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="UserTaskStillCreatingProcess" isExecutable="true">
+    <bpmn:startEvent id="StillCreating_Start">
+      <bpmn:outgoing>StillCreating_ToTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="StillCreating_ToTask" sourceRef="StillCreating_Start" targetRef="StillCreating_Task" />
+
+    <!-- The element template is how a model says that this element belongs to somebody else,
+         and it is what lets this process deploy: a @WorkflowService class of the test claims
+         it, and the deployment refuses a claimed process whose listener no method names. -->
+    <bpmn:userTask id="StillCreating_Task" name="the user task the cluster never finishes creating on its own"
+                   zeebe:modelerTemplate="io.vanillabp.test:aUserTaskNobodyFinishesCreating:1">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="theTaskTheClusterIsStillCreating" />
+        <!-- VanillaBP inserts its own 'creating' listener BEFORE this one, so the
+             application is notified while this one keeps the task in state CREATING.
+             No @WorkflowTask method names this job type and no worker of the test
+             subscribes to it, which is what makes the state last as long as the test
+             needs it. -->
+        <zeebe:taskListeners>
+          <zeebe:taskListener eventType="creating" type="aCreatingListenerNobodyServes" />
+        </zeebe:taskListeners>
+      </bpmn:extensionElements>
+      <bpmn:incoming>StillCreating_ToTask</bpmn:incoming>
+      <bpmn:outgoing>StillCreating_ToAfter</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="StillCreating_ToAfter" sourceRef="StillCreating_Task" targetRef="StillCreating_After" />
+
+    <bpmn:serviceTask id="StillCreating_After" name="the task which only runs once the completion arrived">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="theTaskAfterTheUserTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>StillCreating_ToAfter</bpmn:incoming>
+      <bpmn:outgoing>StillCreating_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="StillCreating_ToEnd" sourceRef="StillCreating_After" targetRef="StillCreating_End" />
+    <bpmn:endEvent id="StillCreating_End">
+      <bpmn:incoming>StillCreating_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

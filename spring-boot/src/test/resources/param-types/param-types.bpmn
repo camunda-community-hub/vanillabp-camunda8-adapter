@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_ParamTypes" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="ParamTypesProcess" isExecutable="true">
+    <bpmn:startEvent id="PT_Start">
+      <bpmn:outgoing>PT_f_start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="PT_f_start" sourceRef="PT_Start" targetRef="PT_Fork" />
+    <bpmn:parallelGateway id="PT_Fork">
+      <bpmn:incoming>PT_f_start</bpmn:incoming>
+      <bpmn:outgoing>totalToDouble_in</bpmn:outgoing>
+      <bpmn:outgoing>totalToBigDecimal_in</bpmn:outgoing>
+      <bpmn:outgoing>totalToInt_in</bpmn:outgoing>
+      <bpmn:outgoing>rateToDouble_in</bpmn:outgoing>
+      <bpmn:outgoing>countToLong_in</bpmn:outgoing>
+      <bpmn:outgoing>countToInt_in</bpmn:outgoing>
+      <bpmn:outgoing>hugeToLong_in</bpmn:outgoing>
+      <bpmn:outgoing>hugeToDouble_in</bpmn:outgoing>
+      <bpmn:outgoing>totalTextToInt_in</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:serviceTask id="totalToDouble">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="totalToDouble" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=total" target="total" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>totalToDouble_in</bpmn:incoming>
+      <bpmn:outgoing>totalToDouble_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="totalToBigDecimal">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="totalToBigDecimal" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=total" target="total" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>totalToBigDecimal_in</bpmn:incoming>
+      <bpmn:outgoing>totalToBigDecimal_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="totalToInt">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="totalToInt" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=total" target="total" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>totalToInt_in</bpmn:incoming>
+      <bpmn:outgoing>totalToInt_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="rateToDouble">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rateToDouble" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=rate" target="rate" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>rateToDouble_in</bpmn:incoming>
+      <bpmn:outgoing>rateToDouble_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="countToLong">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="countToLong" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=count" target="count" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>countToLong_in</bpmn:incoming>
+      <bpmn:outgoing>countToLong_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="countToInt">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="countToInt" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=count" target="count" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>countToInt_in</bpmn:incoming>
+      <bpmn:outgoing>countToInt_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="hugeToLong">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="hugeToLong" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=huge" target="huge" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>hugeToLong_in</bpmn:incoming>
+      <bpmn:outgoing>hugeToLong_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="hugeToDouble">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="hugeToDouble" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=huge" target="huge" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>hugeToDouble_in</bpmn:incoming>
+      <bpmn:outgoing>hugeToDouble_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="totalTextToInt">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="totalTextToInt" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=string(total)" target="totalText" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>totalTextToInt_in</bpmn:incoming>
+      <bpmn:outgoing>totalTextToInt_out</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="totalToDouble_in" sourceRef="PT_Fork" targetRef="totalToDouble" />
+    <bpmn:sequenceFlow id="totalToDouble_out" sourceRef="totalToDouble" targetRef="totalToDouble_end" />
+    <bpmn:endEvent id="totalToDouble_end">
+      <bpmn:incoming>totalToDouble_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="totalToBigDecimal_in" sourceRef="PT_Fork" targetRef="totalToBigDecimal" />
+    <bpmn:sequenceFlow id="totalToBigDecimal_out" sourceRef="totalToBigDecimal" targetRef="totalToBigDecimal_end" />
+    <bpmn:endEvent id="totalToBigDecimal_end">
+      <bpmn:incoming>totalToBigDecimal_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="totalToInt_in" sourceRef="PT_Fork" targetRef="totalToInt" />
+    <bpmn:sequenceFlow id="totalToInt_out" sourceRef="totalToInt" targetRef="totalToInt_end" />
+    <bpmn:endEvent id="totalToInt_end">
+      <bpmn:incoming>totalToInt_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="rateToDouble_in" sourceRef="PT_Fork" targetRef="rateToDouble" />
+    <bpmn:sequenceFlow id="rateToDouble_out" sourceRef="rateToDouble" targetRef="rateToDouble_end" />
+    <bpmn:endEvent id="rateToDouble_end">
+      <bpmn:incoming>rateToDouble_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="countToLong_in" sourceRef="PT_Fork" targetRef="countToLong" />
+    <bpmn:sequenceFlow id="countToLong_out" sourceRef="countToLong" targetRef="countToLong_end" />
+    <bpmn:endEvent id="countToLong_end">
+      <bpmn:incoming>countToLong_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="countToInt_in" sourceRef="PT_Fork" targetRef="countToInt" />
+    <bpmn:sequenceFlow id="countToInt_out" sourceRef="countToInt" targetRef="countToInt_end" />
+    <bpmn:endEvent id="countToInt_end">
+      <bpmn:incoming>countToInt_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="hugeToLong_in" sourceRef="PT_Fork" targetRef="hugeToLong" />
+    <bpmn:sequenceFlow id="hugeToLong_out" sourceRef="hugeToLong" targetRef="hugeToLong_end" />
+    <bpmn:endEvent id="hugeToLong_end">
+      <bpmn:incoming>hugeToLong_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="hugeToDouble_in" sourceRef="PT_Fork" targetRef="hugeToDouble" />
+    <bpmn:sequenceFlow id="hugeToDouble_out" sourceRef="hugeToDouble" targetRef="hugeToDouble_end" />
+    <bpmn:endEvent id="hugeToDouble_end">
+      <bpmn:incoming>hugeToDouble_out</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="totalTextToInt_in" sourceRef="PT_Fork" targetRef="totalTextToInt" />
+    <bpmn:sequenceFlow id="totalTextToInt_out" sourceRef="totalTextToInt" targetRef="totalTextToInt_end" />
+    <bpmn:endEvent id="totalTextToInt_end">
+      <bpmn:incoming>totalTextToInt_out</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

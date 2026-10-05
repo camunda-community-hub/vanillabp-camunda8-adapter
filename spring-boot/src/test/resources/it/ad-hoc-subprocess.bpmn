@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_ad_hoc_subprocess" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!--
+    An ad-hoc subprocess whose activities are chosen while the workflow already runs. The
+    application never names an element of it: it writes the ids it wants onto the workflow
+    aggregate, VanillaBP shares that attribute with the cluster, and the FEEL expression
+    below reads it when the workflow enters the element.
+
+    No completion condition is modelled, so the element is left when everything it
+    activated is done.
+  -->
+  <bpmn:process id="AdHocProcess" isExecutable="true">
+    <bpmn:startEvent id="AdHoc_Start">
+      <bpmn:outgoing>AdHoc_ToChecks</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="AdHoc_ToChecks" sourceRef="AdHoc_Start" targetRef="AdHoc_Checks" />
+    <bpmn:adHocSubProcess id="AdHoc_Checks">
+      <bpmn:extensionElements>
+        <zeebe:adHoc activeElementsCollection="=checksToRun" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>AdHoc_ToChecks</bpmn:incoming>
+      <bpmn:outgoing>AdHoc_ToDone</bpmn:outgoing>
+      <!--
+        Three ordinary service tasks. Each of them needs a @WorkflowTask method like any
+        other task of the process, and the two the aggregate names are the two which run.
+      -->
+      <bpmn:serviceTask id="AdHoc_CheckFraud">
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="checkFraud" />
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="AdHoc_CheckIncome">
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="checkIncome" />
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="AdHoc_CheckCollateral">
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="checkCollateral" />
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+    </bpmn:adHocSubProcess>
+    <bpmn:sequenceFlow id="AdHoc_ToDone" sourceRef="AdHoc_Checks" targetRef="AdHoc_Summarize" />
+    <!-- runs only after the subprocess was left, which is what the test waits for -->
+    <bpmn:serviceTask id="AdHoc_Summarize">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="summarizeChecks" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>AdHoc_ToDone</bpmn:incoming>
+      <bpmn:outgoing>AdHoc_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="AdHoc_ToEnd" sourceRef="AdHoc_Summarize" targetRef="AdHoc_End" />
+    <bpmn:endEvent id="AdHoc_End">
+      <bpmn:incoming>AdHoc_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

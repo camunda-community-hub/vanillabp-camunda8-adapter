@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Version 2: the task 'droppedInVersionTwo' is gone, and the cluster still holds
+     version 1 which has it. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_OldProcessVersionsV2" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="OldProcessVersionsProcess" isExecutable="true">
+    <bpmn:startEvent id="OPV_Start">
+      <bpmn:outgoing>OPV_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="OPV_f1" sourceRef="OPV_Start" targetRef="OPV_Kept" />
+    <bpmn:serviceTask id="OPV_Kept">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="keptInBothVersions" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>OPV_f1</bpmn:incoming>
+      <bpmn:outgoing>OPV_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="OPV_f2" sourceRef="OPV_Kept" targetRef="OPV_End" />
+    <bpmn:endEvent id="OPV_End">
+      <bpmn:incoming>OPV_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

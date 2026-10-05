@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_WorkflowCanceled"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="CancelableProcess" isExecutable="true">
+    <bpmn:startEvent id="CancelableStart">
+      <bpmn:outgoing>Flow_ToAwait</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToAwait" sourceRef="CancelableStart" targetRef="Activity_Await" />
+    <bpmn:serviceTask id="Activity_Await">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="awaitCancelation" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToAwait</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCancelableEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_ToCancelableEnd" sourceRef="Activity_Await" targetRef="Event_CancelableEnd" />
+    <bpmn:endEvent id="Event_CancelableEnd">
+      <bpmn:incoming>Flow_ToCancelableEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

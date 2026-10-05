@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.camunda.community.vanillabp</groupId>
+    <artifactId>camunda8-adapter-parent</artifactId>
+    <version>${revision}</version>
+  </parent>
+
+  <artifactId>camunda8-adapter-published-pom</artifactId>
+  <name>VanillaBP Camunda 8 adapter - Published POM assertions</name>
+  <description>What the POM of a Camunda 8 adapter has to promise an application which resolves it, read back out of the file the build wrote.</description>
+
+  <!-- No dependencies at all: PublishedPom reads a file and throws an AssertionError, and
+       the JDK is enough for both. That is why it is a module of its own. It used to sit in
+       'test-support', which starts containers, so every module wanting this one check got
+       Testcontainers on its test classpath. Nothing asks for both halves: a module needs
+       either a cluster or this. -->
+
+  <!-- The class lives in src/main/java although only a test calls it, for the same reason
+       'test-support' does: a test classpath cannot read another module's test classes. It
+       is published with the adapter's other artifacts and on the same release line, because
+       the promise it reads back out of a published POM is a promise about the client that
+       line pins. Another repository which builds a Camunda 8 adapter takes it from here, and
+       a change to it reaches that repository with the next snapshot of this line. -->
+
+</project>

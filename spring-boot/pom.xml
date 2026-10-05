@@ -4,129 +4,102 @@
 
   <parent>
     <groupId>org.camunda.community.vanillabp</groupId>
-    <artifactId>camunda8-adapter</artifactId>
-    <version>1.10.1-SNAPSHOT</version>
+    <artifactId>camunda8-adapter-parent</artifactId>
+    <version>${revision}</version>
   </parent>
-  
-  <artifactId>camunda8-spring-boot-adapter</artifactId>
-  <name>VanillaBP SPI adapter for Camunda 8.x for Spring Boot</name>
 
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-  </properties>
-
-  <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <configuration>
-            <source>17</source>
-            <target>17</target>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-source-plugin</artifactId>
-      </plugin>
-    </plugins>
-  </build>
+  <artifactId>camunda8-adapter-spring-boot</artifactId>
+  <name>VanillaBP Camunda 8 adapter - Spring Boot</name>
+  <description>Spring Boot auto-configuration of the VanillaBP Camunda 8 adapter</description>
 
   <dependencies>
     <dependency>
+      <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda8-adapter</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+    <dependency>
       <groupId>io.vanillabp</groupId>
-      <artifactId>spring-boot-support</artifactId>
-      <version>1.4.0</version>
+      <artifactId>vanillabp-spring-boot-integration</artifactId>
     </dependency>
+    <!-- optional: this adapter's own meters are published only where the application
+         brings Micrometer (see MicrometerCamunda8Metrics) -->
     <dependency>
-      <groupId>io.camunda</groupId>
-      <!--
-        Deliberately kept on the 8.8 line, and deliberately the -4-starter rather than the default one:
-        in 8.8.x the default starter targets Spring Boot 3 and only camunda-spring-boot-4-starter targets
-        Spring Boot 4. Note the naming is inverted in 8.9.x, where the default starter is the Boot 4 one.
-
-        Why 8.8 and not 8.9: Camunda only guarantees compatibility between a client and a cluster of the
-        same version, and the supported upgrade order is cluster first, then client. A newer client may
-        call APIs an older cluster does not offer yet. Cluster upgrades take time in enterprises, so this
-        adapter must not force one. Upgrading the Camunda line is a separate step, independent of the
-        Spring Boot migration.
-      -->
-      <artifactId>camunda-spring-boot-4-starter</artifactId>
-      <version>8.8.33</version>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-tx</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-orm</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework.data</groupId>
-      <artifactId>spring-data-jpa</artifactId>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>org.springframework.data</groupId>
-      <artifactId>spring-data-mongodb</artifactId>
-      <optional>true</optional>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.springframework.retry</groupId>
-      <artifactId>spring-retry</artifactId>
-      <!--
-        Not managed by the Spring Boot BOM, and there is no Spring 7 release: 2.0.13 is built against
-        spring-context 6.2. Pinned deliberately; see the notes in prompts/T09-*.md.
-      -->
-      <version>2.0.13</version>
-    </dependency>
-    <!--
-      spring-boot-starter-aop no longer exists in Spring Boot 4 - its last release is 3.5.16. It used to
-      aggregate spring-boot-starter, spring-aop and aspectjweaver, so those are declared directly. Both
-      versions come from the BOM.
-    -->
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-aop</artifactId>
+      <!-- the health support the platform's health indicator needs (optional there) -->
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-health</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.aspectj</groupId>
-      <artifactId>aspectjweaver</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>jakarta.persistence</groupId>
-      <artifactId>jakarta.persistence-api</artifactId>
+      <groupId>io.vanillabp</groupId>
+      <artifactId>test-utils</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter-engine</artifactId>
-        <scope>test</scope>
+      <groupId>org.camunda.community.vanillabp</groupId>
+      <artifactId>camunda8-adapter-test-support</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
-  
-  <licenses>
-    <license>
-      <name>Apache License, Version 2.0</name>
-      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-      <distribution>repo</distribution>
-    </license>
-  </licenses>
 
-  <developers>
-    <developer>
-      <id>VanillaBP</id>
-      <organization>Phactum Softwareentwicklung GmbH</organization>
-      <organizationUrl>https://www.phactum.at</organizationUrl>
-    </developer>
-  </developers>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Keeps a consumer of the VanillaBP Camunda 8 adapter inside its release line. Extend it from an application's renovate.json with \"github>camunda-community-hub/vanillabp-camunda8-adapter//renovate/camunda8-lines.json\".",
+  "packageRules": [
+    {
+      "description": "The suffix of an adapter version (2.1.0-8.9) names the Camunda 8 minor the build was compiled against, and that minor is the lowest cluster version the build accepts. Maven sorts 2.2.0-8.8 above 2.1.0-8.9, so plain maven versioning would offer an update which silently raises the cluster requirement. Regex versioning reads the suffix as a compatibility value instead, and Renovate never proposes an update that changes it: moving to another line stays a decision, taken together with the cluster upgrade.",
+      "matchDatasources": ["maven"],
+      "matchPackageNames": [
+        "org.camunda.community.vanillabp:camunda8-adapter",
+        "org.camunda.community.vanillabp:camunda8-adapter-*"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<compatibility>\\d+\\.\\d+)(?:-(?<prerelease>[a-zA-Z]+\\d*))?$"
+    }
+  ]
+}

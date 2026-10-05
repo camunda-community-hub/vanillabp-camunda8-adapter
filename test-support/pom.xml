@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.camunda.community.vanillabp</groupId>
+    <artifactId>camunda8-adapter-parent</artifactId>
+    <version>${revision}</version>
+  </parent>
+
+  <artifactId>camunda8-adapter-test-support</artifactId>
+  <name>VanillaBP Camunda 8 adapter - Test support</name>
+  <description>The Camunda 8 cluster an integration test of this adapter, or of an extension of it, runs against.</description>
+
+  <dependencies>
+    <!-- the only one: these classes start containers and write what the containers
+         printed. No JUnit, no Camunda client, no VanillaBP - what a test does WITH the
+         cluster belongs to the test -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+    </dependency>
+  </dependencies>
+
+  <!-- The classes live in src/main/java although they are only ever used by tests. A test
+       classpath cannot read another module's test classes, and this module exists because
+       four of them were reading a copy of the same two classes instead. It is published
+       with the adapter's other artifacts and on the same release line, because the cluster
+       a test needs follows the client the line pins. Another repository which builds a
+       Camunda 8 adapter takes it from here, and a change to it reaches that repository with
+       the next snapshot of this line.
+
+       What a published POM has to promise is read by 'camunda8-adapter-published-pom',
+       which is a module of its own so that a test asking only that question keeps
+       Testcontainers off its classpath. -->
+
+  <build>
+    <resources>
+      <!-- 'camunda8-cluster.properties' carries the cluster image of the active release
+           line to whoever asks for a cluster, see ClusterUnderTest. Filtered here, once,
+           rather than in every module running integration tests -->
+      <resource>
+        <filtering>false</filtering>
+        <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>camunda8-cluster.properties</exclude>
+        </excludes>
+      </resource>
+      <resource>
+        <filtering>true</filtering>
+        <directory>src/main/resources</directory>
+        <includes>
+          <include>camunda8-cluster.properties</include>
+        </includes>
+      </resource>
+    </resources>
+  </build>
+
+</project>

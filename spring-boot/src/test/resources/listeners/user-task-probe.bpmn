@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_UserTaskProbe"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="UserTaskProbeProcess" isExecutable="true">
+    <bpmn:startEvent id="ProbeStart">
+      <bpmn:outgoing>Probe_ToFork</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Probe_ToFork" sourceRef="ProbeStart" targetRef="Probe_Fork" />
+    <bpmn:parallelGateway id="Probe_Fork">
+      <bpmn:incoming>Probe_ToFork</bpmn:incoming>
+      <bpmn:outgoing>Probe_ToServed</bpmn:outgoing>
+      <bpmn:outgoing>Probe_ToPlain</bpmn:outgoing>
+      <bpmn:outgoing>Probe_ToForeign</bpmn:outgoing>
+      <bpmn:outgoing>Probe_ToAwake</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <bpmn:sequenceFlow id="Probe_ToServed" sourceRef="Probe_Fork" targetRef="Probe_ServedTask" />
+    <bpmn:userTask id="Probe_ServedTask" name="the user task whose updating listener this application serves">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="theServedUserTask" />
+        <zeebe:taskListeners>
+          <zeebe:taskListener eventType="updating" type="watchTheServedUserTask" />
+        </zeebe:taskListeners>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Probe_ToServed</bpmn:incoming>
+      <bpmn:outgoing>Probe_ServedToEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Probe_ServedToEnd" sourceRef="Probe_ServedTask" targetRef="Probe_ServedEnd" />
+    <bpmn:endEvent id="Probe_ServedEnd">
+      <bpmn:incoming>Probe_ServedToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Probe_ToPlain" sourceRef="Probe_Fork" targetRef="Probe_PlainTask" />
+    <bpmn:userTask id="Probe_PlainTask" name="the user task without any listener of its own">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="thePlainUserTask" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Probe_ToPlain</bpmn:incoming>
+      <bpmn:outgoing>Probe_PlainToEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Probe_PlainToEnd" sourceRef="Probe_PlainTask" targetRef="Probe_PlainEnd" />
+    <bpmn:endEvent id="Probe_PlainEnd">
+      <bpmn:incoming>Probe_PlainToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Probe_ToForeign" sourceRef="Probe_Fork" targetRef="Probe_ForeignTask" />
+    <!-- The element template is how a model says that this element belongs to somebody else.
+         Without it the deployment would refuse this process, because a @WorkflowService class
+         of the test claims it and no method of the test names the listener's job type. The
+         template is what lets the model through, and the task listener below then stays
+         somebody else's. -->
+    <bpmn:userTask id="Probe_ForeignTask" name="the user task whose updating listener belongs to somebody else"
+                   zeebe:modelerTemplate="io.vanillabp.test:aUserTaskSomebodyElseListensOn:1">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="theForeignUserTask" />
+        <zeebe:taskListeners>
+          <zeebe:taskListener eventType="updating" type="aWorkerNobodyHereRuns" />
+        </zeebe:taskListeners>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Probe_ToForeign</bpmn:incoming>
+      <bpmn:outgoing>Probe_ForeignToEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Probe_ForeignToEnd" sourceRef="Probe_ForeignTask" targetRef="Probe_ForeignEnd" />
+    <bpmn:endEvent id="Probe_ForeignEnd">
+      <bpmn:incoming>Probe_ForeignToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Probe_ToAwake" sourceRef="Probe_Fork" targetRef="Probe_AwakeTask" />
+    <bpmn:serviceTask id="Probe_AwakeTask" name="the asynchronous task whose redelivery wakes the workflow up">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="keepTheWorkflowAwake" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Probe_ToAwake</bpmn:incoming>
+      <bpmn:outgoing>Probe_AwakeToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Probe_AwakeToEnd" sourceRef="Probe_AwakeTask" targetRef="Probe_AwakeEnd" />
+    <bpmn:endEvent id="Probe_AwakeEnd">
+      <bpmn:incoming>Probe_AwakeToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>
