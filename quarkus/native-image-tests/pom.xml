@@ -17,6 +17,7 @@
     <!-- test-only module: nothing to publish -->
     <maven.install.skip>true</maven.install.skip>
     <maven.deploy.skip>true</maven.deploy.skip>
+    <central.publishing.excluded>${project.artifactId}</central.publishing.excluded>
     <!-- and no documentation either: what is published is what a javadoc is written for,
          and this module publishes nothing. The check stays on in every module which does. -->
     <maven.javadoc.skip>true</maven.javadoc.skip>

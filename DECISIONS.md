@@ -1634,10 +1634,10 @@ every published POM carries its own resolved copy, every artifact prints it.
 
 **Every artifact names the repository root.** Maven hands a child the parent's `url` and all three
 `scm` elements with the child's own name appended, so each artifact advertised an address like
-`https://github.com/vanillabp/camunda8-adapter/camunda8-adapter`, which is no page. The four
-`inherit.append.path` attributes in the parent POM turn the appending off. The same address for
-every artifact is deliberate: a link into a module directory breaks when the module is renamed or
-moved, and a reader who wants the module finds it from the root in one click.
+`https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/camunda8-adapter`, which is
+no page. The four `inherit.append.path` attributes in the parent POM turn the appending off. The
+same address for every artifact is deliberate: a link into a module directory breaks when the
+module is renamed or moved, and a reader who wants the module finds it from the root in one click.
 
 **`distributionManagement` leaves the published POM.** Where we deploy is nothing a user of the
 artifact can use or act on, and on an artifact sitting on Maven Central it would point a reader at

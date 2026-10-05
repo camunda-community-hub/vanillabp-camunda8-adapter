@@ -6,7 +6,7 @@ remote cluster, which is what makes it the adapter with the most rules: work arr
 the cluster learns about an instance eventually, and a call may time out without having failed.
 Business code never sees any of that. What an application writes against is
 [`spi-for-java`](https://github.com/vanillabp/spi-for-java), and everything this adapter does for
-its users is described in the [wiki](https://github.com/vanillabp/camunda8-adapter/wiki).
+its users is described in the [wiki](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki).
 
 Where the rules are: [`README.md`](./README.md) explains how the adapter works and why, and it is
 the first thing to read. [`AGENTS.md`](./AGENTS.md) says how work is done here, in the form an agent

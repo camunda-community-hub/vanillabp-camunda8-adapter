@@ -37,7 +37,7 @@ changes on its own, so no automatic update moves you to another cluster minor:
 
 ```json
 {
-  "extends": ["github>vanillabp/camunda8-adapter//renovate/camunda8-lines.json"]
+  "extends": ["github>camunda-community-hub/vanillabp-camunda8-adapter//renovate/camunda8-lines.json"]
 }
 ```
 
@@ -430,8 +430,8 @@ Two listeners of one element under ONE job type end the boot naming both. Versio
 and which one was undefined, so the model said something it could not deliver. Give every listener of an
 element a job type of its own and write a method per job type.
 
-The [README section](https://github.com/vanillabp/camunda8-adapter/blob/main/README.md#listeners-somebody-modelled)
-and the [BPMN model](https://github.com/vanillabp/camunda8-adapter/wiki/Configuration#the-bpmn-model-for-camunda-8)
+The [README section](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/blob/main/README.md#listeners-somebody-modelled)
+and the [BPMN model](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#the-bpmn-model-for-camunda-8)
 section of the wiki carry the details.
 
 ### A handler asking for an item the model hands none over for ends the boot

@@ -40,7 +40,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8PublishedPomTest {
 
   /** The one address every artifact of this repository names, whichever module it is. */
-  private static final String REPOSITORY = "https://github.com/vanillabp/camunda8-adapter";
+  private static final String REPOSITORY = "https://github.com/camunda-community-hub/vanillabp-camunda8-adapter";
 
   @Test
   @DisplayName("the published POM asks for the client of this release line")

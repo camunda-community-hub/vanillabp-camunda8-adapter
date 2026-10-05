@@ -23,15 +23,15 @@
   <!-- Every artifact of this repository points at the repository itself. A child
        inherits this address and the three <scm> ones with its own name appended unless it
        is told not to, so the artifact 'camunda8-adapter' advertised
-       'https://github.com/vanillabp/camunda8-adapter/camunda8-adapter', which is no page.
-       Nobody saw it while the values lived in the parent alone, and since the flatten mode
-       is 'oss' every published POM carries its own resolved copy and prints it. The four
-       'inherit.append.path' attributes turn the appending off, one on <project> above for
-       the URL and three on <scm> below. The repository root is the same value for every
-       artifact, it survives a module being renamed or moved, and a reader who wants the
-       module is one click away from it. Camunda8PublishedPomTest reads the addresses back
-       out of the published POM. -->
-  <url>https://github.com/vanillabp/camunda8-adapter</url>
+       'https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/camunda8-adapter',
+       which is no page. Nobody saw it while the values lived in the parent alone, and since
+       the flatten mode is 'oss' every published POM carries its own resolved copy and
+       prints it. The four 'inherit.append.path' attributes turn the appending off, one on
+       <project> above for the URL and three on <scm> below. The repository root is the
+       same value for every artifact, it survives a module being renamed or moved, and a
+       reader who wants the module is one click away from it. Camunda8PublishedPomTest
+       reads the addresses back out of the published POM. -->
+  <url>https://github.com/camunda-community-hub/vanillabp-camunda8-adapter</url>
 
   <licenses>
     <license>
@@ -64,9 +64,9 @@
   </modules>
 
   <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
-    <connection>scm:git:https://github.com/vanillabp/camunda8-adapter.git</connection>
-    <developerConnection>scm:git:https://github.com/vanillabp/camunda8-adapter.git</developerConnection>
-    <url>https://github.com/vanillabp/camunda8-adapter/tree/main</url>
+    <connection>scm:git:https://github.com/camunda-community-hub/vanillabp-camunda8-adapter.git</connection>
+    <developerConnection>scm:git:https://github.com/camunda-community-hub/vanillabp-camunda8-adapter.git</developerConnection>
+    <url>https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/tree/main</url>
   </scm>
 
   <!-- Where we deploy, which is our business and not a user's: the flatten plugin takes
@@ -76,7 +76,7 @@
     <snapshotRepository>
       <id>github</id>
       <name>Github Packages</name>
-      <url>https://maven.pkg.github.com/vanillabp/camunda8-adapter</url>
+      <url>https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter</url>
     </snapshotRepository>
   </distributionManagement>
 
@@ -85,6 +85,9 @@
     <!-- our snapshots go out through a plain 'mvn deploy', see the deploy plugin below.
          A module which is not published sets this to true in its own properties. -->
     <maven.deploy.skip>false</maven.deploy.skip>
+    <!-- The release to Maven Central does not read 'maven.deploy.skip'. A module which is not
+         published names itself here as well, see central-publishing-maven-plugin below. -->
+    <central.publishing.excluded>none</central.publishing.excluded>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <version.java>21</version.java>
     <jacoco.version>0.8.15</jacoco.version>
@@ -302,6 +305,24 @@
                  main sources. The property cannot be left alone either, because the parent
                  writes its 'true' as configuration and beats the property the same way. -->
             <skip>${maven.deploy.skip}</skip>
+          </configuration>
+        </plugin>
+        <plugin>
+          <!-- What the profile 'central-sonatype-publish' of the hub parent runs in the deploy
+               phase instead of the deploy plugin. It gathers every module of the reactor into
+               one bundle for the Central Portal and does not read 'maven.deploy.skip', so
+               without this the test modules and the coverage reports would be published as
+               well. Measured on 2026-10-05 with '-Dskip.central.release=true', which builds the
+               bundle and uploads nothing: 15 modules in the bundle, 8 of them test modules or
+               reports. A version on Central cannot be taken back, so the module set has to be
+               right before the first release. A module which is not published sets
+               'central.publishing.excluded' to its own artifactId. -->
+          <groupId>org.sonatype.central</groupId>
+          <artifactId>central-publishing-maven-plugin</artifactId>
+          <configuration>
+            <excludeArtifacts>
+              <excludeArtifact>${central.publishing.excluded}</excludeArtifact>
+            </excludeArtifacts>
           </configuration>
         </plugin>
         <plugin>

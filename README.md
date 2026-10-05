@@ -2,6 +2,8 @@
 
 # VanillaBP adapter for Camunda 8
 
+[![](https://img.shields.io/badge/Community%20Extension-An%20open%20source%20community%20maintained%20project-FF4700)](https://github.com/camunda-community-hub/community)
+![Compatible with: Camunda Platform 8](https://img.shields.io/badge/Compatible%20with-Camunda%20Platform%208-0072Ce)
 [![](https://img.shields.io/badge/Lifecycle-Incubating-blue)](https://github.com/Camunda-Community-Hub/community/blob/main/extension-lifecycle.md#incubating-)
 [![Apache License V.2](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
@@ -33,8 +35,8 @@ offers a command for) is documented as such rather than guessed.
 
 This adapter runs on both platforms VanillaBP supports:
 
-1. **Spring Boot**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda8-adapter%2Fspring-boot-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda8-adapter/spring-boot-report)
-2. **Quarkus**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fvanillabp.github.io%2Fcamunda8-adapter%2Fquarkus-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://vanillabp.github.io/camunda8-adapter/quarkus-report)
+1. **Spring Boot**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fcamunda-community-hub.github.io%2Fvanillabp-camunda8-adapter%2Fspring-boot-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://camunda-community-hub.github.io/vanillabp-camunda8-adapter/spring-boot-report)
+2. **Quarkus**<br>[![Coverage](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fcamunda-community-hub.github.io%2Fvanillabp-camunda8-adapter%2Fquarkus-report%2Findex.html&search=Total.*%3F.([0-9]%2B)[^0-9]*%3F%25&replace=%241%25&flags=m&label=Coverage&color=green&cacheSeconds=60)](https://camunda-community-hub.github.io/vanillabp-camunda8-adapter/quarkus-report)
 
 Coverage is measured separately per platform - a platform's tests never cover the other
 platform's code. Click a badge to open the respective report.
@@ -213,7 +215,7 @@ here to inherit that in your own application:
 
 ```json
 {
-  "extends": ["github>vanillabp/camunda8-adapter//renovate/camunda8-lines.json"]
+  "extends": ["github>camunda-community-hub/vanillabp-camunda8-adapter//renovate/camunda8-lines.json"]
 }
 ```
 
@@ -490,6 +492,25 @@ A release of one line consists of:
    stand on the same footing: `renovate/verify-pin-automerge.js` lays them over an update
    with Renovate's own rule engine, and which updates Renovate finds is what the dry run
    would add.
+
+Every push to `main` publishes a snapshot of the current GA line to the GitHub Packages registry of
+this repository, `https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter`.
+A snapshot carries no line in its version, so `2.0.0-SNAPSHOT` is the line a build without a
+profile builds.
+
+A release starts the way it does for every Camunda Community Hub extension: publish a GitHub
+Release and let GitHub create the tag, for example `2.0.0`. The tag names the release and has no
+line in it. The workflow `.github/workflows/deploy.yaml` then runs the line matrix as its first job,
+as point 2 above asks. Once every line is green, it publishes one line after the other with the
+line appended to the tag, `2.0.0-8.8`, `2.0.0-8.9` and `2.0.0-8.10`. Each line goes to the
+repositories `community-hub-release-parent` names, Camunda's Artifactory first and Maven Central
+second, signed and with sources and javadoc through the parent's release profiles. A red line stops the release before anything is published, and the job `gate` names the
+line. The hub's own release action is not used here, because it writes the tag into the POM as the
+one version and commits a next development version afterwards, and neither fits a release of
+several lines. Started by hand, the same workflow is a rehearsal: it runs the gate and the same
+Maven calls with the signing, uploads nothing, and keeps what it staged as an artifact of the run.
+Version 1 is maintained on the branch `maintenance/1.x` and releases from there with the hub's
+action.
 
 Rotating the lines when a minor goes GA touches four places: the `line-*` profiles and the
 pin properties of the parent POM, the boundary rule of `renovate.json`, the table above,

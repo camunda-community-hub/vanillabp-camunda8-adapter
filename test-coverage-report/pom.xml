@@ -20,6 +20,11 @@
     <module>coverage-gate</module>
   </modules>
 
+  <properties>
+    <!-- nothing to publish to Maven Central either, here and in the three modules below -->
+    <central.publishing.excluded>${project.artifactId}</central.publishing.excluded>
+  </properties>
+
   <build>
     <plugins>
       <plugin>

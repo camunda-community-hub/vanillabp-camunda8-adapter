@@ -74,7 +74,7 @@ jobs:
         if: hashFiles('bin/client-api-changes.sh') == ''
         uses: actions/checkout@v7
         with:
-          repository: vanillabp/camunda8-adapter
+          repository: camunda-community-hub/vanillabp-camunda8-adapter
           path: .camunda8-adapter
       - uses: actions/setup-java@v6
         with:

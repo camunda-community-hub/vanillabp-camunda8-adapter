@@ -93,7 +93,7 @@ if [ -z "$block" ]; then
   echo "${pom} has no profile 'line-${line}'. The lines it defines are:" >&2
   sed -n 's|.*<id>line-\([0-9][^<]*\)</id>.*|  \1|p' "$pom" >&2
   echo "A line without a profile cannot be told apart from the preview line. The lines" >&2
-  echo "are defined in vanillabp/camunda8-adapter, so add it there first." >&2
+  echo "are defined in camunda-community-hub/vanillabp-camunda8-adapter, so add it there first." >&2
   exit 2
 fi
 

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  What deploy.yaml gives Maven when it releases. It is passed with '-s', so it replaces the
+  settings.xml which actions/setup-java writes, and everything a release needs has to be in
+  here.
+
+  The servers 'camunda-nexus' and 'central' are the ids community-hub-release-parent
+  deploys to: its distributionManagement names Camunda's Artifactory as 'camunda-nexus', and
+  its profile 'central-sonatype-publish' names the Central Portal as 'central'.
+  'gpg.passphrase' is where the GPG plugin of that parent reads the passphrase of the
+  signing key. The hub's own release action
+  carries the same three servers in its own settings.xml. This repository does not use that
+  action, see the header of deploy.yaml, so it carries them here. The credentials are org
+  secrets of the Camunda Community Hub and reach this file as environment variables.
+
+  The repositories are the ones of github-packages-settings.xml. A rehearsal builds a
+  commit which still depends on VanillaBP snapshots, and those live in GitHub Packages
+  until 2.0.0 is released.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+    <activeProfiles>
+        <activeProfile>github</activeProfile>
+    </activeProfiles>
+    <profiles>
+        <profile>
+            <id>github</id>
+            <repositories>
+                <repository>
+                    <id>central</id>
+                    <url>https://repo1.maven.org/maven2</url>
+                    <snapshots>
+                        <enabled>false</enabled>
+                    </snapshots>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                </repository>
+                <repository>
+                    <id>vanillabp-adapter-platform-integration</id>
+                    <url>https://maven.pkg.github.com/vanillabp/adapter-platform-integration</url>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                    <releases>
+                        <enabled>false</enabled>
+                    </releases>
+                </repository>
+                <repository>
+                    <id>vanillabp-spi-for-java</id>
+                    <url>https://maven.pkg.github.com/vanillabp/spi-for-java</url>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                    <releases>
+                        <enabled>false</enabled>
+                    </releases>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
+
+    <servers>
+        <!-- Camunda's Artifactory, the distributionManagement of the parent -->
+        <server>
+            <id>camunda-nexus</id>
+            <username>${env.NEXUS_USR}</username>
+            <password>${env.NEXUS_PSW}</password>
+        </server>
+        <!-- the Central Portal, profile 'central-sonatype-publish' -->
+        <server>
+            <id>central</id>
+            <username>${env.CENTRAL_USR}</username>
+            <password>${env.CENTRAL_PSW}</password>
+        </server>
+        <!-- the passphrase of the signing key, profile 'community-action-maven-release' -->
+        <server>
+            <id>gpg.passphrase</id>
+            <passphrase>${env.MAVEN_GPG_PASSPHRASE}</passphrase>
+        </server>
+        <!-- reading the VanillaBP snapshots, see github-packages-settings.xml -->
+        <server>
+            <id>vanillabp-adapter-platform-integration</id>
+            <username>${env.USER_NAME}</username>
+            <password>${env.USER_TOKEN}</password>
+        </server>
+        <server>
+            <id>vanillabp-spi-for-java</id>
+            <username>${env.USER_NAME}</username>
+            <password>${env.USER_TOKEN}</password>
+        </server>
+    </servers>
+
+</settings>
