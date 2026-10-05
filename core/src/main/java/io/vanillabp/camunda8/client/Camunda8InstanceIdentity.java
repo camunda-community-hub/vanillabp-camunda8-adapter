@@ -101,8 +101,8 @@ public final class Camunda8InstanceIdentity {
           configuration.getRegion());
     }
     return "self-managed cluster (rest-address '%s', grpc-address '%s')".formatted(
-        configuration.getRestAddress(),
-        configuration.getGrpcAddress());
+        configuration.restAddressInUse(),
+        configuration.grpcAddressInUse());
 
   }
 
@@ -124,8 +124,8 @@ public final class Camunda8InstanceIdentity {
     // legitimate setup the SaaS client id already stood for
     return "self-managed cluster (rest-address '%s', grpc-address '%s'), tenant '%s', authenticated as '%s'"
         .formatted(
-            configuration.getRestAddress(),
-            configuration.getGrpcAddress(),
+            configuration.restAddressInUse(),
+            configuration.grpcAddressInUse(),
             configuration.getTenantId(),
             configuration.getAuth().principal(configuration));
 

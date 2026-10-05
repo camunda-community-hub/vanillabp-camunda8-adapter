@@ -101,11 +101,13 @@ public class Camunda8ProcessServiceTest {
   }
 
   @Test
-  @DisplayName("phase one fails naming the missing property if the adapter is not configured")
+  @DisplayName("phase one fails naming the missing property if the SaaS adapter is not configured")
   public void phaseOneFailsIfNotConfigured() {
 
+    final var configuration = new Camunda8AdapterConfiguration();
+    configuration.setMode(Camunda8AdapterConfiguration.Mode.SAAS);
     final var service = new Camunda8ProcessService<Aggregate>(
-        "c8", new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration()), Duration
+        "c8", new Camunda8ClientFactory("c8", configuration), Duration
             .ofDays(14), (
                 aggregateClass,
                 check) -> check.run(), null);
@@ -114,7 +116,7 @@ public class Camunda8ProcessServiceTest {
         IllegalStateException.class,
         () -> PhaseOperations.phaseOne(service, PhaseOperation.START_WORKFLOW, "module",
             "Process", persistence("agg-1"), new Aggregate("agg-1"), Map.of()));
-    assertTrue(exception.getMessage().contains("vanillabp.adapters.c8.rest-address"));
+    assertTrue(exception.getMessage().contains("vanillabp.adapters.c8.cluster-id"));
 
   }
 

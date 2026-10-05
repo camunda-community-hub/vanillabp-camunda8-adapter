@@ -19,8 +19,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Boot tests of the Camunda 8 startup validation: configuration is
  * validated AT STARTUP, never first at runtime.
  * <ul>
- *   <li>entirely unconfigured connection → the application BOOTS and a guiding WARN
- *       names the exact property keys to add;</li>
+ *   <li>no cluster address → the application BOOTS with a client for the client's
+ *       default address, which is the local cluster, and a WARN names that address and
+ *       the key which changes it;</li>
  *   <li>inconsistent connection config of a first-priority adapter → the boot FAILS
  *       naming the missing keys;</li>
  *   <li>inconsistent config of a nowhere-first adapter with policy 'warn' → the
@@ -53,8 +54,10 @@ public class Camunda8StartupValidationBootTest {
 
   }
 
+  private static final String NO_ADDRESS = "Camunda 8 adapter 'c8' has no cluster address, so it connects to the local cluster at";
+
   @Test
-  public void unconfiguredAdapterBootsWithGuidingWarning(
+  public void anAdapterWithoutAnAddressBootsAndUsesTheLocalCluster(
       final CapturedOutput output) {
 
     final var before = output.getAll().length();
@@ -62,15 +65,24 @@ public class Camunda8StartupValidationBootTest {
     // application.yaml configures adapter 'c8' WITHOUT any connection property
     try (var context = run()) {
       Assertions.assertTrue(context.isActive());
+      final var client = context
+          .getBean(Camunda8ClientFactoryRegistry.class)
+          .getFactory("c8")
+          .getClient();
+      Assertions.assertEquals(
+          "http://0.0.0.0:8080",
+          client.getConfiguration().getRestAddress().toString(),
+          "the client talks to the address the warning names");
     }
 
     final var log = output.getAll().substring(before);
     Assertions.assertTrue(
-        log.contains("Camunda 8 adapter 'c8' has no connection configuration yet"),
-        "expected the guiding warning but got: "
+        log.contains(NO_ADDRESS
+            + " 'http://0.0.0.0:8080'"),
+        "expected the warning naming the local cluster but got: "
             + log);
+    Assertions.assertTrue(log.contains("Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster"), log);
     Assertions.assertTrue(log.contains("vanillabp.adapters.c8.mode"));
-    Assertions.assertTrue(log.contains("vanillabp.adapters.c8.rest-address"));
     Assertions.assertTrue(log.contains("vanillabp.adapters.c8.client-secret"));
 
   }
@@ -144,7 +156,7 @@ public class Camunda8StartupValidationBootTest {
 
     final var log = output.getAll().substring(before);
     Assertions.assertFalse(
-        log.contains("no connection configuration yet"),
+        log.contains("has no cluster address, so it connects to the local cluster at"),
         "no warning expected for a fully configured adapter but got: "
             + log);
     Assertions.assertFalse(

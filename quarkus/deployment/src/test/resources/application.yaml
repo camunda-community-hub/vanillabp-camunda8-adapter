@@ -2,6 +2,7 @@ vanillabp:
   adapters:
     c8:
       type: camunda8
+      job-lease: use
   prioritized-adapters:
     - c8
   workflow-modules:

@@ -31,8 +31,10 @@ import lombok.extern.slf4j.Slf4j;
  * first command is sent. The factory is closed on {@link #close()} (called on
  * application shutdown by the platform bean lifecycle).
  * <p>
- * An application which configures a Camunda 8 adapter incompletely may still boot
- * (absent configuration, or the degraded 'warn' policy): no client is built then, and
+ * A self-managed adapter without an address gets a client too: the client then uses its
+ * own default address, which is a cluster on this machine. An application whose SaaS
+ * adapter is configured incompletely may still boot under the degraded 'warn' policy: no
+ * client is built then, and
  * {@link #getClient()} fails as a runtime BACKSTOP with a message naming the missing
  * properties (see {@link Camunda8AdapterConfiguration#validate(String)}).
  * <p>
@@ -78,7 +80,7 @@ public class Camunda8ClientFactory implements AutoCloseable {
    * here for the same reason as the record above: the deployment service assembles it,
    * because only it can read its cluster, and the process service's message check
    * reads it. <code>null</code> until the deployment service provided it (tests, and
-   * an adapter which booted unconfigured): the checks reading it then fall back to
+   * an adapter which booted degraded): the checks reading it then fall back to
    * staying silent wherever a model outside the current deployment could carry the
    * answer.
    */
@@ -121,9 +123,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
     // and how it proves who it is - checked here for the same reason: credentials which
     // cannot be built are a boot failure, not a surprise on the first command
     configuration.validateAuthentication(adapterId);
-    // eager: configuration defects surface at startup, not first at runtime; an
-    // incompletely configured adapter (absent / degraded) builds no client and
-    // fails on first use instead (backstop)
+    // eager: configuration defects surface at startup, not first at runtime; a degraded
+    // adapter builds no client and fails on first use instead (backstop)
     if (configuration.missingConnectionProperties().isEmpty()) {
       this.authentication = Camunda8Authentication.of(adapterId, configuration, System::getenv);
       this.client = build();
@@ -160,7 +161,7 @@ public class Camunda8ClientFactory implements AutoCloseable {
    * Waits ONCE for this adapter instance's cluster to answer, before the first round of the
    * start which decides anything is made (see {@link Camunda8ClusterWait}).
    * <p>
-   * An adapter which booted unconfigured or degraded has no client and therefore no cluster
+   * An adapter which booted degraded has no client and therefore no cluster
    * to wait for; the guiding failure of {@link #getClient()} stays the answer there.
    *
    * @throws IllegalStateException If the cluster did not answer within
@@ -197,7 +198,7 @@ public class Camunda8ClientFactory implements AutoCloseable {
               .formatted(adapterId));
     }
     if (client == null) {
-      // backstop for adapters which booted unconfigured/degraded - throws with a
+      // backstop for adapters which booted degraded - throws with a
       // guiding message naming the missing properties
       configuration.validate(adapterId);
     }
@@ -223,7 +224,11 @@ public class Camunda8ClientFactory implements AutoCloseable {
     } else {
       log.info("Building Camunda 8 self-managed client for adapter '{}' (rest-address '{}', grpc-address '{}', "
           + "prefer-rest-over-grpc {}, authentication {})",
-          adapterId, configuration.getRestAddress(), configuration.getGrpcAddress(),
+          adapterId,
+          addressOrClientDefault(configuration.getRestAddress(),
+              Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS),
+          addressOrClientDefault(configuration.getGrpcAddress(),
+              Camunda8AdapterConfiguration.CLIENT_DEFAULT_GRPC_ADDRESS),
           configuration.isPreferRestOverGrpc(), authentication.describe());
       builder = CamundaClient
           .newClientBuilder()
@@ -248,6 +253,21 @@ public class Camunda8ClientFactory implements AutoCloseable {
     reportSizing();
     reportEnvironmentOverrides(built);
     return built;
+
+  }
+
+  /**
+   * What the startup line says about an address: the configured one, or the client's default
+   * marked as such, so the line never shows <code>null</code> where the client talks to a
+   * real address.
+   */
+  private static String addressOrClientDefault(
+      final String configured,
+      final String clientDefault) {
+
+    return hasText(configured)
+        ? configured
+        : "%s (client default)".formatted(clientDefault);
 
   }
 
@@ -687,7 +707,7 @@ public class Camunda8ClientFactory implements AutoCloseable {
    * job timeout raised it for that worker too. Building a second reader of the same keys is
    * how the two start disagreeing.
    * <p>
-   * Before the platform provided one - a unit test, an adapter which booted unconfigured -
+   * Before the platform provided one - a unit test, an adapter which booted degraded -
    * it answers {@link Camunda8JobTimeoutResolver#DEFAULT_JOB_TIMEOUT} for everything.
    */
   private volatile Camunda8JobTimeoutResolver jobTimeoutResolver = (

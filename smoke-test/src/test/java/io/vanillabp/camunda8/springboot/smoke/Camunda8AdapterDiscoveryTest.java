@@ -53,23 +53,26 @@ public class Camunda8AdapterDiscoveryTest {
   }
 
   @Test
-  public void anAdapterWithoutAConnectionIsNotUnhealthy() {
+  public void anAdapterWithoutAnAddressAsksTheLocalCluster() {
 
-    // This application configures the adapter but no cluster to talk to, which
-    // is a legitimate state of a setup in progress. The health endpoint has to say so
-    // instead of reporting an outage on top of the guiding warning the boot already gave
+    // This application configures the adapter but no cluster address, so the client uses
+    // its default address, which is a cluster on this machine. The health check asks that
+    // cluster. No cluster runs there in this test, but one may on a developer's machine,
+    // so the answer is UP or DOWN, and never UNKNOWN
     final var deploymentService = context.getBean(AdapterDeploymentService.class);
     final var health = deploymentService.checkHealth();
 
     Assertions.assertNotNull(health, "an adapter which can check something has to answer");
-    Assertions.assertEquals(
+    Assertions.assertNotEquals(
         AdapterHealth.Status.UNKNOWN,
-        health.status());
-    Assertions.assertEquals("c8", health.adapterId());
-    Assertions.assertTrue(
-        health.description().contains("not configured"),
-        "and it says why: "
+        health.status(),
+        "the adapter asked the cluster: "
             + health.description());
+    Assertions.assertEquals("c8", health.adapterId());
+    Assertions.assertEquals(
+        "http://0.0.0.0:8080",
+        health.details().get("address"),
+        "and it says which cluster it asked");
 
   }
 

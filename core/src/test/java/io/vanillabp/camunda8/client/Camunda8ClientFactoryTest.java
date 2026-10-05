@@ -23,24 +23,35 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Unit tests of {@link Camunda8ClientFactory} / {@link Camunda8AdapterConfiguration}: an
- * application without connection configuration still boots (validation is lazy) and a
- * missing property is reported on first use, naming the exact property. Building the
- * self-managed client does not contact any cluster.
+ * Unit tests of {@link Camunda8ClientFactory} / {@link Camunda8AdapterConfiguration}: a
+ * self-managed adapter without an address gets a client for the client's default address,
+ * and a missing SaaS property is reported on first use, naming the exact property. Building
+ * the self-managed client does not contact any cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ClientFactoryTest {
 
   @Test
-  @DisplayName("self-managed without rest-address fails naming the exact property")
-  public void selfManagedMissingRestAddressNamesProperty() {
+  @DisplayName("self-managed without an address builds a client for the client's default address")
+  public void selfManagedWithoutAnAddressUsesTheClientDefault() {
 
-    final var factory = new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration());
+    try (var factory = new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration())) {
 
-    final var exception = assertThrows(IllegalStateException.class, factory::validateConfigured);
-    assertTrue(exception.getMessage().contains("vanillabp.adapters.c8.rest-address"),
-        "message should name the missing property, but was: "
-            + exception.getMessage());
+      factory.validateConfigured();
+      final var client = factory.getClient();
+      assertEquals(
+          Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS,
+          client.getConfiguration().getRestAddress().toString(),
+          "the adapter leaves the address to the client");
+      assertEquals(
+          "http://0.0.0.0:8080",
+          Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS,
+          "the wiki and the startup message name this address; a client which changes it has to change them too");
+      assertEquals(
+          "http://0.0.0.0:26500",
+          Camunda8AdapterConfiguration.CLIENT_DEFAULT_GRPC_ADDRESS,
+          "the same for gRPC");
+    }
 
   }
 

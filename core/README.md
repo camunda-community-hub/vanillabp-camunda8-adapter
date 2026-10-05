@@ -15,9 +15,13 @@ configuration, create beans, run the bean lifecycle).
 - `Camunda8AdapterConfiguration` - resolved, platform-neutral connection configuration of
   one adapter instance (mode, REST/gRPC address, SaaS credentials, tenant). Populated by
   the platform modules from `vanillabp.adapters.<adapter-id>.*` (see the root `README.md`).
-  Validated lazily; `validate(adapterId)` throws naming the exact missing property.
+  Validated at startup by `Camunda8StartupValidation`; `validate(adapterId)` stays as the
+  backstop before a client is used and throws naming the exact missing property. A
+  self-managed adapter without an address is not missing anything: the client then uses its
+  own default address, a cluster on this machine, and the start warns about it.
 - `Camunda8ClientFactory` - owns the single `CamundaClient` of one adapter instance, built
-  **eagerly at startup** (for completely configured instances) and closed on `close()`. Building never contacts the cluster
+  **eagerly at startup** (for every self-managed instance and every completely configured SaaS
+  instance) and closed on `close()`. Building never contacts the cluster
   (that happens on the first command). `newClientBuilder()` is used for self-managed,
   `newCloudClientBuilder()` for SaaS.
 - `Camunda8ClientFactoryRegistry` - map adapter ID &rarr; factory, registered as a managed
@@ -129,7 +133,7 @@ is deliberately NOT used: it would publish `camunda.job.invocations` and friends
 implements it plus `MeterBinder`, and Micrometer stays optional exactly as in the platform
 integration. The execution slots come from the executor the adapter hands the client, which
 both execution models build, so the three of them say something whichever one is configured.
-An adapter which booted without a connection has no client and therefore no executor; there
+An adapter which booted degraded has no client and therefore no executor; there
 only the configured number is published, the other two being absent instead of guessed.
 
 **Reading a metric must not cost anything.** The platform's rule applies here too: a gauge
@@ -158,9 +162,11 @@ way it is.
   the request, ours stops the waiting; without the first one a cluster which never answers
   would leave the request running long after the endpoint gave up on it.
 
-An adapter whose connection is not configured yet answers UNKNOWN. That is the health side
-of the same rule the startup validation follows: an application which booted with a guiding
-warning has not failed.
+A SaaS adapter whose connection is not configured yet answers UNKNOWN. That is the health side
+of the same rule the startup validation follows: an application which booted degraded on
+purpose has not failed. A self-managed adapter without an address is different. Its client
+talks to the client's default address, so the check asks the cluster there and answers UP or
+DOWN, naming that address.
 
 `MicrometerCamunda8MetricsTest` covers the meters, the gauges and the no-op hook a worker gets
 without a registry, `Camunda8HealthTest` the two timeouts and the UNKNOWN above.
