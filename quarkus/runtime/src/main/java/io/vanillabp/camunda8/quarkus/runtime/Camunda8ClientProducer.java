@@ -85,6 +85,9 @@ public class Camunda8ClientProducer {
               properties.getDeploymentFailureFor(
                   adapterId) == DeploymentFailurePolicy.WARN,
               properties.resolvedDeliveryRetention(),
+              // the warning about the local cluster names the key which moves this
+              // application off the port that cluster takes
+              "quarkus.http.port",
               log::warn,
               log::info);
           // a key at a level which does not resolve it changes nothing and would be

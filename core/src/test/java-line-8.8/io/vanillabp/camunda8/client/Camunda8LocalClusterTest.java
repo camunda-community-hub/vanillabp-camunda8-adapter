@@ -16,7 +16,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * On the 8.8 line an adapter without a cluster address talks to the ports Camunda's docker
  * compose for 8.8 publishes: REST on 8088, gRPC on 26500, both on <code>localhost</code>.
- * The start's warning names the address and says where it comes from.
+ * The start's warning names the address and says where it comes from. Port 8088 is the
+ * default port of neither Spring Boot nor Quarkus, so the warning says nothing about the port
+ * of the application.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8LocalClusterTest {
@@ -24,11 +26,19 @@ public class Camunda8LocalClusterTest {
   private static List<String> warningsOfTheStart(
       final Camunda8AdapterConfiguration configuration) {
 
+    return warningsOfTheStart(configuration, "server.port");
+
+  }
+
+  private static List<String> warningsOfTheStart(
+      final Camunda8AdapterConfiguration configuration,
+      final String applicationPortKey) {
+
     // every line has to know whether the jobs are leased; it is not what this test is about
     configuration.setJobLease(Camunda8AdapterConfiguration.JobLease.DO_NOT_USE);
     final var warnings = new ArrayList<String>();
     Camunda8StartupValidation.validateAtStartup(
-        "c8", configuration, true, false, Duration.ofDays(7), warnings::add, line -> {
+        "c8", configuration, true, false, Duration.ofDays(7), applicationPortKey, warnings::add, line -> {
         });
     return warnings;
 
@@ -82,6 +92,23 @@ public class Camunda8LocalClusterTest {
             .contains("Camunda 8 adapter 'c8' has no cluster address, so it connects to the local cluster at "
                 + "'http://localhost:26500'. This address matches Camunda's docker compose for 8.8. "
                 + "Set 'vanillabp.adapters.c8.grpc-address' to connect to another cluster."),
+        warnings.getFirst());
+
+  }
+
+  @Test
+  @DisplayName("Port 8088 is no default port of the application, so the warning says nothing about it")
+  public void port8088IsNoDefaultPortOfTheApplication() {
+
+    final var warnings = warningsOfTheStart(new Camunda8AdapterConfiguration());
+
+    assertEquals(1, warnings.size(), warnings.toString());
+    // the line about the address is followed by the line about SaaS, with nothing between
+    assertTrue(
+        warnings
+            .getFirst()
+            .contains("Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster.\n"
+                + "For Camunda 8 SaaS"),
         warnings.getFirst());
 
   }

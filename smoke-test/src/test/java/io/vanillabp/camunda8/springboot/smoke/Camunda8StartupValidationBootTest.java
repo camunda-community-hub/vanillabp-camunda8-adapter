@@ -84,6 +84,14 @@ public class Camunda8StartupValidationBootTest {
     Assertions.assertTrue(log.contains("Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster"), log);
     Assertions.assertTrue(log.contains("vanillabp.adapters.c8.mode"));
     Assertions.assertTrue(log.contains("vanillabp.adapters.c8.client-secret"));
+    // where the local cluster of the line takes port 8080, the default port of Spring Boot,
+    // the warning names the key which moves the application. Which lines that are is held
+    // by Camunda8LocalClusterTest of each line
+    Assertions.assertEquals(
+        Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS.endsWith(":8080"),
+        log.contains("so this application needs another port. Set 'server.port' to pick one."),
+        "the warning names the port key of Spring Boot where the line needs it: "
+            + log);
 
   }
 

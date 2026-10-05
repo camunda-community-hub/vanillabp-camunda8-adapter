@@ -82,6 +82,9 @@ public class Camunda8ClientAutoConfiguration {
               coreProperties.getDeploymentFailureFor(
                   adapterId) == DeploymentFailurePolicy.WARN,
               coreProperties.resolvedDeliveryRetention(),
+              // the warning about the local cluster names the key which moves this
+              // application off the port that cluster takes
+              "server.port",
               log::warn,
               log::info);
           // a key at a level which does not resolve it changes nothing and would be

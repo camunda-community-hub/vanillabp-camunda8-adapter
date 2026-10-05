@@ -46,6 +46,10 @@ public final class Camunda8StartupValidation {
    * @param deliveryRetention How long a delivery record is kept
    *          (<code>vanillabp.delivery.retention</code>) - the bound the renewal window of
    *          open asynchronous tasks has to stay below
+   * @param applicationPortKey The key which sets the HTTP port of the application on its
+   *          platform: <code>server.port</code> on Spring Boot,
+   *          <code>quarkus.http.port</code> on Quarkus. The warning about the local cluster
+   *          names it where that cluster takes the default port of both platforms
    * @param warnLogger Sink for guiding warnings (the application keeps booting)
    * @param infoLogger Sink for a line which is not a warning: a configuration which is
    *          right and does something else here than it does on another release line
@@ -59,6 +63,7 @@ public final class Camunda8StartupValidation {
       final boolean firstPriorityAnywhere,
       final boolean deploymentFailureWarn,
       final Duration deliveryRetention,
+      final String applicationPortKey,
       final Consumer<String> warnLogger,
       final Consumer<String> infoLogger) {
 
@@ -101,7 +106,7 @@ public final class Camunda8StartupValidation {
 
     final var missing = configuration.missingConnectionProperties();
     if (missing.isEmpty()) {
-      reportTheLocalClusterAddress(adapterId, configuration, warnLogger);
+      reportTheLocalClusterAddress(adapterId, configuration, applicationPortKey, warnLogger);
       validateJobLease(adapterId, configuration, infoLogger);
       return;
     }
@@ -142,14 +147,22 @@ public final class Camunda8StartupValidation {
    * start says it every time. Why this adapter is then asked for <code>job-lease</code> like
    * any other is decision 67 in the repository's DECISIONS.md, and why the address follows
    * the docker compose of the line is decision 68.
+   * <p>
+   * Where that docker compose takes the default port of Spring Boot and Quarkus for REST, the
+   * warning also names the key which moves the application to another port. Otherwise an
+   * application on that port without a running cluster gets the adapter's requests itself.
+   * The key differs per platform, so the platform passes it in.
    *
    * @param adapterId The adapter ID
    * @param configuration The (bound) connection configuration
+   * @param applicationPortKey The key which sets the HTTP port of the application on its
+   *          platform
    * @param warnLogger Sink for the warning
    */
   static void reportTheLocalClusterAddress(
       final String adapterId,
       final Camunda8AdapterConfiguration configuration,
+      final String applicationPortKey,
       final Consumer<String> warnLogger) {
 
     if (!configuration.usesTheLocalClusterAddress()) {
@@ -158,7 +171,7 @@ public final class Camunda8StartupValidation {
     final var message = new StringBuilder(
         """
             Camunda 8 adapter '%s' has no cluster address, so it connects to the local cluster at '%s'. \
-            %s Set '%s' to connect to another cluster.
+            %s Set '%s' to connect to another cluster.%s
             For Camunda 8 SaaS, set '%s' to 'saas' and add '%s', '%s', '%s' and '%s'.
             If your cluster asks for credentials, configure them under '%s'. Without it the adapter \
             sends none."""
@@ -167,6 +180,7 @@ public final class Camunda8StartupValidation {
                 configuration.describeAddress(),
                 Camunda8LocalCluster.WHERE_THE_ADDRESS_COMES_FROM,
                 Camunda8AdapterConfiguration.propertyKey(adapterId, configuration.addressKeyInUse()),
+                whereTheApplicationRuns(configuration, applicationPortKey),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "mode"),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "cluster-id"),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "region"),
@@ -193,6 +207,25 @@ public final class Camunda8StartupValidation {
                   !configuration.isPreferRestOverGrpc()));
     }
     warnLogger.accept(message.toString());
+
+  }
+
+  /**
+   * The line of the warning which names the key that moves the application to another port,
+   * or nothing. Only REST meets the default port of the platforms, so a client which talks
+   * gRPC hears nothing about it.
+   */
+  private static String whereTheApplicationRuns(
+      final Camunda8AdapterConfiguration configuration,
+      final String applicationPortKey) {
+
+    if (!configuration.isPreferRestOverGrpc()) {
+      return "";
+    }
+    return Camunda8LocalCluster
+        .whereTheApplicationRuns(applicationPortKey)
+        .map("\n%s"::formatted)
+        .orElse("");
 
   }
 

@@ -685,4 +685,4 @@ a WARN which names the address in use.
 
 On 8.9 and 8.10 Camunda's docker compose takes host port 8080, which is also the default port of
 Spring Boot and Quarkus. An application on the same machine then needs another `server.port` or
-`quarkus.http.port`.
+`quarkus.http.port`. The WARN says this too and names the key of the platform.
