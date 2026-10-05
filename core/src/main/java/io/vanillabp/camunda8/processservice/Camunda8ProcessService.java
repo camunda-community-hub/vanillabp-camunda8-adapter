@@ -1683,7 +1683,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     final var modelsTheClusterHolds = clientFactory.getModelsTheClusterHolds();
     if (modelsTheClusterHolds == null) {
       // no deployment service provided the picture (tests, an adapter which booted
-      // unconfigured): the models beyond the current deployment cannot be read, so
+      // degraded): the models beyond the current deployment cannot be read, so
       // a module whose ids were not all deployed is answered with silence
       if (declaresUndeployedIds) {
         return;

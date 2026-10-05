@@ -118,11 +118,15 @@ public class Camunda8JobLeaseTest {
   }
 
   @Test
-  @DisplayName("An adapter nobody configured a cluster for is not asked")
-  public void anUnconfiguredAdapterIsNotAsked() {
+  @DisplayName("An adapter without an address is asked too, because it opens workers on the local cluster")
+  public void anAdapterWithoutAnAddressIsAskedToo() {
 
-    new Camunda8AdapterConfiguration().validateJobLease("c8", line -> {
-    });
+    final var failure = assertThrows(
+        IllegalStateException.class,
+        () -> new Camunda8AdapterConfiguration().validateJobLease("c8", line -> {
+        }));
+
+    assertTrue(failure.getMessage().contains("vanillabp.adapters.c8.job-lease"), failure.getMessage());
 
   }
 

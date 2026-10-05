@@ -557,22 +557,23 @@ its own keys to the shared VanillaBP tree via platform OVERLAYS (Spring Boot: a 
 `@ConfigurationProperties("vanillabp")` class; Quarkus: a second RUN_TIME
 `@ConfigMapping(prefix = "vanillabp")`, which also provides the unknown-key validation
 coverage for these keys). The values are turned into a plain-Java `CamundaClient` built
-EAGERLY at startup for every completely configured adapter instance. The adapter-id
+EAGERLY at startup for every self-managed adapter instance and for every completely configured
+SaaS adapter instance. The adapter-id
 set always comes from the platform's core properties (ids of type `camunda8`); the
 overlay maps are per-known-id lookups only.
 
-|                    Property                     |  Applies to  |                  Required                  |                                  Description                                  |
-|-------------------------------------------------|--------------|--------------------------------------------|-------------------------------------------------------------------------------|
-| `vanillabp.adapters.<id>.mode`                  | both         | no (default `self-managed`)                | `self-managed` or `saas`                                                      |
-| `vanillabp.adapters.<id>.rest-address`          | self-managed | yes (unless `prefer-rest-over-grpc=false`) | REST API address, e.g. `http://localhost:8080`                                |
-| `vanillabp.adapters.<id>.grpc-address`          | self-managed | only if `prefer-rest-over-grpc=false`      | gRPC address, e.g. `http://localhost:26500`                                   |
-| `vanillabp.adapters.<id>.prefer-rest-over-grpc` | self-managed | no (default `true`)                        | use the REST API (recommended) or gRPC                                        |
-| `vanillabp.adapters.<id>.cluster-id`            | saas         | yes                                        | SaaS cluster ID                                                               |
-| `vanillabp.adapters.<id>.region`                | saas         | yes                                        | SaaS region                                                                   |
-| `vanillabp.adapters.<id>.client-id`             | saas         | yes                                        | OAuth client ID                                                               |
-| `vanillabp.adapters.<id>.client-secret`         | saas         | yes                                        | OAuth client secret                                                           |
-| `vanillabp.adapters.<id>.tenant-id`             | both         | no                                         | Camunda 8 multi-tenancy tenant, also settable per workflow module             |
-| `vanillabp.adapters.<id>.auth.*`                | both         | no (default: no credentials)               | how the adapter authenticates, see [below](#authenticating-against-a-cluster) |
+|                    Property                     |  Applies to  |              Required               |                                  Description                                  |
+|-------------------------------------------------|--------------|-------------------------------------|-------------------------------------------------------------------------------|
+| `vanillabp.adapters.<id>.mode`                  | both         | no (default `self-managed`)         | `self-managed` or `saas`                                                      |
+| `vanillabp.adapters.<id>.rest-address`          | self-managed | no (default `http://0.0.0.0:8080`)  | REST API address, e.g. `http://localhost:8080`                                |
+| `vanillabp.adapters.<id>.grpc-address`          | self-managed | no (default `http://0.0.0.0:26500`) | gRPC address, e.g. `http://localhost:26500`                                   |
+| `vanillabp.adapters.<id>.prefer-rest-over-grpc` | self-managed | no (default `true`)                 | use the REST API (recommended) or gRPC                                        |
+| `vanillabp.adapters.<id>.cluster-id`            | saas         | yes                                 | SaaS cluster ID                                                               |
+| `vanillabp.adapters.<id>.region`                | saas         | yes                                 | SaaS region                                                                   |
+| `vanillabp.adapters.<id>.client-id`             | saas         | yes                                 | OAuth client ID                                                               |
+| `vanillabp.adapters.<id>.client-secret`         | saas         | yes                                 | OAuth client secret                                                           |
+| `vanillabp.adapters.<id>.tenant-id`             | both         | no                                  | Camunda 8 multi-tenancy tenant, also settable per workflow module             |
+| `vanillabp.adapters.<id>.auth.*`                | both         | no (default: no credentials)        | how the adapter authenticates, see [below](#authenticating-against-a-cluster) |
 
 Example (self-managed):
 
@@ -582,14 +583,18 @@ vanillabp:
     myengine:
       type: camunda8
       mode: self-managed
+      job-lease: use
       rest-address: http://localhost:8080
 ```
 
 **Boot behavior (validated at startup):** Every configured adapter instance's
 connection configuration is validated AT STARTUP:
 
-- entirely unconfigured → the application still boots; a guiding WARN names the
-  adapter id and the exact keys to add (e.g. `vanillabp.adapters.myengine.rest-address`);
+- self-managed without an address for the protocol the client talks → the client uses its
+  own default address, `http://0.0.0.0:8080` for REST and `http://0.0.0.0:26500` for gRPC.
+  That is a cluster on this machine. The start goes on, and a WARN names the address and the
+  key which changes it (e.g. `vanillabp.adapters.myengine.rest-address`). The adapter then
+  opens workers like any other, so on the 8.10 line it also needs `job-lease`;
 - inconsistent (e.g. `mode: saas` without `cluster-id`) → the boot FAILS naming the
   missing keys - unless the adapter is nowhere first in any prioritized-adapters list
   and its `deployment-failure` policy is `warn` (then the application boots DEGRADED
@@ -597,13 +602,20 @@ connection configuration is validated AT STARTUP:
 - fully configured → the client is built eagerly (building never contacts the
   cluster).
 
-Messages name property KEYS only - values, especially credentials like
-`client-secret`, are never echoed. Using an unconfigured adapter at runtime keeps a
-guiding failure message as backstop.
+The default addresses are the ones of the Camunda client (`CamundaClientBuilderImpl`), read
+from the client of each release line, so they cannot drift apart. On the 8.8 line the WARN adds one
+sentence: Camunda's docker compose for 8.8 publishes REST on port 8088, so a cluster started with
+it needs `rest-address: http://localhost:8088`. See decision 67 in [`DECISIONS.md`](./DECISIONS.md). Version 1 used the same
+client defaults where neither `camunda.client.rest-address` nor `camunda.client.mode` was set.
 
-Each of the three outcomes has its test, on both platforms: `Camunda8StartupValidationTest`
-and `Camunda8StartupValidationBootTest` for the adapter nobody configured,
-`Camunda8InconsistentConfigurationTest` together with
+Messages name property KEYS only - values, especially credentials like
+`client-secret`, are never echoed. Using a degraded adapter at runtime keeps a guiding
+failure message as backstop.
+
+Each of the three outcomes has its test, on both platforms: `Camunda8ClientDefaultAddressTest`,
+`Camunda8StartupValidationBootTest#anAdapterWithoutAnAddressBootsAndUsesTheLocalCluster`, the
+Quarkus `Camunda8StartupValidationTest` and both `Camunda8AdapterDiscoveryTest` classes for the
+adapter without an address, `Camunda8InconsistentConfigurationTest` together with
 `Camunda8StartupValidationBootTest#inconsistentNowhereFirstAdapterWithWarnPolicyBootsDegraded`
 for the half configured one, and `Camunda8ClientFactoryTest` for the client which is built
 without asking the cluster anything. That no message carries a secret is

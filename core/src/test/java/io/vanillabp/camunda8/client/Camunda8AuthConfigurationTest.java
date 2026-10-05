@@ -217,13 +217,19 @@ public class Camunda8AuthConfigurationTest {
   }
 
   @Test
-  @DisplayName("an adapter carrying only an auth block is not 'unconfigured'")
-  public void anAuthBlockAloneIsNotAbsent() {
+  @DisplayName("an adapter carrying only an auth block still hears that it uses the local cluster")
+  public void anAuthBlockAloneStillReportsTheClientDefaultAddress() {
 
     final var configuration = new Camunda8AdapterConfiguration();
     configuration.getAuth().setUsername("demo");
+    final var warnings = new java.util.ArrayList<String>();
 
-    assertTrue(!configuration.isAbsent(), "the boot has to report the missing address, not silence");
+    Camunda8StartupValidation.reportTheClientDefaultAddress("c8", configuration, warnings::add);
+
+    assertTrue(
+        warnings.size() == 1 && warnings.getFirst().contains("vanillabp.adapters.c8.rest-address"),
+        "the boot has to report the missing address, not silence: "
+            + warnings);
 
   }
 

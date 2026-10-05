@@ -27,9 +27,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * What one Camunda 8 adapter instance answers when the health endpoint asks
- * it. The rules being pinned here are the ones easy to get wrong: an adapter which is
+ * it. The rules being pinned here are the ones easy to get wrong: a SaaS adapter which is
  * not configured yet must not read as an outage, and every answer has to name the
- * address, because that is what an operator acts on.
+ * address, because that is what an operator acts on. That includes the client's default
+ * address, which an adapter without an address of its own talks to.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8HealthTest {
@@ -91,20 +92,44 @@ public class Camunda8HealthTest {
   }
 
   @Test
-  @DisplayName("An adapter which is not configured yet is UNKNOWN, never DOWN")
-  public void anUnconfiguredAdapterIsUnknown() {
+  @DisplayName("A SaaS adapter which is not configured yet is UNKNOWN, never DOWN")
+  public void anUnconfiguredSaasAdapterIsUnknown() {
 
-    final var health = Camunda8Health
-        .check("c8", factoryWith(new Camunda8AdapterConfiguration(), null));
+    final var configuration = new Camunda8AdapterConfiguration();
+    configuration.setMode(Camunda8AdapterConfiguration.Mode.SAAS);
+
+    final var health = Camunda8Health.check("cloud", factoryWith(configuration, null));
 
     assertEquals(
         AdapterHealth.Status.UNKNOWN,
         health.status(),
-        "the application booted with a guiding warning on purpose - that is not an outage");
+        "the application booted degraded on purpose - that is not an outage");
     assertTrue(
-        health.description().contains("rest-address"),
+        health.description().contains("cluster-id"),
         "and the missing keys are named: "
             + health.description());
+
+  }
+
+  @Test
+  @DisplayName("An adapter without an address asks the local cluster, and names its address")
+  public void anAdapterWithoutAnAddressAsksTheLocalCluster() throws Exception {
+
+    final var health = Camunda8Health
+        .check(
+            "c8",
+            factoryWith(
+                new Camunda8AdapterConfiguration(),
+                clientAnswering(
+                    null,
+                    new ExecutionException(
+                        new IllegalStateException("Connection refused")))));
+
+    assertEquals(
+        AdapterHealth.Status.DOWN,
+        health.status(),
+        "the client's default address is a real address, so a cluster missing there is an outage");
+    assertEquals(Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS, health.details().get("address"));
 
   }
 

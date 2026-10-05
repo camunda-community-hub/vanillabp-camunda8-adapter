@@ -10,8 +10,10 @@ import java.util.stream.Collectors;
  * principle). Three states:
  * <ul>
  *   <li><b>complete</b> - nothing to report;</li>
- *   <li><b>absent</b> (no connection key at all) - the application still boots:
- *       a guiding WARN names the adapter id and the exact keys to add;</li>
+ *   <li><b>no address</b> (self-managed, and the protocol the client talks has no
+ *       address) - the client's default address is used, which is a cluster on this
+ *       machine. The start goes on, and a WARN names that address and the key which
+ *       changes it. See {@link #reportTheClientDefaultAddress};</li>
  *   <li><b>inconsistent</b> (partially configured, e.g. <code>mode: saas</code>
  *       without <code>cluster-id</code>) - a genuine defect: the boot FAILS with a
  *       message naming the missing keys. Exception: an adapter that is NOWHERE
@@ -98,31 +100,9 @@ public final class Camunda8StartupValidation {
     // reason: what it decides happens per wake-up and nowhere a reader would look
     configuration.validateProbeOpenUserTasks(adapterId, infoLogger);
 
-    if (configuration.isAbsent()) {
-      warnLogger.accept(
-          """
-              Camunda 8 adapter '%s' has no connection configuration yet - the application boots, but \
-              deploying BPMNs or starting workflows via this adapter will fail until configured. Add the \
-              connection properties for this adapter instance:
-                %s (self-managed | saas; default self-managed)
-                %s (self-managed)
-                %s, %s, %s, %s (saas)
-              A self-managed cluster usually wants credentials as well, which is what '%s' is for; \
-              without it the adapter sends none."""
-              .formatted(
-                  adapterId,
-                  Camunda8AdapterConfiguration.propertyKey(adapterId, "mode"),
-                  Camunda8AdapterConfiguration.propertyKey(adapterId, "rest-address"),
-                  Camunda8AdapterConfiguration.propertyKey(adapterId, "cluster-id"),
-                  Camunda8AdapterConfiguration.propertyKey(adapterId, "region"),
-                  Camunda8AdapterConfiguration.propertyKey(adapterId, "client-id"),
-                  Camunda8AdapterConfiguration.propertyKey(adapterId, "client-secret"),
-                  Camunda8AdapterConfiguration.propertyKey(adapterId, "auth.method")));
-      return;
-    }
-
     final var missing = configuration.missingConnectionProperties();
     if (missing.isEmpty()) {
+      reportTheClientDefaultAddress(adapterId, configuration, warnLogger);
       validateJobLease(adapterId, configuration, infoLogger);
       return;
     }
@@ -156,12 +136,83 @@ public final class Camunda8StartupValidation {
   }
 
   /**
+   * Warns where a self-managed adapter has no address for the protocol its client talks. The
+   * client then uses its own default address, which is a cluster on this machine. That is
+   * what a developer starting a local cluster wants, so the start goes on. It is never what
+   * a production system wants, so the start says it every time. Why the default is the
+   * client's, and why this adapter is then asked for <code>job-lease</code> like any other, is
+   * decision 67 in the repository's DECISIONS.md.
+   *
+   * @param adapterId The adapter ID
+   * @param configuration The (bound) connection configuration
+   * @param warnLogger Sink for the warning
+   */
+  static void reportTheClientDefaultAddress(
+      final String adapterId,
+      final Camunda8AdapterConfiguration configuration,
+      final Consumer<String> warnLogger) {
+
+    if (!configuration.usesTheClientDefaultAddress()) {
+      return;
+    }
+    final var message = new StringBuilder(
+        """
+            Camunda 8 adapter '%s' has no cluster address, so it connects to the local cluster at '%s'. \
+            This is the default address of the Camunda client. Set '%s' to connect to another cluster.
+            For Camunda 8 SaaS, set '%s' to 'saas' and add '%s', '%s', '%s' and '%s'.
+            If your cluster asks for credentials, configure them under '%s'. Without it the adapter \
+            sends none."""
+            .formatted(
+                adapterId,
+                configuration.describeAddress(),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, configuration.addressKeyInUse()),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "mode"),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "cluster-id"),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "region"),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "client-id"),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "client-secret"),
+                Camunda8AdapterConfiguration.propertyKey(adapterId, "auth")));
+    // where the release line knows that Camunda's own docker compose publishes REST on a
+    // port other than the client's default, the warning says so
+    final var aboutTheLine = configuration.isPreferRestOverGrpc()
+        ? Camunda8LocalCluster
+            .aboutTheDefaultRestAddress(Camunda8AdapterConfiguration.propertyKey(adapterId, "rest-address"))
+        : null;
+    if (aboutTheLine != null) {
+      message
+          .append('\n')
+          .append(aboutTheLine);
+    }
+    // an address written for the other protocol is most likely meant for this one, and the
+    // switch which makes the client use it is easy to miss
+    final var otherKey = configuration.isPreferRestOverGrpc()
+        ? "grpc-address"
+        : "rest-address";
+    final var otherAddress = configuration.isPreferRestOverGrpc()
+        ? configuration.getGrpcAddress()
+        : configuration.getRestAddress();
+    if ((otherAddress != null) && !otherAddress.isBlank()) {
+      message.append(
+          """
+
+              '%s' is set, but the client does not talk that protocol. Set '%s' to '%s' to use \
+              that address."""
+              .formatted(
+                  Camunda8AdapterConfiguration.propertyKey(adapterId, otherKey),
+                  Camunda8AdapterConfiguration.propertyKey(adapterId, "prefer-rest-over-grpc"),
+                  !configuration.isPreferRestOverGrpc()));
+    }
+    warnLogger.accept(message.toString());
+
+  }
+
+  /**
    * Whether the jobs of this adapter are leased, which is the one key this adapter has no
    * default for: a lease cannot be taken back per job.
    * <p>
-   * It is asked LAST, and only of an adapter whose connection is complete. An adapter
-   * nobody finished configuring has a message of its own and gets one thing to fix at a
-   * time; an adapter which boots degraded serves nothing, so it opens no worker and leases
+   * It is asked LAST, and only of an adapter whose connection is complete. That includes an
+   * adapter which uses the client's default address, because it opens workers like any
+   * other. An adapter which boots degraded serves nothing, so it opens no worker and leases
    * nothing.
    */
   private static void validateJobLease(

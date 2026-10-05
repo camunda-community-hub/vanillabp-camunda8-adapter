@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import io.camunda.client.impl.CamundaClientBuilderImpl;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
@@ -24,9 +25,10 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  * <ul>
  *   <li>{@code vanillabp.adapters.<adapter-id>.mode} - {@code self-managed} (default) or
  *       {@code saas}</li>
- *   <li>self-managed: {@code .rest-address} (required unless
- *       {@code .prefer-rest-over-grpc=false}), {@code .grpc-address} (optional, required
- *       when {@code .prefer-rest-over-grpc=false})</li>
+ *   <li>self-managed: {@code .rest-address} and {@code .grpc-address} (both optional).
+ *       Where the address of the protocol in use is missing, the client's default is used,
+ *       which is a cluster on this machine, and the start warns about it (see
+ *       {@link #usesTheClientDefaultAddress()})</li>
  *   <li>saas: {@code .cluster-id}, {@code .region}, {@code .client-id},
  *       {@code .client-secret} (all required)</li>
  *   <li>{@code .tenant-id} (optional, both modes) - Camunda 8 multi-tenancy tenant. One
@@ -88,9 +90,9 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  *       each Camunda-managed user task of a running instance, see
  *       {@link #validateProbeOpenUserTasks(String, Consumer)}</li>
  * </ul>
- * All fields are optional at binding time so applications which configure a Camunda 8
- * adapter but never actually use it still boot; {@link #validate(String)} enforces the
- * required fields lazily on first use of the client.
+ * All fields are optional at binding time. The start validates them (see
+ * {@link Camunda8StartupValidation}), and {@link #validate(String)} is the backstop before a
+ * client is used.
  */
 public class Camunda8AdapterConfiguration {
 
@@ -131,39 +133,7 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether one of the defaulted properties ({@link #mode},
-   * {@link #preferRestOverGrpc}) was set explicitly - required to distinguish the
-   * "not configured yet" state (see {@link #isAbsent()}) from an inconsistent
-   * configuration like <code>mode: saas</code> without any credential.
-   */
-  private boolean defaultedPropertySet = false;
-
-  /**
-   * Whether the application wrote one of the keys which carry a default.
-   *
-   * @return Whether such a key was written
-   */
-  public boolean isDefaultedPropertySet() {
-
-    return defaultedPropertySet;
-
-  }
-
-  /**
-   * Whether the application wrote one of the keys which carry a default.
-   *
-   * @param defaultedPropertySet Whether such a key was written
-   */
-  public void setDefaultedPropertySet(
-      final boolean defaultedPropertySet) {
-
-    this.defaultedPropertySet = defaultedPropertySet;
-
-  }
-
-  /**
-   * Sets the connection mode and marks this section as configured, which is what tells an
-   * adapter nobody wrote a key for from one whose keys do not fit together.
+   * Sets the connection mode.
    *
    * @param mode The mode the application wrote
    */
@@ -171,9 +141,21 @@ public class Camunda8AdapterConfiguration {
       final Mode mode) {
 
     this.mode = mode;
-    this.defaultedPropertySet = true;
 
   }
+
+  /**
+   * The REST address the Camunda client uses where none is configured. It is the client's
+   * own default, read from the client so it cannot drift from the release line's client, and
+   * it means a cluster on this machine.
+   */
+  public static final String CLIENT_DEFAULT_REST_ADDRESS = CamundaClientBuilderImpl.DEFAULT_REST_ADDRESS.toString();
+
+  /**
+   * The gRPC address the Camunda client uses where none is configured, for the same reason
+   * and with the same meaning as {@link #CLIENT_DEFAULT_REST_ADDRESS}.
+   */
+  public static final String CLIENT_DEFAULT_GRPC_ADDRESS = CamundaClientBuilderImpl.DEFAULT_GRPC_ADDRESS.toString();
 
   /**
    * The REST address of a self-managed cluster.
@@ -248,8 +230,7 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Sets which of the two protocols is preferred and marks this section as configured, the
-   * same way {@link #setMode(Mode)} does.
+   * Sets which of the two protocols is preferred.
    *
    * @param preferRestOverGrpc What the application wrote
    */
@@ -257,7 +238,65 @@ public class Camunda8AdapterConfiguration {
       final boolean preferRestOverGrpc) {
 
     this.preferRestOverGrpc = preferRestOverGrpc;
-    this.defaultedPropertySet = true;
+
+  }
+
+  /**
+   * Whether a self-managed adapter has no address for the protocol its client talks, so the
+   * client uses its own default address, which is a cluster on this machine.
+   *
+   * @return Whether the client's default address is used
+   */
+  public boolean usesTheClientDefaultAddress() {
+
+    if (mode == Mode.SAAS) {
+      return false;
+    }
+    return preferRestOverGrpc
+        ? isBlank(restAddress)
+        : isBlank(grpcAddress);
+
+  }
+
+  /**
+   * The REST address the client of a self-managed adapter uses: the configured one, or the
+   * client's default.
+   *
+   * @return The address, never <code>null</code>
+   */
+  public String restAddressInUse() {
+
+    return isBlank(restAddress)
+        ? CLIENT_DEFAULT_REST_ADDRESS
+        : restAddress;
+
+  }
+
+  /**
+   * The gRPC address the client of a self-managed adapter uses: the configured one, or the
+   * client's default.
+   *
+   * @return The address, never <code>null</code>
+   */
+  public String grpcAddressInUse() {
+
+    return isBlank(grpcAddress)
+        ? CLIENT_DEFAULT_GRPC_ADDRESS
+        : grpcAddress;
+
+  }
+
+  /**
+   * The key, relative to <code>vanillabp.adapters.&lt;id&gt;.</code>, which sets the
+   * address of the protocol the client talks.
+   *
+   * @return <code>rest-address</code> or <code>grpc-address</code>
+   */
+  public String addressKeyInUse() {
+
+    return preferRestOverGrpc
+        ? "rest-address"
+        : "grpc-address";
 
   }
 
@@ -1587,27 +1626,14 @@ public class Camunda8AdapterConfiguration {
   public static final int BUSINESS_ID_LIMIT = 256;
 
   /**
-   * Whether NO connection property is set at all - the "not configured yet" state:
-   * the application still boots (with a guiding startup warning), only using the
-   * adapter fails. The defaulted properties ({@link #mode},
-   * {@link #preferRestOverGrpc}) do not count.
-   *
-   * @return Whether the connection configuration is entirely absent
-   */
-  public boolean isAbsent() {
-
-    return !defaultedPropertySet && auth.isAbsent() && isBlank(restAddress) && isBlank(grpcAddress) && isBlank(
-        tenantId) && isBlank(
-            clusterId) && isBlank(
-                region) && isBlank(clientId) && isBlank(clientSecret);
-
-  }
-
-  /**
    * The connection properties required for the configured {@link #mode} which are
    * not set (property KEY names relative to
    * <code>vanillabp.adapters.&lt;id&gt;.</code> - values are never part of
    * messages). An empty list means the configuration is complete.
+   * <p>
+   * Only SaaS requires keys. A self-managed adapter without an address uses the client's
+   * default address, which is a cluster on this machine (see
+   * {@link #usesTheClientDefaultAddress()}).
    *
    * @return The missing property keys
    */
@@ -1626,14 +1652,6 @@ public class Camunda8AdapterConfiguration {
       }
       if (isBlank(clientSecret)) {
         missing.add("client-secret");
-      }
-    } else if (preferRestOverGrpc) {
-      if (isBlank(restAddress)) {
-        missing.add("rest-address");
-      }
-    } else {
-      if (isBlank(grpcAddress)) {
-        missing.add("grpc-address");
       }
     }
     return missing;
@@ -2009,9 +2027,10 @@ public class Camunda8AdapterConfiguration {
    * <p>
    * Every message about reaching the cluster carries it, because the point of such a
    * message is that somebody can act on it without opening the application's configuration
-   * first.
+   * first. A self-managed adapter is described by the address of the protocol its client
+   * talks, and that is the client's default where none is configured.
    *
-   * @return The address, or <code>null</code> if none is configured
+   * @return The address, or <code>null</code> for a SaaS adapter without cluster and region
    */
   public String describeAddress() {
 
@@ -2020,10 +2039,9 @@ public class Camunda8AdapterConfiguration {
           ? null
           : "cluster '%s' in region '%s'".formatted(clusterId, region);
     }
-    if (!isBlank(restAddress)) {
-      return restAddress;
-    }
-    return grpcAddress;
+    return preferRestOverGrpc
+        ? restAddressInUse()
+        : grpcAddressInUse();
 
   }
 
@@ -2347,12 +2365,6 @@ public class Camunda8AdapterConfiguration {
       return;
     }
     if (jobLease != null) {
-      return;
-    }
-    // an adapter nobody configured a cluster for opens no worker, so it leases nothing and
-    // has nothing to decide - and an application which is not finished configuring still
-    // boots, which is what the warning about an absent configuration is for
-    if (isAbsent()) {
       return;
     }
     throw new IllegalStateException(

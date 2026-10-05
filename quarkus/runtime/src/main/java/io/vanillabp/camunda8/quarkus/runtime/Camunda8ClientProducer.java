@@ -32,8 +32,9 @@ import jakarta.inject.Singleton;
  * {@code camunda8}); the overlay map is used as a per-known-id lookup only. Every
  * instance's connection configuration is VALIDATED AT STARTUP (the
  * {@link Camunda8StartupObserver} forces this producer on {@code StartupEvent}):
- * an entirely unconfigured adapter boots with a guiding warning, an inconsistently
- * configured one fails the boot (unless it is nowhere first priority and its
+ * a self-managed adapter without an address uses the client's default address, which is
+ * a cluster on this machine, and the start warns about it. An inconsistently configured
+ * adapter fails the boot (unless it is nowhere first priority and its
  * deployment-failure policy is 'warn'); clients of completely configured adapters
  * are built eagerly. The registry is closed on application shutdown via the
  * {@link #close(Camunda8ClientFactoryRegistry) disposer}, closing all clients.
