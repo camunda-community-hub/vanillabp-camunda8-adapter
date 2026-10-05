@@ -31,8 +31,8 @@ import lombok.extern.slf4j.Slf4j;
  * first command is sent. The factory is closed on {@link #close()} (called on
  * application shutdown by the platform bean lifecycle).
  * <p>
- * A self-managed adapter without an address gets a client too: the client then uses its
- * own default address, which is a cluster on this machine. An application whose SaaS
+ * A self-managed adapter without an address gets a client too: it talks to the address
+ * of the local cluster of its release line. An application whose SaaS
  * adapter is configured incompletely may still boot under the degraded 'warn' policy: no
  * client is built then, and
  * {@link #getClient()} fails as a runtime BACKSTOP with a message naming the missing
@@ -225,20 +225,17 @@ public class Camunda8ClientFactory implements AutoCloseable {
       log.info("Building Camunda 8 self-managed client for adapter '{}' (rest-address '{}', grpc-address '{}', "
           + "prefer-rest-over-grpc {}, authentication {})",
           adapterId,
-          addressOrClientDefault(configuration.getRestAddress(),
-              Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS),
-          addressOrClientDefault(configuration.getGrpcAddress(),
-              Camunda8AdapterConfiguration.CLIENT_DEFAULT_GRPC_ADDRESS),
+          addressOrLocalCluster(configuration.getRestAddress(), configuration.restAddressInUse()),
+          addressOrLocalCluster(configuration.getGrpcAddress(), configuration.grpcAddressInUse()),
           configuration.isPreferRestOverGrpc(), authentication.describe());
+      // both addresses are always set, because the client's own defaults point at 0.0.0.0
+      // and at port 8080 on every line, which is not where the local cluster of every line
+      // answers; an environment variable of the client still overrules them
       builder = CamundaClient
           .newClientBuilder()
-          .preferRestOverGrpc(configuration.isPreferRestOverGrpc());
-      if (hasText(configuration.getRestAddress())) {
-        builder.restAddress(URI.create(configuration.getRestAddress()));
-      }
-      if (hasText(configuration.getGrpcAddress())) {
-        builder.grpcAddress(URI.create(configuration.getGrpcAddress()));
-      }
+          .preferRestOverGrpc(configuration.isPreferRestOverGrpc())
+          .restAddress(URI.create(configuration.restAddressInUse()))
+          .grpcAddress(URI.create(configuration.grpcAddressInUse()));
       if (hasText(configuration.getTenantId())) {
         builder.defaultTenantId(configuration.getTenantId());
       }
@@ -257,17 +254,17 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * What the startup line says about an address: the configured one, or the client's default
-   * marked as such, so the line never shows <code>null</code> where the client talks to a
-   * real address.
+   * What the startup line says about an address: the configured one, or the address of the
+   * local cluster marked as such, so the line never shows <code>null</code> where the client
+   * talks to a real address.
    */
-  private static String addressOrClientDefault(
+  private static String addressOrLocalCluster(
       final String configured,
-      final String clientDefault) {
+      final String inUse) {
 
     return hasText(configured)
         ? configured
-        : "%s (client default)".formatted(clientDefault);
+        : "%s (local cluster)".formatted(inUse);
 
   }
 

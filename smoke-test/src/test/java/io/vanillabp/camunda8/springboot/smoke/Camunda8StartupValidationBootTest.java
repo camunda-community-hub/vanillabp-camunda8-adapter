@@ -10,6 +10,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
 import io.camunda.client.impl.basicauth.BasicAuthCredentialsProvider;
+import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8Authentication;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.integration.test.utils.CapturedOutput;
@@ -19,9 +20,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Boot tests of the Camunda 8 startup validation: configuration is
  * validated AT STARTUP, never first at runtime.
  * <ul>
- *   <li>no cluster address → the application BOOTS with a client for the client's
- *       default address, which is the local cluster, and a WARN names that address and
- *       the key which changes it;</li>
+ *   <li>no cluster address → the application BOOTS with a client for the local cluster of
+ *       the release line, and a WARN names that address and the key which changes it;</li>
  *   <li>inconsistent connection config of a first-priority adapter → the boot FAILS
  *       naming the missing keys;</li>
  *   <li>inconsistent config of a nowhere-first adapter with policy 'warn' → the
@@ -70,15 +70,15 @@ public class Camunda8StartupValidationBootTest {
           .getFactory("c8")
           .getClient();
       Assertions.assertEquals(
-          "http://0.0.0.0:8080",
+          Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS,
           client.getConfiguration().getRestAddress().toString(),
           "the client talks to the address the warning names");
     }
 
     final var log = output.getAll().substring(before);
     Assertions.assertTrue(
-        log.contains(NO_ADDRESS
-            + " 'http://0.0.0.0:8080'"),
+        log.contains(NO_ADDRESS + " '%s'. This address matches Camunda's docker compose for "
+            .formatted(Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS)),
         "expected the warning naming the local cluster but got: "
             + log);
     Assertions.assertTrue(log.contains("Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster"), log);

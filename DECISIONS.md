@@ -1097,10 +1097,11 @@ for are excluded by tag in the POM, so what is left of the line is worth waiting
 alpha ever break so badly that waiting for it stops making sense, it is left out of the matrix,
 and the gate follows.
 
-This repository has no release workflow yet, because a release is still done by hand. Whoever writes
-that workflow makes its first job a call of `line-matrix.yaml` with `secrets: inherit`, and puts
-every job which builds or publishes a line behind it, so the chain from the gate to the tag is hard
-and carries no input which skips it. `line-matrix.yaml` declares `workflow_call` for exactly this.
+The release workflow is `.github/workflows/deploy.yaml`. A published GitHub Release starts it, and a
+start by hand is a rehearsal which publishes nothing. Its first job calls `line-matrix.yaml` with
+`secrets: inherit`, and every job which builds or publishes a line comes after it. So the chain from
+the gate to the published artifacts is hard and carries no input which skips it. `line-matrix.yaml`
+declares `workflow_call` for exactly this.
 
 The second rule is the issue. A line which breaks in the night gets a GitHub issue, so that the
 break is seen and fixed rather than scrolled past. `release-lines-issue.yaml` opens it, one per
@@ -3035,6 +3036,12 @@ its process is written without a search, a row of another version is searched fo
 
 ### 67. A missing cluster address means the local cluster, and the start warns about it
 
+**The choice of the address below is superseded by decision 68**: the paragraph which takes the
+client's default `0.0.0.0` and the 8.8 exception after it. The address now follows Camunda's docker
+compose of each line, with `localhost` as the host, and the 8.8 line needs no extra sentence any
+more. `Camunda8ClientDefaultAddressTest` is called `Camunda8MissingClusterAddressTest` now. The
+rest of this entry stands.
+
 A self-managed adapter id which names no address for the protocol its client talks uses the
 default address of the Camunda client: `http://0.0.0.0:8080` for REST and `http://0.0.0.0:26500`
 for gRPC. The start goes on and logs a WARN. It names the address, says that this is the local
@@ -3064,3 +3071,48 @@ adapter which is nowhere first with `deployment-failure: warn` still boots degra
 the sentence of the 8.8 line, and `Camunda8StartupValidationBootTest` (Spring Boot) and
 `Camunda8StartupValidationTest` (Quarkus) the boot. See
 [Connecting to a Camunda 8 cluster](./README.md#connecting-to-a-camunda-8-cluster).
+
+### 68. The address of the local cluster follows Camunda's docker compose of each line
+
+A self-managed adapter id without an address for the protocol its client talks connects to the
+local cluster, as decision 67 says. Which address that is depends on the release line. It is the
+address where Camunda's own docker compose of that line publishes the cluster
+(`camunda/camunda-distributions`, `docker-compose/versions/camunda-<line>`):
+
+| Line |          REST           |           gRPC           |
+|------|-------------------------|--------------------------|
+| 8.8  | `http://localhost:8088` | `http://localhost:26500` |
+| 8.9  | `http://localhost:8080` | `http://localhost:26500` |
+| 8.10 | `http://localhost:8080` | `http://localhost:26500` |
+
+The 8.8 compose publishes REST as `"8088:8080"`, the 8.9 and 8.10 composes as `"8080:8080"`. gRPC is
+`"26500:26500"` on every line.
+
+Why not the client's default. The client takes `http://0.0.0.0:8080` and `http://0.0.0.0:26500` on
+every line. On 8.8 that REST port finds nothing, because the compose of that line publishes 8088.
+An application which listens on 8080 itself then talks to itself. Following the compose of the line
+makes the common case work without any address, and it removes the extra sentence decision 67 had to
+add to the WARN on 8.8.
+
+On 8.9 and 8.10 the compose takes host port 8080, which is also the default port of a Spring Boot or
+Quarkus application. The application is the one which moves: it sets another `server.port` or
+`quarkus.http.port`. The compose is Camunda's, and a default which pointed somewhere else would find
+no cluster at all.
+
+Why `localhost` and not `0.0.0.0`. Docker binds a port without a host IP to every interface, so both
+reach the cluster on Linux and macOS. On Windows `0.0.0.0` is no address a client can connect to,
+while `localhost` works everywhere.
+
+The addresses sit in the line sources, in `Camunda8LocalCluster` of `core/src/main/java-line-<line>`,
+so a new line brings its own and no shared code needs to know them. The client factory always sets
+both addresses on the client builder. An environment variable of the client, such as
+`CAMUNDA_REST_ADDRESS`, still overrules them, because the client applies it when it is built.
+
+The WARN names the address in use and says that it matches Camunda's docker compose of the line.
+Version 1 used the client's default through Camunda's Spring Boot starter, so this is a change
+against version 1, and `UPGRADE.md` says so.
+
+`Camunda8LocalClusterTest` of each line holds the two addresses and the WARN of that line.
+`Camunda8MissingClusterAddressTest` holds the cases around the WARN, and
+`Camunda8StartupValidationBootTest` (Spring Boot) and `Camunda8StartupValidationTest` (Quarkus) the
+boot. See [Connecting to a Camunda 8 cluster](./README.md#connecting-to-a-camunda-8-cluster).

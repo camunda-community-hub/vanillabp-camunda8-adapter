@@ -1,14 +1,14 @@
 package io.vanillabp.camunda8.client;
 
 /**
- * What the start says about the local cluster an adapter without a REST address talks to.
- * This is the 8.8 variant.
+ * The local cluster of the 8.8 line: where an adapter without a cluster address connects to,
+ * and what the start says about it.
  * <p>
- * Camunda's docker compose for 8.8 (camunda/camunda-distributions,
- * <code>docker-compose/versions/camunda-8.8</code>) publishes the REST port of the cluster as
- * <code>8088:8080</code>, while the client's default REST address uses port 8080. A cluster
- * started with that file therefore answers nothing at the default address, and the start
- * says so. From 8.9 on the same file publishes <code>8080:8080</code>.
+ * The addresses are the ones Camunda's docker compose for 8.8 publishes
+ * (camunda/camunda-distributions, <code>docker-compose/versions/camunda-8.8</code>):
+ * <code>"8088:8080"</code> for REST and <code>"26500:26500"</code> for gRPC. So on this line the REST port is 8088, while 8.9 and 8.10 publish 8080. The host is
+ * <code>localhost</code>, not the client's own default <code>0.0.0.0</code>, because
+ * <code>localhost</code> also works on Windows. See decision 68 in the repository's DECISIONS.md.
  */
 final class Camunda8LocalCluster {
 
@@ -16,19 +16,18 @@ final class Camunda8LocalCluster {
   }
 
   /**
-   * One more sentence for the warning about the client's default REST address.
-   *
-   * @param restAddressKey The full key of the REST address of the adapter id
-   * @return The sentence, never <code>null</code> on this line
+   * The REST address of the local cluster.
    */
-  static String aboutTheDefaultRestAddress(
-      final String restAddressKey) {
+  static final String REST_ADDRESS = "http://localhost:8088";
 
-    return """
-        Camunda's docker compose for 8.8 publishes REST on port 8088, not 8080. If you started \
-        your cluster with it, set '%s' to 'http://localhost:8088'."""
-        .formatted(restAddressKey);
+  /**
+   * The gRPC address of the local cluster.
+   */
+  static final String GRPC_ADDRESS = "http://localhost:26500";
 
-  }
+  /**
+   * The sentence of the start's warning which says where the address comes from.
+   */
+  static final String WHERE_THE_ADDRESS_COMES_FROM = "This address matches Camunda's docker compose for 8.8.";
 
 }

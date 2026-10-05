@@ -665,3 +665,24 @@ has. Two things follow for an application:
 
 The line the shutdown writes says how many workers were closed and whether the cluster released them,
 and it warns where one of them still holds its request when the grace passes.
+
+### Without a cluster address the adapter connects to `localhost`, on the port of the line
+
+Version 1 left a missing address to Camunda's client, which takes `http://0.0.0.0:8080` for REST and
+`http://0.0.0.0:26500` for gRPC. This version takes the address where Camunda's own docker compose
+of the line publishes the cluster:
+
+| Line |          REST           |           gRPC           |
+|------|-------------------------|--------------------------|
+| 8.8  | `http://localhost:8088` | `http://localhost:26500` |
+| 8.9  | `http://localhost:8080` | `http://localhost:26500` |
+| 8.10 | `http://localhost:8080` | `http://localhost:26500` |
+
+An application which sets `rest-address` or `grpc-address` sees no change. One which relied on the
+default and runs on the 8.8 line now talks to port 8088. If your 8.8 cluster listens on 8080, set
+`vanillabp.adapters.<id>.rest-address: http://localhost:8080`. Every start without an address logs
+a WARN which names the address in use.
+
+On 8.9 and 8.10 Camunda's docker compose takes host port 8080, which is also the default port of
+Spring Boot and Quarkus. An application on the same machine then needs another `server.port` or
+`quarkus.http.port`.

@@ -10,13 +10,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 import io.quarkus.test.QuarkusExtensionTest;
+import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Startup-validation boot test on Quarkus: an adapter WITHOUT a cluster address still
  * boots. The {@code StartupEvent} observer forces the validation, which warns that the
- * client's default address is used, which is the local cluster, and names the key which
- * changes it.
+ * address of the local cluster of the release line is used, and names the key which changes
+ * it.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8StartupValidationTest {
@@ -44,10 +45,11 @@ public class Camunda8StartupValidationTest {
                 .anyMatch(
                     message -> message
                         .contains(
-                            "Camunda 8 adapter 'c8' has no cluster address, so it connects to the local cluster at 'http://0.0.0.0:8080'") && message
-                                .contains(
-                                    "Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster") && message
-                                        .contains("vanillabp.adapters.c8.mode")),
+                            "Camunda 8 adapter 'c8' has no cluster address, so it connects to the local cluster at '%s'. This address matches Camunda's docker compose for "
+                                .formatted(Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS)) && message
+                                    .contains(
+                                        "Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster") && message
+                                            .contains("vanillabp.adapters.c8.mode")),
             "expected the startup warning naming the local cluster but got: "
                 + messages);
       });

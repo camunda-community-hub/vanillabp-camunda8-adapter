@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 import io.quarkus.test.QuarkusExtensionTest;
+import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
 import io.vanillabp.integration.adapter.spi.MigratableProcessService;
@@ -90,7 +91,7 @@ public class Camunda8AdapterDiscoveryTest {
   public void anAdapterWithoutAnAddressAsksTheLocalCluster() {
 
     // This application configures the adapter but no cluster address, so the client uses
-    // its default address, which is a cluster on this machine. The readiness check asks
+    // the address of the local cluster of its release line. The readiness check asks
     // that cluster. No cluster runs there in this test, but one may on a developer's
     // machine, so the answer is UP or DOWN, and never UNKNOWN
     final var health = deploymentServices
@@ -105,11 +106,11 @@ public class Camunda8AdapterDiscoveryTest {
             + health.description());
     Assertions.assertEquals("c8", health.adapterId());
     Assertions.assertEquals(
-        "http://0.0.0.0:8080",
+        Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS,
         health.details().get("address"),
         "and it says which cluster it asked");
     Assertions.assertEquals(
-        "http://0.0.0.0:8080",
+        Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS,
         clientFactoryRegistry
             .getFactory("c8")
             .getClient()

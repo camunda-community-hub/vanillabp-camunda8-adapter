@@ -17,8 +17,9 @@ configuration, create beans, run the bean lifecycle).
   the platform modules from `vanillabp.adapters.<adapter-id>.*` (see the root `README.md`).
   Validated at startup by `Camunda8StartupValidation`; `validate(adapterId)` stays as the
   backstop before a client is used and throws naming the exact missing property. A
-  self-managed adapter without an address is not missing anything: the client then uses its
-  own default address, a cluster on this machine, and the start warns about it.
+  self-managed adapter without an address is not missing anything: it then uses the address
+  of the local cluster of its release line, and the start warns about it.
+  `Camunda8LocalCluster` holds that address once per line, next to the other line sources.
 - `Camunda8ClientFactory` - owns the single `CamundaClient` of one adapter instance, built
   **eagerly at startup** (for every self-managed instance and every completely configured SaaS
   instance) and closed on `close()`. Building never contacts the cluster
@@ -165,7 +166,7 @@ way it is.
 A SaaS adapter whose connection is not configured yet answers UNKNOWN. That is the health side
 of the same rule the startup validation follows: an application which booted degraded on
 purpose has not failed. A self-managed adapter without an address is different. Its client
-talks to the client's default address, so the check asks the cluster there and answers UP or
+talks to the address of the local cluster, so the check asks the cluster there and answers UP or
 DOWN, naming that address.
 
 `MicrometerCamunda8MetricsTest` covers the meters, the gauges and the no-op hook a worker gets

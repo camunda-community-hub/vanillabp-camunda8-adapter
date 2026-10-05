@@ -24,7 +24,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Unit tests of {@link Camunda8ClientFactory} / {@link Camunda8AdapterConfiguration}: a
- * self-managed adapter without an address gets a client for the client's default address,
+ * self-managed adapter without an address gets a client for the local cluster,
  * and a missing SaaS property is reported on first use, naming the exact property. Building
  * the self-managed client does not contact any cluster.
  */
@@ -32,25 +32,20 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8ClientFactoryTest {
 
   @Test
-  @DisplayName("self-managed without an address builds a client for the client's default address")
-  public void selfManagedWithoutAnAddressUsesTheClientDefault() {
+  @DisplayName("self-managed without an address builds a client for the local cluster")
+  public void selfManagedWithoutAnAddressUsesTheLocalCluster() {
 
     try (var factory = new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration())) {
 
       factory.validateConfigured();
       final var client = factory.getClient();
+      // which address that is depends on the release line, see Camunda8LocalClusterTest
       assertEquals(
-          Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS,
-          client.getConfiguration().getRestAddress().toString(),
-          "the adapter leaves the address to the client");
+          Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS,
+          client.getConfiguration().getRestAddress().toString());
       assertEquals(
-          "http://0.0.0.0:8080",
-          Camunda8AdapterConfiguration.CLIENT_DEFAULT_REST_ADDRESS,
-          "the wiki and the startup message name this address; a client which changes it has to change them too");
-      assertEquals(
-          "http://0.0.0.0:26500",
-          Camunda8AdapterConfiguration.CLIENT_DEFAULT_GRPC_ADDRESS,
-          "the same for gRPC");
+          Camunda8AdapterConfiguration.LOCAL_CLUSTER_GRPC_ADDRESS,
+          client.getConfiguration().getGrpcAddress().toString());
     }
 
   }

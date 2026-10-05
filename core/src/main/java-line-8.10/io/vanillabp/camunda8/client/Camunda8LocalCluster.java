@@ -1,10 +1,14 @@
 package io.vanillabp.camunda8.client;
 
 /**
- * What the start says about the local cluster an adapter without a REST address talks to.
- * This is the 8.10 variant, and there is nothing to add here: Camunda's docker compose for
- * this minor publishes the REST port as <code>8080:8080</code>, which is the client's
- * default. The 8.8 variant explains why that line says more.
+ * The local cluster of the 8.10 line: where an adapter without a cluster address connects to,
+ * and what the start says about it.
+ * <p>
+ * The addresses are the ones Camunda's docker compose for 8.10 publishes
+ * (camunda/camunda-distributions, <code>docker-compose/versions/camunda-8.10</code>):
+ * <code>"8080:8080"</code> for REST and <code>"26500:26500"</code> for gRPC. The host is
+ * <code>localhost</code>, not the client's own default <code>0.0.0.0</code>, because
+ * <code>localhost</code> also works on Windows. See decision 68 in the repository's DECISIONS.md.
  */
 final class Camunda8LocalCluster {
 
@@ -12,16 +16,18 @@ final class Camunda8LocalCluster {
   }
 
   /**
-   * One more sentence for the warning about the client's default REST address.
-   *
-   * @param restAddressKey The full key of the REST address of the adapter id
-   * @return <code>null</code>: nothing to add on this line
+   * The REST address of the local cluster.
    */
-  static String aboutTheDefaultRestAddress(
-      final String restAddressKey) {
+  static final String REST_ADDRESS = "http://localhost:8080";
 
-    return null;
+  /**
+   * The gRPC address of the local cluster.
+   */
+  static final String GRPC_ADDRESS = "http://localhost:26500";
 
-  }
+  /**
+   * The sentence of the start's warning which says where the address comes from.
+   */
+  static final String WHERE_THE_ADDRESS_COMES_FROM = "This address matches Camunda's docker compose for 8.10.";
 
 }

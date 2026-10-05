@@ -11,9 +11,8 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li><b>complete</b> - nothing to report;</li>
  *   <li><b>no address</b> (self-managed, and the protocol the client talks has no
- *       address) - the client's default address is used, which is a cluster on this
- *       machine. The start goes on, and a WARN names that address and the key which
- *       changes it. See {@link #reportTheClientDefaultAddress};</li>
+ *       address) - the address of the local cluster is used. The start goes on, and a
+ *       WARN names that address and the key which changes it. See {@link #reportTheLocalClusterAddress};</li>
  *   <li><b>inconsistent</b> (partially configured, e.g. <code>mode: saas</code>
  *       without <code>cluster-id</code>) - a genuine defect: the boot FAILS with a
  *       message naming the missing keys. Exception: an adapter that is NOWHERE
@@ -102,7 +101,7 @@ public final class Camunda8StartupValidation {
 
     final var missing = configuration.missingConnectionProperties();
     if (missing.isEmpty()) {
-      reportTheClientDefaultAddress(adapterId, configuration, warnLogger);
+      reportTheLocalClusterAddress(adapterId, configuration, warnLogger);
       validateJobLease(adapterId, configuration, infoLogger);
       return;
     }
@@ -137,34 +136,36 @@ public final class Camunda8StartupValidation {
 
   /**
    * Warns where a self-managed adapter has no address for the protocol its client talks. The
-   * client then uses its own default address, which is a cluster on this machine. That is
-   * what a developer starting a local cluster wants, so the start goes on. It is never what
-   * a production system wants, so the start says it every time. Why the default is the
-   * client's, and why this adapter is then asked for <code>job-lease</code> like any other, is
-   * decision 67 in the repository's DECISIONS.md.
+   * adapter then uses the address of the local cluster, which is where Camunda's docker
+   * compose of this release line publishes it. That is what a developer starting a local
+   * cluster wants, so the start goes on. It is never what a production system wants, so the
+   * start says it every time. Why this adapter is then asked for <code>job-lease</code> like
+   * any other is decision 67 in the repository's DECISIONS.md, and why the address follows
+   * the docker compose of the line is decision 68.
    *
    * @param adapterId The adapter ID
    * @param configuration The (bound) connection configuration
    * @param warnLogger Sink for the warning
    */
-  static void reportTheClientDefaultAddress(
+  static void reportTheLocalClusterAddress(
       final String adapterId,
       final Camunda8AdapterConfiguration configuration,
       final Consumer<String> warnLogger) {
 
-    if (!configuration.usesTheClientDefaultAddress()) {
+    if (!configuration.usesTheLocalClusterAddress()) {
       return;
     }
     final var message = new StringBuilder(
         """
             Camunda 8 adapter '%s' has no cluster address, so it connects to the local cluster at '%s'. \
-            This is the default address of the Camunda client. Set '%s' to connect to another cluster.
+            %s Set '%s' to connect to another cluster.
             For Camunda 8 SaaS, set '%s' to 'saas' and add '%s', '%s', '%s' and '%s'.
             If your cluster asks for credentials, configure them under '%s'. Without it the adapter \
             sends none."""
             .formatted(
                 adapterId,
                 configuration.describeAddress(),
+                Camunda8LocalCluster.WHERE_THE_ADDRESS_COMES_FROM,
                 Camunda8AdapterConfiguration.propertyKey(adapterId, configuration.addressKeyInUse()),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "mode"),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "cluster-id"),
@@ -172,17 +173,6 @@ public final class Camunda8StartupValidation {
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "client-id"),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "client-secret"),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "auth")));
-    // where the release line knows that Camunda's own docker compose publishes REST on a
-    // port other than the client's default, the warning says so
-    final var aboutTheLine = configuration.isPreferRestOverGrpc()
-        ? Camunda8LocalCluster
-            .aboutTheDefaultRestAddress(Camunda8AdapterConfiguration.propertyKey(adapterId, "rest-address"))
-        : null;
-    if (aboutTheLine != null) {
-      message
-          .append('\n')
-          .append(aboutTheLine);
-    }
     // an address written for the other protocol is most likely meant for this one, and the
     // switch which makes the client use it is easy to miss
     final var otherKey = configuration.isPreferRestOverGrpc()
@@ -211,7 +201,7 @@ public final class Camunda8StartupValidation {
    * default for: a lease cannot be taken back per job.
    * <p>
    * It is asked LAST, and only of an adapter whose connection is complete. That includes an
-   * adapter which uses the client's default address, because it opens workers like any
+   * adapter which uses the address of the local cluster, because it opens workers like any
    * other. An adapter which boots degraded serves nothing, so it opens no worker and leases
    * nothing.
    */

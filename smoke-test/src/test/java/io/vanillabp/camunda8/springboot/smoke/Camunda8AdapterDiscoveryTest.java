@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
+import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentService;
 import io.vanillabp.camunda8.processservice.Camunda8ProcessService;
 import io.vanillabp.integration.adapter.spi.AdapterDeploymentService;
@@ -56,7 +57,7 @@ public class Camunda8AdapterDiscoveryTest {
   public void anAdapterWithoutAnAddressAsksTheLocalCluster() {
 
     // This application configures the adapter but no cluster address, so the client uses
-    // its default address, which is a cluster on this machine. The health check asks that
+    // the address of the local cluster of its release line. The health check asks that
     // cluster. No cluster runs there in this test, but one may on a developer's machine,
     // so the answer is UP or DOWN, and never UNKNOWN
     final var deploymentService = context.getBean(AdapterDeploymentService.class);
@@ -70,7 +71,7 @@ public class Camunda8AdapterDiscoveryTest {
             + health.description());
     Assertions.assertEquals("c8", health.adapterId());
     Assertions.assertEquals(
-        "http://0.0.0.0:8080",
+        Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS,
         health.details().get("address"),
         "and it says which cluster it asked");
 
