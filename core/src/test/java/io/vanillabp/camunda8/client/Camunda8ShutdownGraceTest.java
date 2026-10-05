@@ -132,7 +132,7 @@ public class Camunda8ShutdownGraceTest {
     configuration.setJobLease(Camunda8AdapterConfiguration.JobLease.DO_NOT_USE);
 
     Camunda8StartupValidation.validateAtStartup(
-        "c8", configuration, true, false, Duration.ofDays(7), warnings::add, line -> {
+        "c8", configuration, true, false, Duration.ofDays(7), "server.port", warnings::add, line -> {
         });
 
     assertEquals(1, warnings.size(), "the grace is checked where every other value is checked");

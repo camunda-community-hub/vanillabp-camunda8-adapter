@@ -52,6 +52,17 @@ public class Camunda8StartupValidationTest {
                                             .contains("vanillabp.adapters.c8.mode")),
             "expected the startup warning naming the local cluster but got: "
                 + messages);
+        // where the local cluster of the line takes port 8080, the default port of Quarkus,
+        // the warning names the key which moves the application. Which lines that are is
+        // held by Camunda8LocalClusterTest of each line
+        Assertions.assertEquals(
+            Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS.endsWith(":8080"),
+            messages
+                .stream()
+                .anyMatch(message -> message.contains(
+                    "so this application needs another port. Set 'quarkus.http.port' to pick one.")),
+            "the warning names the port key of Quarkus where the line needs it: "
+                + messages);
       });
 
   @Test

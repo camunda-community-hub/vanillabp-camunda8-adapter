@@ -33,7 +33,7 @@ public class Camunda8MissingClusterAddressTest {
     configuration.setJobLease(Camunda8AdapterConfiguration.JobLease.DO_NOT_USE);
     final var warnings = new ArrayList<String>();
     Camunda8StartupValidation.validateAtStartup(
-        "c8", configuration, true, false, Duration.ofDays(7), warnings::add, line -> {
+        "c8", configuration, true, false, Duration.ofDays(7), "server.port", warnings::add, line -> {
         });
     return warnings;
 
@@ -127,7 +127,7 @@ public class Camunda8MissingClusterAddressTest {
     final var failure = assertThrows(
         IllegalStateException.class,
         () -> Camunda8StartupValidation.validateAtStartup(
-            "c8", configuration, true, false, Duration.ofDays(7), warnings::add, line -> {
+            "c8", configuration, true, false, Duration.ofDays(7), "server.port", warnings::add, line -> {
             }));
 
     assertTrue(failure.getMessage().contains("vanillabp.adapters.c8.cluster-id"), failure.getMessage());

@@ -616,7 +616,10 @@ connection configuration is validated AT STARTUP:
   publishes it: `http://localhost:8088` for REST on 8.8, `http://localhost:8080` for REST on
   8.9 and 8.10, and `http://localhost:26500` for gRPC on every line. The start goes on, and a
   WARN names the address, says that it matches the docker compose of this line, and names the
-  key which changes it (e.g. `vanillabp.adapters.myengine.rest-address`). The adapter then
+  key which changes it (e.g. `vanillabp.adapters.myengine.rest-address`). On 8.9 and 8.10, when
+  the client talks REST, the WARN also says that the application needs a port other than 8080.
+  It names the key of the platform: `server.port` on Spring Boot, `quarkus.http.port` on
+  Quarkus. The adapter then
   opens workers like any other, so on the 8.10 line it also needs `job-lease`;
 - inconsistent (e.g. `mode: saas` without `cluster-id`) → the boot FAILS naming the
   missing keys - unless the adapter is nowhere first in any prioritized-adapters list
