@@ -603,7 +603,9 @@ connection configuration is validated AT STARTUP:
   cluster).
 
 The default addresses are the ones of the Camunda client (`CamundaClientBuilderImpl`), read
-from the client of each release line, so they cannot drift apart. Version 1 used the same
+from the client of each release line, so they cannot drift apart. On the 8.8 line the WARN adds one
+sentence: Camunda's docker compose for 8.8 publishes REST on port 8088, so a cluster started with
+it needs `rest-address: http://localhost:8088`. See decision 67 in [`DECISIONS.md`](./DECISIONS.md). Version 1 used the same
 client defaults where neither `camunda.client.rest-address` nor `camunda.client.mode` was set.
 
 Messages name property KEYS only - values, especially credentials like

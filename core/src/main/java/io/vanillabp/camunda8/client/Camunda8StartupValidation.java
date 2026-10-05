@@ -139,7 +139,9 @@ public final class Camunda8StartupValidation {
    * Warns where a self-managed adapter has no address for the protocol its client talks. The
    * client then uses its own default address, which is a cluster on this machine. That is
    * what a developer starting a local cluster wants, so the start goes on. It is never what
-   * a production system wants, so the start says it every time.
+   * a production system wants, so the start says it every time. Why the default is the
+   * client's, and why this adapter is then asked for <code>job-lease</code> like any other, is
+   * decision 67 in the repository's DECISIONS.md.
    *
    * @param adapterId The adapter ID
    * @param configuration The (bound) connection configuration
@@ -170,6 +172,17 @@ public final class Camunda8StartupValidation {
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "client-id"),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "client-secret"),
                 Camunda8AdapterConfiguration.propertyKey(adapterId, "auth")));
+    // where the release line knows that Camunda's own docker compose publishes REST on a
+    // port other than the client's default, the warning says so
+    final var aboutTheLine = configuration.isPreferRestOverGrpc()
+        ? Camunda8LocalCluster
+            .aboutTheDefaultRestAddress(Camunda8AdapterConfiguration.propertyKey(adapterId, "rest-address"))
+        : null;
+    if (aboutTheLine != null) {
+      message
+          .append('\n')
+          .append(aboutTheLine);
+    }
     // an address written for the other protocol is most likely meant for this one, and the
     // switch which makes the client use it is easy to miss
     final var otherKey = configuration.isPreferRestOverGrpc()

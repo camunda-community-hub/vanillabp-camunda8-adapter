@@ -1393,6 +1393,10 @@ See [Eventual consistency of the query API](./README.md#eventual-consistency-of-
 
 ### 36. A job this adapter holds from the activation to the answer leases it, and the application says whether
 
+**One sentence below is superseded by decision 67**, the one which says that an adapter id nobody
+configured a cluster for is not asked. Such an adapter id now uses the local cluster, opens workers
+there, and is asked for `job-lease` like every other one. The rest of this entry stands.
+
 Camunda 8.10 lets a worker lease an activation. The job then carries a token, and the cluster takes
 the completion, the failure and the BPMN error of that job only from whoever holds the current one.
 An activation which follows an expired lock supersedes the token before it.
@@ -3028,3 +3032,35 @@ into the iteration was answered by the variable search alone, checked once with 
 older tests of `Camunda8AggregateChangedIT` stayed green. `Camunda8TaskScopedPushWaitsForItsScopeTest` holds the
 rules without a cluster: no row or a closed row asks nothing, a user task is asked as a user task, a task directly in
 its process is written without a search, a row of another version is searched for.
+
+### 67. A missing cluster address means the local cluster, and the start warns about it
+
+A self-managed adapter id which names no address for the protocol its client talks uses the
+default address of the Camunda client: `http://0.0.0.0:8080` for REST and `http://0.0.0.0:26500`
+for gRPC. The start goes on and logs a WARN. It names the address, says that this is the local
+cluster, and names the key which changes it. Before, the start warned that the application boots
+and then stopped in the deployment because `rest-address` was missing. The warning and the
+behaviour did not agree.
+
+Why `0.0.0.0` and not `localhost`. The rule is: whatever Camunda's docker compose binds to.
+`camunda/camunda-distributions` publishes the ports in `docker-compose/versions/camunda-8.8` and
+`camunda-8.9` without a host IP (`"26500:26500"`, `"8080:8080"`), so Docker binds them to
+`0.0.0.0`. The client uses the same address as its default (`CamundaClientBuilderImpl`, the same
+on all three lines), and the adapter reads it from there, so the two cannot drift apart. Version 1
+used the same defaults through Camunda's Spring Boot starter, so an upgrade changes nothing here.
+
+One exception is the 8.8 compose. It publishes REST as `"8088:8080"`, so the default REST address
+finds nothing there. The 8.8 line adds one sentence to the WARN which says so and names the address
+to set. The 8.9 and 8.10 lines publish `8080:8080` and add nothing.
+
+Such an adapter opens its workers on the local cluster like any other. So on a line whose client
+can lease, it is asked for `job-lease` as well, and the start stops until the key is set. This
+replaces the sentence of decision 36 which left an adapter without a cluster out of that question.
+
+SaaS is not affected. It has no default to fall back to, so its keys stay required, and a SaaS
+adapter which is nowhere first with `deployment-failure: warn` still boots degraded.
+
+`Camunda8ClientDefaultAddressTest` holds the WARN and the cases around it, `Camunda8LocalClusterTest`
+the sentence of the 8.8 line, and `Camunda8StartupValidationBootTest` (Spring Boot) and
+`Camunda8StartupValidationTest` (Quarkus) the boot. See
+[Connecting to a Camunda 8 cluster](./README.md#connecting-to-a-camunda-8-cluster).
