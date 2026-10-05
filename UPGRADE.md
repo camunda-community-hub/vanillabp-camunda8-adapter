@@ -6,7 +6,7 @@ history is in git. These entries feed the user-facing
 [migration guide](https://github.com/vanillabp/adapter-platform-integration/wiki/Migrating-from-version-1);
 the same file exists for
 [VanillaBP itself](https://github.com/vanillabp/adapter-platform-integration/blob/main/UPGRADE.md)
-and for the [Camunda 7 adapter](https://github.com/vanillabp/camunda7-adapter/blob/main/UPGRADE.md).
+and for the [Camunda 7 adapter](https://github.com/camunda-community-hub/vanillabp-camunda7-adapter/blob/main/UPGRADE.md).
 
 ## 2.0
 
