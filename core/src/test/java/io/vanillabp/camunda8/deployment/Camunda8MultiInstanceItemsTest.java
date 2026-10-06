@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -124,6 +125,101 @@ public class Camunda8MultiInstanceItemsTest {
 
     }
 
+    @Override
+    public boolean workflowsShareTheWorkflowAggregate(
+        final String workflowModuleId,
+        final String bpmnProcessId,
+        final String otherBpmnProcessId) {
+
+      return true;
+
+    }
+
+  }
+
+  /**
+   * A caller iterating over a call activity without naming the item, and the process it calls
+   * statically, with one task of its own and one multi-instance element of its own which names
+   * no item either.
+   */
+  private static String callerAndCalled(
+      final String loopCharacteristicsOfTheCaller) {
+
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="D" targetNamespace="http://bpmn.io/schema/bpmn">
+          <bpmn:process id="Caller" isExecutable="true">
+            <bpmn:callActivity id="Call_perApplication">
+              <bpmn:extensionElements>
+                <zeebe:calledElement processId="Called" />
+              </bpmn:extensionElements>
+              <bpmn:multiInstanceLoopCharacteristics>
+                <bpmn:extensionElements>
+                  %s
+                </bpmn:extensionElements>
+              </bpmn:multiInstanceLoopCharacteristics>
+            </bpmn:callActivity>
+          </bpmn:process>
+          <bpmn:process id="Called" isExecutable="true">
+            <bpmn:subProcess id="Subprocess_ownRounds">
+              <bpmn:multiInstanceLoopCharacteristics>
+                <bpmn:extensionElements>
+                  <zeebe:loopCharacteristics inputCollection="=rounds" />
+                </bpmn:extensionElements>
+              </bpmn:multiInstanceLoopCharacteristics>
+              <bpmn:serviceTask id="Activity_check">
+                <bpmn:extensionElements>
+                  <zeebe:taskDefinition type="checkCredit" />
+                </bpmn:extensionElements>
+              </bpmn:serviceTask>
+            </bpmn:subProcess>
+          </bpmn:process>
+        </bpmn:definitions>
+        """
+        .formatted(loopCharacteristicsOfTheCaller);
+
+  }
+
+  private static final String THE_CALLER_NAMES_NO_ITEM = "<zeebe:loopCharacteristics inputCollection=\"=applications\" />";
+
+  private static final String THE_CALLER_NAMES_THE_ITEM = "<zeebe:loopCharacteristics inputCollection=\"=applications\" inputElement=\"application\" />";
+
+  /**
+   * Reads, prepares and wires every process of one file, the way the pipeline does for a
+   * workflow module, and links the calls between them as the deployment does before it asks
+   * the cluster anything.
+   *
+   * @return The service, for the registry it filled
+   */
+  private static Camunda8DeploymentService deployModule(
+      final Map<String, List<String>> wanted,
+      final String xml) {
+
+    final var configuration = new Camunda8AdapterConfiguration();
+    configuration.setRestAddress("http://localhost:65535");
+    final var scoping = TestScoping.of(NameClashAvoidance.BY_ADAPTER);
+    final var service = DeploymentServiceUnderTest.of(
+        "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators
+            .of(new ACoreWantingTheItemOf(wanted), scoping),
+        (
+            workflowModuleId,
+            bpmnProcessId,
+            taskDefinition) -> Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT,
+        Duration
+            .ofHours(1),
+        adapterId -> configuration, scoping);
+    final var models = service
+        .readBpmn(MODULE, FILE, new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)), true);
+    io.vanillabp.camunda8.Camunda8ProcessingContext context = null;
+    for (final var model : models) {
+      context = service.prepareBpmn(MODULE, context, FILE, model.getKey(), model.getValue());
+    }
+    for (final var model : models) {
+      service.wireBpmn(MODULE, FILE, model.getKey(), model.getValue(), context);
+    }
+    service.wireTheProcessesThisModuleCalls(MODULE, context);
+    return service;
+
   }
 
   private static void deploy(
@@ -205,8 +301,8 @@ public class Camunda8MultiInstanceItemsTest {
         () -> deploy(
             Map.of("checkCredit", List.of("Subprocess_ofTheCaller")),
             model(SUBPROCESS_WITHOUT_AN_ITEM)),
-        "the chain crosses a call activity, so a task of a called process asks for an "
-            + "element of its caller, and that element is read where the caller is deployed");
+        "a process nobody calls has no level of a caller, so an element id the method names "
+            + "and the model does not hold is nothing this check can judge");
 
   }
 
@@ -271,6 +367,58 @@ public class Camunda8MultiInstanceItemsTest {
         message.contains("'Subprocess_applications', 'Activity_rate'"),
         () -> "and both elements the second task wants an item of: "
             + message);
+
+  }
+
+  @Test
+  @DisplayName("A handler of a called process wanting the item of a caller's element which names none ends the boot")
+  public void anElementOfACallerWithoutAnItemEndsTheBoot() {
+
+    final var refused = assertThrows(
+        IllegalStateException.class,
+        () -> deployModule(
+            Map.of("checkCredit", List.of("Call_perApplication")),
+            callerAndCalled(THE_CALLER_NAMES_NO_ITEM)));
+
+    final var message = refused.getMessage();
+    assertTrue(
+        message.contains("BPMN process 'Called'"),
+        () -> "the process whose method asked for it: "
+            + message);
+    assertTrue(
+        message.contains("'Call_perApplication' (in the calling BPMN process 'Caller')"),
+        () -> "the element and the model it stands in, because the reader has two of them: "
+            + message);
+    assertTrue(
+        message.contains("'Activity_check'") && message.contains("'checkCredit'"),
+        () -> "and the task whose method asked for it: "
+            + message);
+
+  }
+
+  @Test
+  @DisplayName("The same caller naming the variable deploys")
+  public void anElementOfACallerNamingTheVariableDeploys() {
+
+    assertDoesNotThrow(
+        () -> deployModule(
+            Map.of("checkCredit", List.of("Call_perApplication")),
+            callerAndCalled(THE_CALLER_NAMES_THE_ITEM)));
+
+  }
+
+  @Test
+  @DisplayName("The second round judges only what the callers add, so the first round's finding is not named twice")
+  public void theSecondRoundJudgesOnlyTheCallersLevels() {
+
+    final var service = deployModule(Map.of(), callerAndCalled(THE_CALLER_NAMES_NO_ITEM));
+
+    assertEquals(
+        Map.of("Call_perApplication", "Caller"),
+        Camunda8MultiInstanceItems
+            .inheritedElementsWithoutAnItem(service.multiInstanceRegistry(), "Called", "Activity_check"),
+        "'Subprocess_ownRounds' names no item either, but it stands in the process itself and "
+            + "the round in wireBpmn has judged it already");
 
   }
 

@@ -457,6 +457,11 @@ multi-instance element, so a handler which only counts needs no change to its mo
 Nothing else is refused. An element without an `inputElement` still deploys where no handler asks
 for its item.
 
+One more case ends the boot. Two processes which call the same process may carry multi-instance
+elements whose ids differ only in characters a Camunda 8 variable name cannot hold, such as
+`my-task` and `my.task`. Both write one variable, so a handler in the called process could be told a
+round which never ran. The message names both elements. Rename one of them.
+
 ### An ad-hoc subprocess in your model earns a warning, or ends the boot
 
 Version 1 said nothing about the element and neither executed nor reported it. This version serves

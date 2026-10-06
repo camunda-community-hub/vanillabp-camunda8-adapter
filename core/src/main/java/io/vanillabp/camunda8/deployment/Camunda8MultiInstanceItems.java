@@ -1,8 +1,10 @@
 package io.vanillabp.camunda8.deployment;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,10 +36,12 @@ public final class Camunda8MultiInstanceItems {
    * The IDs of the multi-instance elements enclosing the given BPMN element which name no
    * <code>inputElement</code>.
    * <p>
-   * Read off the chain this deployment just recorded, so only the elements of the process
-   * being wired are judged. A level a CALLER contributes is linked once every process of the
-   * workflow module is wired, and that element belongs to the model of the caller, where the
-   * same question is asked about it.
+   * Read off the chain this deployment just recorded. Asked while one process is wired, that
+   * chain holds the elements of the process itself and nothing else: the levels a CALLER
+   * contributes are linked only once every process of the workflow module is wired. Those are
+   * judged then, by {@link #inheritedElementsWithoutAnItem}. A method in the called process
+   * asks for the item by the caller's element id, so the caller's own model cannot answer that
+   * question.
    *
    * @param registry The chains recorded while deploying
    * @param bpmnProcessId The process' ID as the CLUSTER will know it (the SCOPED ID)
@@ -59,17 +63,65 @@ public final class Camunda8MultiInstanceItems {
   }
 
   /**
+   * The multi-instance elements of the CALLERS of a process which enclose the given BPMN
+   * element and name no <code>inputElement</code>.
+   * <p>
+   * Only what the call sites contribute, so nothing found by
+   * {@link #elementsWithoutAnItem} while the process itself was wired is found a second time.
+   * Asked once the call graph of the workflow module is linked, and before anything is sent to
+   * the cluster.
+   *
+   * @param registry The chains recorded while deploying, with the call graph linked
+   * @param bpmnProcessId The called process' ID as the CLUSTER will know it (the SCOPED ID)
+   * @param elementId The BPMN element the handler serves
+   * @return The element IDs, each with the calling process declaring it as the CLUSTER knows
+   *         it, possibly empty
+   */
+  public static Map<String, String> inheritedElementsWithoutAnItem(
+      final Camunda8MultiInstance.Registry registry,
+      final String bpmnProcessId,
+      final String elementId) {
+
+    final var found = new LinkedHashMap<String, String>();
+    registry
+        .inheritedLevelsOf(bpmnProcessId, elementId)
+        .stream()
+        .filter(level -> level.element().elementVariable() == null)
+        .forEach(level -> found.putIfAbsent(level.element().elementId(), level.bpmnProcessId()));
+    return found;
+
+  }
+
+  /**
    * One handler asking for an item its model never hands over.
    *
    * @param taskElementId The BPMN element the handler serves
    * @param taskDefinition The task definition it was wired by
    * @param elementIds The multi-instance elements it wants the item of, all of them
    *          without one
+   * @param callers For an element a calling process declares, that process' PLAIN ID by
+   *          element ID. Empty where every element stands in the process of the handler
    */
   public record Finding(
                         String taskElementId,
                         String taskDefinition,
-                        Collection<String> elementIds) {
+                        Collection<String> elementIds,
+                        Map<String, String> callers) {
+
+    /**
+     * A finding about elements of the handler's own process.
+     *
+     * @param taskElementId The BPMN element the handler serves
+     * @param taskDefinition The task definition it was wired by
+     * @param elementIds The multi-instance elements it wants the item of
+     */
+    public Finding(
+        final String taskElementId,
+        final String taskDefinition,
+        final Collection<String> elementIds) {
+      this(taskElementId, taskDefinition, elementIds, Map.of());
+    }
+
   }
 
   /**
@@ -101,7 +153,7 @@ public final class Camunda8MultiInstanceItems {
                     .formatted(
                         finding.taskElementId(),
                         finding.taskDefinition(),
-                        described(finding.elementIds()))));
+                        described(finding.elementIds(), finding.callers()))));
     message
         .append(
             """
@@ -121,14 +173,20 @@ public final class Camunda8MultiInstanceItems {
    * with their number - so the sentence around it reads as one sentence either way.
    */
   private static String described(
-      final Collection<String> elementIds) {
+      final Collection<String> elementIds,
+      final Map<String, String> callers) {
 
-    final var quoted = elementIds
+    // an element of a caller is named with its process: the reader has two models in front of
+    // them, and the handler's own one does not hold it
+    final var named = elementIds
         .stream()
-        .collect(Collectors.joining("', '", "'", "'"));
+        .map(elementId -> callers.containsKey(elementId)
+            ? "'%s' (in the calling BPMN process '%s')".formatted(elementId, callers.get(elementId))
+            : "'%s'".formatted(elementId))
+        .collect(Collectors.joining(", "));
     return elementIds.size() == 1
-        ? "the element %s, which names".formatted(quoted)
-        : "the elements %s, which name".formatted(quoted);
+        ? "the element %s, which names".formatted(named)
+        : "the elements %s, which name".formatted(named);
 
   }
 

@@ -1001,7 +1001,7 @@ it was.
 
 The reading side keeps one way. `chainOf` answers what the deployment knows, the handed-down levels
 go in front of it, and `valuesOf` stays the only place turning a level into a `MultiInstanceValue`.
-A level whose element id the called process uses itself is dropped, because both write the same
+A level whose variable the called process writes itself is dropped, because both write the same
 variable names and the inner scope overwrites the outer one - the same rule the graph follows. Once
 the two sources are together, nothing tells them apart.
 
@@ -1042,13 +1042,19 @@ paths nest the same two ids the other way round, one of the two orders is the on
 call sites are walked in a fixed order so the answer survives a restart. The price is the fetch
 list, which asks for the variables of every call site on every activation.
 
-Where the same element id turns up twice along ONE path, the inner occurrence wins. Both write the
+Where two levels along ONE path write the same variable, the inner occurrence wins. Both write the
 same variable names and the inner scope overwrites the outer one, so the job carries the inner
-values and the chain says so. A process calling itself is where this happens by design.
+values and the chain says so. A process calling itself is where this happens by design. Two
+different element ids can be such a pair, where they differ only in characters a variable name
+cannot hold, and a DEBUG line names both.
 
-Where two call sites carry multi-instance elements of one id which do not mean the same thing, the
-boot ends with a message naming both processes. Nobody can say what `@MultiInstanceElement` of that
-id means there, and answering it wrongly would hand a handler the values of another iteration.
+Where two call sites carry multi-instance elements which write the same variable and do not mean
+the same thing, the boot ends with a message naming both processes. Two different ids are such a
+case as well: `my-task` in one caller and `my.task` in another both write
+`vanillabpMiIndex_my_task`, and a job of an instance reached from one of them would answer a
+handler asking for the other with a round which never ran. Nobody can say what
+`@MultiInstanceElement` of that id means there, and answering it wrongly would hand a handler the
+values of another iteration.
 
 A call graph with a cycle stops at the first process already on the path and reports the levels
 collected so far. Without that rule a process calling itself has a chain which grows with every
@@ -1597,7 +1603,11 @@ notification rather than a task.
 serve belongs to a foreign worker or to a connector runtime, and to that worker the probe is a
 real update. The adapter knows at deployment which listeners it serves, so the check of the other
 open tasks sends no probe for such an element at all and answers "cannot say" for its tasks. That
-is one rule and not a second mechanism beside the mark.
+is one rule and not a second mechanism beside the mark. Since decision 54 a model reaches that case
+in two ways only: a listener in a process no `@WorkflowService` class claims, and a listener on an
+element carrying a `zeebe:modelerTemplate`. Anywhere else a listener no method serves ends the boot
+before any probe could be sent. The template is the case this exception exists for, because there
+somebody else really does answer the job.
 
 The rule holds for that CHECK and not for the two probes which ask about a task somebody named.
 `awarenessOfUserTask` and the pre-commit check of `completeUserTask` send the same empty update

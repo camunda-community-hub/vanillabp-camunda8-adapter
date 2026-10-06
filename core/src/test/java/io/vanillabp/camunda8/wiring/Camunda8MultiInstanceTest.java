@@ -802,6 +802,109 @@ public class Camunda8MultiInstanceTest {
 
   }
 
+  /**
+   * One process whose multi-instance subprocess of the given id encloses a call activity of
+   * the given process, and optionally a task of its own inside a multi-instance subprocess.
+   */
+  private static String callerOf(
+      final String processId,
+      final String loopId,
+      final String calledProcessId) {
+
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="D" targetNamespace="http://bpmn.io/schema/bpmn">
+          <bpmn:process id="%s" isExecutable="true">
+            <bpmn:subProcess id="%s">
+              <bpmn:multiInstanceLoopCharacteristics>
+                <bpmn:extensionElements>
+                  <zeebe:loopCharacteristics inputCollection="=items" inputElement="item" />
+                </bpmn:extensionElements>
+              </bpmn:multiInstanceLoopCharacteristics>
+              <bpmn:callActivity id="Call_%s">
+                <bpmn:extensionElements>
+                  <zeebe:calledElement processId="%s" />
+                </bpmn:extensionElements>
+              </bpmn:callActivity>
+              <bpmn:serviceTask id="%sTask">
+                <bpmn:extensionElements>
+                  <zeebe:taskDefinition type="%sTask" />
+                </bpmn:extensionElements>
+              </bpmn:serviceTask>
+            </bpmn:subProcess>
+          </bpmn:process>
+        </bpmn:definitions>
+        """
+        .formatted(processId, loopId, calledProcessId, calledProcessId, processId, processId);
+
+  }
+
+  @Test
+  @DisplayName("two callers whose element ids write one variable end the boot")
+  public void twoCallersWritingOneVariableAreRejected() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model(callerOf("CallerA", "my-task", "Shared")), "CallerA", registry);
+    Camunda8MultiInstance.wire(model(callerOf("CallerC", "my.task", "Shared")), "CallerC", registry);
+    registry.registerCall("CallerA", "Call_Shared", "Shared");
+    registry.registerCall("CallerC", "Call_Shared", "Shared");
+
+    final var exception = assertThrows(IllegalStateException.class, registry::linkCalledProcesses);
+
+    final var message = exception.getMessage();
+    assertTrue(
+        message.contains("'my-task'") && message.contains("'my.task'"),
+        () -> "both ids, which look different to the reader: "
+            + message);
+    assertTrue(
+        message.contains("'vanillabpMiIndex_my_task'"),
+        () -> "and the one variable the cluster knows them by: "
+            + message);
+    assertTrue(
+        message.contains("differ only in characters a Camunda 8 variable name cannot hold"),
+        () -> "and why two different ids are one: "
+            + message);
+    assertTrue(message.contains("Rename one of the two elements"), message);
+
+  }
+
+  @Test
+  @DisplayName("along one call path, an inner element writing the same variable replaces the outer one")
+  public void theInnerLevelOfOnePathWins() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model(callerOf("Outer", "my-task", "Middle")), "Outer", registry);
+    Camunda8MultiInstance.wire(model(callerOf("Middle", "my.task", "Inner")), "Middle", registry);
+    registry.registerCall("Outer", "Call_Middle", "Middle");
+    registry.registerCall("Middle", "Call_Inner", "Inner");
+    registry.linkCalledProcesses();
+
+    assertEquals(
+        List.of("my.task"),
+        elementIdsOf(registry.chainOf("Inner", "InnerTask")),
+        "both levels write vanillabpMiIndex_my_task, the inner scope overwrites the outer one, "
+            + "so the job carries the round of 'my.task' and nothing of 'my-task'");
+
+  }
+
+  @Test
+  @DisplayName("a called process writing the variable of a caller's level itself drops that level")
+  public void anOwnLevelWritingTheSameVariableHidesTheInheritedOne() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    Camunda8MultiInstance.wire(model(callerOf("Caller", "my-task", "Shared")), "Caller", registry);
+    Camunda8MultiInstance.wire(model(callerOf("Shared", "my.task", "Elsewhere")), "Shared", registry);
+    registry.registerCall("Caller", "Call_Shared", "Shared");
+    registry.linkCalledProcesses();
+
+    assertEquals(
+        List.of("my.task"),
+        elementIdsOf(registry.chainOf("Shared", "SharedTask")),
+        "the caller's value is overwritten in a scope further in, so reporting it under "
+            + "'my-task' would report the inner round under the outer id");
+
+  }
+
   @Test
   @DisplayName("a process calling itself ends with the levels collected so far")
   public void aRecursiveCallGraphTerminates() {

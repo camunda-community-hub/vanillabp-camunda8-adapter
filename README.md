@@ -1609,6 +1609,19 @@ is job-based) and V1's marker-variable workaround is broken by V1's own admissio
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
 or later.
 
+A Camunda-managed user task which no `@WorkflowTask` method serves is no defect. The cluster
+creates it, a task list shows it, and whoever finishes it moves the workflow on. The listener
+worker is opened anyway and answers the listener jobs, so the workflow never waits for this
+application. What the application misses is the notification. So the boot says it once per BPMN
+process, on INFO, and names each element with the two ways to write its method:
+`Camunda8DeploymentService#nameTheUserTasksNothingServes`, with the text in
+`Camunda8UnservedUserTasks`. The Camunda 7 adapter says the same sentence for the same case. It is
+said only for a process a `@WorkflowService` class claims, because no method of this application
+was meant to serve the tasks of any other process. A form reference written as an expression is
+left out, because it has a finding of its own, see
+[A form reference has to be a name as well](#a-form-reference-has-to-be-a-name-as-well).
+`Camunda8UnservedUserTasksTest` holds the report, the served task and the unclaimed process.
+
 A user task WITHOUT `zeebe:userTask` is a user task a job worker serves, and this adapter does not
 accept that shape. The question is the shape of the element and nothing else: nothing asks whether
 some worker would fetch the job, because the model already says who serves the task. What the
@@ -2723,9 +2736,14 @@ task declare `@MultiInstanceElement` for. Where the two meet, the message names 
 element, the attribute and the two ways out. Before that check the parameter received `null` once a
 job arrived and nothing said why.
 
-Only the elements of the process being wired are judged. A level a CALLER contributes is linked
-once the whole workflow module is wired, and it belongs to the model of that caller, where the same
-question is asked about it.
+The question is asked in two rounds. While a process is wired, its own elements are judged, and
+the message is about that one model. A level a CALLER contributes is linked only once the whole
+workflow module is wired, in `wireTheProcessesThisModuleCalls`. The method in the called process
+asks for the item by the caller's element id, so the caller's model cannot answer for it. So the
+same check runs a second time right after `linkCalledProcesses()`, before anything is sent to the
+cluster, and it judges only the levels the call sites added. Nothing the first round found is
+reported twice. Its message names the calling process of each element, because the reader now has
+two models in front of them. `Camunda8MultiInstanceItemsTest` holds both rounds.
 
 The same question is asked about a version the cluster still HOLDS, and there the answer travels
 instead of ending anything. Nobody can redraw such a model, so `taskSpecsOf` puts the elements
@@ -2845,8 +2863,12 @@ What that costs where a call graph is not a straight line:
 - A process which calls itself ends at the first repetition, and a handler sees the round it
   runs in rather than all the rounds above it. Every round writes the same variable names, so
   the innermost one is what the job carries.
-- Two call sites whose multi-instance elements share a BPMN id but hand over different things
-  end the boot, because `@MultiInstanceElement` of that id would mean two things.
+- Two call sites whose multi-instance elements write the same variable but hand over different
+  things end the boot, because `@MultiInstanceElement` would mean two things there. The variable
+  decides and not the BPMN id: `my-task` in one caller and `my.task` in another both write
+  `vanillabpMiIndex_my_task`, and a job of an instance reached from the first would answer a
+  handler asking for the second with a round which never ran. Along ONE call path the inner of two
+  such levels wins, as it does on the reading side, and a DEBUG line names both ids.
 
 Two details of this engine are worth knowing when modelling:
 
@@ -2862,8 +2884,10 @@ Two details of this engine are worth knowing when modelling:
   Camunda 8 counts iterations from 1. The adapter translates.
 
 Characters an element id may hold but a variable name may not are replaced by `_`. Two
-multi-instance elements of one process whose ids differ only in such characters would end up
-sharing variables, which fails the deployment with a message naming both.
+multi-instance elements whose ids differ only in such characters would end up sharing variables.
+Within one process that fails the deployment with a message naming both. Across the processes
+calling one process it does the same, as the list above says, and a level the called process
+writes itself hides the caller's level of the same variable.
 
 A model which already carries an input mapping of one of these names, reading something else,
 fails the deployment too. Nothing the application modelled is overwritten, and the modelled
