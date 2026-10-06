@@ -4509,6 +4509,25 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
                     openTaskProbe);
                 openedJobTypes.add(listenerJobType);
               });
+          // a user task may go without a method, and the cluster still waits for its creating
+          // listener. For a deployed model every user task gets a listener worker; for the old
+          // id the task definitions above only name the served ones, so the listeners of the
+          // held models are read and served as well
+          userTaskListenerJobTypesTheClusterHoldsFor(workflowModuleId, bpmnProcessId)
+              .stream()
+              .filter(listenerJobType -> !jobTypesAlreadyServed.contains(listenerJobType))
+              .filter(listenerJobType -> !openedJobTypes.contains(listenerJobType))
+              .forEach(listenerJobType -> {
+                openUserTaskListenerWorker(
+                    workflowModuleId,
+                    bpmnProcessId,
+                    listenerJobType,
+                    bpmsProcessingContext,
+                    client,
+                    drain,
+                    openTaskProbe);
+                openedJobTypes.add(listenerJobType);
+              });
           openWorkflowEndWorkerOfADeclaredId(
               workflowModuleId,
               bpmnProcessId,
@@ -4519,6 +4538,38 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               openedJobTypes);
           reportWhatADeclaredIdIsServedWith(workflowModuleId, bpmnProcessId, taskDefinitions, openedJobTypes);
         });
+
+  }
+
+  /**
+   * The job types of the user-task listeners in the models the cluster holds under a
+   * declared BPMN process id. Where the cluster cannot be asked, nothing is added, and the
+   * user tasks of those workflows are served only where a method names their task
+   * definition, as before.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @return The listener job types, each once
+   */
+  private Set<String> userTaskListenerJobTypesTheClusterHoldsFor(
+      final String workflowModuleId,
+      final String bpmnProcessId) {
+
+    final var modelsTheClusterHolds = clientFactory.getModelsTheClusterHolds();
+    if (modelsTheClusterHolds == null) {
+      return Set.of();
+    }
+    if (!(modelsTheClusterHolds
+        .heldFor(workflowModuleId, bpmnProcessId) instanceof Camunda8ModelsTheClusterHolds.Answer.Known known)) {
+      return Set.of();
+    }
+    final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
+    final var jobTypes = new TreeSet<String>();
+    known
+        .models()
+        .forEach(heldModel -> jobTypes
+            .addAll(Camunda8TaskWiring.userTaskListenerJobTypesOfHeldModel(heldModel.model(), scopedBpmnProcessId)));
+    return jobTypes;
 
   }
 

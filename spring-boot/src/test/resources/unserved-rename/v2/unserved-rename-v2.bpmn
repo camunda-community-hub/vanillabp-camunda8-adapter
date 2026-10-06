@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_UnservedRename_v2"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_UnservedContinueV2" name="UnservedContinueV2" />
+  <!-- the same model under the NEW id -->
+  <bpmn:process id="UnservedRenameNew" isExecutable="true">
+    <bpmn:startEvent id="URN_Start">
+      <bpmn:outgoing>URN_ToWait</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="URN_ToWait" sourceRef="URN_Start" targetRef="URN_Wait" />
+    <bpmn:intermediateCatchEvent id="URN_Wait">
+      <bpmn:incoming>URN_ToWait</bpmn:incoming>
+      <bpmn:outgoing>URN_ToReview</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="URN_MsgDef" messageRef="Msg_UnservedContinueV2" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="URN_ToReview" sourceRef="URN_Wait" targetRef="URN_Review" />
+    <!-- a user task no @WorkflowTask method serves, which is allowed for a user task -->
+    <bpmn:userTask id="URN_Review">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="reviewByHand" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>URN_ToReview</bpmn:incoming>
+      <bpmn:outgoing>URN_ToEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="URN_ToEnd" sourceRef="URN_Review" targetRef="URN_End" />
+    <bpmn:endEvent id="URN_End">
+      <bpmn:incoming>URN_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

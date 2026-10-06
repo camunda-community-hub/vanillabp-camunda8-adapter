@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_UnservedRename_v1"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_UnservedContinue" name="UnservedContinue" />
+  <!-- the process id BEFORE the rename. The workflow waits for the message while the
+       application is upgraded, and only then reaches the user task, so the task is created
+       while the renamed application runs -->
+  <bpmn:process id="UnservedRenameOld" isExecutable="true">
+    <bpmn:startEvent id="UR_Start">
+      <bpmn:outgoing>UR_ToWait</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="UR_ToWait" sourceRef="UR_Start" targetRef="UR_Wait" />
+    <bpmn:intermediateCatchEvent id="UR_Wait">
+      <bpmn:incoming>UR_ToWait</bpmn:incoming>
+      <bpmn:outgoing>UR_ToReview</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="UR_MsgDef" messageRef="Msg_UnservedContinue" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="UR_ToReview" sourceRef="UR_Wait" targetRef="UR_Review" />
+    <!-- a user task no @WorkflowTask method serves, which is allowed for a user task -->
+    <bpmn:userTask id="UR_Review">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="reviewByHand" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>UR_ToReview</bpmn:incoming>
+      <bpmn:outgoing>UR_ToEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="UR_ToEnd" sourceRef="UR_Review" targetRef="UR_End" />
+    <bpmn:endEvent id="UR_End">
+      <bpmn:incoming>UR_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

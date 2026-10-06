@@ -2707,6 +2707,13 @@ wired to a BPMN element id: composing a job type from an element needs the model
 says so with the two ways out. This is the one place where such a method is out of reach.
 Everywhere else the cluster names the element of the job and the core routes by it.
 
+A user task may go without a method, and composing cannot see such a task at all. The cluster
+still waits for its `creating` listener, and nobody answered it: the task stood in `CREATING` for
+good. So the job types of the user-task listeners are also read from the models the cluster holds
+under the declared id, and a listener worker is opened for each one nothing else serves. Where
+the cluster cannot be asked for those models, nothing is added.
+`Camunda8UnservedUserTaskOfARenamedProcessIT` holds it against a cluster.
+
 `Camunda8DeclaredProcessWorkersTest` holds which workers are opened per mode,
 `Camunda8RenamedProcessIT` the same against a cluster with prefixed identifiers.
 
