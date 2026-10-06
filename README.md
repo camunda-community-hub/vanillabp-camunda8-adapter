@@ -2863,8 +2863,12 @@ What that costs where a call graph is not a straight line:
 - A process which calls itself ends at the first repetition, and a handler sees the round it
   runs in rather than all the rounds above it. Every round writes the same variable names, so
   the innermost one is what the job carries.
-- Two call sites whose multi-instance elements share a BPMN id but hand over different things
-  end the boot, because `@MultiInstanceElement` of that id would mean two things.
+- Two call sites whose multi-instance elements write the same variable but hand over different
+  things end the boot, because `@MultiInstanceElement` would mean two things there. The variable
+  decides and not the BPMN id: `my-task` in one caller and `my.task` in another both write
+  `vanillabpMiIndex_my_task`, and a job of an instance reached from the first would answer a
+  handler asking for the second with a round which never ran. Along ONE call path the inner of two
+  such levels wins, as it does on the reading side, and a DEBUG line names both ids.
 
 Two details of this engine are worth knowing when modelling:
 
@@ -2880,8 +2884,10 @@ Two details of this engine are worth knowing when modelling:
   Camunda 8 counts iterations from 1. The adapter translates.
 
 Characters an element id may hold but a variable name may not are replaced by `_`. Two
-multi-instance elements of one process whose ids differ only in such characters would end up
-sharing variables, which fails the deployment with a message naming both.
+multi-instance elements whose ids differ only in such characters would end up sharing variables.
+Within one process that fails the deployment with a message naming both. Across the processes
+calling one process it does the same, as the list above says, and a level the called process
+writes itself hides the caller's level of the same variable.
 
 A model which already carries an input mapping of one of these names, reading something else,
 fails the deployment too. Nothing the application modelled is overwritten, and the modelled

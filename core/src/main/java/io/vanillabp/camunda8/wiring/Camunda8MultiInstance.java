@@ -366,26 +366,53 @@ public final class Camunda8MultiInstance {
     }
 
     /**
-     * Adds one level to ONE call path, where a repeated element ID is nesting rather than
-     * a choice: both write the same variables, the inner scope overwrites the outer one,
+     * Adds one level to ONE call path, where a repeated variable is nesting rather than a
+     * choice: both levels write the same variables, the inner scope overwrites the outer one,
      * and the job therefore carries the inner values. So the later occurrence replaces the
-     * earlier one and takes its place at the end. A process calling itself is where this
-     * happens by design.
+     * earlier one and takes its place at the end, which is the answer the reading side gives
+     * for a handed-down chain as well. A process calling itself is where this happens by
+     * design.
+     * <p>
+     * Keyed by the index variable and not by the element ID, because the cluster knows the
+     * variable only. Two IDs which differ only in characters a variable name may not hold are
+     * one level for the cluster.
      */
     private static void appendLevel(
         final Map<String, Level> levels,
         final Level level) {
 
-      levels.remove(level.element().elementId());
-      levels.put(level.element().elementId(), level);
+      final var variable = level.element().indexVariable();
+      final var replaced = levels.remove(variable);
+      if ((replaced != null) && !replaced.element().elementId().equals(level.element().elementId())) {
+        log
+            .debug(
+                "Camunda8: the multi-instance elements '{}' of BPMN process '{}' and '{}' of BPMN "
+                    + "process '{}' sit on one call path and both write the variable '{}'. The "
+                    + "inner one, '{}', is what a job carries, so a @MultiInstanceElement(\"{}\") "
+                    + "is not answered there.",
+                replaced.element().elementId(),
+                replaced.bpmnProcessId(),
+                level.element().elementId(),
+                level.bpmnProcessId(),
+                variable,
+                level.element().elementId(),
+                replaced.element().elementId());
+      }
+      levels.put(variable, level);
 
     }
 
     /**
-     * Adds one level to the union over the call paths, where a repeated element ID is a
+     * Adds one level to the union over the call paths, where a repeated variable is a
      * CHOICE: only one of the paths reached the instance at hand, so one entry serves both
      * as long as both mean the same thing. Where they do not, nobody can say what
      * <code>@MultiInstanceElement</code> of that ID means, and the boot ends here.
+     * <p>
+     * Keyed by the index variable and not by the element ID, like {@link #appendLevel}. Two
+     * different IDs writing one variable are a collision as well: a job of an instance reached
+     * from one caller carries that variable, and a handler naming the element of the other
+     * caller would be told a round which never ran. That is the rule the deployment applies to
+     * two elements of ONE process, applied across the processes calling this one.
      * <p>
      * A level two paths share keeps the place the first path gave it. Where those two paths
      * nest the same two IDs the other way round, one of the two orders is therefore the one
@@ -397,25 +424,31 @@ public final class Camunda8MultiInstance {
         final Level level,
         final String calledBpmnProcessId) {
 
-      final var alreadyThere = levels.putIfAbsent(level.element().elementId(), level);
+      final var alreadyThere = levels.putIfAbsent(level.element().indexVariable(), level);
       if ((alreadyThere == null) || alreadyThere.element().equals(level.element())) {
         return;
       }
+      final var oneId = alreadyThere.element().elementId().equals(level.element().elementId());
       throw new IllegalStateException(
           """
-              Two multi-instance elements named '%s' reach the BPMN process '%s' from the places it \
-              is called: the one in '%s' hands over %s, the one in '%s' hands over %s. Both write the \
-              variable '%s', so a @MultiInstanceElement("%s") of a task in '%s' cannot say which of \
-              the two it means. Rename one of the two elements."""
+              Two multi-instance elements %s reach the BPMN process '%s' from the places it is \
+              called: the one in '%s' hands over %s, the one in '%s' hands over %s. Both write the \
+              variable '%s'%s, so a @MultiInstanceElement of a task in '%s' cannot say which of the \
+              two it means. Rename one of the two elements."""
               .formatted(
-                  level.element().elementId(),
+                  oneId
+                      ? "named '%s'".formatted(level.element().elementId())
+                      : "named '%s' and '%s'".formatted(alreadyThere.element().elementId(),
+                          level.element().elementId()),
                   calledBpmnProcessId,
                   alreadyThere.bpmnProcessId(),
                   shapeOf(alreadyThere.element()),
                   level.bpmnProcessId(),
                   shapeOf(level.element()),
                   level.element().indexVariable(),
-                  level.element().elementId(),
+                  oneId
+                      ? ""
+                      : " (their IDs differ only in characters a Camunda 8 variable name cannot hold)",
                   calledBpmnProcessId));
 
     }
@@ -509,15 +542,17 @@ public final class Camunda8MultiInstance {
       if (own.isEmpty()) {
         return inherited;
       }
-      final var ownIds = own
+      final var ownVariables = own
           .stream()
-          .map(MultiInstanceElement::elementId)
+          .map(MultiInstanceElement::indexVariable)
           .collect(Collectors.toSet());
       return inherited
           .stream()
-          // an ID this process uses itself writes the same variables in a scope further in,
-          // so what arrived from the call site is not in the job any more
-          .filter(level -> !ownIds.contains(level.element().elementId()))
+          // a variable this process writes itself is written in a scope further in, so what
+          // arrived from the call site is not in the job any more. The variable decides and not
+          // the ID, because two IDs differing only in characters a variable name may not hold
+          // write one variable
+          .filter(level -> !ownVariables.contains(level.element().indexVariable()))
           .toList();
 
     }
@@ -1062,7 +1097,7 @@ public final class Camunda8MultiInstance {
    * an expression handed down in {@link #CHAIN_VARIABLE}.
    * <p>
    * The handed-down levels go in FRONT, because they belong to processes further out, and a
-   * level whose id the called process uses itself is dropped: both write the same variable
+   * level whose variable the called process writes itself is dropped: both write the same variable
    * names, the inner scope overwrites the outer one, and the job therefore carries the inner
    * values. That is the rule {@link Registry#chainOf} follows for a static call, and it is the
    * reason the two sources are indistinguishable once they are together.
