@@ -153,8 +153,10 @@ of those it has already seen end, and the message names the difference. That is 
 falls to zero as you work the tasks off, which the plain total of the search never did. It is near
 rather than exact, because an exporter feeds that index and the index runs behind the engine: a task
 which finished a moment ago can still be counted, and one which opened a moment ago can still be
-missing. A cluster which is not up yet costs you the number altogether, and the message says that
-instead of writing a zero.
+missing. For the WARN the boot waits for the cluster before it counts, so a cluster which starts
+together with your application still gives you the number. The refusal does not wait, because the
+model is the cause and a wait would only put a message about the cluster in front of it. A cluster
+which is not up yet costs that message the number, and it says so instead of writing a zero.
 
 ### A task your cockpit showed while a check answered 404
 

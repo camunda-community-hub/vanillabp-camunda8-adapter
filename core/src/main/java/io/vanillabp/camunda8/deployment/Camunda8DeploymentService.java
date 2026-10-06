@@ -2638,9 +2638,11 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * this boot deploys and are what has to reach zero. The count of open tasks is a search of the
    * cluster's index, and {@link Camunda8UnservedUserTaskJobs} says what that answer is worth:
    * the index leaves out the jobs it has seen finish and runs behind the engine at both ends,
-   * so the number is near rather than exact and the message says so. It can also be missing
-   * altogether, because this runs while the module is wired, which is before the start has
-   * waited for its cluster.
+   * so the number is near rather than exact and the message says so. Where the boot goes on,
+   * the cluster is waited for before the count is read, so a cluster which starts together
+   * with the application still gives a number. Where the boot ends, it is not waited for,
+   * and the number is missing when the cluster does not answer yet: the model is the cause,
+   * and a wait would only put a message about the cluster in front of it.
    *
    * @param workflowModuleId The workflow module id
    * @param bpmnProcessId The plain BPMN process id
@@ -2662,9 +2664,18 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // workflow aggregate of it, which is the same question the start listener and the
     // refusal of a file without a correlation key ask
     final var theApplicationClaimsTheProcess = aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null;
+    if (!theApplicationClaimsTheProcess) {
+      // the boot goes on here, so it may wait for the cluster now rather than one round
+      // later in deployResources, and the count below gets an answer. The wait happens once
+      // per adapter instance, so the later round costs nothing more
+      clientFactory.waitUntilTheClusterAnswers();
+    }
     final var howManyAreOpen = Camunda8UnservedUserTaskJobs
         .howManyAreOpen(whatTheIndexHoldsOfTheJobWorkerUserTasks(scopedBpmnProcessId));
     if (theApplicationClaimsTheProcess) {
+      // no wait on this path: the boot ends over the model, and waiting first would let a
+      // cluster which is not up yet sit out 'startup-wait' and then end the boot with its
+      // own message, which hides the real cause
       throw new IllegalStateException(
           """
               Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s': it \
