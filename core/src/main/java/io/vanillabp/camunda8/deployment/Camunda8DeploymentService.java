@@ -60,6 +60,7 @@ import io.vanillabp.camunda8.wiring.Camunda8OpenTaskProbe;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Scoping;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
+import io.vanillabp.camunda8.wiring.Camunda8UnservedUserTasks;
 import io.vanillabp.camunda8.wiring.Camunda8UserTaskListenerHandler;
 import io.vanillabp.camunda8.wiring.Camunda8WorkflowEndedHandler;
 import io.vanillabp.integration.adapter.spi.AdapterCollaborators;
@@ -1362,6 +1363,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       guideTowardsAllowingConnectors(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, model);
     }
     workflowTaskWiring.validateTaskWiring(workflowModuleId, bpmnProcessId, specs);
+    // the core passes over a user task no method serves, because the workflow runs on without
+    // one. What is missing is the notification, and that is said once per process here
+    nameTheUserTasksNothingServes(workflowModuleId, bpmnProcessId, model, userTasks);
     // a listener job is completed the moment the method returns, so a method declaring
     // @TaskId would wait for a completion nobody can send. Asked of the core here, where a
     // modeller can still change the model, rather than at the first job
@@ -1553,6 +1557,52 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         bpmnProcessId,
         filename,
         workflowModuleId);
+
+  }
+
+  /**
+   * Names the Camunda-managed user tasks of one process which no <code>&#64;WorkflowTask</code>
+   * method serves.
+   * <p>
+   * Nothing is refused and nothing is warned about. The cluster creates the user task, it
+   * appears in a task list, somebody finishes it and the workflow runs on, which is why the core
+   * hands a user task over as an OPTIONAL spec. The one thing missing is the notification, and a
+   * model whose user tasks are worked through a task list alone is a model which is meant that
+   * way. A user task a job worker serves is the other case: the workflow stands at it, and
+   * {@link #refuseOrReportJobWorkerUserTasks} ends the boot over it.
+   * <p>
+   * Only for a process a <code>&#64;WorkflowService</code> class of this application claims.
+   * Where nobody claims the process, no method of this application was meant to serve its tasks
+   * and there is nothing to say.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @param model The model this boot deploys
+   * @param userTasks The Camunda-managed user tasks of the process
+   */
+  private void nameTheUserTasksNothingServes(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final BpmnModelInstance model,
+      final List<Camunda8TaskWiring.Camunda8UserTaskToWire> userTasks) {
+
+    if (userTasks.isEmpty() || (aggregateIdNameOf(workflowModuleId, bpmnProcessId) == null)) {
+      return;
+    }
+    final var unserved = Camunda8UnservedUserTasks
+        .of(
+            model,
+            userTasks,
+            reference -> plainTaskDefinition(workflowModuleId, bpmnProcessId, reference),
+            key -> (workflowTaskInvoker != null) && workflowTaskInvoker
+                .workflowTaskHandlerExists(workflowModuleId, bpmnProcessId, key));
+    if (unserved.isEmpty()) {
+      return;
+    }
+    log.info(
+        "Camunda8[{}]: {}",
+        adapterId,
+        Camunda8UnservedUserTasks.report(unserved, bpmnProcessId, workflowModuleId));
 
   }
 

@@ -1609,6 +1609,19 @@ is job-based) and V1's marker-variable workaround is broken by V1's own admissio
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
 or later.
 
+A Camunda-managed user task which no `@WorkflowTask` method serves is no defect. The cluster
+creates it, a task list shows it, and whoever finishes it moves the workflow on. The listener
+worker is opened anyway and answers the listener jobs, so the workflow never waits for this
+application. What the application misses is the notification. So the boot says it once per BPMN
+process, on INFO, and names each element with the two ways to write its method:
+`Camunda8DeploymentService#nameTheUserTasksNothingServes`, with the text in
+`Camunda8UnservedUserTasks`. The Camunda 7 adapter says the same sentence for the same case. It is
+said only for a process a `@WorkflowService` class claims, because no method of this application
+was meant to serve the tasks of any other process. A form reference written as an expression is
+left out, because it has a finding of its own, see
+[A form reference has to be a name as well](#a-form-reference-has-to-be-a-name-as-well).
+`Camunda8UnservedUserTasksTest` holds the report, the served task and the unclaimed process.
+
 A user task WITHOUT `zeebe:userTask` is a user task a job worker serves, and this adapter does not
 accept that shape. The question is the shape of the element and nothing else: nothing asks whether
 some worker would fetch the job, because the model already says who serves the task. What the
