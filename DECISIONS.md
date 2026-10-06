@@ -2536,6 +2536,9 @@ holds the cluster to what was measured and to accepting the frame everywhere els
 
 See [Keeping workflow modules apart](./README.md#keeping-workflow-modules-apart).
 
+A form reference (`zeebe:formDefinition externalReference`) is one of these places, and one
+written as an expression is refused in a claimed process: decision 69.
+
 ### 56. The 404 of a user-task probe is about the key it was handed
 
 A user task which is simply open never makes the probe say `404`. Decision 38 reads that answer as
@@ -3158,3 +3161,41 @@ against version 1, and `UPGRADE.md` says so.
 `Camunda8MissingClusterAddressTest` holds the cases around the WARN, and
 `Camunda8StartupValidationBootTest` (Spring Boot) and `Camunda8StartupValidationTest` (Quarkus) the
 boot. See [Connecting to a Camunda 8 cluster](./README.md#connecting-to-a-camunda-8-cluster).
+
+### 69. A form reference written as an expression is refused in a claimed process, and warned about in one nobody claims
+
+The external form reference of a Camunda-managed user task is its task definition. The core finds
+the `@WorkflowTask` method by it, and the job type of the lifecycle listeners is
+`io.vanillabp.userTask:` plus the reference. A task definition is a name, and an expression
+evaluated for each workflow names no method. So a reference written as a FEEL expression gets the
+answer decision 59 gives a job type written as one: a BPMN process a `@WorkflowService` class
+claims does not deploy, and a process nobody claims gets one WARN per process. The same mistake
+reached on two ways gets one answer.
+
+Measured on 2026-10-06 against `camunda/camunda:8.10.0`, with one model naming its form
+`=whichForm` and one method written as `taskDefinition = "=whichForm"`, before this entry. Without
+prefixes the cluster evaluated the reference, the user task carried the form `theFormToShow`, and
+the listener job type stayed `io.vanillabp.userTask:=whichForm`, because it does not start with
+`=` and the cluster takes it as written. The worker met that job and the method was called 305 ms
+after the start. Under `use-prefix` the boot ended in the core's wiring validation instead: the
+rewrite of decision 55 had framed the expression, so the method matched no task, and the message
+named the method and said nothing about the model.
+
+So the model was not broken everywhere, and that is the reason to refuse it rather than leave it.
+It worked only for a method named after the text of an expression, it broke as soon as the
+application switched on prefixes, and the one message it produced then pointed at the wrong place.
+The refusal reads the model while the file is prepared, before the rewrite, so the message quotes
+what the modeller typed, and it says why the reference has to be a name.
+
+The question is the shape of the value and nothing else, as in decision 59. An element template
+is no way out here, because a Camunda-managed user task has no job type another runtime could
+subscribe to. A user task a job worker serves is not read, because decision 53 already refuses or
+reports it for its shape.
+
+This is a rule which refuses a model. Introduced after the 2.0 release it would stop an
+application which boots today, which is why it comes with 2.0.
+
+`Camunda8FormReferenceWrittenAsAnExpressionTest` holds the refusal under both modes, the WARN of
+an unclaimed process and the quiet boot of a reference which is a name.
+
+See [A form reference has to be a name as well](./README.md#a-form-reference-has-to-be-a-name-as-well).

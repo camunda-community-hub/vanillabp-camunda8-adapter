@@ -1187,6 +1187,18 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         "expected the guiding explanation naming the release line and where the operation arrives, but got: "
             + exception.getMessage());
 
+    // the user task is completed before the test ends. An open Camunda-managed user task
+    // left on the shared cluster is cancelled by the cleanup, and the canceling listener
+    // job of that cancellation is one more thing which can reach the wrong application
+    transactionTemplate.executeWithoutResult(status -> {
+      final var aggregate = repository.findById(aggregateId).orElseThrow();
+      workflowService.completeUserTask(aggregate, taskId);
+    });
+    awaitUntil(
+        () -> theClusterNoLongerKnowsTheUserTask(taskId),
+        60000,
+        "the user task to be completed through the outbox");
+
   }
 
   @Test

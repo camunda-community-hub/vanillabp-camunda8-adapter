@@ -572,6 +572,25 @@ workflow. Or leave the element to the runtime which serves it: give the element 
 asks about its job type. A BPMN process none of your classes claims earns one WARN per process
 instead, and the boot goes on.
 
+### A form reference your model writes as an expression ends the boot
+
+This is about the external form reference of a user task. Where it starts with `=`, it is a FEEL
+expression rather than a name, and your application does not start where one of your
+`@WorkflowService` classes claims the process.
+
+The reference is the task definition of the user task: your `@WorkflowTask` method is found by it,
+and the job type of the listeners which tell your application about the task is built from it.
+That job type is built the way version 1 built it, so such a user task was served only where the
+method repeated the expression as its task definition, `taskDefinition = "=whichForm"`. Measured
+against `camunda/camunda:8.10.0` before the refusal: that is still what happened without prefixes,
+and under `use-prefix` the boot ended with a message about that method. Now the message names the
+user task and the expression you typed.
+
+Write a fixed name as the reference and a `@WorkflowTask` method of that name. Where the form to
+show differs from workflow to workflow, model one user task per form behind a gateway, or keep one
+name and let your task list choose the form from the data of the workflow. A BPMN process none of
+your classes claims earns one WARN per process instead, and the boot goes on.
+
 ### A start says which of your names the cluster already held
 
 Version 1 compared the identifiers of a deployment against each other and said nothing about the

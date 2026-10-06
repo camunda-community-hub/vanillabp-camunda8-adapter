@@ -1,15 +1,34 @@
 package io.vanillabp.camunda8.springboot;
 
+import java.io.IOException;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.lang.reflect.Method;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.extension.AfterAllCallback;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ExtensionContext;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import io.camunda.client.CamundaClient;
@@ -20,7 +39,7 @@ import io.camunda.client.api.search.response.UserTask;
 import io.vanillabp.camunda8.client.Camunda8Errors;
 import io.vanillabp.camunda8.client.Camunda8JobLease;
 import io.vanillabp.camunda8.test.ClusterUnderTest;
-import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
+import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 
 /**
  * A test of this module which runs against the one cluster the module starts.
@@ -37,8 +56,11 @@ import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
  * has. What a class leaves RUNNING is the part which needs doing something about: prefixed
  * job types are the same for every class, so the workers of the class running next would
  * activate the jobs of a workflow nobody is waiting for any more, and look for a workflow
- * aggregate their own database never held. That is why every class starts by ending what is
- * still running.
+ * aggregate their own database never held. That is why everything still running is ended after
+ * EVERY test, the guard {@link WhatAClassLeftRunning} looks once more after every class, and
+ * every class starts by ending what is still running. The first narrows the window in which
+ * one test can spoil the next, the second names the class which left something, and the third
+ * catches what the search had not shown yet.
  * <p>
  * What the cluster remembers also decides what a class can FIND on it. A search which names
  * nothing answers with ONE page, oldest entry first, and that page has a ceiling. Measured on
@@ -100,6 +122,7 @@ import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
  * {@code 8.10.0-rc1} hands the jobs out and the exclusions are gone.
  */
 @Testcontainers(disabledWithoutDocker = true)
+@ExtendWith(TestOnTheSharedCluster.WhatAClassLeftRunning.class)
 public abstract class TestOnTheSharedCluster {
 
   /**
@@ -127,6 +150,11 @@ public abstract class TestOnTheSharedCluster {
    * JUnit calls it after the extensions of the class and before the first test instance is
    * built, which is when Spring loads the test's context. So by the time this runs, the
    * application of the class before is closed and this class has not opened a worker yet.
+   * <p>
+   * Since every test ends what it left and {@link WhatAClassLeftRunning} looks once more after
+   * the class, this normally finds nothing. It stays because the search lags behind the
+   * engine: a workflow started just before a class closed can be invisible to both of them and
+   * turn up only here.
    *
    * @param whichClassThisIs The class taking the cluster over, for the message a cleanup
    *          which cannot finish writes about the class before it
@@ -137,13 +165,165 @@ public abstract class TestOnTheSharedCluster {
       final TestInfo whichClassThisIs) throws InterruptedException {
 
     final var startedAt = System.nanoTime();
-    endWhateverAnEarlierClassLeftRunning();
-    classWhichRanBefore = whichClassThisIs
+    endEverythingStillRunning(classWhichRanBefore);
+    classWhichRanBefore = nameOf(whichClassThisIs);
+    waitOutAnActivationRequestOfTheClassBefore(startedAt);
+    aParkedRequestOfTheClassBeforeLivesAtMost = WHAT_THIS_MODULE_CONFIGURES;
+
+  }
+
+  /**
+   * Ends whatever the test which just finished left running, before the next test of the same
+   * class starts.
+   * <p>
+   * A class used to be cleaned up only when the NEXT class took the cluster over, so one test
+   * which left a user task open could poison every class after it. The class which then failed
+   * was never the one which caused it. Ending everything after each test makes that window
+   * one test wide. It is not airtight: the search answers out of the exporter and lags behind
+   * the engine, so a workflow the test started a moment ago can still be invisible here.
+   * {@link WhatAClassLeftRunning} is the second look.
+   * <p>
+   * The application of the class is still running while this runs, so its own workers may
+   * answer a <code>canceling</code> listener job before this cleanup does. Either answer ends
+   * the workflow.
+   * <p>
+   * JUnit runs this after every {@code @AfterEach} method of the subclass. A test which
+   * completes its own workflows there has done so before this looks.
+   *
+   * @param whichTestThisWas The test which just finished, for the message and for the cost
+   */
+  @AfterEach
+  void nothingOfThisTestReachesTheNextOne(
+      final TestInfo whichTestThisWas) {
+
+    if (getClass().isAnnotationPresent(ItsTestsAreOneScenario.class)) {
+      return;
+    }
+    final var startedAt = System.nanoTime();
+    final var ended = endEverythingStillRunning(
+        "test '%s' of %s".formatted(
+            whichTestThisWas
+                .getTestMethod()
+                .map(Method::getName)
+                .orElse(whichTestThisWas.getDisplayName()),
+            nameOf(whichTestThisWas)));
+    recordWhatTheCleanupCost(whichTestThisWas, ended, System.nanoTime() - startedAt);
+
+  }
+
+  /**
+   * Ends what a class whose tests are one scenario left running, once its last test is done.
+   * The application of the class is still running, the same as in
+   * {@link #nothingOfThisTestReachesTheNextOne(TestInfo)}.
+   *
+   * @param whichClassThisIs The class which is done
+   */
+  @AfterAll
+  static void theScenarioEndsWithTheClass(
+      final TestInfo whichClassThisIs) {
+
+    final var testClass = whichClassThisIs.getTestClass();
+    if (testClass.isEmpty() || !testClass.get().isAnnotationPresent(ItsTestsAreOneScenario.class)) {
+      return;
+    }
+    endEverythingStillRunning(nameOf(whichClassThisIs));
+
+  }
+
+  /**
+   * Says that the tests of a class build on each other: a later test needs a workflow an
+   * earlier one started. Such a class is cleaned up once, after its last test, instead of after
+   * every test. A class carrying it orders its tests with {@code @TestMethodOrder}, because
+   * that order is what the scenario relies on.
+   */
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.TYPE)
+  public @interface ItsTestsAreOneScenario {
+  }
+
+  /**
+   * Looks at the cluster once more after a class is done, and fails that class if something of
+   * it is still running.
+   * <p>
+   * It runs after the application of the class is closed. JUnit registers the extensions of a
+   * superclass before those of a subclass and calls them back in reverse order after the
+   * class, so Spring has closed the context of the class (it is {@code @DirtiesContext}) by
+   * the time this looks. What it finds was left by an application on its way down, or by a
+   * test whose cleanup the search did not catch up with. Either way the class to read is this
+   * one, and the message says so. Before this guard, the same leftover failed the NEXT class
+   * in its setup, which named a class that had done nothing wrong.
+   * <p>
+   * What it finds is ended before the class fails, so the class after it still gets a clean
+   * cluster.
+   */
+  static class WhatAClassLeftRunning implements AfterAllCallback {
+
+    @Override
+    public void afterAll(
+        final ExtensionContext context) {
+
+      if (whyTheClusterCannotBeHandedOver != null) {
+        // a cleanup already gave up and said why; the next class says it again
+        return;
+      }
+      final var whoLeftIt = context
+          .getTestClass()
+          .map(Class::getSimpleName)
+          .orElse("this class");
+      final List<String> leftRunning;
+      try (final var client = clientOfTheTest()) {
+        waitUntilTheSearchHasCaughtUp(client);
+        leftRunning = whatIsStillRunning(client);
+      }
+      if (leftRunning.isEmpty()) {
+        return;
+      }
+      endEverythingStillRunning(whoLeftIt);
+      throw new AssertionError(
+          ("%s left %d workflow(s) or user task(s) running on the shared cluster after its "
+              + "application was closed. They are ended now, so the next class is not "
+              + "affected, but a test of this class has to end what it starts: %s")
+              .formatted(whoLeftIt, leftRunning.size(), String.join("", leftRunning)));
+
+    }
+
+  }
+
+  /**
+   * What the search reports as running, one line per entry, for the guard's message.
+   *
+   * @param client The client of the test
+   * @return Nothing where the cluster is clean
+   */
+  private static List<String> whatIsStillRunning(
+      final CamundaClient client) {
+
+    final var found = new ArrayList<String>();
+    stillRunning(client)
+        .stream()
+        .map(workflow -> "%n  workflow %d of '%s'".formatted(
+            workflow.getProcessInstanceKey(),
+            workflow.getProcessDefinitionId()))
+        .forEach(found::add);
+    userTasksBetweenTwoStates(client)
+        .stream()
+        .map(task -> "%n  user task '%s' of '%s' in %s, instance %d".formatted(
+            task.getElementId(),
+            task.getBpmnProcessId(),
+            task.getState(),
+            task.getProcessInstanceKey()))
+        .forEach(found::add);
+    return found;
+
+  }
+
+  private static String nameOf(
+      final TestInfo test) {
+
+    return test
         .getTestClass()
         .map(Class::getSimpleName)
         .orElse("the class before");
-    waitOutAnActivationRequestOfTheClassBefore(startedAt);
-    aParkedRequestOfTheClassBeforeLivesAtMost = WHAT_THIS_MODULE_CONFIGURES;
 
   }
 
@@ -161,49 +341,66 @@ public abstract class TestOnTheSharedCluster {
   private static String whyTheClusterCannotBeHandedOver;
 
   /**
-   * Ends what an earlier class left running, until the cluster holds none of it any more.
+   * Ends everything the cluster still runs, and returns only once every workflow it found has
+   * ended.
    * <p>
-   * Two things have to be true afterwards, and they end at different moments. No workflow of
-   * the class before may take a cancellation any more, and no user task may be left between
-   * two of its states, because such a task holds a listener job which is activatable and the
-   * next worker of that job type would be served it.
+   * The search finds what to end. It does NOT decide when the cleanup is done, because it
+   * answers out of the exporter and lags behind the engine. An earlier version stopped once the
+   * user-task search was empty, and it could stop before a task it had just cancelled showed up
+   * as <code>CANCELING</code>. The worker of the next application was then served that task's
+   * <code>canceling</code> listener job, for a workflow aggregate in a database which had died
+   * with the class before. So each workflow found is asked for by its key until it reports an
+   * end state of its own, and until then this answers every listener job of this adapter which
+   * belongs to one of these workflows.
    * <p>
-   * The two are checked TOGETHER, and that is the point of the loop rather than a nicety. An
-   * instance carrying a Camunda-managed user task terminates only once the
+   * An instance carrying a Camunda-managed user task terminates only once the
    * <code>canceling</code> listener job of that task is answered, and while no application
-   * runs nobody answers it. The engine answers <code>404</code> to a second cancellation of
-   * such an instance long before it is over, so the refusal alone would let this class start
-   * while the instance before it still hands out jobs. Measured on 2026-09-25 against
-   * <code>8.10.0-alpha5</code> and <code>8.9.21</code>: 130 seconds after the cancellation the
-   * instance was still alive, and it ended 0.52 seconds after a worker took the job. So this
-   * answers those jobs itself and keeps looking until the search is empty as well.
+   * runs nobody answers it. Measured on 2026-09-25 against <code>8.10.0-alpha5</code> and
+   * <code>8.9.21</code>: 130 seconds after the cancellation the instance was still alive, and
+   * it ended 0.52 seconds after a worker took the job.
    * <p>
    * A child of a call activity is not cancelled: the engine refuses to cancel one, and
    * cancelling its parent ends it anyway, so it goes with the parent.
+   *
+   * @param whoLeftIt The class or test the leftovers belong to, for the message where this
+   *          gives up
+   * @return How many workflows had to be ended
    */
-  private static void endWhateverAnEarlierClassLeftRunning() {
+  private static int endEverythingStillRunning(
+      final String whoLeftIt) {
 
     if (whyTheClusterCannotBeHandedOver != null) {
       throw new IllegalStateException(whyTheClusterCannotBeHandedOver);
     }
     try (final var client = clientOfTheTest()) {
+      waitUntilTheSearchHasCaughtUp(client);
       final var deadline = System.currentTimeMillis() + THE_ENGINE_LETS_GO_WITHIN.toMillis();
+      final var toEnd = new LinkedHashMap<Long, Long>();
       final var refusals = new LinkedHashMap<Long, String>();
       while (true) {
-        final var running = stillRunning(client);
-        final var stillHeldByTheEngine = running
+        stillRunning(client)
             .stream()
             .filter(workflow -> workflow.getParentProcessInstanceKey() == null)
-            .filter(workflow -> cancel(client, workflow, refusals))
-            .count();
-        final var waitingForAListenerJob = userTasksBetweenTwoStates(client);
-        if ((stillHeldByTheEngine == 0) && waitingForAListenerJob.isEmpty()) {
-          return;
+            .filter(workflow -> !toEnd.containsKey(workflow.getProcessInstanceKey()))
+            .forEach(workflow -> {
+              cancel(client, workflow.getProcessInstanceKey(), refusals);
+              toEnd.put(workflow.getProcessInstanceKey(), workflow.getProcessDefinitionKey());
+            });
+        // a task between two states belongs to a workflow which is ending already, possibly
+        // a child the search above passed over. Its workflow is waited for the same way
+        userTasksBetweenTwoStates(client)
+            .forEach(task -> toEnd.putIfAbsent(task.getProcessInstanceKey(), task.getProcessDefinitionKey()));
+        answerTheListenerJobsOf(client, toEnd);
+        final var notOverYet = toEnd
+            .keySet()
+            .stream()
+            .filter(processInstanceKey -> !hasEnded(client, processInstanceKey))
+            .toList();
+        if (notOverYet.isEmpty()) {
+          return toEnd.size();
         }
-        answerTheListenerJobsTheseTasksWaitFor(client, waitingForAListenerJob);
         if (System.currentTimeMillis() > deadline) {
-          whyTheClusterCannotBeHandedOver = whyItCouldNotBeEnded(
-              running, refusals, stillHeldByTheEngine, waitingForAListenerJob);
+          whyTheClusterCannotBeHandedOver = whyItCouldNotBeEnded(client, whoLeftIt, notOverYet, refusals);
           throw new IllegalStateException(whyTheClusterCannotBeHandedOver);
         }
         pauseBeforeAskingAgain();
@@ -213,11 +410,133 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
+   * Waits until the search knows every workflow the engine had started when this was called.
+   * <p>
+   * A test which starts a workflow and ends a moment later leaves a workflow the search does
+   * not show yet. A cleanup which searched at once missed it, and it then ran on into the next
+   * test. Measured on 2026-10-06 against {@code camunda/camunda:8.10.0}: a test of
+   * {@code Camunda8InboundIdempotencyIT} ended 12 ms after creating its workflow, the cleanup
+   * found nothing, and the guard after the class found the workflow still running.
+   * <p>
+   * So this starts a workflow of its own, of a process which ends where it starts, and waits
+   * until that workflow reports its end when asked for by its key. The cluster of this module
+   * runs one partition, which is the default of the image, its keys grow with every workflow
+   * started and its exporter writes in that order. So once the end of this marker is in the
+   * search, every workflow started before it is there as well.
+   * <p>
+   * The END is waited for, not only the marker. On line 8.8, whose cluster exports to
+   * Elasticsearch, the marker could be read while still running, and the guard after the class
+   * then found the marker itself, in six classes of one run on 2026-10-06. The lines
+   * whose storage sits in the cluster's own database never showed that.
+   *
+   * @param client The client of the test
+   */
+  private static void waitUntilTheSearchHasCaughtUp(
+      final CamundaClient client) {
+
+    if (!theMarkerIsDeployed) {
+      whatTheClusterAnswers(
+          () -> client
+              .newDeployResourceCommand()
+              .addResourceStringUtf8(A_PROCESS_WHICH_ENDS_WHERE_IT_STARTS, THE_MARKER
+                  + ".bpmn")
+              .send()
+              .join());
+      theMarkerIsDeployed = true;
+    }
+    final var marker = client
+        .newCreateInstanceCommand()
+        .bpmnProcessId(THE_MARKER)
+        .latestVersion()
+        .send()
+        .join()
+        .getProcessInstanceKey();
+    final var deadline = System.currentTimeMillis() + SEARCHABLE_WITHIN.toMillis();
+    while (true) {
+      try {
+        // the end of the marker, not only the marker: a storage which writes the start of a
+        // workflow before its end, which the Elasticsearch of line 8.8 does, would otherwise
+        // let the search report the marker itself as running
+        if (client
+            .newProcessInstanceGetRequest(marker)
+            .send()
+            .join()
+            .getState() != ProcessInstanceState.ACTIVE) {
+          return;
+        }
+      } catch (final RuntimeException notThereYet) {
+        if (System.currentTimeMillis() > deadline) {
+          throw notThereYet;
+        }
+      }
+      try {
+        Thread.sleep(50);
+      } catch (final InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException("Interrupted while waiting for the cluster's search", interrupted);
+      }
+    }
+
+  }
+
+  private static boolean theMarkerIsDeployed;
+
+  /**
+   * The process of the marker. Its id carries no prefix of a workflow module, so no
+   * application of this module serves it or counts it as one of its own.
+   */
+  private static final String THE_MARKER = "theCleanupOfTheSharedClusterLooksHere";
+
+  private static final String A_PROCESS_WHICH_ENDS_WHERE_IT_STARTS = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+          id="Definitions_%1$s" targetNamespace="http://bpmn.io/schema/bpmn">
+        <bpmn:process id="%1$s" isExecutable="true">
+          <bpmn:startEvent id="Start"><bpmn:outgoing>Flow</bpmn:outgoing></bpmn:startEvent>
+          <bpmn:sequenceFlow id="Flow" sourceRef="Start" targetRef="End" />
+          <bpmn:endEvent id="End"><bpmn:incoming>Flow</bpmn:incoming></bpmn:endEvent>
+        </bpmn:process>
+      </bpmn:definitions>
+      """.formatted(THE_MARKER);
+
+  /**
+   * Whether one workflow reports an end state of its own.
+   * <p>
+   * This asks for the instance by its key rather than searching, so the answer is about this
+   * workflow and nothing else. It still comes out of the secondary storage, which writes an
+   * end only after the engine reached it. So an end reported here is an end the engine is past.
+   * A key the storage does not know yet is a workflow which is not over, because it was found
+   * by a search of the same storage.
+   *
+   * @param client The client of the test
+   * @param processInstanceKey The workflow
+   * @return Whether it completed or was terminated
+   */
+  private static boolean hasEnded(
+      final CamundaClient client,
+      final long processInstanceKey) {
+
+    try {
+      return client
+          .newProcessInstanceGetRequest(processInstanceKey)
+          .send()
+          .join()
+          .getState() != ProcessInstanceState.ACTIVE;
+    } catch (final RuntimeException notThereYet) {
+      if (Camunda8Errors.notFound(notThereYet)) {
+        return false;
+      }
+      throw notThereYet;
+    }
+
+  }
+
+  /**
    * The user tasks the cluster holds between two of their states.
    * <p>
    * Each of them waits for a listener job of this adapter's own, and each of those jobs is
-   * activatable until somebody answers it. No application runs while this is asked, so every
-   * one of them belongs to a class which is over.
+   * activatable until somebody answers it. The search is how a child workflow's task is
+   * found, whose workflow the search for running roots passes over.
    *
    * @param client The client of the test
    * @return What the cluster still has to be told about
@@ -240,141 +559,210 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * Answers the listener jobs those tasks wait for, the way the worker of the class before
-   * would have done.
+   * Answers the listener jobs of this adapter which belong to the workflows being ended, the
+   * way the worker of the application would have done.
    * <p>
-   * The job type is the one the deployment wrote into the model: this adapter's prefix and the
-   * external form reference of the task. A task without such a reference was deployed by
-   * version 1's convention, which this module never does. It is left alone rather than guessed
-   * at, and it is then still there when the cleanup gives up, which is where it gets named.
+   * The job types come from the models of those workflows, read once per process definition,
+   * and not from a search. That is the point: a task the search does not show yet has its
+   * job type in the model all the same. Every listener in the model whose job type carries this
+   * adapter's prefix counts, the <code>canceling</code> listener of a user task as well as a
+   * listener the engine runs when a workflow is cancelled.
+   * <p>
+   * A job of such a type which belongs to a workflow NOT being ended is handed back at once,
+   * with the retries it had. While the application of a class runs, that is a job of a
+   * workflow its test started a moment ago, which the search did not show yet.
    *
    * @param client The client of the test
-   * @param tasks What {@link #userTasksBetweenTwoStates(CamundaClient)} found
+   * @param toEnd The workflows being ended, each with the key of its process definition
    */
-  private static void answerTheListenerJobsTheseTasksWaitFor(
+  private static void answerTheListenerJobsOf(
       final CamundaClient client,
-      final List<UserTask> tasks) {
+      final Map<Long, Long> toEnd) {
 
-    tasks
+    toEnd
+        .values()
         .stream()
-        .map(UserTask::getExternalFormReference)
-        .filter(reference -> (reference != null) && !reference.isBlank())
         .distinct()
-        .forEach(reference -> client
+        .flatMap(processDefinitionKey -> listenerJobTypesOf(client, processDefinitionKey).stream())
+        .distinct()
+        // all job types are asked at once: each request waits its timeout where no job is
+        // there, and a model of this module carries up to twenty such types
+        .map(jobType -> client
             .newActivateJobsCommand()
-            .jobType(Camunda8TaskWiring.TASKDEFINITION_USERTASK_ZEEBE + reference)
+            .jobType(jobType)
             .maxJobsToActivate(AS_MANY_AS_A_CLASS_CAN_LEAVE)
             .timeout(THE_CLEANUP_HOLDS_A_JOB_FOR)
-            .workerName("the class taking the cluster over")
+            .workerName("the cleanup of the shared cluster")
             .requestTimeout(ASKING_FOR_A_LEFTOVER_JOB_ANSWERS_WITHIN)
-            .send()
+            .send())
+        .toList()
+        .forEach(activation -> activation
             .join()
             .getJobs()
-            .forEach(job -> Camunda8JobLease
-                .withToken(client.newCompleteCommand(job.getKey()), Camunda8JobLease.tokenOf(job))
-                .send()
-                .join()));
+            .forEach(job -> {
+              if (toEnd.containsKey(job.getProcessInstanceKey())) {
+                Camunda8JobLease
+                    .withToken(client.newCompleteCommand(job.getKey()), Camunda8JobLease.tokenOf(job))
+                    .send()
+                    .join();
+                return;
+              }
+              Camunda8JobLease
+                  .withToken(
+                      client
+                          .newFailCommand(job.getKey())
+                          .retries(job.getRetries())
+                          .retryBackoff(Duration.ZERO),
+                      Camunda8JobLease.tokenOf(job))
+                  .send()
+                  .join();
+            }));
 
   }
 
   /**
-   * @see #answerTheListenerJobsTheseTasksWaitFor(CamundaClient, List)
+   * The job types of the listeners of this adapter in one process definition. A process
+   * definition never changes, so each is read once per fork.
+   *
+   * @param client The client of the test
+   * @param processDefinitionKey The process definition
+   * @return The job types, empty for a model without such a listener
+   */
+  private static Set<String> listenerJobTypesOf(
+      final CamundaClient client,
+      final Long processDefinitionKey) {
+
+    if (processDefinitionKey == null) {
+      return Set.of();
+    }
+    return LISTENER_JOB_TYPES.computeIfAbsent(processDefinitionKey, key -> {
+      final var xml = whatTheClusterAnswers(
+          () -> client
+              .newProcessDefinitionGetXmlRequest(key)
+              .send()
+              .join());
+      final var jobTypes = new LinkedHashSet<String>();
+      final var listener = A_LISTENER_OF_THIS_ADAPTER.matcher(xml);
+      while (listener.find()) {
+        jobTypes.add(unescaped(listener.group(1)));
+      }
+      return jobTypes;
+    });
+
+  }
+
+  private static final Map<Long, Set<String>> LISTENER_JOB_TYPES = new ConcurrentHashMap<>();
+
+  /**
+   * A task listener or an execution listener whose job type carries this adapter's prefix.
+   * The deployment writes these attributes itself, so their shape is known.
+   */
+  private static final Pattern A_LISTENER_OF_THIS_ADAPTER = Pattern.compile(
+      "<zeebe:(?:taskListener|executionListener)\\b[^>]*\\btype=\"("
+          + Pattern.quote(Camunda8Listeners.VANILLABP_JOB_TYPE_PREFIX)
+          + "[^\"]*)\"");
+
+  private static String unescaped(
+      final String attribute) {
+
+    return attribute
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&");
+
+  }
+
+  /**
+   * @see #answerTheListenerJobsOf(CamundaClient, Map)
    */
   private static final int AS_MANY_AS_A_CLASS_CAN_LEAVE = 100;
 
   /**
-   * @see #answerTheListenerJobsTheseTasksWaitFor(CamundaClient, List)
+   * @see #answerTheListenerJobsOf(CamundaClient, Map)
    */
   private static final Duration THE_CLEANUP_HOLDS_A_JOB_FOR = Duration.ofSeconds(10);
 
   /**
-   * How long the cleanup waits for a job which the search says is there. Short, because the
-   * job exists before the request is sent and a cluster which does not hand it over at once
-   * will not hand it over later either.
+   * How long the cleanup waits for a job of a listener type. Short, because the cleanup asks
+   * again on its next round anyway, and every round pays this wait once per job type that has
+   * no job at the moment.
    */
-  private static final Duration ASKING_FOR_A_LEFTOVER_JOB_ANSWERS_WITHIN = Duration.ofSeconds(2);
+  private static final Duration ASKING_FOR_A_LEFTOVER_JOB_ANSWERS_WITHIN = Duration.ofMillis(200);
 
   /**
-   * What a cleanup says when it gives up, in the words of whichever half of it did not finish.
+   * What a cleanup says when it gives up.
    *
-   * @param running What the search still reports
+   * @param client The client of the test
+   * @param whoLeftIt The class or test the leftovers belong to
+   * @param notOverYet The workflows which did not report an end
    * @param refusals What the engine answered per instance, where it refused the cancellation
-   * @param stillHeldByTheEngine How many workflows the engine still held
-   * @param waitingForAListenerJob The user tasks which are still between two states
    * @return The sentence a reader of a red run gets
    */
   private static String whyItCouldNotBeEnded(
-      final List<ProcessInstance> running,
-      final Map<Long, String> refusals,
-      final long stillHeldByTheEngine,
-      final List<UserTask> waitingForAListenerJob) {
-
-    if (!waitingForAListenerJob.isEmpty()) {
-      return ("%d user task(s) which %s left are still waiting for a listener job %s after this "
-          + "class answered them, so the first worker of that job type in this class would be "
-          + "served one of those jobs: %s%nA task which does not move after its listener job was "
-          + "answered is a cluster which cannot hand that job out. Read the cluster's log before "
-          + "looking for the cause in this repository.")
-          .formatted(
-              waitingForAListenerJob.size(),
-              classWhichRanBefore,
-              THE_ENGINE_LETS_GO_WITHIN,
-              whichTasksAreLeft(waitingForAListenerJob));
-    }
-    return ("The engine still takes a cancellation for %d workflow(s) of %s %s after this class "
-        + "cancelled them, so the workers of this one would be served their jobs: %s")
-        .formatted(
-            stillHeldByTheEngine,
-            classWhichRanBefore,
-            THE_ENGINE_LETS_GO_WITHIN,
-            whatIsLeft(running, refusals));
-
-  }
-
-  /**
-   * Names the user tasks a cleanup could not get rid of, with the state each of them is in.
-   *
-   * @param tasks What is left
-   * @return One line per user task
-   */
-  private static String whichTasksAreLeft(
-      final List<UserTask> tasks) {
-
-    return tasks
-        .stream()
-        .map(task -> "%n  '%s' of '%s' in %s, instance %d".formatted(
-            task.getElementId(),
-            task.getBpmnProcessId(),
-            task.getState(),
-            task.getProcessInstanceKey()))
-        .collect(Collectors.joining());
-
-  }
-
-  /**
-   * Names what is left, so a red run says which models they are and what the engine answered
-   * rather than only how many there were.
-   *
-   * @param running What the search still reports
-   * @param refusals What the engine answered per instance, where it refused the cancellation
-   * @return One line per instance
-   */
-  private static String whatIsLeft(
-      final List<ProcessInstance> running,
+      final CamundaClient client,
+      final String whoLeftIt,
+      final List<Long> notOverYet,
       final Map<Long, String> refusals) {
 
-    return running
-        .stream()
-        .map(workflow -> "%n  %d of '%s'%s".formatted(
-            workflow.getProcessInstanceKey(),
-            workflow.getProcessDefinitionId(),
-            refusals.containsKey(workflow.getProcessInstanceKey())
-                ? ", the engine refused to cancel it: "
-                    + refusals.get(workflow.getProcessInstanceKey())
-                : ", which the engine still held when it took the last cancellation"))
-        .collect(Collectors.joining());
+    return ("%d workflow(s) which %s left did not end within %s after this cleanup cancelled "
+        + "them and answered their listener jobs, so the next application would be served "
+        + "their jobs: %s%s%nA workflow which does not end after its listener jobs were answered "
+        + "is a cluster which cannot hand those jobs out. Read the cluster's log before "
+        + "looking for the cause in this repository.")
+        .formatted(
+            notOverYet.size(),
+            whoLeftIt,
+            THE_ENGINE_LETS_GO_WITHIN,
+            notOverYet
+                .stream()
+                .map(key -> "%n  instance %d%s".formatted(
+                    key,
+                    refusals.containsKey(key)
+                        ? ", the engine refused to cancel it: "
+                            + refusals.get(key)
+                        : ""))
+                .collect(Collectors.joining()),
+            String.join("", whatIsStillRunning(client)));
 
   }
+
+  /**
+   * Appends what one cleanup cost to a file of the module's build directory, one line per
+   * test: the class, the test, the milliseconds and how many workflows it ended. It is how the
+   * price of cleaning up after every test is read off a run.
+   *
+   * @param test The test which just finished
+   * @param ended How many workflows the cleanup ended
+   * @param nanos How long the cleanup took
+   */
+  private static void recordWhatTheCleanupCost(
+      final TestInfo test,
+      final int ended,
+      final long nanos) {
+
+    final var line = "%s;%s;%d;%d%n".formatted(
+        nameOf(test),
+        test
+            .getTestMethod()
+            .map(Method::getName)
+            .orElse(test.getDisplayName()),
+        Duration.ofNanos(nanos).toMillis(),
+        ended);
+    try {
+      Files.writeString(
+          WHERE_THE_COST_IS_WRITTEN,
+          line,
+          StandardOpenOption.CREATE,
+          StandardOpenOption.APPEND);
+    } catch (final IOException notWritten) {
+      // the cost is a reading for a person, and a test does not fail over it
+    }
+
+  }
+
+  private static final Path WHERE_THE_COST_IS_WRITTEN = Path.of("target", "shared-cluster-cleanup.csv");
 
   /**
    * How long the cleanup may take to get the cluster free of the class before. Generous rather
@@ -489,7 +877,11 @@ public abstract class TestOnTheSharedCluster {
             .page(page -> page.limit(1000))
             .send()
             .join()
-            .items());
+            .items()
+            .stream()
+            // the marker of the cleanup ends on its own, and the cleanup waited for that
+            .filter(workflow -> !THE_MARKER.equals(workflow.getProcessDefinitionId()))
+            .toList());
 
   }
 
@@ -540,35 +932,32 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * Cancels one workflow and says whether the engine took the command.
+   * Cancels one workflow.
    * <p>
-   * A <code>404</code> means the engine will take no cancellation for this key, which is
-   * either a workflow that is over or one which is already terminating. It is not proof that
-   * the workflow is over, so the caller reads it together with the user tasks which are still
-   * between two states. Every other refusal is kept for the message a caller writes where it
-   * gives up, because a cancellation refused for some other reason is what a red run has to be
-   * able to read.
+   * A <code>404</code> means the engine takes no cancellation for this key, which is either a
+   * workflow that is over or one which is terminating already. Neither says that it is over,
+   * which is why the caller asks the workflow itself afterwards. Every other refusal is kept
+   * for the message a caller writes where it gives up, because a cancellation refused for some
+   * other reason is what a red run has to be able to read.
    *
    * @param client The client of the test
-   * @param workflow The workflow to cancel
+   * @param processInstanceKey The workflow to cancel
    * @param refusals What the engine answered, per instance
-   * @return Whether the engine took this cancellation
    */
-  private static boolean cancel(
+  private static void cancel(
       final CamundaClient client,
-      final ProcessInstance workflow,
+      final long processInstanceKey,
       final Map<Long, String> refusals) {
 
     try {
       client
-          .newCancelInstanceCommand(workflow.getProcessInstanceKey())
+          .newCancelInstanceCommand(processInstanceKey)
           .send()
           .join();
-      refusals.remove(workflow.getProcessInstanceKey());
-      return true;
     } catch (final RuntimeException refused) {
-      refusals.put(workflow.getProcessInstanceKey(), refused.getMessage());
-      return !Camunda8Errors.notFound(refused);
+      if (!Camunda8Errors.notFound(refused)) {
+        refusals.put(processInstanceKey, refused.getMessage());
+      }
     }
 
   }

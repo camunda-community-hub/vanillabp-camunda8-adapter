@@ -1800,6 +1800,31 @@ decision 54 in the repository's DECISIONS.md, which draw the same line for a use
 serves and for an ad-hoc subprocess nothing serves. `Camunda8JobTypeWrittenAsAnExpressionTest`
 holds both messages, the listener half and the element template.
 
+### A form reference has to be a name as well
+
+The external form reference of a Camunda-managed user task is its task definition. The core finds
+the `@WorkflowTask` method by it, and the job type of the lifecycle listeners is
+`io.vanillabp.userTask:` plus the reference. Camunda 8 lets a model write the reference as a FEEL
+expression, and this adapter answers that the way it answers a job type written as one: a BPMN
+process a `@WorkflowService` class claims does not deploy, and one nobody claims gets a WARN.
+
+Measured on 2026-10-06 against `camunda/camunda:8.10.0`, with one model naming its form
+`=whichForm` and one method written as `taskDefinition = "=whichForm"`, before the refusal
+existed. Without prefixes the cluster evaluated the reference, so the user task carried the form
+`theFormToShow`, while the listener job type stayed `io.vanillabp.userTask:=whichForm`, because it
+does not start with `=`. The worker met that job and the method was called. So the model worked,
+but only for a method named after the expression text. Under `use-prefix` the boot ended in the
+core's wiring validation: the expression had been framed, the method matched no task, and the
+message named the method rather than the model.
+
+The finding is read while the file is prepared, next to the job types, so the message quotes the
+expression as the modeller typed it. It says why the reference has to be a name and names the way
+out: a fixed name and a method of that name, and where the form differs from workflow to workflow,
+one user task per form behind a gateway or one name and a task list which chooses the form. An
+element template is no way out here, because a Camunda-managed user task has no job type another
+runtime could subscribe to. Why it is a refusal in one case and a WARN in the other is
+decision 69 in `DECISIONS.md`. `Camunda8FormReferenceWrittenAsAnExpressionTest` holds both messages.
+
 ### Elements another runtime serves
 
 An element carrying the attribute `zeebe:modelerTemplate` was configured from an ELEMENT TEMPLATE.
@@ -2903,6 +2928,25 @@ adapter is tested against.
 The module holds the cluster and nothing else. `PublishedPom` used to sit beside it and moved
 into `published-pom`, because Testcontainers is an honest dependency of a cluster and dead
 weight on the classpath of a module which only reads a file. No module ever wanted both.
+
+The module `spring-boot` runs its classes against ONE cluster, and what a test leaves running there
+reaches the next one: the workers of the next application are served the jobs of a workflow whose
+aggregate lived in a database which is gone. So `TestOnTheSharedCluster` ends everything still
+running after EVERY test, not only when the next class starts. The search lags behind the engine,
+so the cleanup first starts a workflow of its own which ends at once and waits until the search
+knows it: with one partition, everything started before it is then in the search as well. Then it
+finds the workflows by a search, cancels them, answers the listener jobs of this adapter which
+belong to them, and waits until each of them reports an end when it is asked for by its key. An
+earlier cleanup stopped once the search was empty, and that could happen before a task it had just
+cancelled showed up.
+After each class a guard looks once more, after the application is closed, and fails THAT class if
+something is still running, so a leftover is reported by the class which left it rather than by the
+next one. A class whose tests build on each other says so with `@ItsTestsAreOneScenario` and is
+cleaned up after its last test instead. The cost of each cleanup is written to
+`spring-boot/target/shared-cluster-cleanup.csv`, one line per test. Measured on 2026-10-06 against
+`camunda/camunda:8.10.0` over the 110 tests of the module: 106 seconds in all, 0.7 seconds for the
+median test, 2.7 seconds at most. Most of a cleanup which finds nothing is the wait for the marker,
+about half a second.
 
 Nearly every workflow of the test applications carries `allow-full-sync-with-bpms: true`.
 VanillaBP stops an application whose workflow aggregate hands every attribute to the BPMS,

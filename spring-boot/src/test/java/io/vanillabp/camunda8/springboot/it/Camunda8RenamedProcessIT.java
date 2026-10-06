@@ -72,6 +72,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestOnTheSharedCluster.ItsTestsAreOneScenario
 public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
 
   /**
