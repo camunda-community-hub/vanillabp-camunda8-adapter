@@ -1365,6 +1365,44 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final AggregatePersistenceAware<A> aggregatePersistence,
       final Object workflowAggregateId) {
 
+    return awarenessOfWorkflowForRedispatch(scope, aggregatePersistence, workflowAggregateId, null);
+
+  }
+
+  /**
+   * The same probe, counting only the instances started at or after the moment the start was
+   * planned.
+   * <p>
+   * An aggregate may carry a second workflow once its first one ended. Say the first attempt to
+   * dispatch the second start failed before it created anything. A search without a state filter
+   * still finds the first workflow, and counting it would skip the start: the second workflow
+   * would never run. So only an instance whose <code>startDate</code> is at or after
+   * <code>plannedAt</code> counts.
+   * <p>
+   * The <code>startDate</code> comes from the cluster's clock and the moment from the clock of the
+   * node which planned the start. Where the cluster is behind by more than the time between
+   * planning and the first dispatch, this entry's own workflow looks older than the entry, and the
+   * answer is "unknown". That costs a duplicate, the residual the at-least-once contract permits.
+   * The moment is never moved back to allow for the skew, because a moment moved back counts the
+   * first workflow again, and that loses the second one. An instance without a
+   * <code>startDate</code> does not count either, for the same reason.
+   *
+   * @param scope The workflow module and BPMN processes being asked about
+   * @param aggregatePersistence The workflow aggregate's persistence support
+   * @param workflowAggregateId The ID of the workflow aggregate
+   * @param plannedAt When the start was planned, or <code>null</code> for an entry planned
+   *          before the moment was recorded - then every instance of the aggregate counts
+   * @return {@link WorkflowAwareness#ACTIVE} for an instance of the scope started since then,
+   *         otherwise {@link WorkflowAwareness#UNKNOWN_TO_BPMS}, or
+   *         {@link WorkflowAwareness#BPMS_UNAVAILABLE} where the search failed
+   */
+  @Override
+  public WorkflowAwareness awarenessOfWorkflowForRedispatch(
+      final WorkflowScope scope,
+      final AggregatePersistenceAware<A> aggregatePersistence,
+      final Object workflowAggregateId,
+      final java.time.Instant plannedAt) {
+
     try {
       final var found = clientFactory
           .getClient()
@@ -1379,7 +1417,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           .stream()
           // as in awarenessOfWorkflow: an instance of the other adapter id on
           // this cluster does not prove that THIS one started the workflow
-          .noneMatch(instance -> isInScope(scope, instance.getTenantId(), instance.getProcessDefinitionId()))
+          .filter(instance -> isInScope(scope, instance.getTenantId(), instance.getProcessDefinitionId()))
+          .noneMatch(instance -> startedSince(instance.getStartDate(), plannedAt))
               ? WorkflowAwareness.UNKNOWN_TO_BPMS
               : WorkflowAwareness.ACTIVE;
     } catch (final Exception e) {
@@ -1391,6 +1430,25 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           e);
       return WorkflowAwareness.BPMS_UNAVAILABLE;
     }
+
+  }
+
+  /**
+   * Whether an instance started at or after the moment a start was planned.
+   *
+   * @param startDate When the cluster says the instance started, <code>null</code> where it
+   *          does not say
+   * @param plannedAt When the start was planned, <code>null</code> where nobody knows
+   * @return Whether the instance counts for that start
+   */
+  private static boolean startedSince(
+      final java.time.OffsetDateTime startDate,
+      final java.time.Instant plannedAt) {
+
+    if (plannedAt == null) {
+      return true;
+    }
+    return (startDate != null) && !startDate.toInstant().isBefore(plannedAt);
 
   }
 
