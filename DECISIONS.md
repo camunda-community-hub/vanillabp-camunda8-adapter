@@ -38,11 +38,13 @@ is not supported yet. The user-task lifecycle listeners VanillaBP writes itself 
 their job would be the wrong place in any case - it gates a transition of a task which stays in the
 cluster, and writing there would overwrite what a form or a task list put into the instance.
 
-That is the way OUT. The way IN is a separate question, and the difference is worth knowing: the
-listeners VanillaBP writes itself need nothing of the instance, so their workers fetch no variable
-at all, while a listener somebody modelled is served by a `@WorkflowTask` method which may declare
-`@TaskParam`, so its worker fetches exactly what that method asks for. A user's listener therefore
-sees more than zero variables, and what it may write back is the question above.
+That is the way OUT. The way IN is a separate question, and it follows decision 8 for every
+worker, the listeners VanillaBP writes itself included. A user-task listener fetches what the
+method serving that task reads, the end of a workflow fetches only the aggregate's id, and a start
+the cluster fires itself fetches every variable, because VanillaBP copies all of them into the
+aggregate it builds. A listener somebody modelled is served by a `@WorkflowTask` method which may
+declare `@TaskParam`, so its worker fetches exactly what that method asks for. A user's listener
+therefore sees more than zero variables, and what it may write back is the question above.
 
 ### 2. Workflow modules are kept apart by scoping the identifiers
 
@@ -125,7 +127,7 @@ a twenty-second gap.
 So `stopWorkflowProcessing` closes the workers of the module first, and the shutdown then waits,
 within `shutdown-grace`, for two things: the handlers which are still inside the application, and
 the cluster releasing the workers. The wait is one wait for every workflow module of the adapter
-instance rather than one per module, which is the decision above. The client factory closes
+instance rather than one per module, which is decision 51. The client factory closes
 whatever never reached that path before it closes the client, so the order holds on every shutdown
 path and not only on the one the platform lifecycles happen to take.
 
@@ -179,7 +181,7 @@ A cluster under load rejects commands, and the client retries none of them. Phas
 by the outbox, but the command inside a handler is not: a rejected completion of already committed
 work costs the job a retry and, under sustained load, produces an incident.
 
-So completion, BPMN error, failure and lock renewal of all four worker kinds run inside
+So completion, BPMN error, failure and lock renewal of every worker kind run inside
 `Camunda8CommandRetry`. What may be repeated is what `Camunda8Errors` classifies as repeatable,
 plus the explicit exception that a job which is gone is final, or the at-least-once residual would
 turn into a storm. A socket which timed out belongs to that class, and it is worth saying so
@@ -449,6 +451,10 @@ For the same reason the multi-instance context of such a task is not reported: t
 filled from the models the module deploys, and this one is not among them. A rename whose old
 model has a multi-instance task therefore stays a case for keeping both models deployed.
 
+**That paragraph is superseded by decision 21.** The registry now also gets the multi-instance
+chains of the models the cluster runs, so a job of such a workflow carries its iteration context,
+and a multi-instance task is no longer a reason to keep the old model deployed.
+
 Since decision 20 the reason the alternative was rejected has fallen away: the adapter requires
 a cluster it can search, so reading the models is no longer a feature which would work on one
 cluster and do nothing on another. What this entry decided stands as it is - the composed form is
@@ -558,11 +564,16 @@ travels the same way, filtered into the `camunda8-cluster.properties` of the `te
 module, which every module starting a cluster reads from the classpath. The `line-8.8` profile
 sets it to `elasticsearch`, because moving the previous-GA line onto a storage its own cluster
 serves differently would change what that line is tested against, which is the one thing a
-bugfix-only line may not do. The current GA and the preview line take the default, `rdbms`.
+bugfix-only line may not do. Every other line takes the default, `rdbms`, and so will a preview
+line when there is one again.
 
-A test class sees none of this. It declares one field, `ClusterUnderTest.cluster()` (or
-`cluster(logName)` where a module starts more than one), and gets a container it can ask for its
-mapped ports. Where the line needs an
+A test class sees none of this. It asks `ClusterUnderTest` for a cluster and gets a container it
+can ask for its mapped ports. In most classes that is `sharedCluster()`, the one cluster all
+classes of a module share: they run in one JVM, so one container serves them all, and a module
+starts one cluster instead of some thirty. A class which needs a cluster nobody else touches,
+because it is configured differently or must never have seen its model, declares a field
+`ClusterUnderTest.cluster()` (or `cluster(logName)` where a module starts more than one) instead.
+Either way, where the line needs an
 Elasticsearch, the cluster container creates the network and that Elasticsearch itself, depends
 on it so Testcontainers starts it first, and stops both again in its own `stop()`. That last
 part is the reason the storage is not simply a second `@Container` field the way it used to be:
@@ -572,9 +583,9 @@ cluster and the module would hold twenty of them by the end of a run.
 
 `Camunda8TaskProcessingIT` is the everyday proof of the database storage and
 `Camunda8LocatingWorkflowsIT` of the searches on top of it. Both run the other half when they are
-given `-Dcamunda8.cluster.secondary-storage=elasticsearch`, and that is how a change to this
-mechanism is checked as long as 8.8 is alive: the pull request builds the current GA line only, so
-nothing else would compile the Elasticsearch path before the nightly matrix does.
+given `-Dcamunda8.cluster.secondary-storage=elasticsearch`, which is the quick way to check a
+change to this mechanism on a machine. The pull request builds every line since decision 42, so
+line 8.8 runs the Elasticsearch path there as well.
 
 ### 23. Connectors are allowed per adapter, and every boot says what they cost
 
@@ -1423,10 +1434,14 @@ An activation which follows an expired lock supersedes the token before it.
 
 What it buys is small and real. Today, when the lock expires while the business method is still
 running, the cluster hands the job out again, the method runs a second time, and both runs try to
-complete. The first completion usually wins and writes the values of the OLDER run, while the newer
-run finds the job gone and logs a warning. With a lease the older completion is refused and the
-workflow continues with what the run which finished last wrote. The same duplicate work, a better
-result, and a rejection instead of a silent overwrite.
+complete. Without a lease the cluster has no opinion about which of the two runs is the current
+one: the job goes to whoever answers first, and the other run is told there is no such job
+(`NOT_FOUND`, a `404`), which reads exactly like a job that is long gone. The age of the activation
+decides nothing. Measured against `camunda/camunda:8.9.19` on 2026-09-21 with one pod and one
+worker, in both orders: the answer which arrived first was taken both times. With a lease the answer
+of the older activation is refused whenever it arrives, with a `409` the adapter recognises, and the
+workflow continues with what the newer run wrote. The same duplicate work, a result which no longer
+depends on which run happens to be faster, and a refusal which says what happened.
 
 **Which workers lease.** Those which hold their job from the activation to the answer: the user-task
 listeners, the listeners somebody modelled, the cancel listeners of decision 32, the start events the
@@ -1458,8 +1473,9 @@ next to `applyWorkerOptions`, and an extension which opens listener workers on t
 it for the same reason it calls that one: two components leasing the same job type with different
 opinions is the starvation above, and the decision belongs to the adapter's configuration rather
 than to the extension. It is deliberately not part of `applyWorkerOptions`, because only the
-caller knows whether its worker can ever serve a task which stays open. Until an extension
-follows, an application running one leaves `job-lease` at `do-not-use`.
+caller knows whether its worker can ever serve a task which stays open. The Camunda 8 extension of
+the Business Cockpit calls it. An application running an extension which does not leaves
+`job-lease` at `do-not-use`.
 
 **A 409 of a job command means somebody else holds this activation.** Measured on 8.10.0-alpha5,
 over both transports: a completion carrying a superseded token is refused with HTTP `409`, title
@@ -1472,9 +1488,9 @@ The code alone cannot say WHICH wrong state the cluster means, the REST specific
 "the job is in the wrong state", and the words around the code are the cluster's to reword
 (decision 16). So the rule is the honest one: a 409 of a job command means another activation holds
 this job, whatever the reason. `Camunda8CommandRetry` stops on it instead of repeating until the
-job's deadline, and it stops without failing the job: the newer run answered already, and failing
-the job would take it away from whoever holds it. The line it writes says the run converged with a
-redelivery, which is what happened.
+job's deadline, and it stops without failing the job: the newer run holds the job and answers it,
+and failing the job would take it away from that run. The line it writes says the run converged
+with a redelivery, which is what happened.
 
 **What a lease does to the drain.** A shutdown leaves a job to its lock rather than failing it, and
 a leased job is still leased when the next pod activates it. That activation gets a fresh token and
@@ -1485,7 +1501,7 @@ without one, and from a client which never activated that job, measured over bot
 probe of `Camunda8OpenTaskProbe`, the lock renewal of an open asynchronous task and the phase-one
 check all rest on that.
 
-`Camunda8JobLease` is per release line, because `withLease` and `withLeaseToken` do not exist in
+`Camunda8JobLease` is per release line, because `withLease` and `withJobLeaseToken` do not exist in
 the client of 8.8 or 8.9. `Camunda8JobLeaseTest` is per line too and holds what the client can do
 and what the boot says about the key there; `Camunda8JobLeaseDeploymentTest` holds which worker
 leases and which does not; `Camunda8ErrorsTest` and `Camunda8CommandRetryTest` hold the codes and
@@ -1833,16 +1849,19 @@ two states. It answers the listener jobs a cancellation waits for while it loops
 which describe it said "the `404` is how the engine says it has let go", which is the half that is
 not true.
 
-One question this does not answer, because it was not measured: what the existence probe of
+When this entry was written, one question was open: what the existence probe of
 `Camunda8ProcessService` answers for an instance in that window. The probe is a refused
 modification, not a cancellation, and the texts around it say "the engine forgets an instance the
-moment it ends". Whether that sentence has the same hole is a measurement somebody still has to
-take.
+moment it ends". That has been measured since. `Camunda8ProbeWhileAnInstanceTerminatesIT` holds the
+window open, and on 2026-09-27, against `8.8.39`, `8.9.21` and `8.10.0-rc1`, the existence probe
+answered `400 INVALID_ARGUMENT` inside it, the empty `UpdateUserTask` of the task probe answered
+`409`, and both turned to `404` only once the listener job was answered. So neither probe reads a
+terminating instance as gone.
 
 Decision 43 carries the same measurement from the other side and needs nothing. Decision 35 says the
 engine forgets an instance the moment it ends, and decision 38 says a `404` means gone. Both are
-about the PROBE and not about a cancellation, so neither is touched here. They are named because
-whoever takes the measurement above decides what happens to them.
+about the PROBE and not about a cancellation, and the measurement above shows that both hold, so
+neither changes.
 
 ### 45. A job for a workflow this application does not own keeps its incident
 
@@ -2750,8 +2769,9 @@ bill: `checks.yaml` calls the matrix for every pull request without a condition 
 it once more, which was 55 pull request runs and 7 nights in the seven days up to 2026-10-01, so
 about 103 runner hours in a week. A fourth line makes that about 137, and it adds nothing to the
 waiting unless it is the slowest one. What a line costs in work is close to nothing, because every
-line is built from this one source tree: the delta is `core/src/main/java-line-<id>`, the same five
-class names on every line, 340 lines on 8.8 and on 8.9 and 382 lines on 8.10. So the bill of a line
+line is built from this one source tree: the delta is `core/src/main/java-line-<id>`, the same six
+class names on every line, 391 lines on 8.8, 395 on 8.9 and 437 on 8.10 (counted on 2026-10-06,
+after decision 68 added the sixth). So the bill of a line
 is the matrix, and nothing else about a line is expensive.
 
 The dates line up on top of that. 8.8 leaves maintenance on 13 April 2027 and the next minor is due

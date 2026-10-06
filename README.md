@@ -1385,7 +1385,7 @@ rejected at the caller against one node). The outbox covers the phase-two comman
 what was left unprotected was the command the handler itself sends back: a rejected
 completion of committed work escaped into the client's fail path and cost the job a
 retry. `Camunda8CommandRetry` now wraps the completion, the BPMN error, the fail command
-and the lock renewal of all four worker kinds. It repeats only what
+and the lock renewal of every worker kind. It repeats only what
 `Camunda8Errors.repeatableJobCommandFailure` calls repeatable, which is the outbox
 classification named above plus the gone job (repeating a command against a job which no
 longer exists would turn the tolerated at-least-once residual into a storm). It stops at
@@ -1397,7 +1397,8 @@ and a 5s ceiling the five attempts never reach, which keeps the whole sequence b
 a second because a waiting handler occupies an execution slot. When the bound is reached
 the original failure is rethrown, so the behaviour after the retry is exactly what it was
 before. The bounds and the waits are `Camunda8CommandRetryTest`, and
-`Camunda8OutcomeCommandRetryTest` sends through it from all four kinds of worker.
+`Camunda8OutcomeCommandRetryTest` sends through it from four kinds of worker. The
+listener somebody modelled is not among them yet.
 
 `retry-backoff` (default `PT10S`, resolvable per module, workflow and task like
 `job-timeout`, resolved per COMMAND rather than per worker, so nothing has to be aligned
@@ -1716,9 +1717,9 @@ lease the first answer wins, and which run that is comes down to which one finis
 of the activation decides nothing. Measured against `camunda/camunda:8.9.19` on 2026-09-21 with one
 pod and one worker, both orders were run: the run which answered first was taken both times, and
 the other run got its command rejected with `NOT_FOUND`, which reads exactly like a job that is
-long gone. With a lease the older answer is refused and the workflow continues with what the run
-which finished last wrote. The work is done twice either way; the result is better and the
-rejection is visible.
+long gone. With a lease the answer of the older activation is refused whenever it arrives, and
+the workflow continues with what the newer run wrote. The work is done twice either way; the
+result is better and the rejection is visible.
 
 Whether the second run happens at all depends on the client. Up to `8.8.36` and `8.9.17` a worker
 which still held a job stopped asking for work, so its own expired job could only be picked up
@@ -1762,7 +1763,7 @@ application running an extension which has not followed leaves the key at `do-no
 
 An answer refused because another activation holds the job arrives as HTTP `409` (`INVALID_STATE`),
 on gRPC as `FAILED_PRECONDITION`. The adapter neither repeats it nor fails the job over it: the run
-converged with a redelivery, and the newer run has answered. Why the code alone decides that is
+converged with a redelivery, and the newer run holds the job. Why the code alone decides that is
 decision 36 in the repository's DECISIONS.md.
 
 ### A job type has to be a name, not an expression
@@ -2878,8 +2879,10 @@ Every integration test here starts the cluster of the active release line throug
 lines whose cluster keeps its secondary storage in a database of its own process a test class
 starts ONE container, an embedded H2 inside the cluster serving every search; line 8.8 exports
 to an Elasticsearch and the cluster takes that container along and stops it again with itself.
-The test asks for a cluster either way and declares one field, see decision 22 in
-[`DECISIONS.md`](./DECISIONS.md).
+The test asks for a cluster either way, see decision 22 in [`DECISIONS.md`](./DECISIONS.md). Most
+classes take `sharedCluster()`, the one cluster all classes of a module share, and start by
+ending what the class before them left running (`TestOnTheSharedCluster`). A class which needs a
+cluster of its own declares a `cluster()` field and says why where it stands.
 
 `ClusterUnderTest` and the log writer beside it live in the module `test-support` and are
 published as `org.camunda.community.vanillabp:camunda8-adapter-test-support`, on the same
