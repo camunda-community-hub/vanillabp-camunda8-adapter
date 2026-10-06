@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.deployment;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -8,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * The cluster is an address nothing listens on, so the count of open tasks is the one thing
  * these runs cannot have. That the message says so instead of a number is asserted as well.
+ * So is the wait for the cluster before the count: the boot which goes on waits, so a cluster
+ * starting with the application still gives a number, and the boot which ends does not.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -185,6 +189,35 @@ public class Camunda8JobWorkerUserTasksReportTest {
   }
 
   /**
+   * A client factory which counts the waits for its cluster instead of waiting. The cluster
+   * of these runs is an address nothing listens on, so a real wait would only time out.
+   */
+  private static class ClientFactoryCountingTheWaits extends Camunda8ClientFactory {
+
+    private final AtomicInteger waits = new AtomicInteger();
+
+    ClientFactoryCountingTheWaits(
+        final Camunda8AdapterConfiguration configuration) {
+
+      super("c8", configuration);
+
+    }
+
+    @Override
+    public void waitUntilTheClusterAnswers() {
+
+      waits.incrementAndGet();
+
+    }
+
+  }
+
+  /**
+   * The factory of the last wiring, which tells how often that wiring waited for the cluster.
+   */
+  private static ClientFactoryCountingTheWaits lastFactory;
+
+  /**
    * Wires one model and hands the wiring back unrun, so the test can read what it said or
    * catch what it refused.
    *
@@ -202,8 +235,9 @@ public class Camunda8JobWorkerUserTasksReportTest {
     final var core = claimed
         ? new Camunda8DeploymentServiceTest.NoOpInvoker()
         : new NoWorkflowServiceClaimsIt();
+    lastFactory = new ClientFactoryCountingTheWaits(configuration);
     final var service = DeploymentServiceUnderTest.of(
-        "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators.of(core, scoping),
+        "c8", lastFactory, TestCollaborators.of(core, scoping),
         (
             workflowModuleId,
             bpmnProcessId,
@@ -286,6 +320,12 @@ public class Camunda8JobWorkerUserTasksReportTest {
         refused.contains("The cluster did not answer how many of them are open right now"),
         () -> "this run has no cluster, and the message says that rather than a number: "
             + refused);
+    assertEquals(
+        0,
+        lastFactory.waits.get(),
+        "the boot ends over the model, so it does not wait for the cluster first: a cluster "
+            + "which is not up yet would sit out the whole startup wait and then end the boot "
+            + "with a message which hides the real cause");
 
   }
 
@@ -385,6 +425,11 @@ public class Camunda8JobWorkerUserTasksReportTest {
         logged.contains(THE_WAY_OUT_THROUGH_A_METHOD) || logged.contains(THE_WAY_OUT_THROUGH_THE_MODEL),
         () -> "nothing asks the reader to change a model which is none of ours: "
             + logged);
+    assertEquals(
+        1,
+        lastFactory.waits.get(),
+        "the boot goes on, so it waits for the cluster before it counts: a cluster which "
+            + "starts together with the application still gives the number");
 
   }
 

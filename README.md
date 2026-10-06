@@ -1370,6 +1370,13 @@ branch extends the lock once more: the renewal is driven by the cluster's own
 redelivery and needs no timer of the adapter's. The worker's own job timeout stays
 SHORT - it is the crash-recovery horizon for synchronous handlers.
 
+The renewal can arrive after the task is gone. The application may complete the task
+between the handler's decision and the renewal, and then the cluster refuses the renewal
+with `400` while it still holds the closed job, or with `404` once it does not. A lock
+which ran out first gets the `400` as well. There is nothing left to renew in either case,
+so the adapter writes a debug line and the handler ends normally
+(`Camunda8RenewalOfAJobWhichJustFinishedTest`).
+
 The window has to sit clearly below `vanillabp.delivery.retention` (seven days, following
 `vanillabp.outbox.retention` where it is not set itself), since
 the delivery record is what answers the redelivery which renews the lock; a value
@@ -1789,6 +1796,11 @@ An answer refused because another activation holds the job arrives as HTTP `409`
 on gRPC as `FAILED_PRECONDITION`. The adapter neither repeats it nor fails the job over it: the run
 converged with a redelivery, and the newer run holds the job. Why the code alone decides that is
 decision 36 in the repository's DECISIONS.md.
+
+A lease has one more cost, and it comes from the cluster. Where the cluster activates a leased job
+for a request which has already ended, it cannot give the job back, and the job waits for the
+lock of that lost activation. See
+[a job activated for a worker which never saw it](#a-job-activated-for-a-worker-which-never-saw-it).
 
 ### A job type has to be a name, not an expression
 
@@ -2706,6 +2718,13 @@ wired to a BPMN element id: composing a job type from an element needs the model
 says so with the two ways out. This is the one place where such a method is out of reach.
 Everywhere else the cluster names the element of the job and the core routes by it.
 
+A user task may go without a method, and composing cannot see such a task at all. The cluster
+still waits for its `creating` listener, and nobody answered it: the task stood in `CREATING` for
+good. So the job types of the user-task listeners are also read from the models the cluster holds
+under the declared id, and a listener worker is opened for each one nothing else serves. Where
+the cluster cannot be asked for those models, nothing is added.
+`Camunda8UnservedUserTaskOfARenamedProcessIT` holds it against a cluster.
+
 `Camunda8DeclaredProcessWorkersTest` holds which workers are opened per mode,
 `Camunda8RenamedProcessIT` the same against a cluster with prefixed identifiers.
 
@@ -3484,6 +3503,18 @@ next receives the job.
 
 That sentence only holds for a job which HAS a retry, which is why the user-task listeners carry
 one, see [the retry a lost listener delivery needs](#the-retry-a-lost-listener-delivery-needs).
+
+It does not hold for a job activated with a lease either, see
+[the lease of an activation](#the-lease-of-an-activation). The gateway gives the job back with a
+FAIL command which carries no lease token, and the cluster refuses that command: "a matching lease
+token must be provided because the job is currently leased". The gateway logs `Failed to
+reactivate job ...` and leaves it there. So the job stays locked for nobody until the lock of the
+lost activation runs out, which is the `job-timeout` of that worker. Measured against
+`camunda/camunda:8.10.0` on 2026-10-06: `Camunda8JobLeaseIT` met it in 1 of 23 runs, at the
+moment a long poll of its own ended just as the lock of the job ran out. That test asked for a lock
+of five minutes back then, and it failed after waiting two. Nothing is lost here either, but a
+leased job waits for one lock instead of a few milliseconds. This is a defect of the cluster, and
+the lease is where it shows.
 
 **The gateway does not notice.** Over REST the response is written when the request ends, so a
 connection which died while the request was parked is found too late for the reactivation above.

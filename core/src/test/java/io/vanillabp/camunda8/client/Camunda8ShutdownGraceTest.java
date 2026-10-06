@@ -110,6 +110,27 @@ public class Camunda8ShutdownGraceTest {
   }
 
   @Test
+  @DisplayName("The default grace is held against a raised request timeout as well")
+  public void theDefaultGraceBelowARaisedRequestTimeoutWarns() {
+
+    // nothing configured for the grace: the application runs on the twenty seconds of the
+    // default, and a request timeout of thirty outlasts them just as a written grace would
+    final var configuration = new Camunda8AdapterConfiguration();
+    configuration.setRequestTimeout(Duration.ofSeconds(30));
+
+    configuration.validateShutdownGrace("c8", warnings::add);
+
+    assertEquals(1, warnings.size(), warnings::toString);
+    final var warning = warnings.getFirst();
+    assertTrue(
+        warning.contains("runs on the default 'vanillabp.adapters.c8.shutdown-grace: PT20S'"),
+        "says that nobody wrote the value it warns about: "
+            + warning);
+    assertTrue(warning.contains("'vanillabp.adapters.c8.request-timeout: PT30S'"), warning);
+
+  }
+
+  @Test
   @DisplayName("A grace below the budget, none at all and zero say nothing")
   public void aUsableGraceIsSilent() {
 

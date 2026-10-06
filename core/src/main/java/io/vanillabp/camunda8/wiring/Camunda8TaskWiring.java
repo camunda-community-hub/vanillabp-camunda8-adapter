@@ -5,6 +5,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
@@ -1101,6 +1102,39 @@ public final class Camunda8TaskWiring {
         })
         .filter(java.util.Objects::nonNull)
         .toList();
+
+  }
+
+  /**
+   * The job types of the user-task listeners VanillaBP wrote into a model the CLUSTER already
+   * runs, read off the listeners themselves.
+   * <p>
+   * The job type is read and not composed, because the model in the cluster carries it as it
+   * was written when that model was deployed: with the scoping of that deployment, and for
+   * every user task, served by a method or not. An application which declares an old process
+   * id after a rename has no model of its own for that id, so this is the only place which
+   * says which listener jobs the workflows of the old id produce.
+   *
+   * @param model The model as the cluster holds it
+   * @param bpmnProcessId The process id as the CLUSTER knows it
+   * @return The listener job types, each once, in the order of the model
+   */
+  public static Set<String> userTaskListenerJobTypesOfHeldModel(
+      final BpmnModelInstance model,
+      final String bpmnProcessId) {
+
+    final var jobTypes = new LinkedHashSet<String>();
+    model
+        .getModelElementsByType(UserTask.class)
+        .stream()
+        .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
+        .map(task -> task.getSingleExtensionElement(ZeebeTaskListeners.class))
+        .filter(Objects::nonNull)
+        .flatMap(listeners -> listeners.getTaskListeners().stream())
+        .map(ZeebeTaskListener::getType)
+        .filter(type -> (type != null) && type.startsWith(TASKDEFINITION_USERTASK_ZEEBE))
+        .forEach(jobTypes::add);
+    return jobTypes;
 
   }
 

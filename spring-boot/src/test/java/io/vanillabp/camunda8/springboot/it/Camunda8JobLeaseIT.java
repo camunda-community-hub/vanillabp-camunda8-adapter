@@ -21,6 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import io.camunda.client.CamundaClient;
 import io.camunda.client.api.response.ActivatedJob;
+import io.camunda.client.api.search.enums.JobState;
 import io.vanillabp.camunda8.client.Camunda8JobLease;
 import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.CapturedOutput;
@@ -63,6 +64,21 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * hands it, so the one slot the blocked handler occupies also stops the activation below from
  * ever completing. What the test reads is therefore the refusal and the absence of a failure,
  * which is what it is about, and not how often the cluster offered the job.
+ * <p>
+ * <b>The second activation is short, and the wait for it counts on that.</b> An activation
+ * request is a long poll. When the poll ends in the same moment the job's lock runs out, the
+ * cluster can activate the job for a request which has already been answered. The gateway
+ * then cannot deliver the job and gives it back with a FAIL command, but that command carries
+ * no lease token, so the cluster refuses it ("a matching lease token must be provided because
+ * the job is currently leased"). The job then stays locked for nobody until that activation
+ * runs out. Measured on 2026-10-06 against {@code camunda/camunda:8.10.0}: 1 run in 23 met it.
+ * That run is the one this class used to fail in, after 129 seconds. The activation was asked
+ * for with a lock of five minutes, so the job was out of reach for longer than the test waits.
+ * The lock of the second activation is therefore {@link #SECOND_ACTIVATION_LOCK}. That is long
+ * enough for what the test does with the job, and short enough that a lost activation costs
+ * one lock and not the test. This is the cluster's defect and not the adapter's. The adapter
+ * meets it as well, with its own job timeout as the cost, and the README of this repository
+ * says so.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -77,6 +93,21 @@ public class Camunda8JobLeaseIT extends SpringBootTestOnTheSharedCluster {
    * with a prefix.
    */
   private static final String JOB_TYPE = "test-app__LeasedProcess__slowTask";
+
+  /**
+   * The lock of the test's own activation. What the test does while holding the job takes
+   * well under a second. An activation the cluster loses blocks the job for exactly this
+   * long, see the class comment.
+   */
+  private static final Duration SECOND_ACTIVATION_LOCK = Duration.ofSeconds(30);
+
+  /**
+   * How long the test asks for the job. The adapter's own worker can take the expired job
+   * back up to three times before all four execution slots of this module hold a blocked run,
+   * and each takeback costs the ten-second lock of the task. One activation the cluster loses
+   * costs {@link #SECOND_ACTIVATION_LOCK} on top. Two minutes cover both with room to spare.
+   */
+  private static final Duration TIME_TO_TAKE_THE_JOB_OVER = Duration.ofMinutes(2);
 
   /**
    * Whether the client this build was compiled against can lease an activation. Read
@@ -118,7 +149,7 @@ public class Camunda8JobLeaseIT extends SpringBootTestOnTheSharedCluster {
         LeaseDockerWorkflowService.entered.await(120, TimeUnit.SECONDS),
         "the handler was delivered and is inside the application");
 
-    // the lock of that job is ten seconds, so it is over by the time this asks, and what
+    // the lock of that job is ten seconds, so it runs out while this asks, and what
     // comes back is what a second pod would get: the same job with a token of its own
     final var takenOver = awaitTheJobAgain(secondPod);
     assertNotNull(
@@ -198,7 +229,7 @@ public class Camunda8JobLeaseIT extends SpringBootTestOnTheSharedCluster {
   private ActivatedJob awaitTheJobAgain(
       final CamundaClient secondPod) throws Exception {
 
-    final var deadline = System.currentTimeMillis() + 120000;
+    final var deadline = System.currentTimeMillis() + TIME_TO_TAKE_THE_JOB_OVER.toMillis();
     while (System.currentTimeMillis() < deadline) {
       final List<ActivatedJob> jobs = Camunda8JobLease
           .leaseTheActivation(
@@ -206,7 +237,7 @@ public class Camunda8JobLeaseIT extends SpringBootTestOnTheSharedCluster {
                   .newActivateJobsCommand()
                   .jobType(JOB_TYPE)
                   .maxJobsToActivate(1)
-                  .timeout(Duration.ofMinutes(5))
+                  .timeout(SECOND_ACTIVATION_LOCK)
                   .workerName("lease-verification"))
           .send()
           .join()
@@ -216,7 +247,39 @@ public class Camunda8JobLeaseIT extends SpringBootTestOnTheSharedCluster {
       }
       TimeUnit.MILLISECONDS.sleep(500);
     }
-    throw new AssertionError("the job of type '%s' was not handed out a second time".formatted(JOB_TYPE));
+    throw new AssertionError(
+        "the job of type '%s' was not handed out a second time within %s; the cluster's search says: %s"
+            .formatted(JOB_TYPE, TIME_TO_TAKE_THE_JOB_OVER, whatTheSearchSaysAbout(secondPod)));
+
+  }
+
+  /**
+   * What the cluster's search knows about the jobs of the slow task, for a failure message.
+   * The search runs behind the engine, so it says where the job was a moment ago: which
+   * worker had it and until when.
+   *
+   * @param secondPod The client of this test
+   * @return One entry per job of that type which is not over yet
+   */
+  private static String whatTheSearchSaysAbout(
+      final CamundaClient secondPod) {
+
+    try {
+      return secondPod
+          .newJobSearchRequest()
+          .filter(filter -> filter.type(JOB_TYPE))
+          .send()
+          .join()
+          .items()
+          .stream()
+          .filter(job -> (job.getState() != JobState.COMPLETED) && (job.getState() != JobState.CANCELED))
+          .map(job -> "job %d %s, worker '%s', lock until %s"
+              .formatted(job.getJobKey(), job.getState(), job.getWorker(), job.getDeadline()))
+          .toList()
+          .toString();
+    } catch (final RuntimeException e) {
+      return "nothing, the search failed with %s".formatted(e);
+    }
 
   }
 
