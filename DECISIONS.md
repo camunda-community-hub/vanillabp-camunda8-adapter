@@ -1554,8 +1554,11 @@ See [Sharing the workflow aggregate](./README.md#sharing-the-workflow-aggregate)
 
 The check which looks at the other open tasks of a workflow can ask about a Camunda-managed user
 task, and the command which asks is an `UpdateUserTask` carrying nothing but an audit action. It
-answers from the partition instead of the index: `204` in 5 to 21 milliseconds for a task which
-is open and `404` for one which is gone, measured on 8.9.19 and on 8.10.0-alpha5.
+answers from the partition instead of the index: `204` for a task which is open and `404` for one
+which is gone. How long the `204` takes depends on the model. Measured on 2026-09-19 against
+8.9.19 and 8.10.0-alpha5, one container each on an idle machine: 5 to 21 milliseconds for a user
+task with no `updating` listener modelled, and with a modelled listener a worker answered, 106 to
+111 milliseconds on 8.9.19 and 15 to 78 milliseconds on 8.10.0-alpha5.
 
 The command has a side effect nobody would guess from the documentation of the endpoint. It fires
 a modelled `updating` task listener although it changes no attribute at all, measured on both
