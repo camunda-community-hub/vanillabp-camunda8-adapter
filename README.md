@@ -2929,6 +2929,25 @@ The module holds the cluster and nothing else. `PublishedPom` used to sit beside
 into `published-pom`, because Testcontainers is an honest dependency of a cluster and dead
 weight on the classpath of a module which only reads a file. No module ever wanted both.
 
+The module `spring-boot` runs its classes against ONE cluster, and what a test leaves running there
+reaches the next one: the workers of the next application are served the jobs of a workflow whose
+aggregate lived in a database which is gone. So `TestOnTheSharedCluster` ends everything still
+running after EVERY test, not only when the next class starts. The search lags behind the engine,
+so the cleanup first starts a workflow of its own which ends at once and waits until the search
+knows it: with one partition, everything started before it is then in the search as well. Then it
+finds the workflows by a search, cancels them, answers the listener jobs of this adapter which
+belong to them, and waits until each of them reports an end when it is asked for by its key. An
+earlier cleanup stopped once the search was empty, and that could happen before a task it had just
+cancelled showed up.
+After each class a guard looks once more, after the application is closed, and fails THAT class if
+something is still running, so a leftover is reported by the class which left it rather than by the
+next one. A class whose tests build on each other says so with `@ItsTestsAreOneScenario` and is
+cleaned up after its last test instead. The cost of each cleanup is written to
+`spring-boot/target/shared-cluster-cleanup.csv`, one line per test. Measured on 2026-10-06 against
+`camunda/camunda:8.10.0` over the 110 tests of the module: 106 seconds in all, 0.7 seconds for the
+median test, 2.7 seconds at most. Most of a cleanup which finds nothing is the wait for the marker,
+about half a second.
+
 Nearly every workflow of the test applications carries `allow-full-sync-with-bpms: true`.
 VanillaBP stops an application whose workflow aggregate hands every attribute to the BPMS,
 unless that workflow says it may. The aggregates here are test data. A test writes one so it
