@@ -180,7 +180,7 @@ public final class Camunda8MultiInstance {
      * computed from {@link #callSites} by {@link #linkCalledProcesses()} rather than on
      * every job.
      */
-    private final Map<String, List<MultiInstanceElement>> inheritedChains = new ConcurrentHashMap<>();
+    private final Map<String, List<Level>> inheritedChains = new ConcurrentHashMap<>();
 
     /**
      * One place a process is called from.
@@ -193,9 +193,15 @@ public final class Camunda8MultiInstance {
 
     /**
      * One multi-instance element together with the process declaring it - which is what a
-     * message about two elements of one ID has to name.
+     * message about an element of a CALLER has to name, because the reader has two models in
+     * front of them then.
+     *
+     * @param bpmnProcessId The process declaring the element, as the CLUSTER knows it
+     * @param element The element
      */
-    private record Level(String bpmnProcessId, MultiInstanceElement element) {
+    public record Level(
+                        String bpmnProcessId,
+                        MultiInstanceElement element) {
     }
 
     private static String key(
@@ -298,17 +304,11 @@ public final class Camunda8MultiInstance {
      */
     public void linkCalledProcesses() {
 
-      final var linked = new LinkedHashMap<String, List<MultiInstanceElement>>();
+      final var linked = new LinkedHashMap<String, List<Level>>();
       for (final var calledProcess : new TreeSet<>(callSites.keySet())) {
         final var levels = inheritedBy(calledProcess, List.of());
         if (!levels.isEmpty()) {
-          linked
-              .put(
-                  calledProcess,
-                  levels
-                      .stream()
-                      .map(Level::element)
-                      .toList());
+          linked.put(calledProcess, levels);
         }
       }
       inheritedChains.putAll(linked);
@@ -473,10 +473,39 @@ public final class Camunda8MultiInstance {
         final String elementId) {
 
       final var own = chains.getOrDefault(key(bpmnProcessId, elementId), List.of());
-      final var inherited = inheritedChains.getOrDefault(bpmnProcessId, List.of());
+      final var inherited = inheritedLevelsOf(bpmnProcessId, elementId);
       if (inherited.isEmpty()) {
         return own;
       }
+      final var complete = inherited
+          .stream()
+          .map(Level::element)
+          .collect(Collectors.toCollection(ArrayList::new));
+      complete.addAll(own);
+      return List.copyOf(complete);
+
+    }
+
+    /**
+     * The part of {@link #chainOf} which the places a process is called from contribute,
+     * outermost first, each level with the process declaring it.
+     * <p>
+     * Empty until {@link #linkCalledProcesses()} ran, which is what a check asking before that
+     * moment has to know: it sees the levels of the process itself and nothing else.
+     *
+     * @param bpmnProcessId The BPMN process ID as the CLUSTER knows it
+     * @param elementId The BPMN element ID the job reports
+     * @return The inherited levels which are still in a job of that element
+     */
+    public List<Level> inheritedLevelsOf(
+        final String bpmnProcessId,
+        final String elementId) {
+
+      final var inherited = inheritedChains.getOrDefault(bpmnProcessId, List.of());
+      if (inherited.isEmpty()) {
+        return inherited;
+      }
+      final var own = chains.getOrDefault(key(bpmnProcessId, elementId), List.of());
       if (own.isEmpty()) {
         return inherited;
       }
@@ -484,14 +513,12 @@ public final class Camunda8MultiInstance {
           .stream()
           .map(MultiInstanceElement::elementId)
           .collect(Collectors.toSet());
-      final var complete = inherited
+      return inherited
           .stream()
           // an ID this process uses itself writes the same variables in a scope further in,
           // so what arrived from the call site is not in the job any more
-          .filter(element -> !ownIds.contains(element.elementId()))
-          .collect(Collectors.toCollection(ArrayList::new));
-      complete.addAll(own);
-      return List.copyOf(complete);
+          .filter(level -> !ownIds.contains(level.element().elementId()))
+          .toList();
 
     }
 

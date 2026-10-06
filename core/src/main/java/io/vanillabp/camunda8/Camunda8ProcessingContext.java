@@ -15,6 +15,7 @@ import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 import io.vanillabp.camunda8.wiring.Camunda8MultiInstance;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
+import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 import lombok.Getter;
 
 /**
@@ -136,6 +137,29 @@ public class Camunda8ProcessingContext {
    */
   @Getter
   private final List<Camunda8TaskWiring.Camunda8TaskToWire> tasksToWire = new LinkedList<>();
+
+  /**
+   * What the core's wiring validation was handed for each process of the module, by PLAIN
+   * BPMN process id: the tasks, the user tasks and the modelled listeners. Kept for the
+   * questions which can be asked only once every process of the module is wired, because
+   * their answer depends on the processes calling this one.
+   */
+  @Getter
+  private final Map<String, List<BpmnTaskSpec>> taskSpecsByProcess = new LinkedHashMap<>();
+
+  /**
+   * Remembers what the core's wiring validation was handed for one process.
+   *
+   * @param plainBpmnProcessId The BPMN process id as the application knows it
+   * @param specs The task specs of that process
+   */
+  public void recordTaskSpecs(
+      final String plainBpmnProcessId,
+      final List<BpmnTaskSpec> specs) {
+
+    taskSpecsByProcess.put(plainBpmnProcessId, List.copyOf(specs));
+
+  }
 
   /**
    * The Camunda-managed user tasks collected during {@code wireBpmn} -

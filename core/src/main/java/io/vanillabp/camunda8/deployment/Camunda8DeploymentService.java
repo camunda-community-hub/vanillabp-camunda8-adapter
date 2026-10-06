@@ -1452,6 +1452,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // the model and only the core scans the handlers, so this is the one place the two
     // halves meet
     refuseHandlersWantingAnItemTheModelHasNot(workflowModuleId, bpmnProcessId, scopedBpmnProcessId, specs);
+    // the same question about the iterations of the processes calling this one is asked once
+    // the call graph of the whole module is linked, which needs these specs then
+    context.recordTaskSpecs(bpmnProcessId, specs);
     context.getTasksToWire().addAll(tasks);
     context.getUserTasksToWire().addAll(userTasks);
 
@@ -1639,13 +1642,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * multi-instance element this model never names one for.
    * <p>
    * Judged per task, over the chain of iterations enclosing it which this deployment just
-   * recorded. So only elements of THIS process are looked at: a level a caller contributes
-   * is linked once the whole workflow module is wired, and it belongs to the model of that
-   * caller, where the same question is asked about it.
-   * <p>
-   * The core is asked by the task definition AND by the element id, which is the pair
-   * {@code validateTaskWiring} matches a method against: a method may name either of the
-   * two, and a method naming the element id would otherwise be missed.
+   * recorded. So only elements of THIS process are looked at here: a level a caller
+   * contributes is linked once the whole workflow module is wired, and
+   * {@link #refuseHandlersWantingAnItemACallerHasNot} asks about it then.
    * <p>
    * Every finding of the process goes into ONE message, the way the wiring validation
    * reports every unwired task at once - a developer fixing one model should not have to
@@ -1664,15 +1663,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (withoutAnItem.isEmpty()) {
         continue;
       }
-      final var wanted = new java.util.LinkedHashSet<String>();
-      wanted
-          .addAll(workflowTaskWiring
-              .multiInstanceElementNames(workflowModuleId, bpmnProcessId, spec.activityId()));
-      if (spec.taskDefinition() != null) {
-        wanted
-            .addAll(workflowTaskWiring
-                .multiInstanceElementNames(workflowModuleId, bpmnProcessId, spec.taskDefinition()));
-      }
+      final var wanted = itemsTheMethodWants(workflowModuleId, bpmnProcessId, spec);
       wanted.retainAll(withoutAnItem);
       if (!wanted.isEmpty()) {
         findings
@@ -1684,6 +1675,87 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     }
     throw new IllegalStateException(
         Camunda8MultiInstanceItems.refusal(findings, bpmnProcessId, workflowModuleId));
+
+  }
+
+  /**
+   * The multi-instance elements whose item the method serving one task asks for.
+   * <p>
+   * The core is asked by the task definition AND by the element id, which is the pair
+   * {@code validateTaskWiring} matches a method against: a method may name either of the
+   * two, and a method naming the element id would otherwise be missed.
+   *
+   * @param workflowModuleId The workflow module
+   * @param bpmnProcessId The PLAIN BPMN process id
+   * @param spec The task
+   * @return The element ids named by <code>&#64;MultiInstanceElement</code>, to be narrowed
+   *         down by the caller
+   */
+  private java.util.Set<String> itemsTheMethodWants(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final BpmnTaskSpec spec) {
+
+    final var wanted = new java.util.LinkedHashSet<String>();
+    wanted
+        .addAll(workflowTaskWiring
+            .multiInstanceElementNames(workflowModuleId, bpmnProcessId, spec.activityId()));
+    if (spec.taskDefinition() != null) {
+      wanted
+          .addAll(workflowTaskWiring
+              .multiInstanceElementNames(workflowModuleId, bpmnProcessId, spec.taskDefinition()));
+    }
+    return wanted;
+
+  }
+
+  /**
+   * Ends the deployment where a <code>&#64;WorkflowTask</code> method of a called process
+   * wants the item of a multi-instance element of a CALLER which names no
+   * <code>inputElement</code>.
+   * <p>
+   * The second round of {@link #refuseHandlersWantingAnItemTheModelHasNot}, asked once the
+   * call graph of the workflow module is linked. Only the levels the call sites contribute are
+   * judged, so a finding of the first round is not reported a second time. The method asks by
+   * the caller's element id, which is why the caller's own model cannot answer for it.
+   * <p>
+   * One message per called process, naming the calling process of each element: the reader
+   * has two models in front of them.
+   *
+   * @param workflowModuleId The workflow module being deployed
+   * @param bpmsProcessingContext Everything of it, as wired
+   */
+  private void refuseHandlersWantingAnItemACallerHasNot(
+      final String workflowModuleId,
+      final Camunda8ProcessingContext bpmsProcessingContext) {
+
+    for (final var process : bpmsProcessingContext.getTaskSpecsByProcess().entrySet()) {
+      final var bpmnProcessId = process.getKey();
+      final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
+      final var findings = new ArrayList<Camunda8MultiInstanceItems.Finding>();
+      for (final var spec : process.getValue()) {
+        final var withoutAnItem = Camunda8MultiInstanceItems
+            .inheritedElementsWithoutAnItem(multiInstanceRegistry, scopedBpmnProcessId, spec.activityId());
+        if (withoutAnItem.isEmpty()) {
+          continue;
+        }
+        final var wanted = itemsTheMethodWants(workflowModuleId, bpmnProcessId, spec);
+        wanted.retainAll(withoutAnItem.keySet());
+        if (wanted.isEmpty()) {
+          continue;
+        }
+        final var callers = new java.util.LinkedHashMap<String, String>();
+        wanted
+            .forEach(elementId -> callers
+                .put(elementId, plainProcessId(workflowModuleId, withoutAnItem.get(elementId))));
+        findings
+            .add(new Camunda8MultiInstanceItems.Finding(spec.activityId(), spec.taskDefinition(), wanted, callers));
+      }
+      if (!findings.isEmpty()) {
+        throw new IllegalStateException(
+            Camunda8MultiInstanceItems.refusal(findings, bpmnProcessId, workflowModuleId));
+      }
+    }
 
   }
 
@@ -3293,6 +3365,10 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       }
     }
     multiInstanceRegistry.linkCalledProcesses();
+    // now chainOf answers the levels of the callers as well, and a handler in a called process
+    // may want the item of one of them. Before the cluster is asked anything, like the first
+    // round of this question in wireBpmn
+    refuseHandlersWantingAnItemACallerHasNot(workflowModuleId, bpmsProcessingContext);
     // what is left over are the call activities naming their process by an expression. They
     // cannot be linked model to model, so they hand their chain down instead - which needs the
     // graph above to be linked already, because a caller passes on what IT inherited too

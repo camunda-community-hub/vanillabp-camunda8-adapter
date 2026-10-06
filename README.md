@@ -2736,9 +2736,14 @@ task declare `@MultiInstanceElement` for. Where the two meet, the message names 
 element, the attribute and the two ways out. Before that check the parameter received `null` once a
 job arrived and nothing said why.
 
-Only the elements of the process being wired are judged. A level a CALLER contributes is linked
-once the whole workflow module is wired, and it belongs to the model of that caller, where the same
-question is asked about it.
+The question is asked in two rounds. While a process is wired, its own elements are judged, and
+the message is about that one model. A level a CALLER contributes is linked only once the whole
+workflow module is wired, in `wireTheProcessesThisModuleCalls`. The method in the called process
+asks for the item by the caller's element id, so the caller's model cannot answer for it. So the
+same check runs a second time right after `linkCalledProcesses()`, before anything is sent to the
+cluster, and it judges only the levels the call sites added. Nothing the first round found is
+reported twice. Its message names the calling process of each element, because the reader now has
+two models in front of them. `Camunda8MultiInstanceItemsTest` holds both rounds.
 
 The same question is asked about a version the cluster still HOLDS, and there the answer travels
 instead of ending anything. Nobody can redraw such a model, so `taskSpecsOf` puts the elements
