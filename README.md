@@ -1359,6 +1359,13 @@ branch extends the lock once more: the renewal is driven by the cluster's own
 redelivery and needs no timer of the adapter's. The worker's own job timeout stays
 SHORT - it is the crash-recovery horizon for synchronous handlers.
 
+The renewal can arrive after the task is gone. The application may complete the task
+between the handler's decision and the renewal, and then the cluster refuses the renewal
+with `400` while it still holds the closed job, or with `404` once it does not. A lock
+which ran out first gets the `400` as well. There is nothing left to renew in either case,
+so the adapter writes a debug line and the handler ends normally
+(`Camunda8RenewalOfAJobWhichJustFinishedTest`).
+
 The window has to sit clearly below `vanillabp.delivery.retention` (seven days, following
 `vanillabp.outbox.retention` where it is not set itself), since
 the delivery record is what answers the redelivery which renews the lock; a value

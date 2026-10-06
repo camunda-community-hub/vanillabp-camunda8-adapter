@@ -399,30 +399,7 @@ public class Camunda8JobHandler implements JobHandler {
           failAsOverdue(client, job, taskDefinition, bpmnProcessId, String.valueOf(aggregateId), outcome.openFor());
           return;
         }
-        // the task stays open: extend THIS job's lock by the renewal window, so the
-        // handler is not re-invoked while the workflow waits for
-        // ProcessService#completeTask. When the window passes the cluster hands the job
-        // out again, the core answers from its delivery record and this branch renews
-        // the lock once more
-        Camunda8CommandRetry.send(
-            adapterId,
-            "lock renewal",
-            job.getKey(),
-            taskDefinition,
-            job.getDeadline(),
-            drain::isShuttingDown,
-            () -> camundaClient
-                .newUpdateTimeoutCommand(job.getKey())
-                .timeout(asyncTaskLockRenewal)
-                .send()
-                .join());
-        log.debug(
-            "Camunda8[{}]: job '{}' (type '{}') stays open for asynchronous completion - lock "
-                + "renewed for {}",
-            adapterId,
-            job.getKey(),
-            taskDefinition,
-            asyncTaskLockRenewal);
+        renewTheLock(job, taskDefinition);
       }
     }
 
@@ -432,6 +409,66 @@ public class Camunda8JobHandler implements JobHandler {
     if (openTaskProbe != null) {
       openTaskProbe.reportWhatTheClusterNoLongerHas(bpmnProcessId, context);
     }
+
+  }
+
+  /**
+   * Extends the lock of a job whose task stays open by the renewal window, so the handler
+   * is not run again while the workflow waits for <code>ProcessService#completeTask</code>.
+   * When the window passes, the cluster hands the job out again, the core answers from its
+   * delivery record, and this renews the lock once more.
+   * <p>
+   * The renewal can come too late, and that is not a failure. The task is open from the
+   * moment the handler decides so, which is before the renewal reaches the cluster. An
+   * application which completes the task in that gap closes the job first. The cluster then
+   * refuses the renewal: with HTTP <code>400</code> (gRPC <code>INVALID_ARGUMENT</code>)
+   * while it still holds the closed job, and with <code>404</code> once it does not. A lock
+   * which ran out before the renewal arrived gets the <code>400</code> as well. In each case
+   * there is no lock left to extend, and the cluster already holds what comes next: the
+   * completion, or a redelivery which renews the lock again. So the refusal is a debug line
+   * and the handler goes on. Any other answer still escapes, as before.
+   *
+   * @param job The job whose task stays open
+   * @param taskDefinition The task definition, as the application knows it
+   */
+  private void renewTheLock(
+      final ActivatedJob job,
+      final String taskDefinition) {
+
+    try {
+      Camunda8CommandRetry.send(
+          adapterId,
+          "lock renewal",
+          job.getKey(),
+          taskDefinition,
+          job.getDeadline(),
+          drain::isShuttingDown,
+          () -> camundaClient
+              .newUpdateTimeoutCommand(job.getKey())
+              .timeout(asyncTaskLockRenewal)
+              .send()
+              .join());
+    } catch (final RuntimeException e) {
+      if (!Camunda8Errors.jobIsThereButNotActive(e) && !Camunda8Errors.jobAlreadyGone(e)) {
+        throw e;
+      }
+      log.debug(
+          "Camunda8[{}]: job '{}' (type '{}') was not active any more when its lock was to be "
+              + "renewed - it was completed in the meantime or its lock ran out, so there was "
+              + "nothing to renew",
+          adapterId,
+          job.getKey(),
+          taskDefinition,
+          e);
+      return;
+    }
+    log.debug(
+        "Camunda8[{}]: job '{}' (type '{}') stays open for asynchronous completion - lock "
+            + "renewed for {}",
+        adapterId,
+        job.getKey(),
+        taskDefinition,
+        asyncTaskLockRenewal);
 
   }
 
