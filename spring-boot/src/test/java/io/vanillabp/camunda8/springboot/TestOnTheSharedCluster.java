@@ -419,10 +419,15 @@ public abstract class TestOnTheSharedCluster {
    * found nothing, and the guard after the class found the workflow still running.
    * <p>
    * So this starts a workflow of its own, of a process which ends where it starts, and waits
-   * until that workflow can be asked for by its key. The cluster of this module runs one
-   * partition, which is the default of the image, its keys grow with every workflow started
-   * and its exporter writes in that order. So once this marker is in the search, every
-   * workflow started before it is there as well.
+   * until that workflow reports its end when asked for by its key. The cluster of this module
+   * runs one partition, which is the default of the image, its keys grow with every workflow
+   * started and its exporter writes in that order. So once the end of this marker is in the
+   * search, every workflow started before it is there as well.
+   * <p>
+   * The END is waited for, not only the marker. On line 8.8, whose cluster exports to
+   * Elasticsearch, the marker could be read while still running, and the guard after the class
+   * then found the marker itself, in six classes of one run on 2026-10-06. The lines
+   * whose storage sits in the cluster's own database never showed that.
    *
    * @param client The client of the test
    */
@@ -449,11 +454,16 @@ public abstract class TestOnTheSharedCluster {
     final var deadline = System.currentTimeMillis() + SEARCHABLE_WITHIN.toMillis();
     while (true) {
       try {
-        client
+        // the end of the marker, not only the marker: a storage which writes the start of a
+        // workflow before its end, which the Elasticsearch of line 8.8 does, would otherwise
+        // let the search report the marker itself as running
+        if (client
             .newProcessInstanceGetRequest(marker)
             .send()
-            .join();
-        return;
+            .join()
+            .getState() != ProcessInstanceState.ACTIVE) {
+          return;
+        }
       } catch (final RuntimeException notThereYet) {
         if (System.currentTimeMillis() > deadline) {
           throw notThereYet;
@@ -867,7 +877,11 @@ public abstract class TestOnTheSharedCluster {
             .page(page -> page.limit(1000))
             .send()
             .join()
-            .items());
+            .items()
+            .stream()
+            // the marker of the cleanup ends on its own, and the cleanup waited for that
+            .filter(workflow -> !THE_MARKER.equals(workflow.getProcessDefinitionId()))
+            .toList());
 
   }
 
