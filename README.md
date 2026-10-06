@@ -1187,6 +1187,17 @@ not see the instance yet (query-API lag), which the probe answers honestly with
 "unknown" so the idempotent start proceeds, deliberately NOT an optimistic ACTIVE,
 which would skip and thereby LOSE workflows. Do not build on exactly-once semantics.
 
+An aggregate may carry a second workflow once its first one ended. The search has no state
+filter, so a probe for the second start would find the first workflow and skip the start where
+its first dispatch failed before it created anything. So the core hands the probe the moment
+the start was planned, and the adapter counts only the instances whose `startDate` is at or
+after it. That date comes from the cluster's clock, and the moment from the clock of the node
+which planned the start. Where the cluster is behind by more than the time between planning
+and the first dispatch, the probe answers "unknown" and the start runs again: a duplicate, the
+residual above, and never a lost workflow. An instance without a `startDate` does not count,
+and an entry planned before the moment was recorded carries none, so for it every instance
+counts. `Camunda8SecondWorkflowOfAnAggregateTest` holds it.
+
 The layers have their tests: `Camunda8InboundIdempotencyIT#redeliveredJobsSkipTheHandler` for a
 repeated delivery, `Camunda8RestartDeliveryIT` with its Quarkus twin
 `Camunda8RestartDeliveryTest` for a delivery which survives a restart, and
