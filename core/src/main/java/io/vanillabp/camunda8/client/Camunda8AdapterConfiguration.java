@@ -2271,6 +2271,11 @@ public class Camunda8AdapterConfiguration {
    * a value which does not fit into the shutdown budget of the runtime is legitimate but
    * only works if that budget is raised too, so it is a guiding warning rather than a
    * failure.
+   * <p>
+   * The two warnings read the grace in force, not the property. They compare it with other
+   * values, and a default can clash with one of those as much as a written value can: a
+   * request timeout raised to thirty seconds outlasts the default grace of twenty. Only
+   * the typo check is about what somebody wrote, and a default is never negative.
    *
    * @param adapterId The adapter id
    * @param warnLogger Sink for the guiding warning
@@ -2280,10 +2285,8 @@ public class Camunda8AdapterConfiguration {
       final String adapterId,
       final Consumer<String> warnLogger) {
 
-    if (shutdownGrace == null) {
-      return;
-    }
-    if (shutdownGrace.isNegative()) {
+    final var grace = resolvedShutdownGrace();
+    if (grace.isNegative()) {
       throw new IllegalStateException(
           """
               Camunda 8 adapter '%s' has '%s: %s'. The grace is how long a shutdown waits for the \
@@ -2292,13 +2295,17 @@ public class Camunda8AdapterConfiguration {
               .formatted(
                   adapterId,
                   propertyKey(adapterId, "shutdown-grace"),
-                  shutdownGrace,
+                  grace,
                   DEFAULT_SHUTDOWN_GRACE_ISO));
     }
-    if (!shutdownGrace.isZero() && (shutdownGrace.compareTo(resolvedRequestTimeout()) < 0)) {
+    // a warning about a value nobody wrote has to say where the value came from
+    final var whereTheGraceComesFrom = (shutdownGrace == null
+        ? "runs on the default '%s: %s'"
+        : "has '%s: %s'").formatted(propertyKey(adapterId, "shutdown-grace"), grace);
+    if (!grace.isZero() && (grace.compareTo(resolvedRequestTimeout()) < 0)) {
       warnLogger.accept(
           """
-              Camunda 8 adapter '%s' has '%s: %s', which is shorter than '%s: %s'. An activation request \
+              Camunda 8 adapter '%s' %s, which is shorter than '%s: %s'. An activation request \
               of a worker waits at the cluster for that long, closing the worker does not cancel it, and \
               a request which is still there when the client goes down keeps the first job created \
               afterwards until '%s' expires. The shutdown therefore waits for the cluster to release the \
@@ -2307,18 +2314,17 @@ public class Camunda8AdapterConfiguration {
               its lock."""
               .formatted(
                   adapterId,
-                  propertyKey(adapterId, "shutdown-grace"),
-                  shutdownGrace,
+                  whereTheGraceComesFrom,
                   propertyKey(adapterId, "request-timeout"),
                   resolvedRequestTimeout(),
                   propertyKey(adapterId, "job-timeout")));
     }
-    if (shutdownGrace.compareTo(PLATFORM_SHUTDOWN_BUDGET) < 0) {
+    if (grace.compareTo(PLATFORM_SHUTDOWN_BUDGET) < 0) {
       return;
     }
     warnLogger.accept(
         """
-            Camunda 8 adapter '%s' has '%s: %s', which reaches into the shutdown budget of the runtime \
+            Camunda 8 adapter '%s' %s, which reaches into the shutdown budget of the runtime \
             around it: 'spring.lifecycle.timeout-per-shutdown-phase' and Kubernetes' \
             'terminationGracePeriodSeconds' both default to %s. With this grace the application can be \
             killed while VanillaBP is still waiting for its handlers, which is the opposite of what the \
@@ -2326,8 +2332,7 @@ public class Camunda8AdapterConfiguration {
             is %s)."""
             .formatted(
                 adapterId,
-                propertyKey(adapterId, "shutdown-grace"),
-                shutdownGrace,
+                whereTheGraceComesFrom,
                 PLATFORM_SHUTDOWN_BUDGET,
                 DEFAULT_SHUTDOWN_GRACE_ISO));
 
