@@ -149,7 +149,7 @@ jobs:
               echo "'lines / lines-verified' stay red, which is what this issue reports."
               echo "The preview line is built against an alpha which is rewritten under"
               echo "us, and a defect of that alpha may cost a night, it may not cost a"
-              echo "pull request. See decision 31 in DECISIONS.md."
+              echo "pull request. See decision 42 in DECISIONS.md."
               echo
               echo "The test reports and the application logs of that line are attached to"
               echo "the run as \`test-reports-${line}\`, and GitHub keeps them for seven"

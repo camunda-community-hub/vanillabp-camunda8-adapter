@@ -1095,10 +1095,10 @@ off: a published artifact cannot be taken back.
 
 Which lines are asked is not decided a second time. The matrix reads the `line-*` profiles of the
 POM, so it cannot fall behind the build, and the release reads the same list by running that
-workflow. The preview line is one of them here. The tests of the cluster defect that line is known
-for are excluded by tag in the POM, so what is left of the line is worth waiting for. Should an
-alpha ever break so badly that waiting for it stops making sense, it is left out of the matrix,
-and the gate follows.
+workflow. A preview line is one of them whenever there is one, and it excludes no test (decision
+47). Right now there is none, and the next one comes with the first pre-release of 8.11 (decision
+52). Should an alpha ever break so badly that waiting for it stops making sense, it is left out of
+the matrix, and the gate follows.
 
 The release workflow is `.github/workflows/deploy.yaml`. A published GitHub Release starts it, and a
 start by hand is a rehearsal which publishes nothing. Its first job calls `line-matrix.yaml` with
@@ -1111,10 +1111,26 @@ break is seen and fixed rather than scrolled past. `release-lines-issue.yaml` op
 line, and writes the line, the commit, what the log said and a link to the run. A line which is
 still red the next night gets a comment on the issue it already has, which is found again by the
 label `release-lines` and a title naming only the line. A line which is green again gets a comment
-saying so, and the issue stays open. A green night is not a fix: the defect named at the top of
-this entry lost a workflow in about one run out of four, so three nights out of four that line was
-green. Closing would also mean that the next red night opens a second issue, and one break would
-end up spread over several. The person who merged the fix is the one who closes it.
+saying so, and the issue stays open. A green night is not a fix: a defect which loses a workflow
+in one run out of four leaves its line green on three nights out of four. Closing would also mean
+that the next red night opens a second issue, and one break would end up spread over several. The
+person who merged the fix is the one who closes it.
+
+There is a second kind of issue, and it belongs to a pull request rather than to a line. Since
+decision 42 every pull request builds every line, and a red preview line does not make the pull
+request red. So a preview line which breaks there would be a red cross nobody has to act on, and
+the change would be merged and show up in the night a day later. `preview-line-issue.yaml` opens
+an issue for that break, under the label `preview-line` and a title naming the line. While such an
+issue is open, the next broken run writes a comment on it instead of opening a second one.
+
+The two kinds are kept apart because they answer different questions. The night's issue belongs
+to a line on `main`. The night after a fix builds the same branch again, so it can say that the
+line is green again. The preview issue belongs to a pull request, which is the one place where a
+break still has an author: the change which broke the line is in front of the person who proposed
+it. Nothing closes that issue automatically, not even with a comment. The next pull request builds
+another branch, so its green preview line says nothing about this break. Whoever fixes the line
+closes the issue. A preview line which breaks on `main` gets only the night's issue, so one break
+never has two issues.
 
 ### 32. A served listener gets a cancel listener of VanillaBP's own, and the release line says which elements can have one
 
