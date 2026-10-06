@@ -319,6 +319,11 @@ public class Camunda8ProcessingContext {
    * it, and the task then stands in <code>UPDATING</code> for fifteen seconds while assign
    * and complete are refused. The check says "cannot say" for those tasks instead, see
    * decision 38 in the repository's DECISIONS.md.
+   * <p>
+   * Two ways lead here, because a listener no method serves ends the boot of a claimed process
+   * everywhere else: a process no <code>&#64;WorkflowService</code> class claims, and an element
+   * carrying a <code>zeebe:modelerTemplate</code>, which says that another runtime answers the
+   * job.
    */
   @Getter
   private final Map<String, Set<String>> elementsWithAnUpdatingListenerNobodyServes = new LinkedHashMap<>();

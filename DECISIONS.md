@@ -1597,7 +1597,11 @@ notification rather than a task.
 serve belongs to a foreign worker or to a connector runtime, and to that worker the probe is a
 real update. The adapter knows at deployment which listeners it serves, so the check of the other
 open tasks sends no probe for such an element at all and answers "cannot say" for its tasks. That
-is one rule and not a second mechanism beside the mark.
+is one rule and not a second mechanism beside the mark. Since decision 54 a model reaches that case
+in two ways only: a listener in a process no `@WorkflowService` class claims, and a listener on an
+element carrying a `zeebe:modelerTemplate`. Anywhere else a listener no method serves ends the boot
+before any probe could be sent. The template is the case this exception exists for, because there
+somebody else really does answer the job.
 
 The rule holds for that CHECK and not for the two probes which ask about a task somebody named.
 `awarenessOfUserTask` and the pre-commit check of `completeUserTask` send the same empty update
