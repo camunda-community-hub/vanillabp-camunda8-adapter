@@ -264,7 +264,8 @@ public final class Camunda8TaskWiring {
    * it evaluates the reference itself. A method therefore matches only where its task
    * definition repeats the expression, and under <code>use-prefix</code> not even then,
    * because the frame of {@link Camunda8Scoping} is written into the expression. The
-   * deployment refuses or reports such a model instead, see {@code DECISIONS.pending/926.md}.
+   * deployment refuses or reports such a model instead, see
+   * decision 69 in the repository's DECISIONS.md.
    * <p>
    * A user task served by a job worker is not read here: it has a job type instead, and the
    * deployment refuses or reports it for that reason already. Nor is an element template a

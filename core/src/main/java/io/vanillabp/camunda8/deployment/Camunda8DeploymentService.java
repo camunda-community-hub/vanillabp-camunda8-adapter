@@ -2850,7 +2850,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * <p>
    * The same answer as for a job type written as an expression, for the same kind of reason:
    * the reference is the task definition, and a task definition is a name. Who claims the
-   * process decides between the refusal and the WARN, see {@code DECISIONS.pending/926.md}.
+   * process decides between the refusal and the WARN, see
+   * decision 69 in the repository's DECISIONS.md.
    * <p>
    * Before this was asked, nothing said a word in the one mode where the model seemed to work:
    * without prefixes a method written as <code>taskDefinition = "=whichForm"</code> matched

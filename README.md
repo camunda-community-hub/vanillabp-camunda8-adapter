@@ -1823,7 +1823,7 @@ out: a fixed name and a method of that name, and where the form differs from wor
 one user task per form behind a gateway or one name and a task list which chooses the form. An
 element template is no way out here, because a Camunda-managed user task has no job type another
 runtime could subscribe to. Why it is a refusal in one case and a WARN in the other is
-`DECISIONS.pending/926.md`. `Camunda8FormReferenceWrittenAsAnExpressionTest` holds both messages.
+decision 69 in `DECISIONS.md`. `Camunda8FormReferenceWrittenAsAnExpressionTest` holds both messages.
 
 ### Elements another runtime serves
 
