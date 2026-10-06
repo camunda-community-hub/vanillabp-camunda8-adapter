@@ -1239,6 +1239,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       // validation, so the message quotes what the modeller typed and says what is really
       // wrong instead of asking for a method nobody can write
       refuseOrReportJobTypesWrittenAsAnExpression(workflowModuleId, filename, model);
+      // and for the form references written as an expression, for the same reason: the
+      // reference of a user task is its task definition, and a task definition is a name
+      refuseOrReportFormReferencesWrittenAsAnExpression(workflowModuleId, filename, model);
       // read while the process ids are still the plain ones, and once per FILE rather
       // than once per process: after the rewrite below an element cannot be attributed
       // to the process the configuration is keyed by any more
@@ -2816,6 +2819,101 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           String.join("; ", written),
           WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_IS,
           WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_COSTS);
+    }
+
+  }
+
+  /**
+   * What a form reference written as a FEEL expression is, said wherever the finding is
+   * reported.
+   */
+  private static final String WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_IS = """
+      A form reference has to be a fixed name, because under VanillaBP's Camunda 8 convention it \
+      IS the task definition of the user task: the @WorkflowTask method is found by it, and the \
+      job type of the listeners which tell the application about the task is built from it. An \
+      expression is evaluated for each workflow, so it names no method.""";
+
+  /**
+   * What such a model costs. Both halves are this adapter's own doing, so they are said as
+   * facts: the listener job type is the reference behind a fixed prefix, which the cluster
+   * takes as written, and <code>use-prefix</code> frames the expression.
+   */
+  private static final String WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_COSTS = """
+      Such a user task is served only where a @WorkflowTask method repeats the expression as its \
+      taskDefinition, and under name-clash-avoidance 'use-prefix' not even then, because the \
+      prefix is written into the expression.""";
+
+  /**
+   * Ends the boot where a BPMN process this application claims names the form of a user task
+   * by a FEEL expression, and names such a user task without ending anything where no workflow
+   * service claims the process.
+   * <p>
+   * The same answer as for a job type written as an expression, for the same kind of reason:
+   * the reference is the task definition, and a task definition is a name. Who claims the
+   * process decides between the refusal and the WARN, see {@code DECISIONS.pending/926.md}.
+   * <p>
+   * Before this was asked, nothing said a word in the one mode where the model seemed to work:
+   * without prefixes a method written as <code>taskDefinition = "=whichForm"</code> matched
+   * and was served. Under <code>use-prefix</code> the boot ended in the core's wiring
+   * validation, which named the method as matching no task and said nothing about the model.
+   *
+   * @param workflowModuleId The workflow module id
+   * @param filename The file the model was read from
+   * @param model The model as it was read, with the plain process ids still in it
+   * @throws IllegalStateException If a workflow service of this application claims the process
+   */
+  private void refuseOrReportFormReferencesWrittenAsAnExpression(
+      final String workflowModuleId,
+      final String filename,
+      final BpmnModelInstance model) {
+
+    for (final var process : model.getModelElementsByType(Process.class)) {
+      if (!process.isExecutable()) {
+        continue;
+      }
+      final var written = Camunda8TaskWiring
+          .formReferencesWrittenAsAnExpressionOf(model, process.getId())
+          .stream()
+          .map(Camunda8TaskWiring.FormReferenceWrittenAsAnExpression::describe)
+          .toList();
+      if (written.isEmpty()) {
+        continue;
+      }
+      if (aggregateIdNameOf(workflowModuleId, process.getId()) != null) {
+        throw new IllegalStateException(
+            """
+                Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s' \
+                (file '%s'): %d user task(s) of it name their form by a FEEL expression: %s. %s %s \
+                A @WorkflowService class of this application claims this process, so this is \
+                yours to change: write a fixed name as the external form reference and a \
+                @WorkflowTask method of that name. Where the form to show differs from workflow to \
+                workflow, model one user task per form behind a gateway, or keep one name and let \
+                your task list choose the form from the data of the workflow."""
+                .formatted(
+                    adapterId,
+                    process.getId(),
+                    workflowModuleId,
+                    filename,
+                    written.size(),
+                    String.join("; ", written),
+                    WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_IS,
+                    WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_COSTS));
+      }
+      log.warn(
+          """
+              Camunda8[{}]: {} user task(s) of BPMN process '{}' (file '{}', workflow module '{}') \
+              name their form by a FEEL expression: {}. {} What it costs: {} No @WorkflowService \
+              class of this application claims this process, so there is nothing here for you to \
+              do: the file the process stands in travels to the cluster as a whole. For a process \
+              this application does claim, the same finding ends the boot.""",
+          adapterId,
+          written.size(),
+          process.getId(),
+          filename,
+          workflowModuleId,
+          String.join("; ", written),
+          WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_IS,
+          WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_COSTS);
     }
 
   }

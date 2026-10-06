@@ -1800,6 +1800,31 @@ decision 54 in the repository's DECISIONS.md, which draw the same line for a use
 serves and for an ad-hoc subprocess nothing serves. `Camunda8JobTypeWrittenAsAnExpressionTest`
 holds both messages, the listener half and the element template.
 
+### A form reference has to be a name as well
+
+The external form reference of a Camunda-managed user task is its task definition. The core finds
+the `@WorkflowTask` method by it, and the job type of the lifecycle listeners is
+`io.vanillabp.userTask:` plus the reference. Camunda 8 lets a model write the reference as a FEEL
+expression, and this adapter answers that the way it answers a job type written as one: a BPMN
+process a `@WorkflowService` class claims does not deploy, and one nobody claims gets a WARN.
+
+Measured on 2026-10-06 against `camunda/camunda:8.10.0`, with one model naming its form
+`=whichForm` and one method written as `taskDefinition = "=whichForm"`, before the refusal
+existed. Without prefixes the cluster evaluated the reference, so the user task carried the form
+`theFormToShow`, while the listener job type stayed `io.vanillabp.userTask:=whichForm`, because it
+does not start with `=`. The worker met that job and the method was called. So the model worked,
+but only for a method named after the expression text. Under `use-prefix` the boot ended in the
+core's wiring validation: the expression had been framed, the method matched no task, and the
+message named the method rather than the model.
+
+The finding is read while the file is prepared, next to the job types, so the message quotes the
+expression as the modeller typed it. It says why the reference has to be a name and names the way
+out: a fixed name and a method of that name, and where the form differs from workflow to workflow,
+one user task per form behind a gateway or one name and a task list which chooses the form. An
+element template is no way out here, because a Camunda-managed user task has no job type another
+runtime could subscribe to. Why it is a refusal in one case and a WARN in the other is
+`DECISIONS.pending/926.md`. `Camunda8FormReferenceWrittenAsAnExpressionTest` holds both messages.
+
 ### Elements another runtime serves
 
 An element carrying the attribute `zeebe:modelerTemplate` was configured from an ELEMENT TEMPLATE.

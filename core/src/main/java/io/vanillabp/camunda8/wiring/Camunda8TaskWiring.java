@@ -230,6 +230,78 @@ public final class Camunda8TaskWiring {
   }
 
   /**
+   * One Camunda-managed user task of a model whose external form reference is written as a
+   * FEEL expression instead of a name.
+   *
+   * @param elementId The user task
+   * @param formReference What the modeller wrote, <code>=</code> included
+   */
+  public record FormReferenceWrittenAsAnExpression(
+                                                   String elementId,
+                                                   String formReference) {
+
+    /**
+     * The entry in one line, which is how the deployment names it.
+     *
+     * @return Where the expression stands and what it says
+     */
+    public String describe() {
+
+      return "zeebe:formDefinition externalReference of '%s' (%s)".formatted(elementId, formReference);
+
+    }
+
+  }
+
+  /**
+   * The Camunda-managed user tasks of the given executable process whose external form
+   * reference is written as a FEEL expression.
+   * <p>
+   * Under VanillaBP's Camunda 8 convention the external form reference IS the task definition
+   * of a user task. The core finds the <code>&#64;WorkflowTask</code> method by it, and the job
+   * type of the lifecycle listeners is {@link #TASKDEFINITION_USERTASK_ZEEBE} plus the reference.
+   * That job type does not start with <code>=</code>, so the cluster takes it as written while
+   * it evaluates the reference itself. A method therefore matches only where its task
+   * definition repeats the expression, and under <code>use-prefix</code> not even then,
+   * because the frame of {@link Camunda8Scoping} is written into the expression. The
+   * deployment refuses or reports such a model instead, see {@code DECISIONS.pending/926.md}.
+   * <p>
+   * A user task served by a job worker is not read here: it has a job type instead, and the
+   * deployment refuses or reports it for that reason already. Nor is an element template a
+   * way out, because a Camunda-managed user task has no job type another runtime could
+   * subscribe to.
+   * <p>
+   * Read while the model is still the modeller's, so a message quotes what was typed rather
+   * than the frame.
+   *
+   * @param model The BPMN model, as it was read
+   * @param bpmnProcessId The process id as it stands in the model
+   * @return One entry per such user task, empty for every other model
+   */
+  public static List<FormReferenceWrittenAsAnExpression> formReferencesWrittenAsAnExpressionOf(
+      final BpmnModelInstance model,
+      final String bpmnProcessId) {
+
+    return model
+        .getModelElementsByType(UserTask.class)
+        .stream()
+        .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
+        .filter(task -> task.getSingleExtensionElement(ZeebeUserTask.class) != null)
+        .map(task -> {
+          final var formDefinition = task.getSingleExtensionElement(ZeebeFormDefinition.class);
+          final var reference = formDefinition != null
+              ? formDefinition.getExternalReference()
+              : null;
+          return Camunda8Scoping.isWrittenAsFeel(reference)
+              ? new FormReferenceWrittenAsAnExpression(task.getId(), reference)
+              : null;
+        })
+        .filter(Objects::nonNull)
+        .toList();
+
+  }
+
+  /**
    * The V1-compatible job-type prefix of user-task listeners: the listener type is
    * this prefix plus the user task's external form reference. MUST NOT change. It is the
    * name a worker subscribes to, and a version-1 application brings workflows whose user
