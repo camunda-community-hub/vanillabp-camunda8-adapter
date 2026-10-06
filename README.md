@@ -1779,6 +1779,11 @@ on gRPC as `FAILED_PRECONDITION`. The adapter neither repeats it nor fails the j
 converged with a redelivery, and the newer run holds the job. Why the code alone decides that is
 decision 36 in the repository's DECISIONS.md.
 
+A lease has one more cost, and it comes from the cluster. Where the cluster activates a leased job
+for a request which has already ended, it cannot give the job back, and the job waits for the
+lock of that lost activation. See
+[a job activated for a worker which never saw it](#a-job-activated-for-a-worker-which-never-saw-it).
+
 ### A job type has to be a name, not an expression
 
 Camunda 8 lets a model write a FEEL expression where a name belongs, and a job type is one of
@@ -3473,6 +3478,18 @@ next receives the job.
 
 That sentence only holds for a job which HAS a retry, which is why the user-task listeners carry
 one, see [the retry a lost listener delivery needs](#the-retry-a-lost-listener-delivery-needs).
+
+It does not hold for a job activated with a lease either, see
+[the lease of an activation](#the-lease-of-an-activation). The gateway gives the job back with a
+FAIL command which carries no lease token, and the cluster refuses that command: "a matching lease
+token must be provided because the job is currently leased". The gateway logs `Failed to
+reactivate job ...` and leaves it there. So the job stays locked for nobody until the lock of the
+lost activation runs out, which is the `job-timeout` of that worker. Measured against
+`camunda/camunda:8.10.0` on 2026-10-06: `Camunda8JobLeaseIT` met it in 1 of 23 runs, at the
+moment a long poll of its own ended just as the lock of the job ran out. That test asked for a lock
+of five minutes back then, and it failed after waiting two. Nothing is lost here either, but a
+leased job waits for one lock instead of a few milliseconds. This is a defect of the cluster, and
+the lease is where it shows.
 
 **The gateway does not notice.** Over REST the response is written when the request ends, so a
 connection which died while the request was parked is found too late for the reactivation above.
