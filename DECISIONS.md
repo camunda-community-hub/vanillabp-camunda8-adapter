@@ -859,9 +859,12 @@ build.
 So the entry points an extension needs are public, they say in their javadoc what they promise and
 what they do not, and a test holds each promise. They are public WHERE THEY ARE rather than moved
 into a package of their own: the javadoc is the contract, and moving them would rename what the
-adapter itself uses. The two exceptions are `Camunda8Workers` and `Camunda8ListenerJobs`, which
-took code out of the deployment service, and the `test-support` module, which exists because a
-test classpath cannot read another module's test classes.
+adapter itself uses. The exceptions are `Camunda8Workers` and `Camunda8ListenerJobs`, which
+took code out of the deployment service, and two modules of test code, `test-support` and
+`published-pom`. Both modules exist because a test classpath cannot read another module's test
+classes. They are two and not one because `test-support` starts containers and `published-pom`
+only reads a file. No module wants both, and a module which only checks its published POM should
+not get Testcontainers on its test classpath.
 
 This is not the deployment service becoming public API. What an extension may use is the named
 list in [What an extension of the pipeline is told](./core/README.md#what-an-extension-of-the-pipeline-is-told);
