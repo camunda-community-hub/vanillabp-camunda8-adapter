@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
@@ -1322,6 +1323,21 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // model is searched by the SCOPED process id and the invoker is called with the
     // plain one
     final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
+    // The cluster runs an activity carrying a standard loop once and says nothing. Asked
+    // first, because no other finding about this model matters while it does not do what
+    // was drawn. A process nobody claims is somebody else's model, so it only gets a WARN,
+    // like every other finding of that kind
+    final var standardLoops = Camunda8StandardLoops.elementIdsOf(model, scopedBpmnProcessId);
+    if (!standardLoops.isEmpty()) {
+      if (aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null) {
+        throw new IllegalStateException(
+            Camunda8StandardLoops.refusal(standardLoops, bpmnProcessId, workflowModuleId));
+      }
+      log.warn(
+          "Camunda8[{}]: {}",
+          adapterId,
+          Camunda8StandardLoops.warningAboutAnUnclaimedProcess(standardLoops, bpmnProcessId, workflowModuleId));
+    }
     // extract the job-worker tasks (zeebe:taskDefinition type = VanillaBP task
     // definition) and validate them against the registered @WorkflowTask methods;
     // throwing here honors the deployment-failure policy
@@ -4074,6 +4090,75 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // workers of this adapter id is known and the last one before the block of the start
     // is written
     holdTheOpenWorkersAgainstTheConnectionPool();
+    // a version deployed by an earlier generation of the application may carry a standard
+    // loop, and the workflows on it repeat nothing
+    warnAboutStandardLoopsOfHeldVersions(workflowModuleId);
+
+  }
+
+  /**
+   * Warns about each version the cluster holds which carries a standard loop while workflows
+   * still run on it. Such a model was deployed before this adapter refused it, by version 1 or
+   * by an older snapshot, and nobody can change it any more, so this is a warning and not a
+   * refusal.
+   * <p>
+   * The models come from the picture of what the cluster holds, which the startup check of the
+   * core reads anyway. Where the cluster cannot be searched, the picture says so once, and
+   * nothing is said here.
+   *
+   * @param workflowModuleId The workflow module which is about to process workflows
+   */
+  private void warnAboutStandardLoopsOfHeldVersions(
+      final String workflowModuleId) {
+
+    final var modelsTheClusterHolds = clientFactory.getModelsTheClusterHolds();
+    if (modelsTheClusterHolds == null) {
+      return;
+    }
+    if (!(modelsTheClusterHolds
+        .heldFor(workflowModuleId) instanceof Camunda8ModelsTheClusterHolds.Answer.Known known)) {
+      return;
+    }
+    known
+        .models()
+        .stream()
+        .collect(Collectors.groupingBy(
+            Camunda8ModelsTheClusterHolds.HeldModel::bpmnProcessId, TreeMap::new, Collectors.toList()))
+        .forEach((
+            bpmnProcessId,
+            heldModels) -> Camunda8StandardLoops
+                .heldVersionsToWarnAbout(
+                    heldModels,
+                    scopedProcessId(workflowModuleId, bpmnProcessId),
+                    version -> workflowsRunningOn(workflowModuleId, bpmnProcessId, version))
+                .forEach(heldVersion -> log
+                    .warn(
+                        "Camunda8[{}]: {}",
+                        adapterId,
+                        Camunda8StandardLoops.warningAboutAHeldVersion(heldVersion, bpmnProcessId, workflowModuleId))));
+
+  }
+
+  /**
+   * How many workflows run on one version, or <code>null</code> where the cluster did not
+   * answer. A failed search is no reason to stop a boot over a warning.
+   */
+  private Long workflowsRunningOn(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String version) {
+
+    try {
+      return processVersions.activeInstanceCountOf(workflowModuleId, bpmnProcessId, version);
+    } catch (final RuntimeException e) {
+      log.debug(
+          "Camunda8[{}]: could not count the workflows on version {} of BPMN process '{}'",
+          adapterId,
+          version,
+          bpmnProcessId,
+          e);
+      return null;
+    }
 
   }
 

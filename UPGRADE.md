@@ -464,6 +464,28 @@ elements whose ids differ only in characters a Camunda 8 variable name cannot ho
 `my-task` and `my.task`. Both write one variable, so a handler in the called process could be told a
 round which never ran. The message names both elements. Rename one of them.
 
+### A standard loop in your model ends the boot
+
+Camunda 8 does not run a standard loop. An activity carrying `standardLoopCharacteristics`, drawn to
+repeat it while a condition holds, deploys without a word, runs once, and the workflow moves on.
+Version 1 deployed such a model the same way, so a model which counts on the loop has done its work
+once all along.
+
+Version 2 refuses the model while it deploys it, where one of your `@WorkflowService` classes
+claims the process, and the boot ends there. The message names the activity, the BPMN process and
+the workflow module. A model which deployed in version 1 does not deploy any more, and this is on
+purpose: the upgrade is where you learn that the loop never ran. A process nobody claims gets a
+WARN with the same words, and the boot goes on, because the model is somebody else's.
+
+Change the model to one of the two forms which do repeat an activity. Either draw a loop in the
+sequence flow, with a gateway after the activity which leads back to it while the condition holds.
+Or make the activity a multi-instance element; a handler then reads its round with
+`@MultiInstanceElement`, `@MultiInstanceIndex` and `@MultiInstanceTotal`.
+
+A version the cluster already holds is not refused, because nobody can change it any more. Where
+workflows still run on it, the start logs a WARN naming the version, the activity and how many
+workflows are on it.
+
 ### An ad-hoc subprocess in your model earns a warning, or ends the boot
 
 Version 1 said nothing about the element and neither executed nor reported it. This version serves
