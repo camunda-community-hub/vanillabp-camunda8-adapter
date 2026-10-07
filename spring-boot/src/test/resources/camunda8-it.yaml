@@ -139,6 +139,10 @@ vanillabp:
               adapters:
                 c8:
                   message-time-to-live: PT2S
+        SilentUserTaskProcess:
+          tasks:
+            SUT_task:
+              implemented-externally: true
         TaskProcess:
           adapters:
             c8:

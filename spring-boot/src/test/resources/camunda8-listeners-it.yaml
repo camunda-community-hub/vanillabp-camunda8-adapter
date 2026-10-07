@@ -34,10 +34,16 @@ vanillabp:
           adapters:
             c8:
               allow-listeners: true
+          tasks:
+            aWorkerNobodyHereRuns:
+              implemented-externally: true
         UserTaskStillCreatingProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+          tasks:
+            aCreatingListenerNobodyServes:
+              implemented-externally: true
   outbox:
     poll-interval: PT0.5S
     attempt-frequency: PT0.5S

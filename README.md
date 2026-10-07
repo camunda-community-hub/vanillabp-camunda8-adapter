@@ -1616,7 +1616,7 @@ them a new process version, see
 Listener jobs are consumed like normal jobs (one worker per
 listener job type), ALWAYS completed, and deliver the USER-TASK KEY as `@TaskId`;
 a failing notification fails the listener job with no retries left, so the first
-failure is the incident. The notification handler is OPTIONAL. `completeUserTask` sends `CompleteUserTask` by
+failure is the incident. A user task without a method, which the application marked as served elsewhere, has its listener jobs answered without a notification. `completeUserTask` sends `CompleteUserTask` by
 the user-task key after the commit (phase one re-checks existence pre-commit via
 an empty `UpdateUserTask` carrying only an audit `action` - also the awareness
 probe; note: modeller-defined `updating` listeners would fire on probes).
@@ -1627,18 +1627,13 @@ is job-based) and V1's marker-variable workaround is broken by V1's own admissio
 arrive with Camunda 8.10, so it can only ever come on a line built against 8.10
 or later.
 
-A Camunda-managed user task which no `@WorkflowTask` method serves is no defect. The cluster
-creates it, a task list shows it, and whoever finishes it moves the workflow on. The listener
-worker is opened anyway and answers the listener jobs, so the workflow never waits for this
-application. What the application misses is the notification. So the boot says it once per BPMN
-process, on INFO, and names each element with the two ways to write its method:
-`Camunda8DeploymentService#nameTheUserTasksNothingServes`, with the text in
-`Camunda8UnservedUserTasks`. The Camunda 7 adapter says the same sentence for the same case. It is
-said only for a process a `@WorkflowService` class claims, because no method of this application
-was meant to serve the tasks of any other process. A form reference written as an expression is
-left out, because it has a finding of its own, see
-[A form reference has to be a name as well](#a-form-reference-has-to-be-a-name-as-well).
-`Camunda8UnservedUserTasksTest` holds the report, the served task and the unclaimed process.
+A Camunda-managed user task of a claimed process needs a `@WorkflowTask` method, or the line
+`implemented-externally=true` which says that something else serves it, a task list for example.
+Without either the boot ends, as it did in version 1, which wired every user task with
+`allowNoMethodFound=false`. The rule and the message live in the core, so all three adapters say
+the same sentence (the platform's decision on it waits in its `DECISIONS.pending/834.md`). A user
+task marked that way still gets its listener worker, which answers the listener jobs, so the
+workflow never waits for this application.
 
 A user task WITHOUT `zeebe:userTask` is a user task a job worker serves, and this adapter does not
 accept that shape. The question is the shape of the element and nothing else: nothing asks whether
@@ -1827,9 +1822,9 @@ type is not a name instead of being asked for a `@WorkflowTask` method whose nam
 The two ways out are in the message. Write a job type which is a fixed name and a `@WorkflowTask`
 method of that name, and let the method branch on the workflow aggregate it is handed where the work
 differs from workflow to workflow, which is where the data such an expression reads comes from
-anyway. Or leave the element to the runtime which does serve it, as the next section describes: an
-element carrying a `zeebe:modelerTemplate` is passed over here, and a runtime somebody else deployed
-may compose its job type however it likes.
+anyway. Or leave the element to the runtime which does serve it, as the next section describes: a
+job element carrying a `zeebe:modelerTemplate` is passed over here, and a runtime somebody else
+deployed may compose its job type however it likes.
 
 Why this is a refusal for a claimed process and a WARN for an unclaimed one is decision 53 and
 decision 54 in the repository's DECISIONS.md, which draw the same line for a user task a job worker
@@ -1949,21 +1944,28 @@ to, so a model carrying one says nothing about who serves it while a method nami
 task-definition route counts: `@WorkflowTask(id = ...)` names the ELEMENT, and one element may carry a
 task and a listener at once. A listener no method names is not passed over in silence, and who claims the
 process decides the rest, in `refuseOrReportListenerJobsNothingServes`. Where a `@WorkflowService`
-class claims the process, the boot ends: the class says the application stands in for the process,
-and the cluster creates that job the moment it reaches the listener, so a workflow would stand inside
-the element with no incident and nothing in any log. Where nobody claims the process, the WARN it
+class claims the process, the listener goes to the core's wiring validation as a task of its own
+(`BpmnTaskSpec.listener`), which asks for a method or for the line `implemented-externally=true`
+and ends the boot over neither. The class says the application stands in for the process, and the
+cluster creates that job the moment it reaches the listener, so a workflow would stand inside the
+element with no incident and nothing in any log. Where nobody claims the process, the WARN it
 always had is written and the boot goes on, without the sentences which asked the reader to change a
 model which is none of ours.
 
-The job type cannot say who answers it, which is why the ELEMENT is asked instead. A worker somebody
-else runs and a worker the application runs beside VanillaBP look exactly the same in a model, so a
-developer who answers such a job elsewhere needs a way of saying so. The way is the marker this
-adapter already reads for the same question: an element built from an element template belongs to the
-runtime which owns it, see [decision 23](./DECISIONS.md#23-connectors-are-allowed-per-adapter-and-every-boot-says-what-they-cost)
+The job type cannot say who answers it, so the APPLICATION says it. A worker somebody else runs and
+a worker the application runs beside VanillaBP look exactly the same in a model, and the line
+`implemented-externally=true` for the task, named by the listener's job type or by the element id,
+is how a developer says that something else answers the job. The element id covers every listener
+on the element. A job type with a dot or a colon has to be protected in a property key, and the
+core's message writes such a line once per platform. Why a configuration key and not a marker in
+the model or a naming rule for job types is in `DECISIONS.pending/834.md`.
+
+One marker in the model still counts: a JOB element built from an element template, a connector
+say, belongs to the runtime which owns it, see [decision 23](./DECISIONS.md#23-connectors-are-allowed-per-adapter-and-every-boot-says-what-they-cost)
 and [decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on).
-A listener on such an element is named in a WARN of its own and the boot goes on, whoever claims the
-process. What that costs is one miss: a developer who meant VanillaBP to serve the listener of a
-templated element and forgot the method reads a warning rather than a refusal.
+A listener on such an element is named in a WARN of its own and the boot goes on. On a user task the
+template does not count, because the Camunda Modeler sets one there to preset a form or an assignee,
+which says nothing about who answers a job.
 
 `Camunda8Listeners#listenersOf` is what reads a model, and it is asked while the BPMN file is
 PREPARED rather than while a process of it is wired. Two things follow from the moment. The job

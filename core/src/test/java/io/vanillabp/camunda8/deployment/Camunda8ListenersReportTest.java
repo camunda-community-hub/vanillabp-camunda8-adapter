@@ -32,10 +32,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * refusal where nobody asked for them, and one framed report where somebody did.
  * <p>
  * A listener whose job type no method of this application names is the other half, and who
- * claims the process decides it. The process of a {@code @WorkflowService} class does not
- * deploy, because the cluster creates that job and nothing would answer it. A process nobody
- * claims keeps its WARN, and so does a listener on an element built from an element template:
- * that template is how a developer says the element belongs to somebody else.
+ * claims the process decides it. In the process of a {@code @WorkflowService} class it goes to
+ * the core's wiring validation as a task, which asks for a method or for
+ * {@code implemented-externally=true}. A process nobody claims keeps its WARN, and so does a
+ * listener on a job element built from an element template: that template is how a developer
+ * says the element belongs to somebody else. On a user task a template does not count.
  * <p>
  * The cluster is an address nothing listens on. What is under test is the text a reader gets
  * and the task specs the core is handed, and neither needs a cluster.
@@ -294,6 +295,39 @@ public class Camunda8ListenersReportTest {
   }
 
   /**
+   * A core which serves the ordinary task of the model and no listener of it, and remembers
+   * what it was handed for its wiring validation.
+   */
+  private static Camunda8DeploymentServiceTest.NoOpInvoker aCoreServingTheTaskOnlyRecording(
+      final java.util.List<BpmnTaskSpec> specs) {
+
+    return new Camunda8DeploymentServiceTest.NoOpInvoker() {
+
+      @Override
+      public boolean workflowTaskHandlerExists(
+          final String workflowModuleId,
+          final String bpmnProcessId,
+          final String taskDefinitionOrActivityId) {
+
+        return "approve".equals(taskDefinitionOrActivityId);
+
+      }
+
+      @Override
+      public void validateTaskWiring(
+          final String workflowModuleId,
+          final String bpmnProcessId,
+          final Collection<BpmnTaskSpec> tasks) {
+
+        specs.addAll(tasks);
+
+      }
+
+    };
+
+  }
+
+  /**
    * The same core, answering that no {@code @WorkflowService} class of the application claims
    * the process.
    */
@@ -324,40 +358,66 @@ public class Camunda8ListenersReportTest {
   }
 
   @Test
-  @DisplayName("A job type no method names ends the boot of a process the application claims")
-  public void aJobTypeNoMethodNamesEndsTheBootOfAClaimedProcess() {
+  @DisplayName("A job type no method names goes to the core's wiring validation, which ends the boot")
+  public void aJobTypeNoMethodNamesGoesToTheCore(
+      final CapturedOutput output) {
 
-    final var service = adapterServedBy(aCoreServingTheTaskOnly(), NameClashAvoidance.BY_ADAPTER, null);
-    final var model = modelWithAListener();
+    final var specs = new ArrayList<BpmnTaskSpec>();
+    final var logged = deploy(
+        output,
+        adapterServedBy(aCoreServingTheTaskOnlyRecording(specs), NameClashAvoidance.BY_ADAPTER, null),
+        modelWithAListener());
 
-    final var refused = assertThrows(
-        IllegalStateException.class,
-        () -> service.prepareBpmn(MODULE, null, FILE, PROCESS, model)).getMessage();
+    assertTrue(
+        specs
+            .stream()
+            .anyMatch(spec -> spec.listener() && "archiveTheOrder".equals(spec.taskDefinition()) && "Event_Done"
+                .equals(spec.activityId())),
+        () -> "the listener is a task like any other: the core asks for a method or for "
+            + "'implemented-externally', and ends the boot over neither: "
+            + specs);
+    assertFalse(
+        logged.contains(NO_METHOD_NAMES_IT),
+        () -> "the adapter says nothing of its own about it, the core's message is the one: "
+            + logged);
+
+  }
+
+  @Test
+  @DisplayName("An element template on a user task does not keep its listener from the core")
+  public void aTemplateOnAUserTaskDoesNotCount(
+      final CapturedOutput output) {
+
+    final var specs = new ArrayList<BpmnTaskSpec>();
+    final var logged = deploy(
+        output,
+        adapterServedBy(aCoreServingTheTaskOnlyRecording(specs), NameClashAvoidance.BY_ADAPTER, null),
+        model("""
+                <bpmn:serviceTask id="Activity_Approve">
+                  <bpmn:extensionElements>
+                    <zeebe:taskDefinition type="approve" />
+                  </bpmn:extensionElements>
+                </bpmn:serviceTask>
+                <bpmn:userTask id="Activity_Review" zeebe:modelerTemplate="com.example.review-form:1">
+                  <bpmn:extensionElements>
+                    <zeebe:userTask />
+                    <zeebe:formDefinition externalReference="approve" />
+                    <zeebe:taskListeners>
+                      <zeebe:taskListener eventType="creating" type="assignTheReviewer" />
+                    </zeebe:taskListeners>
+                  </bpmn:extensionElements>
+                </bpmn:userTask>
+            """));
 
     assertTrue(
-        refused.contains(NO_METHOD_NAMES_IT),
-        () -> "the cluster creates that job and nothing here would answer it: "
-            + refused);
-    assertTrue(
-        refused.contains("job type 'archiveTheOrder'"),
-        () -> "naming the job type nothing here subscribes to: "
-            + refused);
-    assertTrue(
-        refused.contains("@WorkflowService"),
-        () -> "and that the application stands in for this process, which is why the boot ends: "
-            + refused);
-    assertTrue(
-        refused.contains("vanillabp.adapters.c8.allow-listeners"),
-        () -> "the first way out, with the key a served listener needs: "
-            + refused);
-    assertTrue(
-        refused.contains("take the listener out of the model"),
-        () -> "the second one: "
-            + refused);
-    assertTrue(
-        refused.contains("zeebe:modelerTemplate"),
-        () -> "and the third, for a job a runtime other than VanillaBP answers: "
-            + refused);
+        specs.stream().anyMatch(spec -> spec.listener() && "assignTheReviewer".equals(spec.taskDefinition())),
+        () -> "a template on a user task presets a form or an assignee and says nothing about who "
+            + "answers a job: "
+            + specs);
+    assertFalse(
+        logged.contains("element built from an element template"),
+        () -> "so it is not the WARN of an element of another runtime: "
+            + logged);
 
   }
 

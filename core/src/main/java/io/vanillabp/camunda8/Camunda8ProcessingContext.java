@@ -311,6 +311,39 @@ public class Camunda8ProcessingContext {
   }
 
   /**
+   * The listeners of a CLAIMED process whose job type no method of this application names,
+   * and which no element template marks as somebody else's. They go to the core's wiring
+   * validation as tasks, so the one rule applies to them as to every task: a method, or the
+   * property <code>implemented-externally=true</code>, or the boot ends.
+   */
+  private final List<Camunda8Listeners.ModelledListener> listenersNothingHereServes = new LinkedList<>();
+
+  /**
+   * Remembers a listener of a claimed process which no method of this application names.
+   *
+   * @param listener The listener
+   */
+  public void recordListenerNothingHereServes(
+      final Camunda8Listeners.ModelledListener listener) {
+
+    listenersNothingHereServes.add(listener);
+
+  }
+
+  /**
+   * The listeners of claimed processes which no method of this application names, in the
+   * order they were read.
+   *
+   * @return The listeners
+   */
+  public List<Camunda8Listeners.ModelledListener> getListenersNothingHereServes() {
+
+    return listenersNothingHereServes;
+
+  }
+
+
+  /**
    * Per PLAIN BPMN process id of this module, the elements carrying an
    * <code>updating</code> task listener which no method of this application serves.
    * <p>

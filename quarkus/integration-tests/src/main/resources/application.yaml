@@ -56,6 +56,10 @@ vanillabp:
           adapters:
             c8:
               retry-backoff: PT1S
+        SilentUserTaskProcess:
+          tasks:
+            SUT_task:
+              implemented-externally: true
         TaskProcess:
           adapters:
             c8:
