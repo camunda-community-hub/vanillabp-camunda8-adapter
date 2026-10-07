@@ -1631,7 +1631,7 @@ A Camunda-managed user task of a claimed process needs a `@WorkflowTask` method,
 `implemented-externally=true` which says that something else serves it, a task list for example.
 Without either the boot ends, as it did in version 1, which wired every user task with
 `allowNoMethodFound=false`. The rule and the message live in the core, so all three adapters say
-the same sentence (the platform's decision on it waits in its `DECISIONS.pending/834.md`). A user
+the same sentence (the platform's decision 119). A user
 task marked that way still gets its listener worker, which answers the listener jobs, so the
 workflow never waits for this application.
 
@@ -1958,7 +1958,8 @@ a worker the application runs beside VanillaBP look exactly the same in a model,
 is how a developer says that something else answers the job. The element id covers every listener
 on the element. A job type with a dot or a colon has to be protected in a property key, and the
 core's message writes such a line once per platform. Why a configuration key and not a marker in
-the model or a naming rule for job types is in `DECISIONS.pending/834.md`.
+the model or a naming rule for job types is in
+[decision 72](./DECISIONS.md#72-a-listener-nobody-here-serves-is-marked-in-the-configuration-and-an-element-template-counts-on-a-job-element-only).
 
 One marker in the model still counts: a JOB element built from an element template, a connector
 say, belongs to the runtime which owns it, see [decision 23](./DECISIONS.md#23-connectors-are-allowed-per-adapter-and-every-boot-says-what-they-cost)
