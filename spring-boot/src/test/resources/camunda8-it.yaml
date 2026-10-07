@@ -51,6 +51,13 @@ vanillabp:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+        CompensationProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+          adapters:
+            c8:
+              retry-backoff: PT1S
         DecisionProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:

@@ -2093,12 +2093,19 @@ with no completion condition modelled.
 
 Compensation reaches the core through a report of its own. `Camunda8TaskWiring#compensationOf`
 reads every compensation throw event of a process together with the handlers it starts, and the
-adapter reports the ones which start more than one: this cluster hands out both handler jobs at
-the same moment, so from that event the workflow holds a token per handler, and a reader has to
-see which event starts which handlers rather than a flat list of ids. A throw event which undoes a
-single activity is left out, and a version the cluster still holds carries its compensation as
-plain element ids among the others, because the shaped message belongs to the model somebody can
-still redraw. `Camunda8ConcurrentTokensTest` holds the reading.
+adapter reports the ones which start more than one: this cluster hands out both handler jobs
+together, so from that event the workflow holds a token per handler, and a reader has to see which
+event starts which handlers rather than a flat list of ids. A throw event which undoes a single
+activity is left out, and a version the cluster still holds carries its compensation as plain
+element ids among the others, because the shaped message belongs to the model somebody can still
+redraw. `Camunda8ConcurrentTokensTest` holds the reading.
+
+`Camunda8CompensationIT` measures what the cluster does with two handlers of one throw event. Both
+handlers are inside their method at the same moment, on two threads of the adapter. Each handler is
+a job of its own, so it commits on its own and is retried on its own. When one handler throws, only
+that one runs again after the retry backoff, and the handler which succeeded runs once. Camunda 7
+does the opposite: one transaction for all handlers, and a failure runs them all again. The order
+of the two handlers is not stable, so the test does not assert it.
 
 ### What a worker fetches
 
