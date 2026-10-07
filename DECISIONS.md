@@ -92,6 +92,8 @@ coming back.
 
 ### 5. The deployed model is rewritten so the cluster can do what an embedded engine does for free
 
+*Superseded in part by `DECISIONS.pending/937.md`: a file whose unclaimed process waits for a message without a correlation key is not refused any more. The cluster rejects it, and this adapter writes nothing into such a process.*
+
 Camunda 8 runs remote and answers only what its protocol carries, so several things an embedded
 engine offers as a side effect have to be put INTO the model before it reaches the cluster.
 `prepareBpmn` and `wireBpmn` therefore add the scoped identifiers of decision 2, the user-task
@@ -2117,7 +2119,9 @@ claims. The listener holds the instance until its job is answered, and for such 
 has no workflow service to answer with - the start would fail, the retries would run out and the
 instance would sit in an incident it never had before. So the wiring asks first, with the same
 question the end and cancel listeners ask: does this process have a workflow aggregate id name? A
-process without one is left exactly as it was.
+process without one is left exactly as it was. Since `DECISIONS.pending/937.md` the question is
+`WorkflowTaskWiring.isClaimedByAWorkflowService`, asked once at the top of `wireBpmn`, and the rest of
+the model of such a process is left as it was too.
 
 **What the listener on every start event costs.** The listener is written into the model at
 deployment, so the cost is paid twice: once in the model and once per started workflow.
@@ -2358,6 +2362,8 @@ See [Release lines](./README.md#release-lines).
 
 ### 53. A user task a job worker serves is refused in a process the application claims, and only warned about in one it does not
 
+*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more. No WARN, and no wait for the cluster to count its open jobs.*
+
 Camunda 8 knows two kinds of user task. One carries `zeebe:userTask` and the CLUSTER manages it,
 which is the kind this adapter serves. The other carries none and a job worker serves it, which is
 how VanillaBP 1 worked up to its release 1.6.3. **This adapter does not accept the second kind.**
@@ -2410,6 +2416,8 @@ application serves itself, the counter-test of a claimed process whose user task
 Camunda-managed, and that the WARN asks for nothing.
 
 ### 54. Every element of a claimed process has to be served, and an element template is how the model says it is served elsewhere
+
+*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more, so it keeps no WARN.*
 
 *Superseded in part by decision 72: the part about a modelled listener no method names. Such a listener now goes to the core's wiring validation, which asks for a method or for `implemented-externally=true`, and an element template counts only on a job element, not on a user task. The ad-hoc subprocess part stands, and a marked ad-hoc subprocess now passes as well.*
 
@@ -2674,6 +2682,8 @@ common case pays for one page. The walk itself still costs one search per elemen
 the scope, which is what it cost before.
 
 ### 59. A job type written as an expression is refused in a claimed process, and warned about in one nobody claims
+
+*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more, so it keeps no WARN.*
 
 A job type is the NAME a worker subscribes to. This adapter opens one worker per job type it reads
 out of a model and subscribes exactly the string the model says, so a job type written as a FEEL
@@ -3178,6 +3188,8 @@ boot. See [Connecting to a Camunda 8 cluster](./README.md#connecting-to-a-camund
 
 ### 69. A form reference written as an expression is refused in a claimed process, and warned about in one nobody claims
 
+*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more, so it keeps no WARN.*
+
 The external form reference of a Camunda-managed user task is its task definition. The core finds
 the `@WorkflowTask` method by it, and the job type of the lifecycle listeners is
 `io.vanillabp.userTask:` plus the reference. A task definition is a name, and an expression
@@ -3262,6 +3274,8 @@ user-task listeners the workers are composed AND read.
 
 ### 71. A standard loop is refused in a claimed process, warned about in one nobody claims, and a held version is warned about while workflows run on it
 
+*Superseded in part by `DECISIONS.pending/937.md`: a standard loop in a process nobody claims is not looked at any more, so it gets no WARN.*
+
 ## What was decided
 
 Camunda 8 does not run a standard loop. An activity carrying `standardLoopCharacteristics` deploys
@@ -3340,9 +3354,9 @@ completed without this application.
 refused in a claimed process, and the line now lets it pass for a worker the application runs itself.
 A marked one is handed to the core like a task, so a method next to the line is refused there.
 
-**What the claim is.** The question whether a workflow service claims a process is now asked through
-`WorkflowTaskWiring.isClaimedByAWorkflowService` where this change touched it. The rest of the
-adapter moves to it with story 937.
+**What the claim is.** The question whether a workflow service claims a process is asked through
+`WorkflowTaskWiring.isClaimedByAWorkflowService`, everywhere in this adapter since
+`DECISIONS.pending/937.md`.
 
 `Camunda8ListenersReportTest` holds the listener handed to the core, the template on a user task
 which does not count, and the WARN of a templated job element. The spring-boot listener ITs use the

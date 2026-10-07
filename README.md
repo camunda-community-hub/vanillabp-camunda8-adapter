@@ -1654,25 +1654,22 @@ of its own. A worker of the APPLICATION serves it, under a job type the applicat
 no longer a user task VanillaBP is meant to serve and the reader passes over it. That is the third
 way out the refusal names, and `Camunda8JobWorkerUserTasksReportTest` holds the boundary.
 
-Who claims the process decides what happens next, in
-`Camunda8DeploymentService#refuseOrReportJobWorkerUserTasks`. Where a `@WorkflowService` class of
-the application claims the process, the boot ends: the class says the application stands in for
-that process, and VanillaBP serves a user task only where the cluster manages it. The message names
-the process, the elements per shape and the three ways out. Where nobody claims the process, the
-WARN it always had is written and the boot goes on, without the sentences which asked the reader to
-change something: the model travels to the cluster because of the file it sits in, and whoever owns
-it may serve such a job with a worker of their own.
-`Camunda8JobWorkerUserTasksReportTest` holds both messages and `Camunda8UserTaskWiringTest` the
+What happens next is in `Camunda8DeploymentService#refuseJobWorkerUserTasks`. Where a
+`@WorkflowService` class of the application claims the process, the boot ends: the class says the
+application stands in for that process, and VanillaBP serves a user task only where the cluster
+manages it. The message names the process, the elements per shape and the three ways out. A process
+nobody claims is not looked at, see [A process nobody claims](#a-process-nobody-claims).
+`Camunda8JobWorkerUserTasksReportTest` holds the message and `Camunda8UserTaskWiringTest` the
 reader.
 
-Both messages carry how many tasks are open on the elements right now, and that number used to
+The message carries how many tasks are open on the elements right now, and that number used to
 count the finished ones with it. It was the total of one job search by process and job type, and
 the index keeps a job after it is over, so it was every such job the process ever had and it never
 fell. `Camunda8UnservedUserTaskJobs` is the number now: two searches, all jobs of that type and
 those of them the index holds in a state a job does not leave again, and the difference between
 them. The end states are named rather than the open ones because the client grows that enum inside
 a release line, and a state this build has no literal for then counts as open rather than
-disappearing. What the number is worth is in that class and in every message carrying it: the index
+disappearing. What the number is worth is in that class and in the message carrying it: the index
 runs behind the engine at both ends. `Camunda8UnservedUserTaskJobsTest` holds the two searches and
 the arithmetic, and `Camunda8CountOfOpenUnservedUserTasksIT` reads one open and one finished job of
 the same type in the same process against a real cluster and writes down which states each line
@@ -1690,20 +1687,16 @@ lifecycle against a cluster is `Camunda8TaskProcessingIT#userTaskCreatedAndCompl
 correlation-key expression `=<aggregate-ID variable>` into message subscriptions
 lacking one - catch events correlate via the aggregate ID without manual model
 tweaks (existing expressions stay untouched; V1 models deploy byte-identically).
-The injection needs a workflow aggregate, and a BPMN process no `@WorkflowService`
-class of this application claims has none. Such a file is REFUSED while starting,
-in `prepareBpmn` and before any element of it was rewritten: the cluster demands a
-`zeebe:subscription` on the message of every executable process which waits for one,
-and it answers a missing one by rejecting the whole FILE (8.9.16 says *Must have
-exactly one zeebe:subscription extension element*; a static value is refused too, the
-key has to be an expression). So the file would not deploy either way, the process
-next to that one included, and ending the boot here is the earlier half of a failure
-which happens anyway. The message says which file, which process and which element it
-is about, and it asks for one of the two things which fix the model: the correlation
-key, or an `isExecutable` taken off a process nothing is meant to run. What VanillaBP
-does NOT do is put a substitute into a model it does not own.
-`Camunda8UnclaimedProcessTest` holds the verdict, the message and the claimed process
-which still gets its real key next to an unclaimed one;
+The injection needs a workflow aggregate, and only a claimed process has one. A
+process nobody claims gets no key, and this adapter does not refuse its file either:
+the cluster demands a `zeebe:subscription` on the message of every executable process
+which waits for one and rejects the whole FILE over a missing one (8.9.16 says *Must
+have exactly one zeebe:subscription extension element*), and that rejection is what
+the developer reads. A message element the file shares with a claimed process gets the
+key of the claimed one, because it belongs to the file. See
+[A process nobody claims](#a-process-nobody-claims).
+`Camunda8UnclaimedProcessTest` holds the missing key and the claimed process which
+still gets its real key next to an unclaimed one;
 `Camunda8RenamedProcessIT#theClusterRejectsTheWholeFileOverAMessageWithoutASubscription`
 sends such a file to a cluster, so the premise is measured on every run instead of
 remembered. An unclaimed process whose model IS complete costs the boot nothing, and
@@ -1802,7 +1795,7 @@ lock of that lost activation. See
 Camunda 8 lets a model write a FEEL expression where a name belongs, and a job type is one of
 those places: the `type` of a `zeebe:taskDefinition` and the `type` of a listener somebody modelled
 may both start with `=`. This adapter refuses such a model for a BPMN process a `@WorkflowService`
-class claims, and names it in a WARN for a process nobody claims.
+class claims. A process nobody claims is not looked at.
 
 The reason is the job type itself. It is the NAME a worker subscribes to, and this adapter opens one
 worker per job type it reads out of the model, subscribing exactly the string the model says. Both
@@ -1826,10 +1819,10 @@ anyway. Or leave the element to the runtime which does serve it, as the next sec
 job element carrying a `zeebe:modelerTemplate` is passed over here, and a runtime somebody else
 deployed may compose its job type however it likes.
 
-Why this is a refusal for a claimed process and a WARN for an unclaimed one is decision 53 and
-decision 54 in the repository's DECISIONS.md, which draw the same line for a user task a job worker
-serves and for an ad-hoc subprocess nothing serves. `Camunda8JobTypeWrittenAsAnExpressionTest`
-holds both messages, the listener half and the element template.
+Why this is a refusal for a claimed process is decision 53 and decision 54 in the repository's
+DECISIONS.md, which draw the same line for a user task a job worker serves and for an ad-hoc
+subprocess nothing serves. `Camunda8JobTypeWrittenAsAnExpressionTest` holds the message, the
+listener half, the element template and the silence about a process nobody claims.
 
 ### A form reference has to be a name as well
 
@@ -1837,7 +1830,7 @@ The external form reference of a Camunda-managed user task is its task definitio
 the `@WorkflowTask` method by it, and the job type of the lifecycle listeners is
 `io.vanillabp.userTask:` plus the reference. Camunda 8 lets a model write the reference as a FEEL
 expression, and this adapter answers that the way it answers a job type written as one: a BPMN
-process a `@WorkflowService` class claims does not deploy, and one nobody claims gets a WARN.
+process a `@WorkflowService` class claims does not deploy, and one nobody claims is not looked at.
 
 Measured on 2026-10-06 against `camunda/camunda:8.10.0`, with one model naming its form
 `=whichForm` and one method written as `taskDefinition = "=whichForm"`, before the refusal
@@ -1942,15 +1935,13 @@ A listener is served only where a `@WorkflowTask` method names its job type, and
 task definition such a method names. A job type is a name in the cluster which anybody may subscribe
 to, so a model carrying one says nothing about who serves it while a method naming it does. Only the
 task-definition route counts: `@WorkflowTask(id = ...)` names the ELEMENT, and one element may carry a
-task and a listener at once. A listener no method names is not passed over in silence, and who claims the
-process decides the rest, in `refuseOrReportListenerJobsNothingServes`. Where a `@WorkflowService`
+task and a listener at once. A listener no method names is not passed over in silence, in
+`handOverListenerJobsNothingServes`. Where a `@WorkflowService`
 class claims the process, the listener goes to the core's wiring validation as a task of its own
 (`BpmnTaskSpec.listener`), which asks for a method or for the line `implemented-externally=true`
 and ends the boot over neither. The class says the application stands in for the process, and the
 cluster creates that job the moment it reaches the listener, so a workflow would stand inside the
-element with no incident and nothing in any log. Where nobody claims the process, the WARN it
-always had is written and the boot goes on, without the sentences which asked the reader to change a
-model which is none of ours.
+element with no incident and nothing in any log. A process nobody claims is not looked at.
 
 The job type cannot say who answers it, so the APPLICATION says it. A worker somebody else runs and
 a worker the application runs beside VanillaBP look exactly the same in a model, and the line
@@ -2080,12 +2071,11 @@ the workflow stops at the element and the job ends in an incident once its retri
 Nothing later in the boot sees it, because the element produces no task spec and no validation
 misses a method.
 
-Who claims the process decides the rest, in `refuseOrReportUnservedAdHocSubProcesses` and in the
-shape of the user task a job worker serves. Where a `@WorkflowService` class claims the process, the
-boot ends, naming the element, what it costs and the two ways out. Where nobody claims the process,
-one WARN per BPMN process says so and the boot goes on, which is the half of
+What happens next is in `refuseUnservedAdHocSubProcesses`. Where a `@WorkflowService` class claims
+the process, the boot ends, naming the element, what it costs and the two ways out. A process nobody
+claims is not looked at any more, so the WARN of
 [decision 24](./DECISIONS.md#24-an-ad-hoc-subprocess-nothing-serves-is-named-and-the-boot-goes-on)
-that still holds. An element carrying a `zeebe:modelerTemplate` as well is left out of both, through
+is gone. An element carrying a `zeebe:modelerTemplate` as well is left out of both, through
 `Camunda8Connectors#elementTemplateOf`: the Camunda AI agent is an element template on exactly this
 element, and a connector runtime fetches its job.
 
@@ -2291,6 +2281,19 @@ decision (`Camunda8DeploymentServiceTest#aBusinessRuleTaskFindsItsRenamedDecisio
 of a prefixed module. What this mode cannot follow is a
 reference to a decision the module does not deploy: that one is renamed here and not in the
 cluster.
+
+### A process nobody claims
+
+A BPMN file goes to the cluster as a whole, so a workflow module may deploy a process no
+`@WorkflowService` class claims. The core ends the start over such a process unless the
+application marks it with
+`vanillabp.workflow-modules.<module>.workflows.<process>.implemented-externally=true`. A process
+which reaches `wireBpmn` unclaimed is therefore one somebody else serves, and `wireBpmn` returns for
+it right away: no listener, no multi-instance mapping and no correlation key is written into it, no
+worker is opened for its jobs, and no check ends the boot or warns because of it. What belongs to the
+whole file still reaches it, the prefix of `use-prefix` and the checks of a file the cluster would
+refuse. The question is `WorkflowTaskWiring#isClaimedByAWorkflowService`, everywhere in this adapter.
+Why: `DECISIONS.pending/937.md`. `Camunda8UnclaimedProcessTest` holds it.
 
 ### Keeping workflow modules apart
 
@@ -2653,14 +2656,9 @@ after the last element completed, and its completion lets the instance disappear
 The core also wants that notification where no application method asks for it: a workflow
 module which releases the records of its processed task deliveries, or the hints of its
 election cache, when a workflow ends. So `workflowEndedHandlerExists` can answer `true` for
-every process of the module, an unclaimed one included. Such a process is left out anyway.
-The worker answering the listener's job reads the aggregate-ID variable, and a listener whose
-job nobody activates would stop the workflow at its own end, so the guard sits in `wireBpmn`,
-before the listener is attached. Held by
-`Camunda8UnclaimedProcessTest#anUnclaimedProcessGetsNoWorkflowEndListener`. Leaving it out
-is enough because the listener is this adapter's own addition and the cluster wants nothing
-of it, unlike the correlation key of a message subscription, which is why that one ends the
-boot instead.
+every process of the module, an unclaimed one included. Such a process is left out anyway,
+because `wireBpmn` does nothing for a process nobody claims. Held by
+`Camunda8UnclaimedProcessTest#anUnclaimedProcessGetsNoWorkflowEndListener`.
 
 `Camunda8BpmsInitiatedStartIT#timerStartCreatesTheAggregate` drives a timer start and the end
 behind it, `Camunda8WorkflowLifecycleTest#theClusterStartsAWorkflowOnItsOwn` the same on

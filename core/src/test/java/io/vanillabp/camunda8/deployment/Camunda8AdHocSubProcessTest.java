@@ -406,27 +406,20 @@ public class Camunda8AdHocSubProcessTest {
   }
 
   @Test
-  @DisplayName("The same element in a process nobody claims keeps its warning, and the boot goes on")
-  public void theJobWorkerFlavourOfAnUnclaimedProcessOnlyWarns(
+  @DisplayName("The same element in a process nobody claims is not looked at, and the boot goes on")
+  public void theJobWorkerFlavourOfAnUnclaimedProcessIsNotLookedAt(
       final CapturedOutput output) {
 
     final var logged = wire(
         output, new ReportedForAProcessNobodyClaims(), false, modelActivatedByAWorker());
 
-    assertTrue(
-        logged.contains(THE_UNSERVED_FLAVOUR) && logged.contains("'AdHoc_AgentTools'"),
-        () -> "a reader still has to learn that the element is there: "
-            + logged);
-    assertTrue(
-        logged.contains("No @WorkflowService class of this application claims this process"),
-        () -> "and why this one is a warning: "
-            + logged);
     assertFalse(
-        logged.contains("zeebe:adHoc activeElementsCollection"),
-        () -> "nothing asks the reader to change a model which is none of ours: "
+        logged.contains(THE_UNSERVED_FLAVOUR),
+        () -> "somebody else's model is not judged: "
             + logged);
 
   }
+
 
   @Test
   @DisplayName("An element another runtime serves stays quiet, whether or not connectors are allowed")

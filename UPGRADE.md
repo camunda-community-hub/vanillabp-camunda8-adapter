@@ -142,20 +142,18 @@ Where a worker of your own serves the element, give it a `zeebe:taskDefinition` 
 worker's job type: the element is then yours to serve rather than a user task of VanillaBP's, and
 the check passes over it.
 
-A BPMN process no `@WorkflowService` class of yours claims is not refused. It reaches the cluster
-because it sits in a file next to a process you do serve, and what it contains is not ours to make
-demands about, so one WARN per process names the elements and the boot goes on.
+A BPMN process no `@WorkflowService` class of yours claims is not looked at, once you marked it as
+somebody else's, see [A process none of your classes claims](#a-process-none-of-your-classes-claims).
 
-Both messages say how many tasks are open on the elements right now, and only the count of elements
+The message says how many tasks are open on the elements right now, and only the count of elements
 is certain. The elements come from the model this boot deploys. The open tasks are a search of the
 cluster's index: it is asked how many jobs of that element's job type the process has, and how many
 of those it has already seen end, and the message names the difference. That is the number which
 falls to zero as you work the tasks off, which the plain total of the search never did. It is near
 rather than exact, because an exporter feeds that index and the index runs behind the engine: a task
 which finished a moment ago can still be counted, and one which opened a moment ago can still be
-missing. For the WARN the boot waits for the cluster before it counts, so a cluster which starts
-together with your application still gives you the number. The refusal does not wait, because the
-model is the cause and a wait would only put a message about the cluster in front of it. A cluster
+missing. The boot does not wait for the cluster before it counts, because the model is the cause
+and a wait would only put a message about the cluster in front of it. A cluster
 which is not up yet costs that message the number, and it says so instead of writing a zero.
 
 ### A task your cockpit showed while a check answered 404
@@ -485,8 +483,8 @@ once all along.
 Version 2 refuses the model while it deploys it, where one of your `@WorkflowService` classes
 claims the process, and the boot ends there. The message names the activity, the BPMN process and
 the workflow module. A model which deployed in version 1 does not deploy any more, and this is on
-purpose: the upgrade is where you learn that the loop never ran. A process nobody claims gets a
-WARN with the same words, and the boot goes on, because the model is somebody else's.
+purpose: the upgrade is where you learn that the loop never ran. A process nobody claims is not
+looked at, because the model is somebody else's.
 
 Change the model to one of the two forms which do repeat an activity. Either draw a loop in the
 sequence flow, with a gateway after the activity which leads back to it while the condition holds.
@@ -497,7 +495,7 @@ A version the cluster already holds is not refused, because nobody can change it
 workflows still run on it, the start logs a WARN naming the version, the activity and how many
 workflows are on it.
 
-### An ad-hoc subprocess in your model earns a warning, or ends the boot
+### An ad-hoc subprocess in your model ends the boot
 
 Version 1 said nothing about the element and neither executed nor reported it. This version serves
 the flavour whose activities the model names through `zeebe:adHoc activeElementsCollection`, and it
@@ -513,8 +511,24 @@ your application does not boot.** A workflow would reach the element and stop th
 ends in an incident once its retries are used up. The message names the element and the two ways
 out: let the model say which activities to run and fill the aggregate attribute that expression
 reads, or leave the element to a runtime which does serve it. A process none of your classes claims
-earns one WARN per process instead, and the boot goes on. Nothing is said at all about an element
+is not looked at. Nothing is said at all about an element
 which also carries a `zeebe:modelerTemplate`, because a connector runtime owns that one.
+
+### A process none of your classes claims
+
+Version 1 ended the start over a BPMN process no `@WorkflowService` class declared, a process which
+only sits in the same file as yours included. Version 2 does the same, and offers a way out for a
+process somebody else serves:
+
+```properties
+vanillabp.workflow-modules.<module>.workflows.<process>.implemented-externally=true
+```
+
+Such a process goes to the cluster with its file, and this adapter leaves it as you modelled it: no
+listener, no correlation key and no multi-instance mapping is written into it, no worker serves its
+jobs, and no check ends the boot or warns because of it. What it still has to get right is what the
+cluster demands of every executable process. A message the process waits for needs a correlation
+key you model yourself, or the cluster rejects the whole file.
 
 ### Two workflow modules with the same BPMN process id end the boot
 
@@ -609,8 +623,7 @@ ways out. Write a job type which is a fixed name and a `@WorkflowTask` method of
 the method branch on the workflow aggregate it is handed where the work differs from workflow to
 workflow. Or leave the element to the runtime which serves it: give the element a
 `zeebe:modelerTemplate` and allow such elements with `allow-connectors`, after which nothing here
-asks about its job type. A BPMN process none of your classes claims earns one WARN per process
-instead, and the boot goes on.
+asks about its job type. A BPMN process none of your classes claims is not looked at.
 
 ### A form reference your model writes as an expression ends the boot
 
@@ -629,7 +642,7 @@ user task and the expression you typed.
 Write a fixed name as the reference and a `@WorkflowTask` method of that name. Where the form to
 show differs from workflow to workflow, model one user task per form behind a gateway, or keep one
 name and let your task list choose the form from the data of the workflow. A BPMN process none of
-your classes claims earns one WARN per process instead, and the boot goes on.
+your classes claims is not looked at.
 
 ### A start says which of your names the cluster already held
 

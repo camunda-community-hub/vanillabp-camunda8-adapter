@@ -334,27 +334,20 @@ public class Camunda8JobTypeWrittenAsAnExpressionTest {
   }
 
   @Test
-  @DisplayName("The same model in a process nobody claims is named, and the boot goes on")
-  public void aProcessNobodyClaimsOnlyWarns(
+  @DisplayName("The same model in a process nobody claims is not looked at, and the boot goes on")
+  public void aProcessNobodyClaimsIsNotLookedAt(
       final CapturedOutput output) {
 
     final var logged = boot(
         output, new ReportedForAProcessNobodyClaims(), aServiceTaskNamingItsJobTypeByExpression());
 
-    assertTrue(
-        logged.contains(THE_FINDING) && logged.contains("=whichAssessment"),
-        () -> "a reader still has to learn that the element is there: "
-            + logged);
-    assertTrue(
-        logged.contains("No @WorkflowService class of this application claims this process"),
-        () -> "and why this one is a warning: "
-            + logged);
     assertFalse(
-        logged.contains("Two ways out"),
-        () -> "nothing asks the reader to change a model which is none of ours: "
+        logged.contains(THE_FINDING),
+        () -> "somebody else's model is not judged: "
             + logged);
 
   }
+
 
   @Test
   @DisplayName("An element another runtime serves keeps its expression and stays quiet")

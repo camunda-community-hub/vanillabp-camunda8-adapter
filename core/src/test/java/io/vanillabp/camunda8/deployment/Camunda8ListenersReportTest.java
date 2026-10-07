@@ -422,8 +422,8 @@ public class Camunda8ListenersReportTest {
   }
 
   @Test
-  @DisplayName("The same listener in a process nobody claims keeps its warning, and the boot goes on")
-  public void aJobTypeNoMethodNamesOnlyWarnsForAnUnclaimedProcess(
+  @DisplayName("The same listener in a process nobody claims is not looked at, and the boot goes on")
+  public void aJobTypeNoMethodNamesIsNotLookedAtInAnUnclaimedProcess(
       final CapturedOutput output) {
 
     final var logged = deploy(
@@ -431,17 +431,9 @@ public class Camunda8ListenersReportTest {
         adapterServedBy(aCoreWhoseProcessNobodyClaims(), NameClashAvoidance.BY_ADAPTER, null),
         modelWithAListener());
 
-    assertTrue(
-        logged.contains(NO_METHOD_NAMES_IT) && logged.contains("job type 'archiveTheOrder'"),
-        () -> "a reader still has to learn that the job type is there: "
-            + logged);
-    assertTrue(
-        logged.contains("No @WorkflowService class of this application claims this process"),
-        () -> "and why this one is a warning: "
-            + logged);
     assertFalse(
-        logged.contains("take the listener out of the model"),
-        () -> "nothing asks the reader to change a model which is none of ours: "
+        logged.contains(NO_METHOD_NAMES_IT),
+        () -> "somebody else's model is not judged: "
             + logged);
     assertFalse(
         logged.contains("MODELLED LISTENERS ARE SERVED"),
@@ -449,6 +441,7 @@ public class Camunda8ListenersReportTest {
             + logged);
 
   }
+
 
   @Test
   @DisplayName("A listener on an element built from an element template is warned about, not refused")

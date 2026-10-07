@@ -1228,10 +1228,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         .getResources()
         .containsKey(filename);
     if (!modelAlreadyScoped) {
-      // the file is read for what it demands of the cluster while it is still the
-      // model somebody wrote, before this adapter rewrote a single element of it
-      refuseAFileTheClusterWouldReject(workflowModuleId, filename, model);
-      // and for the one thing only the untouched model can say: whether an expression
+      // the file is read for the one thing only the untouched model can say: whether an expression
       // naming a called process or decision composes the prefix itself, which the rewrite
       // below would give a second one
       refuseAnExpressionWhichAlreadyCarriesThePrefix(workflowModuleId, filename, model);
@@ -1239,10 +1236,10 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       // application can subscribe to. Asked here, before the rewrite and before the wiring
       // validation, so the message quotes what the modeller typed and says what is really
       // wrong instead of asking for a method nobody can write
-      refuseOrReportJobTypesWrittenAsAnExpression(workflowModuleId, filename, model);
+      refuseJobTypesWrittenAsAnExpression(workflowModuleId, filename, model);
       // and for the form references written as an expression, for the same reason: the
       // reference of a user task is its task definition, and a task definition is a name
-      refuseOrReportFormReferencesWrittenAsAnExpression(workflowModuleId, filename, model);
+      refuseFormReferencesWrittenAsAnExpression(workflowModuleId, filename, model);
       // read while the process ids are still the plain ones, and once per FILE rather
       // than once per process: after the rewrite below an element cannot be attributed
       // to the process the configuration is keyed by any more
@@ -1322,20 +1319,27 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // model is searched by the SCOPED process id and the invoker is called with the
     // plain one
     final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
+    // a process nobody claims travels with its file and is left as it was modelled: no
+    // listener and no mapping is written into it, no worker serves its jobs, and no check
+    // ends the boot or warns because of it (see DECISIONS.pending/937.md). The core ended the
+    // start over it already unless the application marked it as somebody else's
+    if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, bpmnProcessId)) {
+      log.debug(
+          "Camunda8[{}]: BPMN process '{}' of file '{}' (workflow module '{}') is claimed by no "
+              + "@WorkflowService and is deployed as it was modelled",
+          adapterId,
+          bpmnProcessId,
+          filename,
+          workflowModuleId);
+      return;
+    }
     // The cluster runs an activity carrying a standard loop once and says nothing. Asked
     // first, because no other finding about this model matters while it does not do what
-    // was drawn. A process nobody claims is somebody else's model, so it only gets a WARN,
-    // like every other finding of that kind
+    // was drawn
     final var standardLoops = Camunda8StandardLoops.elementIdsOf(model, scopedBpmnProcessId);
     if (!standardLoops.isEmpty()) {
-      if (aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null) {
-        throw new IllegalStateException(
-            Camunda8StandardLoops.refusal(standardLoops, bpmnProcessId, workflowModuleId));
-      }
-      log.warn(
-          "Camunda8[{}]: {}",
-          adapterId,
-          Camunda8StandardLoops.warningAboutAnUnclaimedProcess(standardLoops, bpmnProcessId, workflowModuleId));
+      throw new IllegalStateException(
+          Camunda8StandardLoops.refusal(standardLoops, bpmnProcessId, workflowModuleId));
     }
     // extract the job-worker tasks (zeebe:taskDefinition type = VanillaBP task
     // definition) and validate them against the registered @WorkflowTask methods;
@@ -1435,10 +1439,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             Camunda8ModelExpressions.of(model, scopedBpmnProcessId));
 
     // a user task without 'zeebe:userTask' is a user task a job worker serves, and this
-    // adapter does not accept that shape. Where a workflow service claims the process, the
-    // application stands in for it and the boot ends; where none does, the elements are
-    // counted and named, whether or not they carry version 1's formKey
-    refuseOrReportJobWorkerUserTasks(
+    // adapter does not accept that shape in a process the application stands in for
+    refuseJobWorkerUserTasks(
         workflowModuleId,
         bpmnProcessId,
         scopedBpmnProcessId,
@@ -1454,9 +1456,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             Camunda8Scoping.elementIdsNamingTheirTargetByExpression(model, scopedBpmnProcessId));
 
     // an ad-hoc subprocess waiting for a job worker is the other element which would stop a
-    // workflow without anything being said about it. Who claims the process decides it, the same
-    // way it decides about a user task a job worker serves
-    refuseOrReportUnservedAdHocSubProcesses(
+    // workflow without anything being said about it
+    refuseUnservedAdHocSubProcesses(
         workflowModuleId,
         bpmnProcessId,
         adHocSubProcessesWithAJob
@@ -1470,8 +1471,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // '=<aggregate-ID variable>' into message subscriptions lacking one - the V2
     // convention enabling ProcessService#correlateMessage without manual model
     // tweaks (existing expressions stay untouched, V1 models deploy unchanged).
-    // Asking the core outright is safe here: prepareBpmn refused the whole file
-    // where a process waiting for a message has no workflow aggregate to name
+    // Asking the core outright is safe here: only a claimed process gets this far, and a
+    // claimed process has a workflow aggregate to name
     Camunda8TaskWiring.wireMessageSubscriptions(
         model,
         scopedBpmnProcessId,
@@ -1509,11 +1510,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     }
 
     // the start of a workflow: the execution listener deciding what a start means is
-    // ADDED TO THE MODEL here as well, on every start event the process itself holds.
-    // Only for a process this application serves, though - the listener holds the
-    // instance until its job is answered, and for an unclaimed process the core has no
-    // workflow service to answer for
-    if ((bpmsInitiatedStartInvoker != null) && (aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null)) {
+    // ADDED TO THE MODEL here as well, on every start event the process itself holds
+    if (bpmsInitiatedStartInvoker != null) {
       final var bpmsInitiatedStarts = Camunda8TaskWiring
           .bpmsInitiatedStartsOf(
               model,
@@ -1532,11 +1530,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     }
 
     // the end of a workflow is reported only where the application asked for it -
-    // a model must not pay for a listener nobody wants. A process this application
-    // serves no workflow of is left out even where the end IS wanted, which a workflow
-    // module releasing its delivery records on workflow end wants for every process it
-    // deploys: the worker answering that listener's job reads the aggregate-ID variable,
-    // so a listener without one would stop the workflow at its own end
+    // a model must not pay for a listener nobody wants
     // the element id the probe of awarenessOfWorkflow reserved for itself: it asks the
     // engine by sending a modification which names an element no model has, and an id which
     // by accident matches one WOULD BE ACTIVATED instead of refused. So the models are read
@@ -1559,9 +1553,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           .recordTheReservedProbeElement(workflowModuleId, bpmnProcessId);
     }
 
-    final var theWorkflowCanBeNamed = aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null;
     final var theEndIsReported = (workflowEndedInvoker != null) && workflowEndedInvoker
-        .workflowEndedHandlerExists(workflowModuleId, bpmnProcessId) && theWorkflowCanBeNamed;
+        .workflowEndedHandlerExists(workflowModuleId, bpmnProcessId);
     // and the cancelation of an instance, which the 8.10 line reports through a listener of
     // its own on the same element and with the same job type. It is worth having for a
     // process this application serves a task of even where nobody declared a
@@ -1569,7 +1562,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // instance and reports each of them as canceled, which is the only way an application
     // on this BPMS hears about them at all
     final var theCancelationIsReported = Camunda8CancelListeners
-        .theProcessCanReportItsCancellation() && (workflowEndedInvoker != null) && theWorkflowCanBeNamed && (theEndIsReported || servesAnyTaskOf(
+        .theProcessCanReportItsCancellation() && (workflowEndedInvoker != null) && (theEndIsReported || servesAnyTaskOf(
             workflowModuleId, bpmnProcessId, specs));
     // the listener holds the instance until its job is answered, so both halves are
     // written only where this adapter opens the worker which answers it. A model carrying
@@ -1583,7 +1576,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       context.getWorkflowEndedProcessesToWire().add(scopedBpmnProcessId);
     }
     if (!Camunda8CancelListeners
-        .theProcessCanReportItsCancellation() && (workflowEndedInvoker != null) && theWorkflowCanBeNamed && (theEndIsReported || servesAnyTaskOf(
+        .theProcessCanReportItsCancellation() && (workflowEndedInvoker != null) && (theEndIsReported || servesAnyTaskOf(
             workflowModuleId, bpmnProcessId, specs))) {
       context.getProcessesWithoutACancelationReport().add(bpmnProcessId);
     }
@@ -1744,79 +1737,6 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         throw new IllegalStateException(
             Camunda8MultiInstanceItems.refusal(findings, bpmnProcessId, workflowModuleId));
       }
-    }
-
-  }
-
-  /**
-   * Ends the deployment of a BPMN file whose executable process waits for a message
-   * without saying what to correlate it by, where this application serves no workflow of
-   * that process.
-   * <p>
-   * Camunda 8 accepts no message catch element whose message carries no
-   * <code>zeebe:subscription</code>, and it answers with the rejection of the whole FILE,
-   * so the processes next to that one would not be deployed either. Where a workflow
-   * service claims the process, <code>wireBpmn</code> writes the subscription and
-   * correlates by the workflow aggregate's ID, which is decision 5 in the repository's
-   * DECISIONS.md. Where none does, there is no aggregate to name, and writing a
-   * substitute would change a model this application does not own and hide from the
-   * modeller that their process is incomplete. So the boot ends here instead, which is
-   * the earlier and clearer half of a failure which happens either way.
-   * <p>
-   * Asked once per file and before anything of it is rewritten: a message element belongs
-   * to the file rather than to one process, so an injection for a process wired earlier
-   * would otherwise decide the verdict about a process wired later.
-   *
-   * @param workflowModuleId The workflow module
-   * @param filename The BPMN file, which is what the cluster accepts or rejects
-   * @param model The model as it was read
-   */
-  private void refuseAFileTheClusterWouldReject(
-      final String workflowModuleId,
-      final String filename,
-      final BpmnModelInstance model) {
-
-    for (final var process : model.getModelElementsByType(Process.class)) {
-      if (!process.isExecutable()) {
-        continue;
-      }
-      // the model is asked first because it answers for free, while the core has to
-      // resolve the ID property of an aggregate to answer at all
-      final var elementsWaitingForACorrelationKey = Camunda8TaskWiring
-          .messagesWithoutACorrelationKey(model, process.getId());
-      if (elementsWaitingForACorrelationKey.isEmpty()) {
-        continue;
-      }
-      // this application serves a workflow of the process, so wireBpmn writes the
-      // subscription and what reaches the cluster is complete
-      if (aggregateIdNameOf(workflowModuleId, process.getId()) != null) {
-        continue;
-      }
-      throw new IllegalStateException(
-          """
-              Camunda 8 adapter '%s' does not deploy BPMN file '%s' of workflow module '%s': the \
-              cluster would reject the file as a whole, and with it every process the file \
-              declares. Its executable process '%s' waits for a message at %s, and Camunda 8 \
-              demands a 'zeebe:subscription' with a correlation key on the message of every \
-              executable process it is given, whether or not VanillaBP runs that process. \
-              VanillaBP writes that subscription for a process one of its @WorkflowService \
-              classes claims and correlates by that process' workflow aggregate. No class of \
-              this application claims '%s', so there is no aggregate to name. Two ways out: model \
-              the correlation key of the message(s) named above (in the modeler: 'Subscription \
-              correlation key' on the message), or set isExecutable="false" on process '%s' where \
-              nothing is meant to run it."""
-              .formatted(
-                  adapterId,
-                  filename,
-                  workflowModuleId,
-                  process.getId(),
-                  elementsWaitingForACorrelationKey
-                      .stream()
-                      .map(waiting -> "'%s' (message '%s')"
-                          .formatted(waiting.catchElementId(), waiting.messageName()))
-                      .collect(Collectors.joining(", ")),
-                  process.getId(),
-                  process.getId()));
     }
 
   }
@@ -2100,6 +2020,11 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (!process.isExecutable()) {
         continue;
       }
+      // a process nobody claims is somebody else's model and is not judged here, see
+      // DECISIONS.pending/937.md
+      if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, process.getId())) {
+        continue;
+      }
       final var listeners = Camunda8Listeners.listenersOf(model, process.getId());
       final var setting = listenersAllowedFor(workflowModuleId, process.getId());
       if (setting.allowed()) {
@@ -2121,7 +2046,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
           .stream()
           .filter(listener -> !served.contains(listener))
           .toList();
-      refuseOrReportListenerJobsNothingServes(workflowModuleId, process.getId(), filename, model, unserved, context);
+      handOverListenerJobsNothingServes(workflowModuleId, process.getId(), filename, model, unserved, context);
       // an element whose 'updating' listener nothing here answers is an element the open
       // task check must not probe: the empty update fires that listener and nobody closes
       // its job. The id is the plain one already - this runs while the file is prepared,
@@ -2177,8 +2102,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * Hands the listeners of a claimed process whose job type no method of this application names
-   * to the core's wiring validation, and names such listeners without ending anything where no
-   * workflow service claims the process.
+   * to the core's wiring validation. A process nobody claims never gets here.
    * <p>
    * The cluster creates a job the moment it reaches a listener, so a job type nothing subscribes
    * to stops the workflow inside the element, with no incident and nothing in any log. A
@@ -2186,8 +2110,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * in for it, so such a listener is a task like any other: it needs a method, or the property
    * <code>implemented-externally=true</code> saying that a worker somebody else runs answers it.
    * The core holds that rule for every task of every adapter, and the listener reaches it as a
-   * task spec in {@code wireBpmn}. A process nobody claims is somebody else's model, and it keeps
-   * the WARN it always had.
+   * task spec in {@code wireBpmn}.
    * <p>
    * One exception stays with this adapter: a listener on an element built from an element template
    * which is a job itself, a connector say. Such an element belongs to the runtime which owns it,
@@ -2203,7 +2126,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * @param listeners The listeners nothing here serves, empty for a model where there are none
    * @param context Where the listeners for the core's validation are remembered
    */
-  private void refuseOrReportListenerJobsNothingServes(
+  private void handOverListenerJobsNothingServes(
       final String workflowModuleId,
       final String bpmnProcessId,
       final String filename,
@@ -2212,10 +2135,6 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       final Camunda8ProcessingContext context) {
 
     if (listeners.isEmpty()) {
-      return;
-    }
-    if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, bpmnProcessId)) {
-      sayWhichListenerJobsNothingServes(workflowModuleId, bpmnProcessId, filename, listeners);
       return;
     }
     final var onAnElementOfAnotherRuntime = listeners
@@ -2250,50 +2169,6 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     final var element = model.getModelElementById(listener.elementId());
     return (element instanceof io.camunda.zeebe.model.bpmn.instance.BaseElement baseElement) && !(element instanceof io.camunda.zeebe.model.bpmn.instance.UserTask) && (Camunda8Connectors
         .elementTemplateOf(baseElement) != null);
-
-  }
-
-  /**
-   * Names the listeners of a process whose job type nothing of this application serves, and lets
-   * the boot go on. Written for a process no workflow service of this application claims.
-   * <p>
-   * Such a process reaches the cluster because it sits in a file next to a process this
-   * application does serve, and what it contains is not ours to make demands about: whoever owns
-   * it may answer that job with a worker of their own. So nothing is asked of the reader. What
-   * must not happen is silence, because the cluster creates the job either way and the workflow
-   * stops at it with no incident and nothing in any log.
-   *
-   * @param workflowModuleId The workflow module
-   * @param bpmnProcessId The PLAIN BPMN process id
-   * @param filename The file the model was read from
-   * @param listeners The listeners nothing here serves
-   */
-  private void sayWhichListenerJobsNothingServes(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final String filename,
-      final java.util.List<Camunda8Listeners.ModelledListener> listeners) {
-
-    log.warn(
-        """
-            Camunda8[{}]: BPMN process '{}' of workflow module '{}' (file '{}') carries {} \
-            listener(s) whose job type no @WorkflowTask method of this application names: {}. The \
-            cluster creates a job for every one of them, so a workflow reaching the element stands \
-            there until something with that job type takes the job - with no incident and nothing in \
-            any log. No @WorkflowService class of this application claims this process, so there is \
-            nothing here for you to do: the file the process stands in travels to the cluster as a \
-            whole, and whoever owns the process may answer that job with a worker of their own. For \
-            a process this application does claim, the same finding ends the boot, unless the \
-            listener is marked with 'implemented-externally=true'.""",
-        adapterId,
-        bpmnProcessId,
-        workflowModuleId,
-        filename,
-        listeners.size(),
-        listeners
-            .stream()
-            .map(Camunda8Listeners.ModelledListener::describe)
-            .collect(Collectors.joining("; ")));
 
   }
 
@@ -2545,9 +2420,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
-   * Ends the boot where a BPMN process this application claims carries a job-worker user task,
-   * and names such an element without ending anything where no workflow service claims the
-   * process.
+   * Ends the boot where a BPMN process this application claims carries a job-worker user task.
+   * A process nobody claims never gets here.
    * <p>
    * The finding is the SHAPE of the element. A user task carrying <code>zeebe:userTask</code>
    * is managed by the cluster, and that is the one shape this adapter takes. A user task
@@ -2560,12 +2434,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * why ending the boot is the kinder answer: the cluster hands out a job of its own user-task
    * type, nothing here fetches it, and the workflow stands at the element until the job's
    * retries are used up. Nobody sees that until somebody waits for a task which never appears.
-   * <p>
-   * A process no class of this application claims is a different thing. It reaches the cluster
-   * because it sits in a file next to a process this application does serve, and what it
-   * contains is not ours to make demands about: whoever owns it may serve such a job with a
-   * worker of their own. That one keeps the WARN it always had, without the sentences which
-   * asked the reader to change something, because there is nothing here for them to do.
+  
    * <p>
    * The two shapes are named apart because only one of them can be searched for. Up to
    * release 1.6.3 VanillaBP 1 served this element and read its task definition off the
@@ -2577,10 +2446,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * this boot deploys and are what has to reach zero. The count of open tasks is a search of the
    * cluster's index, and {@link Camunda8UnservedUserTaskJobs} says what that answer is worth:
    * the index leaves out the jobs it has seen finish and runs behind the engine at both ends,
-   * so the number is near rather than exact and the message says so. Where the boot goes on,
-   * the cluster is waited for before the count is read, so a cluster which starts together
-   * with the application still gives a number. Where the boot ends, it is not waited for,
-   * and the number is missing when the cluster does not answer yet: the model is the cause,
+   * so the number is near rather than exact and the message says so. The cluster is not waited
+   * for, and the number is missing when the cluster does not answer yet: the model is the cause,
    * and a wait would only put a message about the cluster in front of it.
    *
    * @param workflowModuleId The workflow module id
@@ -2588,9 +2455,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * @param scopedBpmnProcessId The process id as the cluster knows it
    * @param found The job-worker user tasks, per shape, both empty for a model whose user
    *          tasks are all Camunda-managed
-   * @throws IllegalStateException If a workflow service of this application claims the process
+   * @throws IllegalStateException If the model carries such a user task
    */
-  private void refuseOrReportJobWorkerUserTasks(
+  private void refuseJobWorkerUserTasks(
       final String workflowModuleId,
       final String bpmnProcessId,
       final String scopedBpmnProcessId,
@@ -2599,68 +2466,39 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (found.isEmpty()) {
       return;
     }
-    // whether the application claims the process is what the core answers by knowing the
-    // workflow aggregate of it, which is the same question the start listener and the
-    // refusal of a file without a correlation key ask
-    final var theApplicationClaimsTheProcess = aggregateIdNameOf(workflowModuleId, bpmnProcessId) != null;
-    if (!theApplicationClaimsTheProcess) {
-      // the boot goes on here, so it may wait for the cluster now rather than one round
-      // later in deployResources, and the count below gets an answer. The wait happens once
-      // per adapter instance, so the later round costs nothing more
-      clientFactory.waitUntilTheClusterAnswers();
-    }
+    // no wait for the cluster: the boot ends over the model, and waiting first would let a
+    // cluster which is not up yet sit out 'startup-wait' and then end the boot with its own
+    // message, which hides the real cause
     final var howManyAreOpen = Camunda8UnservedUserTaskJobs
         .howManyAreOpen(whatTheIndexHoldsOfTheJobWorkerUserTasks(scopedBpmnProcessId));
-    if (theApplicationClaimsTheProcess) {
-      // no wait on this path: the boot ends over the model, and waiting first would let a
-      // cluster which is not up yet sit out 'startup-wait' and then end the boot with its
-      // own message, which hides the real cause
-      throw new IllegalStateException(
-          """
-              Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s': it \
-              carries %d user task(s) with no 'zeebe:userTask' extension element, which is a user \
-              task a job worker serves, and this adapter does not accept that shape: %s. A \
-              @WorkflowService class of this application claims this process, so the application \
-              stands in for it, and VanillaBP serves a user task only where the CLUSTER manages it. \
-              What the shape would cost you: the cluster hands out a job of '%s', nothing here \
-              fetches it, and the workflow stands at the element until the job's retries are used \
-              up. Nobody sees that until somebody waits for a task which never appears, so the boot \
-              ends here instead. Two ways out. Make the user task a Camunda-managed one \
-              ('zeebe:userTask') and set 'External form reference' (zeebe:formDefinition \
-              externalReference) to the task definition your @WorkflowTask method names - VanillaBP \
-              then wires its lifecycle listeners itself. Or take the element out of the model, if \
-              that work is not done any more. Where a worker of your own serves the element, give it \
-              a 'zeebe:taskDefinition' naming that worker's job type, and this check passes over it: \
-              the element is then yours to serve rather than a user task of VanillaBP's. %s A task \
-              already open on such an element stays as it is: its workflow runs on the process \
-              version it was started on, which no change to your model reaches, so finish or cancel \
-              those through your own task list."""
-              .formatted(
-                  adapterId,
-                  bpmnProcessId,
-                  workflowModuleId,
-                  found.all().size(),
-                  whichShapeEachOfThemIs(found),
-                  Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1,
-                  howManyAreOpen));
-    }
-    log.warn(
+    throw new IllegalStateException(
         """
-            Camunda8[{}]: {} user task(s) of BPMN process '{}' (workflow module '{}') have no \
-            'zeebe:userTask' extension element, which is a user task a job worker serves, and this \
-            adapter does not accept that shape: {}. The cluster hands out a job of '{}' for such an \
-            element, and a workflow which reaches it stands there until that job's retries are used \
-            up. No @WorkflowService class of this application claims this process, so there is \
-            nothing here for you to do: the file the process stands in travels to the cluster as a \
-            whole, and whoever owns the process may serve such a job with a worker of their own. For \
-            a process this application does claim, the same finding ends the boot. {}""",
-        adapterId,
-        found.all().size(),
-        bpmnProcessId,
-        workflowModuleId,
-        whichShapeEachOfThemIs(found),
-        Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1,
-        howManyAreOpen);
+            Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s': it \
+            carries %d user task(s) with no 'zeebe:userTask' extension element, which is a user \
+            task a job worker serves, and this adapter does not accept that shape: %s. A \
+            @WorkflowService class of this application claims this process, so the application \
+            stands in for it, and VanillaBP serves a user task only where the CLUSTER manages it. \
+            What the shape would cost you: the cluster hands out a job of '%s', nothing here \
+            fetches it, and the workflow stands at the element until the job's retries are used \
+            up. Nobody sees that until somebody waits for a task which never appears, so the boot \
+            ends here instead. Two ways out. Make the user task a Camunda-managed one \
+            ('zeebe:userTask') and set 'External form reference' (zeebe:formDefinition \
+            externalReference) to the task definition your @WorkflowTask method names - VanillaBP \
+            then wires its lifecycle listeners itself. Or take the element out of the model, if \
+            that work is not done any more. Where a worker of your own serves the element, give it \
+            a 'zeebe:taskDefinition' naming that worker's job type, and this check passes over it: \
+            the element is then yours to serve rather than a user task of VanillaBP's. %s A task \
+            already open on such an element stays as it is: its workflow runs on the process \
+            version it was started on, which no change to your model reaches, so finish or cancel \
+            those through your own task list."""
+            .formatted(
+                adapterId,
+                bpmnProcessId,
+                workflowModuleId,
+                found.all().size(),
+                whichShapeEachOfThemIs(found),
+                Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1,
+                howManyAreOpen));
 
   }
 
@@ -2790,8 +2628,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * Ends the boot where a BPMN process this application claims names a job type by a FEEL
-   * expression, and names such a job type without ending anything where no workflow service
-   * claims the process.
+   * expression. A process nobody claims is not looked at.
    * <p>
    * Two attributes say a job type: the <code>zeebe:taskDefinition</code> type of a service-like
    * task and the type of a listener somebody modelled. This adapter subscribes a worker to the
@@ -2801,10 +2638,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * write, and the listener half asks for the same method in its own words. So the finding is
    * named here, in the words it is about.
    * <p>
-   * Who claims the process decides what happens about it, the same way it decides about a user
-   * task a job worker serves and about an ad-hoc subprocess nothing serves - decisions 53 and 54
-   * in the repository's DECISIONS.md. A process nobody claims is somebody else's model and keeps
-   * a WARN.
+   * Only a claimed process is judged, the same way as for a user task a job worker serves and for
+   * an ad-hoc subprocess nothing serves - decisions 53 and 54 in the repository's DECISIONS.md.
    * <p>
    * An element built from an element template is left out, which is the marker of decision 23 and
    * decision 24: its job type names a runtime somebody else deployed, and that runtime may well
@@ -2819,13 +2654,18 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * @param model The model as it was read, with the plain process ids still in it
    * @throws IllegalStateException If a workflow service of this application claims the process
    */
-  private void refuseOrReportJobTypesWrittenAsAnExpression(
+  private void refuseJobTypesWrittenAsAnExpression(
       final String workflowModuleId,
       final String filename,
       final BpmnModelInstance model) {
 
     for (final var process : model.getModelElementsByType(Process.class)) {
       if (!process.isExecutable()) {
+        continue;
+      }
+      // a process nobody claims is somebody else's model and is not judged here, see
+      // DECISIONS.pending/937.md
+      if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, process.getId())) {
         continue;
       }
       final var written = new ArrayList<String>();
@@ -2848,49 +2688,29 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (written.isEmpty()) {
         continue;
       }
-      // the same question the other two refusals ask, answered the same way: the core knows the
-      // workflow aggregate of a claimed process and nothing of an unclaimed one
-      if (aggregateIdNameOf(workflowModuleId, process.getId()) != null) {
-        throw new IllegalStateException(
-            """
-                Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s' \
-                (file '%s'): %d job type(s) of it are written as a FEEL expression: %s. %s A \
-                @WorkflowService class of this application claims this process, so the application \
-                stands in for it, and such an element is where that stops being true. %s Two ways \
-                out. Write a job type which is a fixed name and a @WorkflowTask method of that \
-                name - where the work differs from workflow to workflow, let that method branch on \
-                the workflow aggregate it is handed, which is where the data the expression reads \
-                comes from anyway. Or leave the element to the runtime which does serve it, a \
-                connector or a worker you run beside this application: give the ELEMENT a \
-                'zeebe:modelerTemplate', which is how this adapter is told that an element belongs \
-                to somebody else, and allow such elements with '%s'."""
-                .formatted(
-                    adapterId,
-                    process.getId(),
-                    workflowModuleId,
-                    filename,
-                    written.size(),
-                    String.join("; ", written),
-                    WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_IS,
-                    WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_COSTS,
-                    Camunda8Connectors.propertyKeyOf(adapterId)));
-      }
-      log.warn(
+      throw new IllegalStateException(
           """
-              Camunda8[{}]: {} job type(s) of BPMN process '{}' (file '{}', workflow module '{}') \
-              are written as a FEEL expression: {}. {} What it costs: {} No @WorkflowService class \
-              of this application claims this process, so there is nothing here for you to do: the \
-              file the process stands in travels to the cluster as a whole, and whoever owns the \
-              process may serve those jobs with a worker of their own. For a process this \
-              application does claim, the same finding ends the boot.""",
-          adapterId,
-          written.size(),
-          process.getId(),
-          filename,
-          workflowModuleId,
-          String.join("; ", written),
-          WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_IS,
-          WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_COSTS);
+              Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s' \
+              (file '%s'): %d job type(s) of it are written as a FEEL expression: %s. %s A \
+              @WorkflowService class of this application claims this process, so the application \
+              stands in for it, and such an element is where that stops being true. %s Two ways \
+              out. Write a job type which is a fixed name and a @WorkflowTask method of that \
+              name - where the work differs from workflow to workflow, let that method branch on \
+              the workflow aggregate it is handed, which is where the data the expression reads \
+              comes from anyway. Or leave the element to the runtime which does serve it, a \
+              connector or a worker you run beside this application: give the ELEMENT a \
+              'zeebe:modelerTemplate', which is how this adapter is told that an element belongs \
+              to somebody else, and allow such elements with '%s'."""
+              .formatted(
+                  adapterId,
+                  process.getId(),
+                  workflowModuleId,
+                  filename,
+                  written.size(),
+                  String.join("; ", written),
+                  WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_IS,
+                  WHAT_A_JOB_TYPE_WRITTEN_AS_AN_EXPRESSION_COSTS,
+                  Camunda8Connectors.propertyKeyOf(adapterId)));
     }
 
   }
@@ -2917,8 +2737,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * Ends the boot where a BPMN process this application claims names the form of a user task
-   * by a FEEL expression, and names such a user task without ending anything where no workflow
-   * service claims the process.
+   * by a FEEL expression. A process nobody claims is not looked at.
    * <p>
    * The same answer as for a job type written as an expression, for the same kind of reason:
    * the reference is the task definition, and a task definition is a name. Who claims the
@@ -2935,13 +2754,18 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * @param model The model as it was read, with the plain process ids still in it
    * @throws IllegalStateException If a workflow service of this application claims the process
    */
-  private void refuseOrReportFormReferencesWrittenAsAnExpression(
+  private void refuseFormReferencesWrittenAsAnExpression(
       final String workflowModuleId,
       final String filename,
       final BpmnModelInstance model) {
 
     for (final var process : model.getModelElementsByType(Process.class)) {
       if (!process.isExecutable()) {
+        continue;
+      }
+      // a process nobody claims is somebody else's model and is not judged here, see
+      // DECISIONS.pending/937.md
+      if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, process.getId())) {
         continue;
       }
       final var written = Camunda8TaskWiring
@@ -2952,41 +2776,24 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       if (written.isEmpty()) {
         continue;
       }
-      if (aggregateIdNameOf(workflowModuleId, process.getId()) != null) {
-        throw new IllegalStateException(
-            """
-                Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s' \
-                (file '%s'): %d user task(s) of it name their form by a FEEL expression: %s. %s %s \
-                A @WorkflowService class of this application claims this process, so this is \
-                yours to change: write a fixed name as the external form reference and a \
-                @WorkflowTask method of that name. Where the form to show differs from workflow to \
-                workflow, model one user task per form behind a gateway, or keep one name and let \
-                your task list choose the form from the data of the workflow."""
-                .formatted(
-                    adapterId,
-                    process.getId(),
-                    workflowModuleId,
-                    filename,
-                    written.size(),
-                    String.join("; ", written),
-                    WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_IS,
-                    WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_COSTS));
-      }
-      log.warn(
+      throw new IllegalStateException(
           """
-              Camunda8[{}]: {} user task(s) of BPMN process '{}' (file '{}', workflow module '{}') \
-              name their form by a FEEL expression: {}. {} What it costs: {} No @WorkflowService \
-              class of this application claims this process, so there is nothing here for you to \
-              do: the file the process stands in travels to the cluster as a whole. For a process \
-              this application does claim, the same finding ends the boot.""",
-          adapterId,
-          written.size(),
-          process.getId(),
-          filename,
-          workflowModuleId,
-          String.join("; ", written),
-          WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_IS,
-          WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_COSTS);
+              Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s' \
+              (file '%s'): %d user task(s) of it name their form by a FEEL expression: %s. %s %s \
+              A @WorkflowService class of this application claims this process, so this is \
+              yours to change: write a fixed name as the external form reference and a \
+              @WorkflowTask method of that name. Where the form to show differs from workflow to \
+              workflow, model one user task per form behind a gateway, or keep one name and let \
+              your task list choose the form from the data of the workflow."""
+              .formatted(
+                  adapterId,
+                  process.getId(),
+                  workflowModuleId,
+                  filename,
+                  written.size(),
+                  String.join("; ", written),
+                  WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_IS,
+                  WHAT_A_FORM_REFERENCE_WRITTEN_AS_AN_EXPRESSION_COSTS));
     }
 
   }
@@ -3056,8 +2863,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * Ends the boot where a BPMN process this application claims carries an ad-hoc subprocess with
-   * a <code>zeebe:taskDefinition</code> of its own, and names such an element without ending
-   * anything where no workflow service claims the process.
+   * a <code>zeebe:taskDefinition</code> of its own. A process nobody claims never gets here.
    * <p>
    * The element deploys and the workflow runs up to it. There it stops, because the job of the
    * subprocess is activated and nothing fetches it, and once the retries of that job are used up
@@ -3065,10 +2871,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * none the wiring collects: it produces no task spec, so no validation misses a method.
    * <p>
    * A <code>&#64;WorkflowService</code> class claiming the process says that this application
-   * stands in for it, so the boot ends over such an element. A process nobody claims keeps the
-   * WARN it always had, without the sentences which asked the reader to change something: the file
-   * travels to the cluster as a whole and the model is somebody else's. That split is what
-   * decision 24 in the repository's DECISIONS.md no longer covers for a claimed process.
+   * stands in for it, so the boot ends over such an element. This is what decision 24 in the
+   * repository's DECISIONS.md no longer covers for a claimed process.
    * <p>
    * An element carrying a <code>zeebe:modelerTemplate</code> never reaches this method, which is
    * the marker of decision 23 and decision 24: the Camunda AI agent is an element template on
@@ -3080,7 +2884,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    *          model
    * @throws IllegalStateException If a workflow service of this application claims the process
    */
-  private void refuseOrReportUnservedAdHocSubProcesses(
+  private void refuseUnservedAdHocSubProcesses(
       final String workflowModuleId,
       final String bpmnProcessId,
       final List<String> elementIds) {
@@ -3088,51 +2892,34 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     if (elementIds.isEmpty()) {
       return;
     }
-    if (workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, bpmnProcessId)) {
-      throw new IllegalStateException(
-          """
-              Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s': %d \
-              ad-hoc subprocess(es) of it carry a 'zeebe:taskDefinition' of their own: %s. %s A \
-              @WorkflowService class of this application claims this process, so the application \
-              stands in for it, and this element is where that stops being true. %s Nothing later in \
-              the boot sees it, so the boot ends here instead. Two ways out. Let the MODEL say which \
-              activities to run: put their element ids into 'zeebe:adHoc activeElementsCollection' \
-              and let a task of your application fill the workflow-aggregate attribute that \
-              expression reads - the activities inside the element are then ordinary tasks with \
-              ordinary @WorkflowTask methods behind them. Or leave the element to a runtime which \
-              does serve it, a connector or the Camunda AI agent: such an element carries a \
-              'zeebe:modelerTemplate' as well, and one carrying that attribute is passed over here \
-              without a word. Where a worker you run yourself serves the element, say so instead:
-              %s"""
-              .formatted(
-                  adapterId,
-                  bpmnProcessId,
-                  workflowModuleId,
-                  elementIds.size(),
-                  named(elementIds),
-                  WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_IS,
-                  WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_COSTS,
-                  elementIds
-                      .stream()
-                      .map(elementId -> io.vanillabp.integration.adapter.spi.workflowtask.ImplementedExternally
-                          .propertyLine(workflowModuleId, bpmnProcessId, elementId))
-                      .collect(Collectors.joining("\n"))));
-    }
-    log.warn(
+    throw new IllegalStateException(
         """
-            Camunda8[{}]: {} ad-hoc subprocess(es) of BPMN process '{}' (workflow module '{}') carry \
-            a 'zeebe:taskDefinition' of their own: {}. {} What it costs: {} No @WorkflowService \
-            class of this application claims this process, so there is nothing here for you to do: \
-            the file the process stands in travels to the cluster as a whole, and whoever owns the \
-            process may fetch that job with a worker of their own. For a process this application \
-            does claim, the same finding ends the boot.""",
-        adapterId,
-        elementIds.size(),
-        bpmnProcessId,
-        workflowModuleId,
-        named(elementIds),
-        WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_IS,
-        WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_COSTS);
+            Camunda 8 adapter '%s' does not deploy BPMN process '%s' of workflow module '%s': %d \
+            ad-hoc subprocess(es) of it carry a 'zeebe:taskDefinition' of their own: %s. %s A \
+            @WorkflowService class of this application claims this process, so the application \
+            stands in for it, and this element is where that stops being true. %s Nothing later in \
+            the boot sees it, so the boot ends here instead. Two ways out. Let the MODEL say which \
+            activities to run: put their element ids into 'zeebe:adHoc activeElementsCollection' \
+            and let a task of your application fill the workflow-aggregate attribute that \
+            expression reads - the activities inside the element are then ordinary tasks with \
+            ordinary @WorkflowTask methods behind them. Or leave the element to a runtime which \
+            does serve it, a connector or the Camunda AI agent: such an element carries a \
+            'zeebe:modelerTemplate' as well, and one carrying that attribute is passed over here \
+            without a word. Where a worker you run yourself serves the element, say so instead:
+            %s"""
+            .formatted(
+                adapterId,
+                bpmnProcessId,
+                workflowModuleId,
+                elementIds.size(),
+                named(elementIds),
+                WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_IS,
+                WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_COSTS,
+                elementIds
+                    .stream()
+                    .map(elementId -> io.vanillabp.integration.adapter.spi.workflowtask.ImplementedExternally
+                        .propertyLine(workflowModuleId, bpmnProcessId, elementId))
+                    .collect(Collectors.joining("\n"))));
 
   }
 
@@ -3856,42 +3643,25 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * The variable a BPMN process carries the workflow aggregate's ID in - the one variable
-   * every worker of this adapter reads. A BPMN file may carry a process no
-   * <code>&#64;WorkflowService</code> class claims, and the wiring validation lets such a
-   * process pass rather than ending the boot over a model somebody else owns, so this can
-   * be asked about a process the core knows no aggregate for.
-   * <p>
-   * Answering <code>null</code> is what lets each caller decide what to do about it. A
-   * worker asks for every variable instead of building a list which is missing exactly the
-   * name its handler reads, and the end of such a workflow is not reported at all, because
-   * an execution listener whose job nobody activates would stop the workflow at its own
-   * end. Where the missing name is not this adapter's to work around it refuses the file
-   * instead, which is what a message subscription without a correlation key gets: the
-   * cluster demands one of every executable process, and a substitute would rewrite a
-   * process this application does not serve.
+   * every worker of this adapter reads. Only a claimed process has one: a process nobody
+   * claims has no workflow aggregate, and this adapter wires nothing for it (see
+   * {@code DECISIONS.pending/937.md}).
    *
    * @param workflowModuleId The workflow module
    * @param plainBpmnProcessId The BPMN process id as the core knows it
-   * @return The variable's name, or <code>null</code> if the core cannot tell
+   * @return The variable's name, or <code>null</code> for a process nobody claims
    */
   private String aggregateIdNameOf(
       final String workflowModuleId,
       final String plainBpmnProcessId) {
 
-    try {
-      return workflowTaskWiring.resolveWorkflowAggregateIdName(workflowModuleId, plainBpmnProcessId);
-    } catch (final RuntimeException e) {
-      log.debug(
-          "Camunda8[{}]: the BPMN process '{}' of workflow module '{}' has no known workflow "
-              + "aggregate, so nothing which needs its aggregate-ID variable is wired for it",
-          adapterId,
-          plainBpmnProcessId,
-          workflowModuleId,
-          e);
+    if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, plainBpmnProcessId)) {
       return null;
     }
+    return workflowTaskWiring.resolveWorkflowAggregateIdName(workflowModuleId, plainBpmnProcessId);
 
   }
+
 
   /**
    * What one worker asks the cluster for: the union of the aggregate-ID
