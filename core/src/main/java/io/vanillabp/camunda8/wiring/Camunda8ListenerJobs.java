@@ -173,9 +173,10 @@ public final class Camunda8ListenerJobs {
    *          resolving it from configuration pays nothing on the ordinary path
    * @param work The listener itself
    * @param onceTheClusterHasTheAnswer What to do after the job was completed, or
-   *          <code>null</code> for nothing. It is not run for a job which was failed or left
-   *          to its lock, and it must not throw: the job is answered by the time it runs, so
-   *          a failure of it can no longer be reported to the cluster
+   *          <code>null</code> for nothing. It is not run for a job which was failed, left
+   *          to its lock or no longer held by the cluster, and it must not throw: the job is
+   *          answered by the time it runs, so a failure of it can no longer be reported to
+   *          the cluster
    */
   public static void completeOrFail(
       final String adapterId,
@@ -205,9 +206,16 @@ public final class Camunda8ListenerJobs {
 
   /**
    * Runs the listener and tells the cluster how it went.
+   * <p>
+   * A job the cluster no longer holds is not a failure here. A redelivery of the same job
+   * answered it first, or the transition it gated ended another way, for example because the
+   * element was canceled. Both answers to the cluster, the completion and the failure, take
+   * that as a late answer and go on with a debug line.
    *
-   * @return Whether the job was COMPLETED. A job which was failed, and a job left to its
-   *         lock by a shutdown, answer <code>false</code>
+   * @return Whether the job was COMPLETED by this run. A job which was failed, a job left to
+   *         its lock by a shutdown, and a job the cluster no longer held answer
+   *         <code>false</code>. The follow-up of a job which is gone belongs to whoever
+   *         answered it, or to nobody, because the transition it gated is over
    */
   private static boolean answerTheCluster(
       final String adapterId,
@@ -224,8 +232,8 @@ public final class Camunda8ListenerJobs {
     final var leaseToken = Camunda8JobLease.tokenOf(job);
     try {
       final var variables = work.run();
-      Camunda8CommandRetry
-          .send(
+      return Camunda8CommandRetry
+          .sendUnlessTheJobIsGone(
               adapterId,
               "completion",
               job.getKey(),
@@ -245,7 +253,6 @@ public final class Camunda8ListenerJobs {
                     .send()
                     .join();
               });
-      return true;
     } catch (final Exception e) {
       // work cut off by a shutdown is not a defect of the application, and the job is left
       // to its lock so the next instance of it gets the listener
@@ -255,7 +262,7 @@ public final class Camunda8ListenerJobs {
       final var howToFail = failure.get();
       reportTheFailure(adapterId, kind, job, howToFail, e);
       Camunda8CommandRetry
-          .send(
+          .sendUnlessTheJobIsGone(
               adapterId,
               "failure",
               job.getKey(),
