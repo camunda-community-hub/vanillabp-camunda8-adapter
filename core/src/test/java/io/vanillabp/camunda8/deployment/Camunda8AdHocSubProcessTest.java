@@ -272,11 +272,11 @@ public class Camunda8AdHocSubProcessTest {
         Map.of("Activity_CheckFraud", "checkFraud", "Activity_CheckIncome", "checkIncome"),
         core.taskDefinitions,
         () -> "the two inner tasks are validated like any other task: "
-            + core.taskDefinitions);
+            + ((Reported) core).taskDefinitions);
     assertFalse(
         core.taskDefinitions.containsKey("AdHoc_AdditionalChecks"),
         () -> "the element is not a task of the application: "
-            + core.taskDefinitions);
+            + ((Reported) core).taskDefinitions);
     assertFalse(
         logged.contains(THE_UNSERVED_FLAVOUR),
         () -> "nothing is wrong with this model, so nothing is said about it: "
@@ -322,12 +322,12 @@ public class Camunda8AdHocSubProcessTest {
     assertTrue(
         core.taskDefinitions.containsKey("Activity_CheckFraud"),
         () -> "the activity is validated: "
-            + core.taskDefinitions);
+            + ((Reported) core).taskDefinitions);
     assertEquals(
         null,
         core.taskDefinitions.get("Activity_CheckFraud"),
         () -> "and it has nothing to be served by: "
-            + core.taskDefinitions);
+            + ((Reported) core).taskDefinitions);
 
   }
 
@@ -359,6 +359,49 @@ public class Camunda8AdHocSubProcessTest {
         refused.contains("incident"),
         () -> "and what a workflow reaching it would cost: "
             + refused);
+
+  }
+
+  @Test
+  @DisplayName("The refusal names the line which says that a worker of the application serves the element")
+  public void theRefusalNamesTheLine() {
+
+    final var refused = assertThrows(
+        IllegalStateException.class,
+        () -> wiringOf(new Reported(), false, modelActivatedByAWorker()).run()).getMessage();
+
+    assertTrue(
+        refused.contains("tasks.AdHoc_AgentTools.implemented-externally=true"),
+        () -> "the third way out, for a worker the application runs itself: "
+            + refused);
+
+  }
+
+  @Test
+  @DisplayName("An element marked as served elsewhere is handed to the core and ends nothing")
+  public void aMarkedElementGoesToTheCore() {
+
+    final var core = new Reported() {
+
+      @Override
+      public boolean isImplementedExternally(
+          final String adapterId,
+          final String workflowModuleId,
+          final String bpmnProcessId,
+          final BpmnTaskSpec task) {
+
+        return "AdHoc_AgentTools".equals(task.activityId());
+
+      }
+
+    };
+
+    wiringOf(core, false, modelActivatedByAWorker()).run();
+
+    assertTrue(
+        ((Reported) core).taskDefinitions.containsKey("AdHoc_AgentTools"),
+        () -> "the core holds the rule, a method next to the line included: "
+            + ((Reported) core).taskDefinitions);
 
   }
 

@@ -2411,6 +2411,8 @@ Camunda-managed, and that the WARN asks for nothing.
 
 ### 54. Every element of a claimed process has to be served, and an element template is how the model says it is served elsewhere
 
+*Superseded in part by `DECISIONS.pending/834.md`: the part about a modelled listener no method names. Such a listener now goes to the core's wiring validation, which asks for a method or for `implemented-externally=true`, and an element template counts only on a job element, not on a user task. The ad-hoc subprocess part stands, and a marked ad-hoc subprocess now passes as well.*
+
 A `@WorkflowService` class claiming a BPMN process says that this application stands in for the
 process. So no element of such a process may be left standing: where the cluster creates a job and
 nothing answers it, the workflow stops inside the element, and both ends of that are quiet. There is

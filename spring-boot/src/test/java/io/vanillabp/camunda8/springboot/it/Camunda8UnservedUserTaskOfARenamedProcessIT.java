@@ -26,7 +26,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * A user task no method serves, in an old version of a renamed process, which is created
  * after the rename.
  * <p>
- * A user task may go without a {@code @WorkflowTask} method. For the models it deploys, the
+ * A user task may go without a {@code @WorkflowTask} method where the application marks it with
+ * {@code implemented-externally=true}, a task worked off in a task list say. For the models it deploys, the
  * adapter answers the {@code creating} listener of every user task, served or not, so the task
  * reaches state CREATED and shows up in a task list. Under {@code use-prefix} the listener job
  * type carries the id of the process it was deployed with. After a rename, the jobs of the
@@ -272,6 +273,12 @@ public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheShared
             .formatted(bpmnVersion));
     boot.add("--vanillabp.workflow-modules.test-app.workflows.UnservedRenameOld.allow-full-sync-with-bpms=true");
     boot.add("--vanillabp.workflow-modules.test-app.workflows.UnservedRenameNew.allow-full-sync-with-bpms=true");
+    // the user task no method serves: a task list works it off, which the application says by
+    // its form reference, the one name both generations of the model share
+    boot.add(
+        "--vanillabp.workflow-modules.test-app.workflows.UnservedRenameOld.tasks.reviewByHand.implemented-externally=true");
+    boot.add(
+        "--vanillabp.workflow-modules.test-app.workflows.UnservedRenameNew.tasks.reviewByHand.implemented-externally=true");
     return new SpringApplicationBuilder(DockerTestApplication.class).run(boot.toArray(String[]::new));
 
   }

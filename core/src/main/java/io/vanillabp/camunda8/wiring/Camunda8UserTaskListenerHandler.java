@@ -24,9 +24,9 @@ import lombok.extern.slf4j.Slf4j;
  * <code>zeebe:taskListener</code>s added at deployment deliver <code>creating</code>
  * (→ {@link TaskEvent.Event#CREATED}) and <code>canceling</code>
  * (→ {@link TaskEvent.Event#CANCELED}) as NORMAL JOBS consumed by this handler.
- * The notified <code>&#64;WorkflowTask</code> method is OPTIONAL (a user task
- * without one is simply processed through forms/task lists) and never completes
- * the user task on return - completion arrives via
+ * A user task without a notified <code>&#64;WorkflowTask</code> method is skipped: the
+ * startup let it through only where the application marked it as served by something
+ * else, a form or a task list say. A method never completes the user task on return - completion arrives via
  * <code>ProcessService#completeUserTask</code> with the USER-TASK KEY reported as
  * <code>&#64;TaskId</code>.
  * <p>

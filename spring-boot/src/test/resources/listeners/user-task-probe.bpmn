@@ -49,13 +49,12 @@
     </bpmn:endEvent>
 
     <bpmn:sequenceFlow id="Probe_ToForeign" sourceRef="Probe_Fork" targetRef="Probe_ForeignTask" />
-    <!-- The element template is how a model says that this element belongs to somebody else.
-         Without it the deployment would refuse this process, because a @WorkflowService class
-         of the test claims it and no method of the test names the listener's job type. The
-         template is what lets the model through, and the task listener below then stays
-         somebody else's. -->
-    <bpmn:userTask id="Probe_ForeignTask" name="the user task whose updating listener belongs to somebody else"
-                   zeebe:modelerTemplate="io.vanillabp.test:aUserTaskSomebodyElseListensOn:1">
+    <!-- No method of the test names the job type of the task listener below, and a
+         @WorkflowService class of the test claims this process. The configuration says that
+         somebody else answers that job ('implemented-externally' of the task named by the job
+         type), which is what lets the model through, and the listener then stays somebody
+         else's. -->
+    <bpmn:userTask id="Probe_ForeignTask" name="the user task whose updating listener belongs to somebody else">
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:formDefinition externalReference="theForeignUserTask" />

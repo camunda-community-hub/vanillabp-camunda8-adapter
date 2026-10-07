@@ -10,11 +10,11 @@
     </bpmn:startEvent>
     <bpmn:sequenceFlow id="StillCreating_ToTask" sourceRef="StillCreating_Start" targetRef="StillCreating_Task" />
 
-    <!-- The element template is how a model says that this element belongs to somebody else,
-         and it is what lets this process deploy: a @WorkflowService class of the test claims
-         it, and the deployment refuses a claimed process whose listener no method names. -->
-    <bpmn:userTask id="StillCreating_Task" name="the user task the cluster never finishes creating on its own"
-                   zeebe:modelerTemplate="io.vanillabp.test:aUserTaskNobodyFinishesCreating:1">
+    <!-- A @WorkflowService class of the test claims this process, and a claimed process whose
+         listener no method names does not deploy. The configuration says that somebody else
+         answers the listener's job ('implemented-externally' of the task named by the job type),
+         and that is what lets this process deploy. -->
+    <bpmn:userTask id="StillCreating_Task" name="the user task the cluster never finishes creating on its own">
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:formDefinition externalReference="theTaskTheClusterIsStillCreating" />
