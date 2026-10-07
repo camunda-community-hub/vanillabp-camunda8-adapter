@@ -65,6 +65,10 @@ import lombok.extern.slf4j.Slf4j;
  * it - the newer run answered already, and failing the job would take it away from whoever
  * holds it now.
  * <p>
+ * <b>A job which is gone.</b> {@link #sendUnlessTheJobIsGone} is the same retry for a caller
+ * whose command may arrive after the cluster moved on. It takes the <code>404</code> as a late
+ * answer and tells the caller so, instead of throwing it.
+ * <p>
  * When the bound is reached the original failure is rethrown, so the behaviour after the
  * retries are used up is what it was before this class existed.
  * <p>
@@ -192,6 +196,66 @@ public final class Camunda8CommandRetry {
         }
         ++attempt;
       }
+    }
+
+  }
+
+  /**
+   * Sends an outcome command like {@link #send}, and takes a job the cluster no longer holds
+   * as a late answer rather than as a failure.
+   * <p>
+   * The cluster answers a command to a job it does not hold with HTTP <code>404</code>, on
+   * gRPC with <code>NOT_FOUND</code> ({@link Camunda8Errors#jobAlreadyGone}). For an outcome
+   * command that happens in normal operation. A redelivery of the same job answered it
+   * first, or the element or the workflow of the job ended while the handler was working,
+   * for example because a boundary event fired or the instance was canceled. Either way the
+   * cluster has moved on. Failing the job instead would meet the same <code>404</code>, and
+   * the only effect would be a warning about a failure that never happened. So the answer is
+   * a debug line, and the caller goes on.
+   * <p>
+   * Only the <code>404</code> is taken this way. A <code>400</code> to a completion, a
+   * failure or a BPMN error is a refusal of the request itself, such as variables the cluster
+   * cannot read, and it still escapes. The lock renewal is different: there a
+   * <code>400</code> means the job is no longer locked, and its caller says so itself.
+   *
+   * @param adapterId The adapter instance, for the messages
+   * @param command What is being sent, named the way the log should name it (e.g.
+   *          <code>completion</code>)
+   * @param jobKey The job the command belongs to
+   * @param taskName The task definition respectively job type, as the application knows it
+   * @param lockDeadline When the job's lock expires (epoch milliseconds, i.e.
+   *          {@code ActivatedJob#getDeadline()})
+   * @param shuttingDown Whether the workflow module is going down
+   * @param send The command itself
+   * @return <code>true</code> where the cluster took the command, <code>false</code> where
+   *         it no longer held the job
+   * @throws RuntimeException Every other failure, as {@link #send} throws it
+   */
+  public static boolean sendUnlessTheJobIsGone(
+      final String adapterId,
+      final String command,
+      final long jobKey,
+      final String taskName,
+      final long lockDeadline,
+      final BooleanSupplier shuttingDown,
+      final Runnable send) {
+
+    try {
+      send(adapterId, command, jobKey, taskName, lockDeadline, shuttingDown, send);
+      return true;
+    } catch (final RuntimeException e) {
+      if (!Camunda8Errors.jobAlreadyGone(e)) {
+        throw e;
+      }
+      log.debug(
+          "Camunda8[{}]: the {} of job {} ('{}') found no job - a redelivery answered it already, "
+              + "or its element or workflow ended in the meantime, so there is nothing left to answer",
+          adapterId,
+          command,
+          jobKey,
+          taskName,
+          e);
+      return false;
     }
 
   }
