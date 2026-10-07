@@ -1457,8 +1457,10 @@ public final class Camunda8TaskWiring {
    * <p>
    * Compensation is a second token drawn differently: from the throw event the workflow
    * holds a token per handler, and every one of those handlers is an ordinary workflow task
-   * writing the same workflow aggregate. Measured against a cluster on 2026-09-26, Camunda 8
-   * hands out both handler jobs at the same moment.
+   * writing the same workflow aggregate. Camunda 8 hands out both handler jobs together, and
+   * the two handlers then run at the same time on two threads. Each handler is a job of its
+   * own, so it commits and is retried on its own: when one throws, only that one runs again.
+   * {@code Camunda8CompensationIT} measures this against a cluster.
    * <p>
    * A throw event which names ONE activity compensates that activity's handler and nothing
    * else, so it leaves the workflow with the one token it already had. Such an event is read

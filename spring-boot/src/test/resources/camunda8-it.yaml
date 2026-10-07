@@ -51,6 +51,13 @@ vanillabp:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+        CompensationProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+          adapters:
+            c8:
+              retry-backoff: PT1S
         DecisionProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
@@ -139,6 +146,10 @@ vanillabp:
               adapters:
                 c8:
                   message-time-to-live: PT2S
+        SilentUserTaskProcess:
+          tasks:
+            SUT_task:
+              implemented-externally: true
         TaskProcess:
           adapters:
             c8:

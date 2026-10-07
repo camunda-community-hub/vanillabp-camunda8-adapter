@@ -69,6 +69,10 @@ import lombok.extern.slf4j.Slf4j;
  * an execution slot, which is why the bound is small. A job which is failed after all gets
  * a <code>retry-backoff</code>, which the element's own task header may name instead of the
  * configuration - see {@link Camunda8RetryBackoffHeader};</li>
+ * <li>a failure, a BPMN error or an overdue failure which finds the job GONE is a late
+ * answer and not a failure: a redelivery answered the job first, or its element or workflow
+ * ended while the handler was working. The cluster has moved on, so the handler writes a
+ * debug line and goes on, see {@link Camunda8CommandRetry#sendUnlessTheJobIsGone};</li>
  * <li>a delivery which fails while the workflow module is SHUTTING DOWN is not reported
  * as a job failure: the adapter's state decides, not the exception, because a
  * handler interrupted by the closing client throws like any other. The job keeps its lock
@@ -325,7 +329,7 @@ public class Camunda8JobHandler implements JobHandler {
           job.getRetries() - 1,
           retryBackoff,
           e);
-      Camunda8CommandRetry.send(
+      Camunda8CommandRetry.sendUnlessTheJobIsGone(
           adapterId,
           "failure",
           job.getKey(),
@@ -360,7 +364,7 @@ public class Camunda8JobHandler implements JobHandler {
         // read ONCE and not per attempt: a repeated command carries what the handler
         // produced, and reading the aggregate again would cost a transaction per retry
         final var errorVariables = variablesOf(bpmnProcessId, aggregateIdName, aggregateId);
-        Camunda8CommandRetry.send(
+        Camunda8CommandRetry.sendUnlessTheJobIsGone(
             adapterId,
             "BPMN error",
             job.getKey(),
@@ -510,7 +514,7 @@ public class Camunda8JobHandler implements JobHandler {
                 .propertyKey(adapterId, "async-task-max-age-action"));
     log.warn("Camunda8[{}]: {}", adapterId, message);
     // no retry backoff: with no retries left there is no next attempt to delay
-    Camunda8CommandRetry.send(
+    Camunda8CommandRetry.sendUnlessTheJobIsGone(
         adapterId,
         "overdue failure",
         job.getKey(),

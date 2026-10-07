@@ -42,6 +42,10 @@ import lombok.extern.slf4j.Slf4j;
  * back are repeated where the cluster rejected them for backpressure, and a job which is
  * failed after all gets a <code>retry-backoff</code>.
  * <p>
+ * A job the cluster no longer holds is a late answer and not a failure: a redelivery answered
+ * it first, or the instance ended another way. So either command which meets it writes a
+ * debug line, and the handler goes on.
+ * <p>
  * Why the start event carries a listener the adapter injected is decision 5 in the repository's
  * DECISIONS.md; why this handler stays silent about a job during shutdown is decision 6 in the repository's
  * DECISIONS.md.
@@ -150,7 +154,7 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
                   : "exists already, so this workflow is already ours");
 
       final var variables = result.variables();
-      Camunda8CommandRetry.send(
+      Camunda8CommandRetry.sendUnlessTheJobIsGone(
           adapterId,
           "completion",
           job.getKey(),
@@ -184,7 +188,7 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
           job.getRetries() - 1,
           retryBackoff,
           e);
-      Camunda8CommandRetry.send(
+      Camunda8CommandRetry.sendUnlessTheJobIsGone(
           adapterId,
           "failure",
           job.getKey(),

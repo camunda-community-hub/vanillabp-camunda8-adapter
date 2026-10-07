@@ -391,12 +391,23 @@ so a workflow stands inside the element until something takes that job, with no 
 in any log. A class claiming the process says your application stands in for it, which is why that
 silence ends the boot now.
 
-If a worker of yours answers that job beside VanillaBP, say so in the model: give the ELEMENT a
-`zeebe:modelerTemplate`. That attribute is how this adapter is told that an element belongs to the
-runtime which owns it, the same way it is told about a connector, and such a listener is named in a
-WARN instead. A process none of your `@WorkflowService` classes claims keeps its WARN as well,
-because that model reaches the cluster because of the file it sits in and there is nothing in it for
-you to change.
+If a worker of yours answers that job beside VanillaBP, say so in your configuration, by the job
+type or by the element id:
+
+```properties
+vanillabp.workflow-modules.<module>.workflows.<process>.tasks.<job-type>.implemented-externally=true
+```
+
+A job type with a dot or a colon needs protection in a property key, and the message which ends the
+boot prints the line for Spring Boot and for Quarkus. A `zeebe:modelerTemplate` on the element still
+does it for a job element such as a connector, but not on a user task, where the Camunda Modeler sets
+a template for a form or an assignee. A process none of your `@WorkflowService` classes claims keeps
+its WARN, because that model reaches the cluster because of the file it sits in and there is nothing
+in it for you to change.
+
+**A Camunda-managed user task needs a method, or the same line.** Version 1 ended the boot over a
+user task no method serves, and version 2 does too. Where a task list works the task off on purpose,
+mark it with `implemented-externally=true`, by its element id or by its form reference.
 
 A `zeebe:executionListener` is served as well now. Any element may carry one, so the door is wider
 than version 1's, and the key is what keeps it shut by default. One placement is refused whatever the
@@ -463,6 +474,28 @@ One more case ends the boot. Two processes which call the same process may carry
 elements whose ids differ only in characters a Camunda 8 variable name cannot hold, such as
 `my-task` and `my.task`. Both write one variable, so a handler in the called process could be told a
 round which never ran. The message names both elements. Rename one of them.
+
+### A standard loop in your model ends the boot
+
+Camunda 8 does not run a standard loop. An activity carrying `standardLoopCharacteristics`, drawn to
+repeat it while a condition holds, deploys without a word, runs once, and the workflow moves on.
+Version 1 deployed such a model the same way, so a model which counts on the loop has done its work
+once all along.
+
+Version 2 refuses the model while it deploys it, where one of your `@WorkflowService` classes
+claims the process, and the boot ends there. The message names the activity, the BPMN process and
+the workflow module. A model which deployed in version 1 does not deploy any more, and this is on
+purpose: the upgrade is where you learn that the loop never ran. A process nobody claims gets a
+WARN with the same words, and the boot goes on, because the model is somebody else's.
+
+Change the model to one of the two forms which do repeat an activity. Either draw a loop in the
+sequence flow, with a gateway after the activity which leads back to it while the condition holds.
+Or make the activity a multi-instance element; a handler then reads its round with
+`@MultiInstanceElement`, `@MultiInstanceIndex` and `@MultiInstanceTotal`.
+
+A version the cluster already holds is not refused, because nobody can change it any more. Where
+workflows still run on it, the start logs a WARN naming the version, the activity and how many
+workflows are on it.
 
 ### An ad-hoc subprocess in your model earns a warning, or ends the boot
 

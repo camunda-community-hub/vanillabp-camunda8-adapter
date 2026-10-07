@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_compensation" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!--
+    Two finished service tasks, a compensation boundary event and a handler on each, and one
+    throw event which compensates both. It is the smallest model in which a cluster has to
+    decide whether two handlers run at once, one after the other or together in one unit of
+    work. The throw event names no activity, so it undoes everything which ran before it.
+  -->
+  <bpmn:process id="CompensationProcess" isExecutable="true">
+    <bpmn:startEvent id="Comp_Start">
+      <bpmn:outgoing>Comp_ToBook</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Comp_ToBook" sourceRef="Comp_Start" targetRef="Comp_BookHotel" />
+    <bpmn:serviceTask id="Comp_BookHotel">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="bookHotel" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Comp_ToBook</bpmn:incoming>
+      <bpmn:outgoing>Comp_ToPay</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Comp_ToPay" sourceRef="Comp_BookHotel" targetRef="Comp_ChargePayment" />
+    <bpmn:serviceTask id="Comp_ChargePayment">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="chargePayment" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Comp_ToPay</bpmn:incoming>
+      <bpmn:outgoing>Comp_ToUndo</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Comp_ToUndo" sourceRef="Comp_ChargePayment" targetRef="Comp_UndoEverything" />
+    <bpmn:intermediateThrowEvent id="Comp_UndoEverything">
+      <bpmn:incoming>Comp_ToUndo</bpmn:incoming>
+      <bpmn:outgoing>Comp_ToReport</bpmn:outgoing>
+      <bpmn:compensateEventDefinition id="Comp_UndoEverythingDefinition" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:sequenceFlow id="Comp_ToReport" sourceRef="Comp_UndoEverything" targetRef="Comp_ReportUndone" />
+    <!-- runs only once both handlers are done, which is what the test waits for -->
+    <bpmn:serviceTask id="Comp_ReportUndone">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="reportUndone" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Comp_ToReport</bpmn:incoming>
+      <bpmn:outgoing>Comp_ToEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Comp_ToEnd" sourceRef="Comp_ReportUndone" targetRef="Comp_End" />
+    <bpmn:endEvent id="Comp_End">
+      <bpmn:incoming>Comp_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Comp_BookingCompensated" attachedToRef="Comp_BookHotel">
+      <bpmn:compensateEventDefinition id="Comp_BookingCompensatedDefinition" />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="Comp_CancelBooking" isForCompensation="true">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cancelBooking" />
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Comp_PaymentCompensated" attachedToRef="Comp_ChargePayment">
+      <bpmn:compensateEventDefinition id="Comp_PaymentCompensatedDefinition" />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="Comp_RefundPayment" isForCompensation="true">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="refundPayment" />
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:association id="Comp_BookingUndoneBy" associationDirection="One" sourceRef="Comp_BookingCompensated" targetRef="Comp_CancelBooking" />
+    <bpmn:association id="Comp_PaymentUndoneBy" associationDirection="One" sourceRef="Comp_PaymentCompensated" targetRef="Comp_RefundPayment" />
+  </bpmn:process>
+</bpmn:definitions>

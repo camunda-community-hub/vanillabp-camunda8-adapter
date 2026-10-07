@@ -2411,6 +2411,8 @@ Camunda-managed, and that the WARN asks for nothing.
 
 ### 54. Every element of a claimed process has to be served, and an element template is how the model says it is served elsewhere
 
+*Superseded in part by decision 72: the part about a modelled listener no method names. Such a listener now goes to the core's wiring validation, which asks for a method or for `implemented-externally=true`, and an element template counts only on a job element, not on a user task. The ad-hoc subprocess part stands, and a marked ad-hoc subprocess now passes as well.*
+
 A `@WorkflowService` class claiming a BPMN process says that this application stands in for the
 process. So no element of such a process may be left standing: where the cluster creates a job and
 nothing answers it, the workflow stops inside the element, and both ends of that are quiet. There is
@@ -3257,3 +3259,91 @@ class was green in 29 seconds.
 
 "They are COMPOSED from what the application serves." This stays true for task workers. For
 user-task listeners the workers are composed AND read.
+
+### 71. A standard loop is refused in a claimed process, warned about in one nobody claims, and a held version is warned about while workflows run on it
+
+## What was decided
+
+Camunda 8 does not run a standard loop. An activity carrying `standardLoopCharacteristics` deploys
+without a word, runs once, and the workflow moves on, with no error, no incident and no log line.
+Measured on 8.8.39, 8.9.21 and 8.10.0-rc1. A model which counts on the loop does its work once, and
+somebody finds out in production.
+
+So the deployment reads the model for the marker before anything else, at any depth of its
+subprocesses, and answers in three ways:
+
+- A BPMN process a `@WorkflowService` class claims does not deploy. The message names the activity,
+  the process, the workflow module, what the cluster does with the marker, and the two forms which
+  do repeat an activity: a loop in the sequence flow, or a multi-instance element with
+  `@MultiInstanceElement`, `@MultiInstanceIndex` and `@MultiInstanceTotal`.
+- A process nobody claims gets one WARN with the same words. It is somebody else's model, and the
+  file travels to the cluster as a whole. This is the split decisions 53, 59 and 69 make for the
+  findings they are about, so the same kind of mistake gets the same answer.
+- A version the cluster already holds is never refused, because nobody can change it. Where
+  workflows still run on it, the start of the workflow module logs a WARN naming the version, the
+  activity and how many workflows are on it. A version no workflow runs on any more is passed over.
+  Where the cluster cannot count, the WARN says so instead of a number. The models come from the
+  picture of decision 21, and a count is asked only for a version which carries the marker.
+
+## Why
+
+The price is accepted on purpose: a model which deployed in version 1 does not deploy any more. The
+upgrade is the moment somebody can still change the model, and the refusal is how they learn that
+the loop never ran. Camunda 7 does the same with such a model, and its adapter refuses it the same
+way, so a migration from Camunda 7 to Camunda 8 never stops at a model which was just as wrong on
+Camunda 7.
+
+This is a rule which refuses a model. Introduced after the 2.0 release it would stop an application
+which boots today, which is why it comes with 2.0.
+
+`Camunda8StandardLoopRefusalTest` holds the refusal, the WARN of an unclaimed process, the
+multi-instance element which must deploy, and which held versions are warned about.
+
+See [A standard loop is refused while deploying](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Deviations#a-standard-loop-is-refused-while-deploying).
+
+### 72. A listener nobody here serves is marked in the configuration, and an element template counts on a job element only
+
+Supersedes the listener part of decision 54. The platform decided on 2026-10-07 that every task of a
+claimed BPMN process needs a `@WorkflowTask` method or the property `implemented-externally=true`, and
+that the core holds that rule for every adapter (decision 119 of `adapter-platform-integration`). This entry
+says what it means for this adapter.
+
+**Listeners.** Decision 54 refused a claimed process whose modelled listener no method names, and let
+the listener pass where its element carried a `zeebe:modelerTemplate`. The template was the only
+marker this adapter read for "somebody else serves this", and it was taken for that reason. It does not
+say that on a user task: the Camunda Modeler sets a template there to preset a form or an assignee.
+A developer who set one for that reason and forgot the method of a listener read a WARN instead of a
+refusal, which decision 54 named as its price.
+
+Three markers were weighed. The template, which costs nothing and mixes two statements. A naming rule
+for job types, which costs nothing in the model but forces a worker we do not own to take a name we
+chose; a look at the SDK, the docs and about 230 published templates on 2026-10-07 found no format a
+connector could be recognised by either. And a configuration key, which stands next to the model and
+can go out of date. The maintainer took the key, and the core warns about a line no deployed model
+needs, which answers the objection.
+
+So an unserved listener of a claimed process is now handed to `validateTaskWiring` as a task of its
+own (`BpmnTaskSpec.listener`), and the core asks for a method or for the line. The line names the job
+type or the element id; the element id covers every listener on the element. The adapter's own
+refusal of such a listener and its text are gone. A listener on a JOB element built from an element
+template, a connector for example, still belongs to the runtime which owns the element, as decision
+23 and decision 24 say: it is named in its WARN and does not reach the core. On a user task the
+template does not count any more.
+
+**User tasks.** A Camunda-managed user task of a claimed process without a method passed and was named
+at INFO (`Camunda8UnservedUserTasks`). It now ends the boot unless the line marks it, as version 1
+did: `Camunda8DeploymentAdapter` (1.9.1) wired every user task with `allowNoMethodFound=false`. The
+INFO line is gone. Its listener worker is opened all the same, so a marked user task is created and
+completed without this application.
+
+**Ad-hoc subprocesses.** An ad-hoc subprocess with a job of its own and without a template is still
+refused in a claimed process, and the line now lets it pass for a worker the application runs itself.
+A marked one is handed to the core like a task, so a method next to the line is refused there.
+
+**What the claim is.** The question whether a workflow service claims a process is now asked through
+`WorkflowTaskWiring.isClaimedByAWorkflowService` where this change touched it. The rest of the
+adapter moves to it with story 937.
+
+`Camunda8ListenersReportTest` holds the listener handed to the core, the template on a user task
+which does not count, and the WARN of a templated job element. The spring-boot listener ITs use the
+line instead of a template for the two listeners nobody here answers.
