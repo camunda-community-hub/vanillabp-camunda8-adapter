@@ -433,9 +433,9 @@ public class C8E2eWorkflowService {
   }
 
   /**
-   * The escape hatch at task level: this task is configured with
-   * {@code fetch-variables: all}, so its worker asks the cluster for the complete
-   * variable scope.
+   * The first of two tasks reading {@code bigPayload}, a variable which appears in no BPMN
+   * model. Nothing is configured for it, and its worker asks the cluster for the variable
+   * because the method declares it.
    *
    * @param aggregate The workflow aggregate
    * @param bigPayload A variable no BPMN model mentions

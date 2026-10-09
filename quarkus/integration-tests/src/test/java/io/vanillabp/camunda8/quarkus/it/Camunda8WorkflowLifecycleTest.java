@@ -1312,10 +1312,9 @@ public class Camunda8WorkflowLifecycleTest {
         .get("id")
         .toString();
 
-    // the FIRST task is configured 'fetch-variables: all' - the escape hatch still
-    // reaches its worker and a worker asking for everything keeps working
-    await(() -> invocations("fetchAllTask", aggregateId) >= 1, "the task fetching everything to be delivered");
-    // the SECOND task configures nothing, and its worker still asks for 'bigPayload':
+    // the FIRST task configures nothing, and the declared name reaches its worker
+    await(() -> invocations("fetchAllTask", aggregateId) >= 1, "the first task to be delivered");
+    // the SECOND task configures nothing either, and its worker asks for 'bigPayload' too:
     // the core scanned the name off the method while wiring
     await(() -> invocations("fetchDerivedTask", aggregateId) >= 1, "the task fetching the derived list");
     await(() -> "fetch-all|fetch-derived".equals(resultsOf(aggregateId)), "both tasks to have committed");

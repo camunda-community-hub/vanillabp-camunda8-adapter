@@ -228,7 +228,6 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
                               job.getType(),
                               bpmnProcessId,
                               aggregateIdName,
-                              adapterId,
                               fetchVariables));
                 }
                 final var context = new Camunda8UserTaskInvocationContext(
@@ -467,7 +466,7 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
 
       if (!fetchVariables.covers(name)) {
         throw new IllegalStateException(
-            Camunda8FetchVariables.unfetchedTaskParameter(name, taskDefinition, adapterId, fetchVariables));
+            Camunda8FetchVariables.unfetchedTaskParameter(name, taskDefinition, fetchVariables));
       }
       return job.getVariablesAsMap().get(name);
 

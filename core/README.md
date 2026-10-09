@@ -101,12 +101,13 @@ them off the annotations while it builds the parameter binders. Keeping both wou
 two sources for one answer, and the model was the weaker of them in both directions, so
 `declaredVariablesOf` is gone.
 
-Three answers are deliberate. The list is a sorted `TreeSet`, because job streaming
-compares it. Where any level of the configuration says `all`, the whole worker asks for
-everything, without the guiding failure two conflicting job timeouts would produce -
-fetching more than derived is never wrong. And where the core cannot name the aggregate-id
-variable of a process, the worker asks for everything too, rather than for a list which
-may be missing exactly what its handler reads.
+Two answers are deliberate. The list is a sorted `TreeSet`, because job streaming compares
+it. And where the core cannot name the aggregate-id variable of a process, the worker asks
+for everything, rather than for a list which may be missing exactly what its handler reads.
+No configuration changes the list. The key `fetch-variables` did in snapshots of version
+2.0. The platforms still bind it, at all four levels, only so that
+`Camunda8FetchVariables#rejectTheRemovedKey` can end the start with a message naming every
+key which sets it.
 
 The handlers carry the `Selection` because they need it in a message, not to decide
 anything: `Camunda8JobHandler` and `Camunda8UserTaskListenerHandler` name it when the
@@ -114,9 +115,11 @@ aggregate-id variable is absent, and their invocation contexts throw when
 `getTaskParameter` is asked for a name outside it. That throw is practically
 unreachable - a statically named `@TaskParam` is in the list by construction - and it stays
 for the name a handler computes at runtime, which the scanner cannot see. Its message says
-so, because the first thing a reader checks is the annotation.
+so, because the first thing a reader checks is the annotation, and it points to the workflow
+aggregate as the place to read such a value from.
 
-`Camunda8FetchVariablesTest` holds the derivation, the union and the three deliberate answers,
+`Camunda8FetchVariablesTest` holds the derivation, the union, the two deliberate answers and the
+refused key,
 `Camunda8UnfetchedVariableTest` the two messages the handlers carry the `Selection` for.
 
 ## What an operator gets to see

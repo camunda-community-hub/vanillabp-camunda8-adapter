@@ -20,7 +20,6 @@ import io.vanillabp.camunda8.client.Camunda8Authentication;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.client.Camunda8VirtualThreadExecutor;
 import io.vanillabp.camunda8.quarkus.runtime.VanillaBpCamunda8Properties;
-import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
@@ -164,42 +163,6 @@ public class Camunda8JobTimeoutOverlayTest {
     Assertions.assertFalse(
         overlay.configuredRetryBackoffFor("unknown-module", "SomeProcess", "someTask", "c8").perTask(),
         "and so does the adapter level");
-
-  }
-
-  @Test
-  public void fetchVariablesResolvesThroughAllFourLevels() {
-
-    final var overlay = overlay();
-
-    // The escape hatch is resolved from the same four levels, and the task
-    // level is its point - the case which needs everything is one task
-    Assertions.assertEquals(
-        Camunda8FetchVariables.Mode.ALL,
-        overlay.fetchVariablesFor("test-app", "TaskProcess", "happyTask", "c8"));
-    Assertions.assertEquals(
-        Camunda8FetchVariables.Mode.DERIVED,
-        overlay.fetchVariablesFor("test-app", "TaskProcess", "otherTask", "c8"));
-    Assertions.assertEquals(
-        Camunda8FetchVariables.Mode.ALL,
-        overlay.fetchVariablesFor("test-app", "OtherProcess", "someTask", "c8"));
-    Assertions.assertEquals(
-        Camunda8FetchVariables.Mode.DERIVED,
-        overlay.fetchVariablesFor("unknown-module", "SomeProcess", "someTask", "c8"));
-    Assertions.assertEquals(
-        Camunda8FetchVariables.Mode.DERIVED,
-        overlay.fetchVariablesFor("test-app", "TaskProcess", "happyTask", "unknown-adapter"),
-        "an adapter id which configures nothing derives, which is the default");
-    Assertions.assertEquals(
-        Camunda8FetchVariables.Mode.DERIVED,
-        Arc
-            .container()
-            .instance(Camunda8ClientFactoryRegistry.class)
-            .get()
-            .getFactory("c8")
-            .getConfiguration()
-            .resolvedFetchVariables(),
-        "the adapter-level value reaches the configuration as well");
 
   }
 

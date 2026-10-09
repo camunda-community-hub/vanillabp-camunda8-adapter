@@ -13,6 +13,7 @@ import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.client.Camunda8StartupValidation;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentService;
 import io.vanillabp.camunda8.wiring.Camunda8Connectors;
+import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
 import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 import io.vanillabp.integration.adapter.migration.config.DeploymentFailurePolicy;
 import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
@@ -78,6 +79,9 @@ public class Camunda8ClientProducer {
         .map(Map.Entry::getKey)
         .forEach(adapterId -> {
           final var configuration = toConfiguration(overlay.adapters().get(adapterId));
+          // a removed key is refused before anything else, wherever it is set: the
+          // workers no longer read it, and silence would hide that from the application
+          Camunda8FetchVariables.rejectTheRemovedKey(adapterId, overlay.fetchVariablesKeys(adapterId));
           Camunda8StartupValidation.validateAtStartup(
               adapterId,
               configuration,
@@ -128,7 +132,6 @@ public class Camunda8ClientProducer {
     keys.clientSecret().ifPresent(configuration::setClientSecret);
     keys.jobTimeout().ifPresent(configuration::setJobTimeout);
     keys.retryBackoff().ifPresent(configuration::setRetryBackoff);
-    keys.fetchVariables().ifPresent(configuration::setFetchVariables);
     keys.asyncTaskLockRenewal().ifPresent(configuration::setAsyncTaskLockRenewal);
     // bound only so the removed key can be REJECTED with a guiding message instead of
     // SmallRye's "does not map to any root"

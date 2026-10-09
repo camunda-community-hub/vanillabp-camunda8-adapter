@@ -1561,7 +1561,6 @@ vanillabp:
                 myengine:
                   job-timeout: PT10S     # per task (task definition)
                   retry-backoff: PT30S   # per task, for a slow dependency
-                  fetch-variables: all   # per task, for a @TaskParam nobody can derive
 ```
 
 Limitation: Camunda 8 workers subscribe by job type only. If the SAME task
@@ -2146,19 +2145,24 @@ it builds, so there is nothing to leave out. And where no workflow service serve
 process, the aggregate's id variable cannot be named at all; such a worker asks for
 everything rather than for a list which may be missing exactly what its handler needs.
 
-`vanillabp.adapters.<id>.fetch-variables: all` is the escape hatch, resolvable per
-workflow module, workflow and task. A statically named `@TaskParam` does not need it, which
+No key asks for more. A statically named `@TaskParam` is in the list by construction, which
 leaves the case the scanner cannot see: a name assembled while the delivery runs. Such a
-read is not answered with a null. It fails the delivery with a message
-naming the variable, the list and the property, and saying that the name is not on the
-method - so the cluster raises an incident instead of the handler computing on a value which
-was quietly dropped.
+read is not answered with a null. It fails the delivery with a message naming the variable
+and the list. It says that the name is not on the method and that the value can be read from
+the workflow aggregate. So the cluster raises an incident instead of the handler computing on
+a value which was quietly dropped.
+
+Snapshots of version 2.0 had the key `vanillabp.adapters.<id>.fetch-variables: all`, which
+made a worker fetch everything. It is gone, because in version 2.0 a handler reads its data
+from the workflow aggregate. An application which still sets it, at any of the four levels, does not
+start. The message names every key which sets it and says what applies instead.
 
 Every worker logs at DEBUG what it fetches when it opens. When somebody reports a variable
 their handler no longer sees, that line answers the first question.
 
-`Camunda8FetchVariablesTest` holds the derivation, the union, the escape hatch and that line,
+`Camunda8FetchVariablesTest` holds the derivation, the union, the refused key and that line,
 `Camunda8UnfetchedVariableTest` the two messages a delivery writes for a name outside the list,
+`Camunda8RemovedFetchVariablesTest` of both platforms the start which a set key ends,
 and `Camunda8TaskProcessingIT#aDeclaredTaskParameterIsFetched` with
 `Camunda8WorkflowLifecycleTest#declaredTaskParametersAreFetched` the same against a cluster.
 

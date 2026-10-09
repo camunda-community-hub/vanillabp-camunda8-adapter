@@ -5,8 +5,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
-
 /**
  * Which process variables a worker of this adapter asks the cluster for.
  *
@@ -69,12 +67,17 @@ import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
  * cluster fires itself asks for everything, because VanillaBP copies every variable such a
  * start carries into the workflow aggregate
  * ({@code BpmsInitiatedStartContext#getVariables}) - there is no list to derive. Apart
- * from that one worker kind, a statically named {@code @TaskParam} is now covered by
- * construction. What remains is a name no annotation carries, read through a path the
- * scanner cannot see, and the escape hatch
- * {@code vanillabp.adapters.<id>.fetch-variables: all} is there for it: the delivery fails
- * with a message naming the property rather than quietly handing the method a
- * <code>null</code>.
+ * from that one worker kind, a statically named {@code @TaskParam} is covered by
+ * construction. A name no annotation carries, read through a path the scanner cannot see,
+ * is not fetched: the delivery fails with a message which says so rather than quietly
+ * handing the method a <code>null</code>. The handler reads such a value from the workflow
+ * aggregate instead.
+ * </p>
+ * <p>
+ * There is no setting which asks for more. The key <code>fetch-variables</code> did that in
+ * snapshots of version 2.0 and was removed: a handler reads its data from the workflow
+ * aggregate.
+ * A key still set ends the start ({@link #rejectTheRemovedKey}).
  * </p>
  * <p>
  * Why the list is derived per worker, why it is sorted, and why a name outside it fails the
@@ -83,23 +86,6 @@ import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 public final class Camunda8FetchVariables {
 
   private Camunda8FetchVariables() {
-  }
-
-  /**
-   * What {@code vanillabp.adapters.<id>.fetch-variables} may say.
-   */
-  public enum Mode {
-    /**
-     * Ask for the variables the adapter derived from the deployed models - the default,
-     * and what keeps the payload of a job at what VanillaBP actually reads.
-     */
-    DERIVED,
-    /**
-     * Ask for the complete variable scope, which is what a Camunda 8 worker does when
-     * nobody says otherwise. The escape hatch for the case the derivation misses: an
-     * application reading a process variable with {@code @TaskParam}.
-     */
-    ALL
   }
 
   /**
@@ -168,29 +154,51 @@ public final class Camunda8FetchVariables {
   }
 
   /**
-   * The property key of the escape hatch, at the level a reader has to change it.
+   * The last part of the removed key, at every level it could be set at.
+   */
+  public static final String REMOVED_KEY = "fetch-variables";
+
+  /**
+   * Ends the start where somebody still sets the removed key <code>fetch-variables</code>.
+   * Ignoring it would be silent: a value of <code>all</code> was set for a handler which
+   * reads a variable nobody declared, and that handler would now fail its delivery long
+   * after the start. The message names every key it found and says what applies instead.
    *
    * @param adapterId The adapter id
-   * @return The full property key
+   * @param keys The full keys which set it, at the adapter level and below; empty where
+   *          nobody does
+   * @throws IllegalStateException If any key sets it
    */
-  public static String propertyKey(
-      final String adapterId) {
+  public static void rejectTheRemovedKey(
+      final String adapterId,
+      final List<String> keys) {
 
-    return Camunda8AdapterConfiguration.propertyKey(adapterId, "fetch-variables");
+    if ((keys == null) || keys.isEmpty()) {
+      return;
+    }
+    throw new IllegalStateException(
+        """
+            Camunda 8 adapter '%s' is configured with '%s', which does not exist any more:
+              %s
+            Remove the key. A worker now always asks the cluster for the variables VanillaBP \
+            reads: the variable holding the workflow aggregate's ID, the multi-instance \
+            variables of the element and every name a @TaskParam of the served tasks declares. \
+            A handler which needs more reads it from the workflow aggregate."""
+            .formatted(adapterId, REMOVED_KEY, String.join("\n  ", keys)));
 
   }
 
   /**
    * What a delivery says when the variable holding the workflow aggregate's ID is not
-   * there. Two causes lead here: a workflow started past VanillaBP, and a worker whose
-   * fetched list does not carry the name. The message therefore names the list too.
+   * there. A worker always asks for that variable, so the cause is the process instance: a
+   * workflow started past VanillaBP, or a model which removed the variable. The message
+   * still names the fetched list, because that is the first thing a reader checks.
    *
    * @param what What kind of job it is, capitalized ("Job", "The user-task listener job")
    * @param jobKey The job's key
    * @param taskDefinition The task definition, as the core knows it
    * @param bpmnProcessId The BPMN process id, as the core knows it
    * @param aggregateIdName The variable the aggregate's ID was expected in
-   * @param adapterId The adapter id, for the property key
    * @param selection What this worker fetches
    * @return The message
    */
@@ -200,22 +208,20 @@ public final class Camunda8FetchVariables {
       final String taskDefinition,
       final String bpmnProcessId,
       final String aggregateIdName,
-      final String adapterId,
       final Selection selection) {
 
     return """
         %s '%s' (type '%s') of BPMN process '%s' carries no variable '%s' holding the workflow \
-        aggregate's ID! Either the workflow was not started through VanillaBP (the variable is \
-        written on start), or its worker did not ask for that variable: it fetches %s. Set '%s' \
-        to 'all' to have this worker fetch the complete variable scope."""
+        aggregate's ID! Its worker fetches %s. Either the workflow was not started through \
+        VanillaBP (the variable is written on start), or something in the process removed or \
+        overwrote that variable."""
         .formatted(
             what,
             jobKey,
             taskDefinition,
             bpmnProcessId,
             aggregateIdName,
-            selection.describe(),
-            propertyKey(adapterId));
+            selection.describe());
 
   }
 
@@ -234,14 +240,12 @@ public final class Camunda8FetchVariables {
    *
    * @param name The variable the method asked for
    * @param taskDefinition The task definition, as the core knows it
-   * @param adapterId The adapter id, for the property key
    * @param selection What this worker fetches
    * @return The message
    */
   public static String unfetchedTaskParameter(
       final String name,
       final String taskDefinition,
-      final String adapterId,
       final Selection selection) {
 
     return """
@@ -249,10 +253,8 @@ public final class Camunda8FetchVariables {
         does not fetch that variable: it fetches %s. A worker asks for every name a @TaskParam \
         of its tasks declares, so this name reached the delivery some other way - through a \
         value computed at runtime rather than through @TaskParam("%s"). Either declare it that \
-        way, or read the value from the workflow aggregate, which is what VanillaBP is about, \
-        or set '%s' to 'all' - at task level for this one task, or at workflow, workflow-module \
-        or adapter level."""
-        .formatted(taskDefinition, name, selection.describe(), name, propertyKey(adapterId));
+        way, or read the value from the workflow aggregate, which is what VanillaBP is about."""
+        .formatted(taskDefinition, name, selection.describe(), name);
 
   }
 

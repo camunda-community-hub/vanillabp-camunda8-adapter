@@ -161,6 +161,8 @@ asked for with what the client reports and warns with variable, property key and
 
 ### 8. A worker fetches only the variables somebody actually reads
 
+*Superseded in part by `DECISIONS.pending/938.md`: the key `fetch-variables` is gone, and a start which still sets it ends. No message names it any more.*
+
 Nothing asked for `fetchVariables`, so every activated job carried the complete variable scope of
 its instance, which with a `FULL` sync model means every shared attribute of an aggregate the
 handler is about to load from its own database anyway.
