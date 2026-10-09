@@ -1492,7 +1492,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // the start of a workflow: the execution listener deciding what a start means is
     // ADDED TO THE MODEL here as well, on every start event the process itself holds. A
     // called process starts no workflow of its own, so it gets no listener and no worker,
-    // see DECISIONS.pending/949.md in the repository
+    // see decision 76 in the repository's DECISIONS.md
     if (bpmsInitiatedStartInvoker != null) {
       final var startsAWorkflow = bpmsInitiatedStartInvoker.startsAWorkflowOfItsOwn(workflowModuleId, bpmnProcessId);
       final var bpmsInitiatedStarts = startsAWorkflow
