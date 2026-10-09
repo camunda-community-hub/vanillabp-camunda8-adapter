@@ -1333,4 +1333,28 @@ public class Camunda8MultiInstanceTest {
 
   }
 
+  @Test
+  @DisplayName("only a process called by an expression may be handed a chain while it runs")
+  public void onlyAProcessCalledByAnExpressionMayBeHandedAChain() {
+
+    final var registry = new Camunda8MultiInstance.Registry();
+    registry.registerCallByExpression("FeelCaller", "TheCalled");
+    registry.registerCall("PlainCaller", "CallIt", "CalledByName");
+
+    assertTrue(
+        registry.mayBeHandedAChain("TheCalled"),
+        "a caller naming its process by an expression may reach this one");
+    assertTrue(
+        registry.chainOf("TheCalled", "CalledTask").isEmpty(),
+        "the model alone says nothing about such a chain, which is why the question exists");
+    assertFalse(
+        registry.mayBeHandedAChain("CalledByName"),
+        "a call naming its process statically shows up in chainOf, not in a variable");
+    assertFalse(
+        registry.mayBeHandedAChain("FeelCaller"),
+        "the caller itself is handed nothing");
+    assertFalse(registry.mayBeHandedAChain("Unknown"), "a process nobody calls is handed nothing");
+
+  }
+
 }

@@ -295,6 +295,27 @@ public final class Camunda8MultiInstance {
     }
 
     /**
+     * Whether a process may be handed a chain while it runs, by a caller which names the
+     * process it calls by an expression.
+     * <p>
+     * Such a chain arrives in the variable {@link #CHAIN_VARIABLE} of the process instance and
+     * not in the model, so {@link #chainOf} cannot see it. An extension which fetches the
+     * variables of a task itself, rather than taking them from a job, asks this method whether
+     * it has to fetch that variable too. <code>true</code> does not mean that a chain is there.
+     * It means that one may be there, and only the variable says.
+     *
+     * @param bpmnProcessId The process, as the CLUSTER knows it
+     * @return Whether a process of the same workflow aggregate calls this process by an
+     *         expression
+     */
+    public boolean mayBeHandedAChain(
+        final String bpmnProcessId) {
+
+      return callersNamingTheirProcessByExpression.containsKey(bpmnProcessId);
+
+    }
+
+    /**
      * Works out what every called process inherits from the places it is called from.
      * Called once the processes of a workflow module are wired, because a call activity
      * of one file may name a process of another one.
