@@ -242,7 +242,10 @@ recognising only one of the two codes turns the other transport's answer into a 
 enclose an element of the models this adapter wired. Camunda 8 tells a job its own element id
 and nothing about the iteration it runs in, so the chain is model knowledge read while the
 model is deployed. An extension which wants to name the iteration a task belongs to asks the
-registry instead of reading the models a second time.
+registry instead of reading the models a second time. A chain which a caller hands down by an
+expression is not in the models: it arrives in a variable of the instance. So an extension which
+fetches the variables of a task itself asks `Registry#mayBeHandedAChain` whether it has to fetch that
+variable as well.
 
 `Camunda8TaskWiring.readUserTasksOf` reports the Camunda-managed user tasks of a model and
 changes nothing. Its sibling `userTasksOf` is the deployment path and writes the
