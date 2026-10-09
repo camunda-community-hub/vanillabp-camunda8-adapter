@@ -191,8 +191,11 @@ public final class Camunda8FetchVariables {
   /**
    * What a delivery says when the variable holding the workflow aggregate's ID is not
    * there. A worker always asks for that variable, so the cause is the process instance: a
-   * workflow started past VanillaBP, or a model which removed the variable. The message
-   * still names the fetched list, because that is the first thing a reader checks.
+   * workflow started past VanillaBP, a model which removed the variable, or a call activity
+   * which did not hand it to the called process. The last one is a call activity saying
+   * <code>propagateAllParentVariables="false"</code> without an input mapping of the ID, which
+   * the deployment leaves as modelled (see decision 77 in the repository's DECISIONS.md). The
+   * message still names the fetched list, because that is the first thing a reader checks.
    *
    * @param what What kind of job it is, capitalized ("Job", "The user-task listener job")
    * @param jobKey The job's key
@@ -214,14 +217,18 @@ public final class Camunda8FetchVariables {
         %s '%s' (type '%s') of BPMN process '%s' carries no variable '%s' holding the workflow \
         aggregate's ID! Its worker fetches %s. Either the workflow was not started through \
         VanillaBP (the variable is written on start), or something in the process removed or \
-        overwrote that variable."""
+        overwrote that variable. Where '%s' is called by a call activity, check that call \
+        activity as well: with propagateAllParentVariables="false" the caller's variables stay \
+        behind, the ID among them, so add an input mapping which hands '%s' over."""
         .formatted(
             what,
             jobKey,
             taskDefinition,
             bpmnProcessId,
             aggregateIdName,
-            selection.describe());
+            selection.describe(),
+            bpmnProcessId,
+            aggregateIdName);
 
   }
 

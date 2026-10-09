@@ -137,7 +137,7 @@ public class Camunda8WorkflowViewer {
 
     final Definition definition;
     if (instance != null) {
-      definition = definitionOf(instance);
+      definition = definitionOf(workflowModuleId, instance);
     } else if (historyContext != null) {
       // a context which cannot be resolved (the cluster did not answer, or the
       // instance is gone) must not silently answer with the primary process's definitions
@@ -275,6 +275,7 @@ public class Camunda8WorkflowViewer {
   }
 
   private Definition definitionOf(
+      final String workflowModuleId,
       final ProcessInstance instance) {
 
     final var processDefinitionKey = String.valueOf(instance.getProcessDefinitionKey());
@@ -300,10 +301,13 @@ public class Camunda8WorkflowViewer {
           processDefinitionKey,
           e);
     }
+    // the cluster names the process the way it was deployed, so under a prefix the plain id
+    // is looked up, to report the same id the deployed version is reported with
     return new Definition(
-        processDefinitionKey, instance.getProcessDefinitionId(), instance.getProcessDefinitionVersion() == null
-            ? 0
-            : instance.getProcessDefinitionVersion(), model);
+        processDefinitionKey, plainProcessIdOf(workflowModuleId, instance.getProcessDefinitionId()), instance
+            .getProcessDefinitionVersion() == null
+                ? 0
+                : instance.getProcessDefinitionVersion(), model);
 
   }
 
@@ -346,10 +350,13 @@ public class Camunda8WorkflowViewer {
     for (final var callActivity : definition
         .model()
         .getModelElementsByType(CallActivity.class)) {
-      final var calledProcessId = calledProcessIdOf(callActivity);
-      if (calledProcessId == null) {
+      final var calledProcessIdInTheModel = calledProcessIdOf(callActivity);
+      if (calledProcessIdInTheModel == null) {
         continue;
       }
+      // the model is the one deployed, so under a prefix the call activity names the prefixed
+      // id, while the deployment record knows the plain one
+      final var calledProcessId = plainProcessIdOf(workflowModuleId, calledProcessIdInTheModel);
       elementsByCalledProcess
           .computeIfAbsent(calledProcessId, key -> new ArrayList<>())
           .add(callActivity.getId());
@@ -378,6 +385,43 @@ public class Camunda8WorkflowViewer {
                   .copyOf(elementIds)));
     });
     return definitions;
+
+  }
+
+  /**
+   * The plain BPMN process id of an id the cluster knows, which a name-clash-avoidance mode may
+   * have prefixed. Every id this viewer reports is plain, whichever source it came from. See
+   * decision 77 in the repository's DECISIONS.md.
+   * <p>
+   * The answer is looked up among the processes the workflow module deploys or declares, never
+   * cut out of the id: a prefix somebody cuts off a string drifts apart from the one the
+   * deployment wrote. An id none of them is scoped to stays as it is. That is a process of
+   * another workflow module, or one this application no longer knows.
+   *
+   * @param workflowModuleId The workflow module the id was met in
+   * @param clusterProcessId The id as the cluster or a deployed model names it
+   * @return The plain id, or the given one where none matches
+   */
+  private String plainProcessIdOf(
+      final String workflowModuleId,
+      final String clusterProcessId) {
+
+    if (clusterProcessId == null) {
+      return null;
+    }
+    final var deployedProcesses = clientFactory.getDeployedProcesses();
+    return java.util.stream.Stream
+        .concat(
+            deployedProcesses
+                .ofWorkflowModule(workflowModuleId)
+                .stream()
+                .map(Camunda8DeployedProcesses.DeployedProcess::bpmnProcessId),
+            deployedProcesses
+                .processesNobodyDeployedOf(workflowModuleId)
+                .stream())
+        .filter(plain -> clusterProcessId.equals(scopedProcessId.apply(workflowModuleId, plain)))
+        .findFirst()
+        .orElse(clusterProcessId);
 
   }
 

@@ -67,7 +67,8 @@ public class Camunda8GlobalPushByTheStartRowTest {
   private final List<Long> writtenTo = new ArrayList<>();
 
   /**
-   * How often the query API was searched for the workflow.
+   * How often the query API was searched, each search noted with the number of writes which
+   * happened before it.
    */
   private final List<Object> searches = new ArrayList<>();
 
@@ -76,7 +77,7 @@ public class Camunda8GlobalPushByTheStartRowTest {
 
     final var search = mock(ProcessInstanceSearchRequest.class, RETURNS_SELF);
     Mockito.lenient().when(client.newProcessInstanceSearchRequest()).thenAnswer(invocation -> {
-      searches.add(search);
+      searches.add(writtenTo.size());
       return search;
     });
     // a read model whose exporter stopped before the workflow was started
@@ -94,7 +95,11 @@ public class Camunda8GlobalPushByTheStartRowTest {
     push(String.valueOf(STARTED_INSTANCE), false);
 
     assertEquals(List.of(STARTED_INSTANCE), writtenTo, "the values belong to the instance the start row names");
-    assertEquals(List.of(), searches, "a workflow the engine answers for by key needs no read model");
+    assertEquals(
+        List.of(1),
+        searches,
+        "a workflow the engine answers for by key needs no read model: it is written first, and the one search"
+            + " afterwards looks for the called instances below it");
     assertTrue(
         output
             .getAllOfThisTest()

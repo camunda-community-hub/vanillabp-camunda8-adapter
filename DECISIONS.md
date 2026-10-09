@@ -3496,3 +3496,58 @@ listener at all, so this concerns snapshots of 2.0 only.
 
 `Camunda8CalledProcessDeploymentTest` holds it without a cluster: the start events of the called process carry no
 listener and the process element no end listener, while the caller gets both.
+
+### 77. A setting of a called process is read under the called process' own id
+
+Proposed by story 950. Decided by the maintainer on 2026-10-09.
+
+The platform decided on 2026-10-09, in a decision of `adapter-platform-integration` of its own,
+that a task belongs to the BPMN process which contains it. For a task of a called process that is
+the called process. This adapter followed
+the rule where the cluster hands a job to the application. A process service belongs to the
+process at the top, though, so its requests name that process, and three places used that id for
+something which belongs to a called process.
+
+**The message time-to-live.** `message-time-to-live` resolves down to
+`workflows.<process>.messages.<message>`. Whoever configures it for a message caught in a called
+process writes it under the called process, and a correlation read it under the process at the
+top. The cluster does not say which subscription will take a message, and a message may be
+published before anything waits for it, so a subscription search cannot answer. The deployed
+models can: the process of the call where its own model waits for the message, otherwise the one
+other process of the workflow module whose model does. Where none does, or several others do, the
+process of the call stays the answer, as before. A start by message reads the adapter level only,
+as before.
+
+**A push without a task.** `aggregateChanged(aggregate)` wrote only into the process instance at
+the top. A called instance gets a copy of its caller's variables when the call activity starts it,
+and nothing the caller is told later. Measured on 2026-10-09 against `camunda/camunda:8.10.0`
+(`Camunda8CallActivityVariablesCanaryIT#aLaterVariableOfTheCallerDoesNotReachTheCalledInstance`):
+a variable set on the caller after the call does not reach the called instance. So a gateway in a
+called process decided on the values of the moment of the call. The push now also writes into
+every running instance whose parent it wrote, which carries the aggregate's ID, level by level. A
+called process without the ID has an aggregate of its own, and the walk stops there.
+
+This half needs the search. The instance at the top is still written first, by the key of the start
+row where there is one, so the read model never holds that write up (decision 64). A called
+instance the exporter has not reported yet keeps the values of its call. A search which fails sends
+the entry back to the outbox, which repeats the whole push; writing the same values twice is
+harmless. Neither case was served before: the called instances never got the push at all.
+
+**The viewer.** Under `use-prefix` the deployed model names the process behind a call activity
+with its prefix, so the lookup in the deployment record, which keeps plain ids, found nothing and
+the called process was left out. A definition only the cluster still holds was reported under its
+prefixed id, while the deployed version was reported under its plain one. Every id the viewer
+reports is plain now. It looks the plain id up among the processes the workflow module deploys or
+declares, rather than cutting the prefix off, because a prefix cut off a string drifts apart from the one
+the deployment wrote, and keeps an id none of them matches as it is.
+
+**What stays, and is said instead.** A call activity saying `propagateAllParentVariables="false"`
+is left as modelled, as decision 30 says. That keeps the aggregate's ID in the caller as well, so
+every job of a called process sharing the aggregate fails. The adapter does not write an input
+mapping of the ID there, for the reason decision 30 gives for the chain. The README section "A
+called process", the wiki page `Configuration` and the message of a job without the ID now name the
+call activity and the fix.
+
+`Camunda8SettingsOfACalledProcessTest` holds the time-to-live and the push,
+`Camunda8ViewerUnderAPrefixTest` the viewer, and `Camunda8FetchVariablesTest#theMessagesNameTheWayOut`
+the message.

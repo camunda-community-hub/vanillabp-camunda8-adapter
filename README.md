@@ -983,6 +983,15 @@ published long before the workflow reaches it are different messages in one appl
 number for the whole application has to be wrong for one of them. Nothing configured means nothing
 set: the client's own default applies, as it always did.
 
+`<w>` is the process whose model waits for the message. A correlation goes through the process
+service of the process at the top, but the event which waits may sit in a called process, and
+that is where its time-to-live is configured. The cluster does not say which subscription will
+take a message, and a message may be published before anything waits for it, so the deployed
+models answer: the process of the call where its own model waits for the message, otherwise the
+one other process of the workflow module whose model does. Where none does, or several others
+do, the process of the call is used (`Camunda8SettingsOfACalledProcessTest`, decision 77 in the
+repository's DECISIONS.md).
+
 **Shortening it does not buy a short deduplication window.** The cluster forgets an expired message
 id on a sweep of its own rather than at the moment it expires. Measured against
 `camunda/camunda:8.9.16` on 2026-08-27, a two-second time-to-live was still deduplicating five
@@ -2258,6 +2267,13 @@ The adapter-native process definition id is the **process definition key**, the 
 context of a call activity its called **process instance key**, and the XML returned is the
 model AS DEPLOYED (VanillaBP's wiring modifications included).
 
+Every BPMN process id the viewer reports is the plain one the application wrote, from either
+source. Under `use-prefix` the deployed model names the process behind a call activity with its
+prefix, and the cluster names a definition of a previous version that way too. The viewer looks
+the plain id up among the processes the workflow module deploys or declares, rather than cutting
+the prefix off, and keeps an id none of them matches as it is
+(`Camunda8ViewerUnderAPrefixTest`, decision 77 in the repository's DECISIONS.md).
+
 `Camunda8WorkflowViewerTest` covers what comes from the deployment, `Camunda8ViewerQueryTest`
 what comes from the cluster and what each answer does where the cluster stops answering, and
 `Camunda8ViewerApiIT`, `Camunda8LocatingWorkflowsIT#theViewerFindsTheWorkflow` and
@@ -2539,6 +2555,18 @@ request carries no key, where the key is not a number, where other adapter ids s
 cluster (a key does not say which of them deployed the process), and where the engine answers
 `404` because the instance is gone. Why a stopped exporter may slow a push down but not lose
 it is decision 64 in the repository's `DECISIONS.md`.
+
+The global push also writes into the called instances below the workflow. A called instance
+gets a copy of its caller's variables when the call activity starts it, and nothing the caller
+is told later (`Camunda8CallActivityVariablesCanaryIT#aLaterVariableOfTheCallerDoesNotReachTheCalledInstance`
+measures it). So a gateway in a called process used to decide on the values of the moment of
+the call. After the instance at the top is written, the adapter searches the running instances
+whose parent it is and which carry the aggregate's ID, writes into each, and goes on one level
+down. A called process without the ID has an aggregate of its own, and the walk stops there.
+This half needs the search, so a called instance the exporter has not reported yet keeps the
+values of its call, and a search which fails sends the entry back to the outbox. Before this
+change the called instances never got the push at all. `Camunda8SettingsOfACalledProcessTest`
+holds it, and decision 77 in the repository's DECISIONS.md gives the reasons.
 
 The push into the scope of a task does not search where the row of the task says enough. The
 core hands in that row as `PhaseTwoRequest#taskRecord()` where this adapter left the task open:
@@ -2894,6 +2922,15 @@ such a call activity. That is what it already means today, and writing it says w
 relies on. A call activity saying `false` is left alone, and it stays out of the chain as
 well: the modeller switched the caller's context off on purpose, the values never reach the
 called instance, and there is nothing to report.
+
+The chain is not the only thing which stays behind. The variable holding the workflow
+aggregate's ID is one of the caller's variables as well, so it does not reach the called
+instance either. Where the called process works on the caller's aggregate, every job of it
+then fails: the worker finds no aggregate ID, and the job ends in an incident once its retries
+are used up. The incident says so and names the call activity as one cause. The fix is an input
+mapping of the ID variable at the call activity, for example
+`<zeebe:input source="=id" target="id" />`. The adapter does not write it, for the same reason
+it leaves the attribute alone (see decision 77 in the repository's DECISIONS.md).
 
 What that costs where a call graph is not a straight line:
 
