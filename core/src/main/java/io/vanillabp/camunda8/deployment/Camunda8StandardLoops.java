@@ -21,7 +21,8 @@ import io.camunda.zeebe.model.bpmn.instance.Process;
  * condition holds. Camunda 8 does not implement it: the cluster deploys the model, runs the
  * activity once and moves on, with no error, no incident and no log line. Measured on 8.8.39,
  * 8.9.21 and 8.10.0-rc1. So a model this boot deploys is refused where the application claims
- * its process, and warned about where nobody does. A version the cluster already holds is
+ * its process. A process nobody claims is somebody else's model and is not looked at (see
+ * decision 73 of {@code DECISIONS.md}). A version the cluster already holds is
  * reported where workflows still run on it, because nobody can change that model any more.
  * <p>
  * The model API has no type for the marker. It keeps the element in the XML all the same,
@@ -148,30 +149,6 @@ public final class Camunda8StandardLoops {
       found.add(new HeldVersion(heldModel.version(), elementIds, running));
     }
     return found;
-
-  }
-
-  /**
-   * The warning about a model this boot deploys for a BPMN process no
-   * <code>&#64;WorkflowService</code> class of the application claims. Such a model is somebody
-   * else's, and the file it stands in travels to the BPMS as a whole, so the boot goes on.
-   *
-   * @param elementIds The activities carrying one, at least one
-   * @param bpmnProcessId The PLAIN BPMN process ID
-   * @param workflowModuleId The workflow module ID
-   * @return The text of the warning
-   */
-  public static String warningAboutAnUnclaimedProcess(
-      final List<String> elementIds,
-      final String bpmnProcessId,
-      final String workflowModuleId) {
-
-    return """
-        BPMN process '%s' of workflow module '%s' carries a standard loop \
-        (standardLoopCharacteristics) on %s. %s No @WorkflowService class of this application \
-        claims this process, so the boot goes on: whoever owns the process has to change it. For a \
-        process this application does claim, the same finding ends the boot."""
-        .formatted(bpmnProcessId, workflowModuleId, described(elementIds), WHAT_THE_CLUSTER_DOES);
 
   }
 

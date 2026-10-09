@@ -196,23 +196,20 @@ public class Camunda8StandardLoopRefusalTest {
   }
 
   @Test
-  @DisplayName("A standard loop in a process nobody claims is a warning, and the boot goes on")
-  public void aStandardLoopNobodyClaimsIsAWarning(
+  @DisplayName("A standard loop in a process nobody claims is not looked at, and the boot goes on")
+  public void aStandardLoopNobodyClaimsIsNotLookedAt(
       final CapturedOutput output) {
 
     assertDoesNotThrow(() -> deploy(model(A_TASK_WITH_A_STANDARD_LOOP), new ACoreClaimingNothing()));
 
     final var logged = output.getAllOfThisTest();
-    assertTrue(
-        logged.contains("BPMN process 'LoanApproval' of workflow module 'loan-approval' carries a standard loop"),
-        () -> "the process and the module: "
-            + logged);
-    assertTrue(
-        logged.contains("No @WorkflowService class of this application claims this process"),
-        () -> "and why the boot goes on: "
+    assertFalse(
+        logged.contains("carries a standard loop"),
+        () -> "somebody else's model is not judged: "
             + logged);
 
   }
+
 
   @Test
   @DisplayName("A standard loop inside a subprocess is found as well")

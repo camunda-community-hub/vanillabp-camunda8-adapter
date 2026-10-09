@@ -165,14 +165,6 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
           logged.contains("test-app__RenamedProcessOld__renameFinished"),
           () -> "and name the job type the jobs of those workflows carry: "
               + logged);
-      assertTrue(
-          logged.contains("RenameNeighbour"),
-          () -> "the process no workflow service claims has to be named while starting: "
-              + logged);
-      assertTrue(
-          logged.contains("renamed-process-v2.bpmn"),
-          () -> "together with the file it came with, which is where it is taken out: "
-              + logged);
     } finally {
       application.close();
     }
@@ -316,6 +308,9 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
     boot
         .add("--vanillabp.workflow-modules.test-app.adapters.c8.resources-location=classpath*:renamed-process/%s"
             .formatted(bpmnVersion));
+    // the second generation of the file carries a process no workflow service claims, and
+    // the start ends over it unless the application says that it is somebody else's
+    boot.add("--vanillabp.workflow-modules.test-app.workflows.RenameNeighbour.implemented-externally=true");
     return new SpringApplicationBuilder(DockerTestApplication.class).run(boot.toArray(String[]::new));
 
   }

@@ -399,39 +399,23 @@ public class Camunda8JobWorkerUserTasksReportTest {
   }
 
   @Test
-  @DisplayName("A process nobody claims keeps its warning, and the boot goes on")
-  public void anUnclaimedProcessIsNamedAndBoots(
+  @DisplayName("A process nobody claims is not looked at, and the boot neither waits nor counts")
+  public void anUnclaimedProcessIsNotLookedAt(
       final CapturedOutput output) {
 
     final var logged = whatTheBootSaid(output, aUserTaskCarryingNothing());
 
-    assertTrue(
-        logged.contains(THE_FINDING),
-        () -> "a reader still has to learn that the element is there: "
-            + logged);
-    assertTrue(
-        logged.contains("'Activity_ApproveTheLoan'") && logged.contains(THE_SHAPE_NO_SEARCH_FINDS),
-        () -> "named by its element id and by its shape, as before: "
-            + logged);
-    assertTrue(
-        logged.contains(THE_REASON),
-        () -> "with the same reason the refusal gives: "
-            + logged);
-    assertTrue(
-        logged.contains("No @WorkflowService class of this application claims this process"),
-        () -> "and told why this one is a warning: "
-            + logged);
     assertFalse(
-        logged.contains(THE_WAY_OUT_THROUGH_A_METHOD) || logged.contains(THE_WAY_OUT_THROUGH_THE_MODEL),
-        () -> "nothing asks the reader to change a model which is none of ours: "
+        logged.contains(THE_FINDING),
+        () -> "somebody else's model is not judged: "
             + logged);
     assertEquals(
-        1,
+        0,
         lastFactory.waits.get(),
-        "the boot goes on, so it waits for the cluster before it counts: a cluster which "
-            + "starts together with the application still gives the number");
+        "nothing is counted for such a process, so nothing waits for the cluster either");
 
   }
+
 
   @Test
   @DisplayName("A claimed process whose user task carries a task definition of its own boots")
@@ -451,17 +435,18 @@ public class Camunda8JobWorkerUserTasksReportTest {
   }
 
   @Test
-  @DisplayName("A process nobody claims keeps its warning for version 1's shape too")
-  public void anUnclaimedProcessIsNamedForTheFormKeyShapeToo(
+  @DisplayName("A process nobody claims is not looked at for version 1's shape either")
+  public void anUnclaimedProcessIsNotLookedAtForTheFormKeyShape(
       final CapturedOutput output) {
 
     final var logged = whatTheBootSaid(output, aUserTaskCarryingAFormKey());
 
-    assertTrue(
-        logged.contains(THE_SHAPE_A_SEARCH_FINDS) && logged.contains("'Activity_SignTheContract'"),
-        () -> "the shape a search of the models finds is named here as well: "
+    assertFalse(
+        logged.contains(THE_FINDING),
+        () -> "somebody else's model is not judged: "
             + logged);
 
   }
+
 
 }

@@ -904,9 +904,8 @@ public final class Camunda8TaskWiring {
    * {@value #TASKDEFINITION_USERTASK_WORKER_V1}, which is how VanillaBP 1 worked up to its
    * release 1.6.3, and this adapter does not take that shape. So the reader asks neither
    * whether something would fetch that job nor whether the element names a
-   * <code>formKey</code>. What the deployment does with the answer depends on the process: it
-   * ends the boot for one a workflow service of the application claims, and it names the
-   * elements for one nobody claims.
+   * <code>formKey</code>. The deployment ends the boot over the answer for a process a workflow
+   * service of the application claims, and asks nothing about a process nobody claims.
    * <p>
    * The element carrying a <code>zeebe:taskDefinition</code> is left out, and it is the one
    * case which is not this shape. Such an element is served by a worker of the APPLICATION
