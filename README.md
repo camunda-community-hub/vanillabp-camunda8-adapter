@@ -2293,7 +2293,7 @@ it right away: no listener, no multi-instance mapping and no correlation key is 
 worker is opened for its jobs, and no check ends the boot or warns because of it. What belongs to the
 whole file still reaches it, the prefix of `use-prefix` and the checks of a file the cluster would
 refuse. The question is `WorkflowTaskWiring#isClaimedByAWorkflowService`, everywhere in this adapter.
-Why: `DECISIONS.pending/937.md`. `Camunda8UnclaimedProcessTest` holds it.
+Why: [decision 73](./DECISIONS.md#73-a-process-nobody-claims-is-left-as-it-was-modelled). `Camunda8UnclaimedProcessTest` holds it.
 
 ### Keeping workflow modules apart
 

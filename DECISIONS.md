@@ -92,7 +92,7 @@ coming back.
 
 ### 5. The deployed model is rewritten so the cluster can do what an embedded engine does for free
 
-*Superseded in part by `DECISIONS.pending/937.md`: a file whose unclaimed process waits for a message without a correlation key is not refused any more. The cluster rejects it, and this adapter writes nothing into such a process.*
+*Superseded in part by decision 73: a file whose unclaimed process waits for a message without a correlation key is not refused any more. The cluster rejects it, and this adapter writes nothing into such a process.*
 
 Camunda 8 runs remote and answers only what its protocol carries, so several things an embedded
 engine offers as a side effect have to be put INTO the model before it reaches the cluster.
@@ -2119,7 +2119,7 @@ claims. The listener holds the instance until its job is answered, and for such 
 has no workflow service to answer with - the start would fail, the retries would run out and the
 instance would sit in an incident it never had before. So the wiring asks first, with the same
 question the end and cancel listeners ask: does this process have a workflow aggregate id name? A
-process without one is left exactly as it was. Since `DECISIONS.pending/937.md` the question is
+process without one is left exactly as it was. Since decision 73 the question is
 `WorkflowTaskWiring.isClaimedByAWorkflowService`, asked once at the top of `wireBpmn`, and the rest of
 the model of such a process is left as it was too.
 
@@ -2362,7 +2362,7 @@ See [Release lines](./README.md#release-lines).
 
 ### 53. A user task a job worker serves is refused in a process the application claims, and only warned about in one it does not
 
-*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more. No WARN, and no wait for the cluster to count its open jobs.*
+*Superseded in part by decision 73: a process nobody claims is not looked at any more. No WARN, and no wait for the cluster to count its open jobs.*
 
 Camunda 8 knows two kinds of user task. One carries `zeebe:userTask` and the CLUSTER manages it,
 which is the kind this adapter serves. The other carries none and a job worker serves it, which is
@@ -2417,7 +2417,7 @@ Camunda-managed, and that the WARN asks for nothing.
 
 ### 54. Every element of a claimed process has to be served, and an element template is how the model says it is served elsewhere
 
-*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more, so it keeps no WARN.*
+*Superseded in part by decision 73: a process nobody claims is not looked at any more, so it keeps no WARN.*
 
 *Superseded in part by decision 72: the part about a modelled listener no method names. Such a listener now goes to the core's wiring validation, which asks for a method or for `implemented-externally=true`, and an element template counts only on a job element, not on a user task. The ad-hoc subprocess part stands, and a marked ad-hoc subprocess now passes as well.*
 
@@ -2683,7 +2683,7 @@ the scope, which is what it cost before.
 
 ### 59. A job type written as an expression is refused in a claimed process, and warned about in one nobody claims
 
-*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more, so it keeps no WARN.*
+*Superseded in part by decision 73: a process nobody claims is not looked at any more, so it keeps no WARN.*
 
 A job type is the NAME a worker subscribes to. This adapter opens one worker per job type it reads
 out of a model and subscribes exactly the string the model says, so a job type written as a FEEL
@@ -3188,7 +3188,7 @@ boot. See [Connecting to a Camunda 8 cluster](./README.md#connecting-to-a-camund
 
 ### 69. A form reference written as an expression is refused in a claimed process, and warned about in one nobody claims
 
-*Superseded in part by `DECISIONS.pending/937.md`: a process nobody claims is not looked at any more, so it keeps no WARN.*
+*Superseded in part by decision 73: a process nobody claims is not looked at any more, so it keeps no WARN.*
 
 The external form reference of a Camunda-managed user task is its task definition. The core finds
 the `@WorkflowTask` method by it, and the job type of the lifecycle listeners is
@@ -3274,7 +3274,7 @@ user-task listeners the workers are composed AND read.
 
 ### 71. A standard loop is refused in a claimed process, warned about in one nobody claims, and a held version is warned about while workflows run on it
 
-*Superseded in part by `DECISIONS.pending/937.md`: a standard loop in a process nobody claims is not looked at any more, so it gets no WARN.*
+*Superseded in part by decision 73: a standard loop in a process nobody claims is not looked at any more, so it gets no WARN.*
 
 ## What was decided
 
@@ -3356,8 +3356,47 @@ A marked one is handed to the core like a task, so a method next to the line is 
 
 **What the claim is.** The question whether a workflow service claims a process is asked through
 `WorkflowTaskWiring.isClaimedByAWorkflowService`, everywhere in this adapter since
-`DECISIONS.pending/937.md`.
+decision 73.
 
 `Camunda8ListenersReportTest` holds the listener handed to the core, the template on a user task
 which does not count, and the WARN of a templated job element. The spring-boot listener ITs use the
 line instead of a template for the two listeners nobody here answers.
+
+### 73. A process nobody claims is left as it was modelled
+
+Proposed by story 937. Decided by the maintainer on 2026-10-07.
+
+The platform decided on 2026-10-07 that a process nobody claims is not supported, in a decision of
+`adapter-platform-integration` of its own. The core ends the start over such a process unless the
+application marks it with
+`vanillabp.workflow-modules.<module>.workflows.<process>.implemented-externally=true`. So a process
+nobody claims which reaches this adapter is one somebody else serves, and this adapter leaves it
+alone:
+
+- `wireBpmn` returns for it before anything else. No user-task listener, no start, end or cancel
+  listener, no multi-instance mapping and no correlation key is written into its model, no worker
+  is opened for its jobs, and its start messages are not reported to the core.
+- No check ends the start or warns because of it. That ends the WARNs of decisions 53, 54, 59, 69 and
+  71 for a process nobody claims, the WARN about a listener nobody serves, and the wait for the
+  cluster which decision 53 took to count the open jobs of such a process. The refusals for a
+  claimed process stay as they were.
+- The refusal of a file whose unclaimed process waits for a message without a correlation key is
+  gone (decision 5). The cluster rejects such a file all the same, and its message says so. Writing
+  a key into a process this application does not serve was ruled out before, and the boot now
+  leaves the answer to the cluster.
+
+What still reaches such a process is what belongs to the whole file: the prefix of `use-prefix`,
+the checks of a file the cluster would refuse whoever serves its processes (a `start` listener on a
+start event, a FEEL expression which carries the prefix already), and a message element the file
+shares with a claimed process, which gets the correlation key of the claimed one.
+
+Every question whether a process is claimed goes to `WorkflowTaskWiring.isClaimedByAWorkflowService`.
+`aggregateIdNameOf` asks it first and is only there for the name of the variable.
+
+The price: for an application which ran an earlier snapshot of 2.0, a file with a process nobody
+claims is deployed as a new process version once, because the listeners and mappings this adapter
+used to write into that process are gone. The maintainer accepted that.
+
+`Camunda8UnclaimedProcessTest` holds the untouched model, the missing key, the shared message and
+the missing workers. The tests of decisions 53, 59, 69 and 71 hold that a process nobody claims is
+not looked at.

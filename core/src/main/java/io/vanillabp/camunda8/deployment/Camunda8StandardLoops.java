@@ -22,7 +22,7 @@ import io.camunda.zeebe.model.bpmn.instance.Process;
  * activity once and moves on, with no error, no incident and no log line. Measured on 8.8.39,
  * 8.9.21 and 8.10.0-rc1. So a model this boot deploys is refused where the application claims
  * its process. A process nobody claims is somebody else's model and is not looked at (see
- * {@code DECISIONS.pending/937.md}). A version the cluster already holds is
+ * decision 73 of {@code DECISIONS.md}). A version the cluster already holds is
  * reported where workflows still run on it, because nobody can change that model any more.
  * <p>
  * The model API has no type for the marker. It keeps the element in the XML all the same,

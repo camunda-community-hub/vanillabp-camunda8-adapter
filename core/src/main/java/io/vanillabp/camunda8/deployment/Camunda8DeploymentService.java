@@ -1321,7 +1321,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     final var scopedBpmnProcessId = scopedProcessId(workflowModuleId, bpmnProcessId);
     // a process nobody claims travels with its file and is left as it was modelled: no
     // listener and no mapping is written into it, no worker serves its jobs, and no check
-    // ends the boot or warns because of it (see DECISIONS.pending/937.md). The core ended the
+    // ends the boot or warns because of it (see decision 73 of DECISIONS.md). The core ended the
     // start over it already unless the application marked it as somebody else's
     if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, bpmnProcessId)) {
       log.debug(
@@ -2021,7 +2021,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         continue;
       }
       // a process nobody claims is somebody else's model and is not judged here, see
-      // DECISIONS.pending/937.md
+      // decision 73 of DECISIONS.md
       if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, process.getId())) {
         continue;
       }
@@ -2664,7 +2664,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         continue;
       }
       // a process nobody claims is somebody else's model and is not judged here, see
-      // DECISIONS.pending/937.md
+      // decision 73 of DECISIONS.md
       if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, process.getId())) {
         continue;
       }
@@ -2764,7 +2764,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         continue;
       }
       // a process nobody claims is somebody else's model and is not judged here, see
-      // DECISIONS.pending/937.md
+      // decision 73 of DECISIONS.md
       if (!workflowTaskWiring.isClaimedByAWorkflowService(workflowModuleId, process.getId())) {
         continue;
       }
@@ -3645,7 +3645,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * The variable a BPMN process carries the workflow aggregate's ID in - the one variable
    * every worker of this adapter reads. Only a claimed process has one: a process nobody
    * claims has no workflow aggregate, and this adapter wires nothing for it (see
-   * {@code DECISIONS.pending/937.md}).
+   * decision 73 of {@code DECISIONS.md}).
    *
    * @param workflowModuleId The workflow module
    * @param plainBpmnProcessId The BPMN process id as the core knows it
