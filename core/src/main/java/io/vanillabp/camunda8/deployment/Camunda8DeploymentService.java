@@ -1490,13 +1490,22 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     }
 
     // the start of a workflow: the execution listener deciding what a start means is
-    // ADDED TO THE MODEL here as well, on every start event the process itself holds
+    // ADDED TO THE MODEL here as well, on every start event the process itself holds. A
+    // called process starts no workflow of its own, so it gets no listener and no worker,
+    // see decision 76 in the repository's DECISIONS.md
     if (bpmsInitiatedStartInvoker != null) {
-      final var bpmsInitiatedStarts = Camunda8TaskWiring
-          .bpmsInitiatedStartsOf(
-              model,
-              scopedBpmnProcessId,
-              signalName -> plainIdentifier(workflowModuleId, signalName));
+      final var startsAWorkflow = bpmsInitiatedStartInvoker.startsAWorkflowOfItsOwn(workflowModuleId, bpmnProcessId);
+      final var bpmsInitiatedStarts = startsAWorkflow
+          ? Camunda8TaskWiring
+              .bpmsInitiatedStartsOf(
+                  model,
+                  scopedBpmnProcessId,
+                  signalName -> plainIdentifier(workflowModuleId, signalName))
+          : Camunda8TaskWiring
+              .startEventsOfACalledProcess(
+                  model,
+                  scopedBpmnProcessId,
+                  signalName -> plainIdentifier(workflowModuleId, signalName));
       bpmsInitiatedStartInvoker
           .validateBpmsInitiatedStarts(
               workflowModuleId,
@@ -1506,7 +1515,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
                   .map(startEvent -> new BpmsInitiatedStartSpec(
                       startEvent.startEventId(), startEvent.kind(), startEvent.signalName()))
                   .toList());
-      context.getBpmsInitiatedStartsToWire().addAll(bpmsInitiatedStarts);
+      if (startsAWorkflow) {
+        context.getBpmsInitiatedStartsToWire().addAll(bpmsInitiatedStarts);
+      }
     }
 
     // the end of a workflow is reported only where the application asked for it -

@@ -2082,6 +2082,8 @@ the model reaches the cluster with a listener on those and on nothing else.
 
 ### 49. The cluster holds the workflow's name in the variable named after the aggregate's id
 
+*Decision 76 leaves a called process out: it gets no start listener.*
+
 The id of a workflow is the id of its workflow aggregate, the application assigns it in the
 `@WorkflowStartedByBpms` method, and nobody else does. Camunda 8 keeps no business key, so this
 adapter keeps that id in a PROCESS VARIABLE. The rule itself and what the core does with it are
@@ -3464,6 +3466,36 @@ lines stays the same.
 
 `Camunda8MultiInstanceTest#onlyAProcessCalledByAnExpressionMayBeHandedAChain` holds the answer for
 a process called by an expression, a process called by name, the caller and an unknown process.
+
+### 76. A called process gets no start listener and no end listener, and keeps the cancel listener for its tasks
+
+The platform decided that a called process is not a workflow of its own (decision 124 of `adapter-platform-integration`,
+story 949). Its start and its end do not reach the application. The core tells an adapter which processes these are:
+`BpmsInitiatedStartInvoker#startsAWorkflowOfItsOwn` and `WorkflowEndedInvoker#workflowEndedHandlerExists` answer
+`false` for a process the application declares only in `secondaryBpmnProcesses` and deploys a model for.
+
+**The start.** This adapter writes the start listener into the model, on every start event the process holds
+(decisions 48 and 49). For a called process it now writes none and opens no worker for one. A listener nobody needs
+still holds the instance until a worker answers its job, so leaving it in place would cost a job per called instance
+for nothing. The start events are still read and handed to the core, which refuses a called process with a start
+event the cluster fires by itself.
+
+**The end.** The end listener was already written only where `workflowEndedHandlerExists` says so, so a called
+process gets none now without a change here.
+
+**The cancel listener stays** where this application serves a task of the called process (release line 8.10 on). It
+does not report the end of a workflow. The core reads the tasks it still believes open in the canceled instance and
+reports them as canceled, and for a called process that is all it does: no `@WorkflowEnded` method runs. A boundary
+event on the call activity is the usual way such an instance is canceled, and its open tasks would otherwise never be
+reported.
+
+**Models deployed before.** A called process deployed by an earlier snapshot of this adapter still carries the start
+listener and, where a method existed, the end listener. The core answers such a notification without effect on the
+workflow. A start listener of such a model has no worker any more, so an instance of it waits. Version 1 wrote no
+listener at all, so this concerns snapshots of 2.0 only.
+
+`Camunda8CalledProcessDeploymentTest` holds it without a cluster: the start events of the called process carry no
+listener and the process element no end listener, while the caller gets both.
 
 ### 77. A setting of a called process is read under the called process' own id
 
