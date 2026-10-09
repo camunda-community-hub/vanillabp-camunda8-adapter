@@ -472,6 +472,10 @@ public class Camunda8FetchVariablesTest {
         + missing);
     assertTrue(missing.contains("[id]"), "the message names what the worker DID fetch, but was: "
         + missing);
+    assertTrue(
+        missing.contains("propagateAllParentVariables=\"false\"") && missing.contains("hands 'loanId' over"),
+        "a called process which was not handed the ID is the third cause, and the message names the fix, but was: "
+            + missing);
 
     final var unfetched = Camunda8FetchVariables.unfetchedTaskParameter("bigPayload", "approve", selection);
     assertFalse(unfetched.contains("fetch-variables"), "the key is gone, so no message names it: "

@@ -23,7 +23,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * Decision 30 says what a called process is told about the iterations of its caller, and where
  * it stops. Three properties of Camunda 8 decide where that line can run, and all three were
- * measured rather than read. A measurement says what was true on one day, so it is asserted
+ * measured rather than read. A fourth decides what a push of a changed aggregate has to write
+ * (decision 77). A measurement says what was true on one day, so it is asserted
  * here instead, with hand-written models and the raw client, so nothing of VanillaBP is in the
  * way.
  * <ul>
@@ -39,10 +40,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <li>What a mapping wrote travels through a SECOND call activity below it, and the mapping
  * there can extend the list it holds. Without that, anything handed down this way would reach
  * exactly one level.</li>
+ * <li>A variable written into the caller AFTER the call does not reach the called instance. The
+ * propagation copies the caller's variables once, when the call activity starts the called
+ * instance. That is why a push of a changed aggregate writes into the called instances as well,
+ * see decision 77.</li>
  * </ul>
  * <p>
  * Measured on 2026-10-01 against <code>camunda/camunda:8.8.40</code>, <code>8.9.21</code> and
- * <code>8.10.0-rc3</code>, which answered identically. A red run here is news about Camunda
+ * <code>8.10.0-rc3</code>, which answered identically. The fourth was measured on 2026-10-09
+ * against <code>camunda/camunda:8.10.0</code>. A red run here is news about Camunda
  * rather than a defect of this repository, and each message says what to do with the news.
  * <p>
  * What this canary deliberately does NOT hold is how big such a list may get. The cluster
@@ -216,6 +222,90 @@ public class Camunda8CallActivityVariablesCanaryIT extends TestOnTheSharedCluste
       client.newCompleteCommand(job.getKey()).send().join();
 
     }
+
+  }
+
+  @Test
+  @DisplayName("A variable the caller is given after the call does not reach the called instance")
+  public void aLaterVariableOfTheCallerDoesNotReachTheCalledInstance() {
+
+    try (final var client = client()) {
+
+      deploy(client, leafCalling("TheCanarysLateChild", "theCanarysLateChild"));
+      deploy(
+          client,
+          caller(
+              "TheCanarysLateCaller",
+              "<zeebe:calledElement processId=\"TheCanarysLateChild\" />",
+              ""));
+
+      final var callerInstance = client
+          .newCreateInstanceCommand()
+          .bpmnProcessId("TheCanarysLateCaller")
+          .latestVersion()
+          .variables(Map.of(WHAT_THE_CALLER_HOLDS, "before the call"))
+          .send()
+          .join()
+          .getProcessInstanceKey();
+      // the job of the called instance exists once it can be activated, so the call happened
+      final var firstLook = activateTheJob(client, "theCanarysLateChild");
+      assertEquals("before the call", firstLook.getVariablesAsMap().get(WHAT_THE_CALLER_HOLDS));
+
+      client
+          .newSetVariablesCommand(callerInstance)
+          .variables(Map.of(WHAT_THE_CALLER_HOLDS, "after the call"))
+          .local(false)
+          .send()
+          .join();
+      // hands the job back, so the next activation reads the variables as they are now
+      client
+          .newFailCommand(firstLook.getKey())
+          .retries(1)
+          .send()
+          .join();
+      final var secondLook = activateTheJob(client, "theCanarysLateChild");
+
+      assertEquals(
+          "before the call",
+          secondLook.getVariablesAsMap().get(WHAT_THE_CALLER_HOLDS),
+          "A variable written into the caller after the call reached the called instance. That is news about"
+              + " Camunda: a push of a changed aggregate writes into every called instance itself BECAUSE the"
+              + " propagation copies once, at the call (decision 77). If the cluster hands later values down now,"
+              + " the push into the called instances is no longer needed.");
+      client.newCompleteCommand(secondLook.getKey()).send().join();
+
+    }
+
+  }
+
+  /**
+   * Activates the one job of a type, waiting for it to appear.
+   *
+   * @param client The client of the cluster under test
+   * @param jobType The job type
+   * @return The activated job, with every variable its scope sees
+   */
+  private ActivatedJob activateTheJob(
+      final CamundaClient client,
+      final String jobType) {
+
+    final var deadline = System.currentTimeMillis() + ANSWER_WITHIN.toMillis();
+    while (System.currentTimeMillis() < deadline) {
+      final var jobs = client
+          .newActivateJobsCommand()
+          .jobType(jobType)
+          .maxJobsToActivate(1)
+          .timeout(Duration.ofMinutes(2))
+          .requestTimeout(Duration.ofSeconds(2))
+          .send()
+          .join()
+          .getJobs();
+      if (!jobs.isEmpty()) {
+        return jobs.getFirst();
+      }
+      pauseBeforeAskingAgain();
+    }
+    return fail("no job of type '%s' within %s".formatted(jobType, ANSWER_WITHIN));
 
   }
 
