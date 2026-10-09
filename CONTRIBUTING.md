@@ -30,7 +30,7 @@ A JDK 21 or newer, and Maven, without a wrapper. The workflows build with the JD
 The class files stay at Java 21 either way, because that is what the property `version.java` in the
 root `pom.xml` compiles against. Two repositories come first, in this order: `spi-for-java`, then
 `adapter-platform-integration`. Build and install them in the workspace, see [Getting
-started](#getting-started), or read their [published snapshots](#snapshots-from-github-packages).
+started](#getting-started), or read their [published snapshots](#snapshots-on-maven-central).
 Then, here:
 
 ```bash
@@ -109,19 +109,17 @@ invalid, transitive dependencies (if any) will not be available". A local build 
 registry keeps it. The publish workflow always deploys the whole reactor, so this is a mistake
 only a person can make.
 
-## Snapshots from GitHub Packages
+## Snapshots on Maven Central
 
 If you clone only this repository, Maven takes `spi-for-java` and `adapter-platform-integration`
-from their registries in GitHub Packages. Every push to `main` there publishes a snapshot. Reading
-them takes a personal access token (classic) with `read:packages` and a few entries in your
-`~/.m2/settings.xml`. [Using the published
-snapshots](https://github.com/vanillabp/development-workspace#using-the-published-snapshots) shows
-both.
+from the snapshot repository of Maven Central, `https://central.sonatype.com/repository/maven-snapshots/`.
+Every push to `main` there publishes a snapshot. The root `pom.xml` names that repository, and
+reading it needs no login and no token.
 
-Every push to `main` of this repository publishes its own snapshot to
-`https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter`. The old URL
-`https://maven.pkg.github.com/vanillabp/camunda8-adapter` still answers, but with an old snapshot
-which no longer changes.
+Every push to `main` of this repository publishes its own snapshot to the same place. The old
+registries `https://maven.pkg.github.com/vanillabp/camunda8-adapter` and
+`https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter` still answer, but
+with an old snapshot which no longer changes.
 
 ## What a POM hands an application
 
@@ -181,7 +179,7 @@ decision number you used while you were writing, and once a pull request is merg
 bin/check-decision-numbers.sh
 ```
 
-Two workflows answer a pull request. *Publish to GitHub Packages* builds and tests the current GA
+Two workflows answer a pull request. *Build and publish snapshots* builds and tests the current GA
 line and publishes nothing from a branch. *Checks* runs what needs no cluster, the API identity of
 the lines among it, and it calls the matrix which builds every release line against that line's
 cluster. The matrix takes about forty minutes, so watch it while it runs and start on a red line at
@@ -192,11 +190,11 @@ waiting. A red check is a finding about your change. Read the log and fix what i
 pushing again to see whether it goes away.
 
 A maintainer approves the first run of the workflows for somebody whose first pull request this is
-in the repository. A pull request from a fork gets no secrets of this repository, but the build
-needs one to read the snapshots. So the build of such a pull request fails with HTTP 401 before it
-compiles your change. [What the build of a pull request can
+in the repository. A pull request from a fork builds and tests like any other, because the
+snapshots it needs can be read without a login. It cannot publish anything, because GitHub gives it
+no secrets of this repository. [What the build of a pull request can
 do](https://github.com/vanillabp/development-workspace#what-the-build-of-a-pull-request-can-do) says
-what to do then.
+more.
 
 This repository lives in the Camunda Community Hub, which asks every contributor to sign its
 [contributor license agreement](https://cla-assistant.io/camunda-community-hub/community). On your

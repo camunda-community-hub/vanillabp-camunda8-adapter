@@ -37,7 +37,7 @@ concurrency:
   # each of them looks for a comment of its own to rewrite, and at that moment neither
   # comment is there yet.
   #
-  # This group cancels, and the publish group of deploy-to-github-packages.yaml does not.
+  # This group cancels, and the publish group of publish-snapshots.yaml does not.
   # What that one protects is work which cannot be repeated, a snapshot half uploaded.
   # The work here is an answer about one commit. The newest run is never the one that is
   # cancelled, so the pull request always ends up with an answer, and with the answer for

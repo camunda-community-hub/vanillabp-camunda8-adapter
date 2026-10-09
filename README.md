@@ -493,8 +493,8 @@ A release of one line consists of:
    with Renovate's own rule engine, and which updates Renovate finds is what the dry run
    would add.
 
-Every push to `main` publishes a snapshot of the current GA line to the GitHub Packages registry of
-this repository, `https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter`.
+Every push to `main` publishes a snapshot of the current GA line to the snapshot repository of
+Maven Central, `https://central.sonatype.com/repository/maven-snapshots/`. Reading it needs no login.
 A snapshot carries no line in its version, so `2.0.0-SNAPSHOT` is the line a build without a
 profile builds.
 
@@ -3722,7 +3722,7 @@ What a pull request needs beyond a green build is in [`CONTRIBUTING.md`](./CONTR
 1. **Spring Boot** (core + Spring Boot integration) - into `test-coverage-report/spring-boot/report`
 2. **Quarkus** (core + Quarkus extension) - into `test-coverage-report/quarkus/report`
 
-Both are published to GitHub Pages by the *Publish to GitHub Packages* workflow on every push to
+Both are published to GitHub Pages by the *Build and publish snapshots* workflow on every push to
 the default branch. Click the [platform's badge](#documentation-and-supported-platforms) to open
 the respective report.
 

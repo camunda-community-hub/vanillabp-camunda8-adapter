@@ -69,24 +69,14 @@
     <url>https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/tree/main</url>
   </scm>
 
-  <!-- Where we deploy, which is our business and not a user's: the flatten plugin takes
-       this out of the published POM, see below. It stays here because the deploy needs
-       it. -->
-  <distributionManagement>
-    <snapshotRepository>
-      <id>github</id>
-      <name>Github Packages</name>
-      <url>https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter</url>
-    </snapshotRepository>
-  </distributionManagement>
-
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- our snapshots go out through a plain 'mvn deploy', see the deploy plugin below.
+    <!-- the release to Camunda's Artifactory goes out through the deploy plugin, see below.
          A module which is not published sets this to true in its own properties. -->
     <maven.deploy.skip>false</maven.deploy.skip>
-    <!-- The release to Maven Central does not read 'maven.deploy.skip'. A module which is not
-         published names itself here as well, see central-publishing-maven-plugin below. -->
+    <!-- The release and the snapshot on Maven Central do not read 'maven.deploy.skip'. A module
+         which is not published names itself here as well, see central-publishing-maven-plugin
+         below. -->
     <central.publishing.excluded>none</central.publishing.excluded>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <version.java>21</version.java>
@@ -281,16 +271,36 @@
     </dependencies>
   </dependencyManagement>
 
+  <!-- the snapshots of the VanillaBP repositories this adapter builds on, and the place where
+       this adapter publishes its own. Nobody needs a login to read it, so the build of a pull
+       request from a fork resolves them as well. io.vanillabp:release-parent names the same
+       repository, but this repository inherits the hub parent and so names it here. Releases
+       are not read from here: they come from Maven Central itself. -->
+  <repositories>
+    <repository>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+      <id>central-snapshots</id>
+      <name>Maven Central snapshots</name>
+      <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+    </repository>
+  </repositories>
+
   <build>
     <pluginManagement>
       <plugins>
         <plugin>
           <!-- The hub parent turns the deploy plugin off for everybody, because a hub release
                goes out through the profiles of that parent and not through a plain deploy.
-               Our snapshots do go out through a plain deploy, into the GitHub Packages
-               registry named in distributionManagement above, and that is what the
-               blueprints and every build downstream of them read. Without this line
-               'mvn deploy' reports success and publishes nothing. -->
+               Our release to Camunda's Artifactory does go out through the deploy plugin, into
+               the repository 'camunda-nexus' of the parent. Without this line that deploy
+               reports success and publishes nothing. The snapshot does not use it: it goes to
+               Maven Central through the profile 'central-sonatype-publish', whose plugin takes
+               the place of the deploy plugin. -->
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
           <configuration>
@@ -480,9 +490,9 @@
           <flattenMode>oss</flattenMode>
           <pomElements>
             <!-- Where we deploy is nothing a user of the artifact can act on, and on an
-                 artifact which later sits on Maven Central it would point a reader at our
-                 GitHub Packages registry. The source POM keeps it, because the deploy
-                 reads it from there. -->
+                 artifact which sits on Maven Central it would point a reader at Camunda's
+                 Artifactory, which the hub parent names. The deploy reads it from the source
+                 POM, so it is only taken out of what is published. -->
             <distributionManagement>remove</distributionManagement>
           </pomElements>
         </configuration>
