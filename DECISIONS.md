@@ -161,7 +161,7 @@ asked for with what the client reports and warns with variable, property key and
 
 ### 8. A worker fetches only the variables somebody actually reads
 
-*Superseded in part by `DECISIONS.pending/938.md`: the key `fetch-variables` is gone, and a start which still sets it ends. No message names it any more.*
+*Superseded in part by decision 74: the key `fetch-variables` is gone, and a start which still sets it ends. No message names it any more.*
 
 Nothing asked for `fetchVariables`, so every activated job carried the complete variable scope of
 its instance, which with a `FULL` sync model means every shared attribute of an aggregate the
@@ -3402,3 +3402,43 @@ used to write into that process are gone. The maintainer accepted that.
 `Camunda8UnclaimedProcessTest` holds the untouched model, the missing key, the shared message and
 the missing workers. The tests of decisions 53, 59, 69 and 71 hold that a process nobody claims is
 not looked at.
+
+### 74. The key `fetch-variables` is gone, and a start which still sets it ends
+
+Proposed by story 938. Decided by the maintainer on 2026-10-07 and 2026-10-09.
+
+`vanillabp.adapters.<id>.fetch-variables: all` let a worker ask the cluster for every variable of
+the process instance instead of the list of decision 8. It could be set at four levels, down to a
+single task. It was there for a `@TaskParam` name the core cannot see because it is put together
+while the delivery runs.
+
+In VanillaBP 2.0 a handler reads its data from the workflow aggregate. A `@TaskParam` name which is
+not on the method is not a case 2.0 has to support. A key is surface which cannot be removed after
+the release without breaking every application which sets it, so it goes now:
+
+- No worker reads the key. The list of decision 8 is the only answer, at every level.
+- An application which still sets the key, with any value and at any of the four levels, does not
+  start. The message names every key which sets it, says to remove it and says what a worker
+  fetches now. The platforms still bind the key as text for this message only, the same way
+  `async-task-timeout` is bound to be refused.
+- The two messages of a delivery which misses a variable no longer name the key. The one for a
+  `@TaskParam` outside the list points to the workflow aggregate.
+
+What was checked before: no part of 2.0 needs `all`. The multi-instance variables are part of the
+derived list, and a called process gets the chain of its caller through
+`Camunda8MultiInstance.CHAIN_VARIABLE`, which every worker asks for. The worker of a start event the
+cluster fires itself still asks for every variable, which is fixed in the code and was never this
+key.
+
+The Business Cockpit was the one user. On the Process-Engine-API adapter a `@TaskParam` of a
+`@UserTaskDetailsProvider` got a variable which no `@WorkflowTask` method reads only through `all`.
+On Camunda 8 such a parameter never gets a process variable, because the cockpit's own listener
+workers ask for the aggregate's ID alone. So nothing changes on this adapter. A details provider
+reads its data from the workflow aggregate, and the cockpit strand updates its documentation.
+
+Version 1 had no such key, so `UPGRADE.md` does not mention it.
+
+`Camunda8FetchVariablesTest#theRemovedKeyEndsTheStart` holds the message, and
+`Camunda8RemovedFetchVariablesTest` of the Spring Boot and the Quarkus module holds that a start
+with the key set at adapter and at task level ends with it. `Camunda8UnfetchedVariableTest` and
+`Camunda8FetchVariablesTest#theMessagesNameTheWayOut` hold that no message names the key.
