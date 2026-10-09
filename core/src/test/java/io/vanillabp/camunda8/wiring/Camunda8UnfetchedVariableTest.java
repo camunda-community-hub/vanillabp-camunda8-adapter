@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.wiring;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,8 +34,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What happens when a delivery is asked for a variable its worker did not fetch. The
  * adapter cannot tell that case apart from a variable which is genuinely absent,
  * and both a <code>null</code> aggregate id and a <code>null</code>
- * <code>&#64;TaskParam</code> would be a loss nothing reports - so both name the fetch
- * list and the property which switches the restriction off.
+ * <code>&#64;TaskParam</code> would be a loss nothing reports - so both fail the delivery
+ * and name the fetch list. Neither names a key which asks for more, because there is none.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UnfetchedVariableTest {
@@ -99,7 +100,7 @@ public class Camunda8UnfetchedVariableTest {
   }
 
   @Test
-  @DisplayName("a @TaskParam outside the fetch list fails the delivery naming the escape hatch")
+  @DisplayName("a @TaskParam outside the fetch list fails the delivery naming the workflow aggregate")
   public void anUnfetchedTaskParameterFailsGuiding() {
 
     final var context = contextOf(DERIVED);
@@ -112,8 +113,12 @@ public class Camunda8UnfetchedVariableTest {
     assertTrue(exception.getMessage().contains("approve"), "names the task, but was: "
         + exception.getMessage());
     assertTrue(
-        exception.getMessage().contains("vanillabp.adapters.c8.fetch-variables"),
-        "names the property which switches the restriction off, but was: "
+        exception.getMessage().contains("workflow aggregate"),
+        "names the workflow aggregate as the way out, but was: "
+            + exception.getMessage());
+    assertFalse(
+        exception.getMessage().contains("fetch-variables"),
+        "names no removed key, but was: "
             + exception.getMessage());
 
   }
@@ -137,7 +142,7 @@ public class Camunda8UnfetchedVariableTest {
   }
 
   @Test
-  @DisplayName("a missing aggregate-ID variable names the fetch list as the second possible cause")
+  @DisplayName("a missing aggregate-ID variable names the fetch list and no removed key")
   public void theMissingAggregateIdNamesTheFetchList() {
 
     when(invoker.resolveWorkflowAggregateIdName("test-module", "TestProcess")).thenReturn("id");
@@ -150,9 +155,9 @@ public class Camunda8UnfetchedVariableTest {
     verify(failCommand.retries(2).retryBackoff(any())).errorMessage(message.capture());
     assertTrue(message.getValue().contains("[id]"), "names what the worker fetches, but was: "
         + message.getValue());
-    assertTrue(
-        message.getValue().contains("vanillabp.adapters.c8.fetch-variables"),
-        "names the property, but was: "
+    assertFalse(
+        message.getValue().contains("fetch-variables"),
+        "names no removed key, but was: "
             + message.getValue());
 
   }

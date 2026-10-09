@@ -6,7 +6,6 @@ vanillabp:
       rest-address: http://localhost:65535
       job-timeout: PT30S
       retry-backoff: PT30S
-      fetch-variables: derived
       async-task-lock-renewal: PT2M
       shutdown-grace: PT5S
       startup-wait: PT30S
@@ -39,7 +38,6 @@ vanillabp:
           tenant-id: test-app-tenant
           job-timeout: PT20S
           retry-backoff: PT20S
-          fetch-variables: all
           message-time-to-live: PT5H
           allow-connectors: false
           allow-listeners: false
@@ -49,7 +47,6 @@ vanillabp:
             c8:
               job-timeout: PT10S
               retry-backoff: PT10S
-              fetch-variables: derived
               message-time-to-live: PT4H
               allow-connectors: true
               allow-listeners: true
@@ -59,7 +56,6 @@ vanillabp:
                 c8:
                   job-timeout: PT2S
                   retry-backoff: PT2S
-                  fetch-variables: all
                   allow-connectors: true
                   allow-listeners: true
           messages:

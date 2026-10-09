@@ -50,7 +50,6 @@ import io.vanillabp.camunda8.wiring.Camunda8CancelListeners;
 import io.vanillabp.camunda8.wiring.Camunda8ConfiguredTenant;
 import io.vanillabp.camunda8.wiring.Camunda8Connectors;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
-import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8JobHandler;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Listeners;
@@ -150,29 +149,10 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   private final WorkflowEndedInvoker workflowEndedInvoker;
 
   /**
-   * Whether a worker asks the cluster for the variables this adapter derived or for all
-   * of them. Handed in by the platform module after construction rather than
-   * through the constructor, whose parameter list is long enough; <code>null</code>
-   * (tests) means the default, which is the derived list.
-   */
-  private Camunda8FetchVariablesResolver fetchVariablesResolver;
-
-  /**
-   * Hands over how <code>fetch-variables</code> resolves for this adapter instance.
-   *
-   * @param fetchVariablesResolver The resolver, or <code>null</code> for the default
-   */
-  public void setFetchVariablesResolver(
-      final Camunda8FetchVariablesResolver fetchVariablesResolver) {
-
-    this.fetchVariablesResolver = fetchVariablesResolver;
-
-  }
-
-  /**
    * Whether this application honours the element-template marker of a model, resolved per
    * workflow module and per workflow. Handed in by the platform module after construction
-   * like {@link #fetchVariablesResolver}; <code>null</code> (tests) means the default,
+   * rather than through the constructor, whose parameter list is long enough;
+   * <code>null</code> (tests) means the default,
    * which is that VanillaBP wires every element.
    */
   private Camunda8AllowConnectorsResolver allowConnectorsResolver;
@@ -3666,7 +3646,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   /**
    * What one worker asks the cluster for: the union of the aggregate-ID
    * variables, multi-instance contexts and declared <code>&#64;TaskParam</code> names of
-   * everything it serves, unless a level of the configuration says <code>all</code>.
+   * everything it serves.
    *
    * @param workflowModuleId The workflow module
    * @param served The elements this worker serves, as (scoped BPMN process id, BPMN
@@ -3680,13 +3660,6 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     final var variables = new TreeSet<String>();
     for (final var element : served) {
       final var plainBpmnProcessId = plainProcessId(workflowModuleId, element.scopedBpmnProcessId());
-      final var mode = Camunda8FetchVariablesResolver
-          .resolve(fetchVariablesResolver, workflowModuleId, plainBpmnProcessId, element.taskDefinition());
-      if (mode == Camunda8FetchVariables.Mode.ALL) {
-        // one worker serves a job type, so the two values cannot both apply - and
-        // fetching more than derived is never wrong, only more expensive
-        return Camunda8FetchVariables.Selection.everything();
-      }
       final var aggregateIdName = aggregateIdNameOf(workflowModuleId, plainBpmnProcessId);
       if (aggregateIdName == null) {
         return Camunda8FetchVariables.Selection.everything();

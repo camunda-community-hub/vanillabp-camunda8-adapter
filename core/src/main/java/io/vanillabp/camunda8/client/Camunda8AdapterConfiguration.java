@@ -7,7 +7,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
-import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 
@@ -49,10 +48,6 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  *       resolvable per workflow module, workflow and task like {@code job-timeout}) - how
  *       long the cluster waits before it hands a FAILED job out again, see
  *       {@link #retryBackoff}</li>
- *   <li>{@code .fetch-variables} (optional, default {@code derived}, resolvable per
- *       workflow module, workflow and task) - whether a worker asks the cluster for the
- *       variables VanillaBP reads or for the complete variable scope, see
- *       {@link Camunda8FetchVariables}</li>
  *   <li>{@code .allow-connectors} (optional, default {@code false}, resolvable per
  *       workflow module and workflow) - whether an element built from an element template
  *       is left to the runtime which owns it, see
@@ -717,35 +712,34 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether the workers of this adapter instance ask the cluster for the variables the
-   * adapter derived from the deployed models or for all of them - adapter-level base of
-   * the most-specific-wins resolution (task &gt; workflow &gt; workflow-module &gt;
-   * adapter). Default {@code derived}, see
-   * {@link Camunda8FetchVariables} for what is derived and
-   * why.
+   * The removed key <code>fetch-variables</code> at adapter level. It exists only to be
+   * REJECTED at startup, see {@link Camunda8FetchVariables#rejectTheRemovedKey}. It is a
+   * text, so every value somebody wrote reaches that message rather than a conversion
+   * error.
    */
-  private Camunda8FetchVariables.Mode fetchVariables;
+  private String fetchVariables;
 
   /**
-   * Whether a worker asks for the derived variables or for all of them, read at adapter
-   * level.
+   * What the application wrote under the removed key <code>fetch-variables</code>, kept so
+   * the startup can refuse it.
    *
-   * @return The mode, or <code>null</code> where no key set one
+   * @return The value of the removed key, or <code>null</code> where nobody wrote it
    */
-  public Camunda8FetchVariables.Mode getFetchVariables() {
+  public String getFetchVariables() {
 
     return fetchVariables;
 
   }
 
   /**
-   * Whether a worker asks for the derived variables or for all of them, read at adapter
-   * level.
+   * What the application wrote under the removed key <code>fetch-variables</code>, kept so
+   * the startup can refuse it.
    *
-   * @param fetchVariables The mode, or <code>null</code> where no key set one
+   * @param fetchVariables The value of the removed key, or <code>null</code> where nobody
+   *          wrote it
    */
   public void setFetchVariables(
-      final Camunda8FetchVariables.Mode fetchVariables) {
+      final String fetchVariables) {
 
     this.fetchVariables = fetchVariables;
 
@@ -1779,20 +1773,6 @@ public class Camunda8AdapterConfiguration {
     return retryBackoff != null
         ? retryBackoff
         : Camunda8RetryBackoffResolver.DEFAULT_RETRY_BACKOFF;
-
-  }
-
-  /**
-   * The adapter-level answer to what a worker fetches: the configured value or
-   * {@link Camunda8FetchVariablesResolver#DEFAULT_FETCH_VARIABLES}.
-   *
-   * @return The mode, never <code>null</code>
-   */
-  public Camunda8FetchVariables.Mode resolvedFetchVariables() {
-
-    return fetchVariables != null
-        ? fetchVariables
-        : Camunda8FetchVariablesResolver.DEFAULT_FETCH_VARIABLES;
 
   }
 

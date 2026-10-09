@@ -318,10 +318,9 @@ public class TaskDockerWorkflowService {
   }
 
   /**
-   * The escape hatch at TASK level: this task is configured with
-   * {@code fetch-variables: all}, so its worker asks the cluster for the complete
-   * variable scope. The derived list would answer this {@code @TaskParam} as well - what the task proves is that the property still reaches the worker and that
-   * a worker asking for everything keeps working.
+   * The first of three tasks reading {@code bigPayload}, a variable which appears in no
+   * BPMN model. Nothing is configured for it, and its worker asks the cluster for the
+   * variable because the method declares it.
    */
   @WorkflowTask
   public void fetchAllTask(

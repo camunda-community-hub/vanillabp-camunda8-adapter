@@ -718,18 +718,17 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         .join()
         .getProcessInstanceKey();
 
-    // the FIRST task is configured 'fetch-variables: all' - the escape hatch still
-    // reaches its worker and a worker asking for everything keeps working
+    // the FIRST task is served by a worker of its own, and the declared name reaches it
     awaitUntil(
         () -> invocations("fetchAllTask", aggregateId) >= 1,
         60000,
-        "the task fetching everything to be delivered");
+        "the first task to be delivered");
     assertEquals(
         bigPayload.length(),
         TaskDockerWorkflowService.OBSERVED_VARIABLES.get("bigPayloadLength"),
-        "a worker fetching the complete scope answers the @TaskParam as it always did");
+        "the declared @TaskParam is fetched for the first task as well");
 
-    // the SECOND task configures nothing, and its worker still asks the cluster for
+    // the SECOND task configures nothing either, and its worker asks the cluster for
     // 'bigPayload': the core scanned the name off the method while wiring,
     // so the derivation covers what the application reads instead of what the model
     // happens to declare. How SHORT that list is has its own tests in the core module -

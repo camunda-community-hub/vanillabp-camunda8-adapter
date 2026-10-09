@@ -81,8 +81,3 @@ vanillabp:
           adapters:
             c8:
               retry-backoff: PT5S
-          tasks:
-            fetchAllTask:
-              adapters:
-                c8:
-                  fetch-variables: all

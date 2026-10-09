@@ -1,6 +1,7 @@
 package io.vanillabp.camunda8.quarkus.runtime;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +19,6 @@ import io.vanillabp.camunda8.wiring.Camunda8AllowConnectorsResolver;
 import io.vanillabp.camunda8.wiring.Camunda8AllowListenersResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Connectors;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
-import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
@@ -53,8 +53,7 @@ public interface VanillaBpCamunda8Properties {
    * The workflow-module sections of the shared tree - the overlay mirrors the
    * levels of the most-specific-wins resolution of scope-specific adapter keys
    * (task &gt; workflow &gt; workflow-module &gt; adapter), currently:
-   * <code>job-timeout</code>, <code>retry-backoff</code> and
-   * <code>fetch-variables</code>. <code>tenant-id</code> is here as well, with the workflow
+   * <code>job-timeout</code> and <code>retry-backoff</code>. <code>tenant-id</code> is here as well, with the workflow
    * module as its ONLY level below the adapter: a tenant id is an attribute of the
    * deployment, and this adapter deploys once per workflow module.
    *
@@ -226,35 +225,64 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves whether a worker fetches the DERIVED variables or all of them with the same
-   * most-specific-wins semantics; falls back to the adapter-level value and finally the
-   * default {@code derived}.
+   * Every key which still sets the removed <code>fetch-variables</code> for one adapter, at
+   * the adapter level and at the three levels below it. The startup refuses them all in
+   * one message, see {@link Camunda8FetchVariables#rejectTheRemovedKey}.
    *
-   * @param workflowModuleId The workflow module ID
-   * @param bpmnProcessId The BPMN process ID
-   * @param taskDefinition The task definition (job type)
    * @param adapterId The adapter ID
-   * @return The most specific configured mode or the default
+   * @return The full keys, empty where nobody sets it
    */
-  default Camunda8FetchVariables.Mode fetchVariablesFor(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final String taskDefinition,
+  default List<String> fetchVariablesKeys(
       final String adapterId) {
 
-    final var scoped = scopedKeysMostSpecificFirst(workflowModuleId, bpmnProcessId, taskDefinition, adapterId)
-        .map(Camunda8ScopedKeys::fetchVariables)
-        .flatMap(Optional::stream)
-        .findFirst();
-    if (scoped.isPresent()) {
-      return scoped.get();
-    }
+    final var keys = new ArrayList<String>();
     final var adapter = adapters().get(adapterId);
-    return adapter != null
-        ? adapter
-            .fetchVariables()
-            .orElse(Camunda8FetchVariablesResolver.DEFAULT_FETCH_VARIABLES)
-        : Camunda8FetchVariablesResolver.DEFAULT_FETCH_VARIABLES;
+    if ((adapter != null) && adapter.fetchVariables().isPresent()) {
+      keys.add("vanillabp.adapters.%s.%s".formatted(adapterId, Camunda8FetchVariables.REMOVED_KEY));
+    }
+    workflowModules().forEach((
+        moduleId,
+        module) -> {
+      if (setsFetchVariables(module.adapters(), adapterId)) {
+        keys.add("vanillabp.workflow-modules.%s.adapters.%s.%s"
+            .formatted(moduleId, adapterId, Camunda8FetchVariables.REMOVED_KEY));
+      }
+      module.workflows().forEach((
+          workflowId,
+          workflow) -> {
+        if (setsFetchVariables(workflow.adapters(), adapterId)) {
+          keys.add("vanillabp.workflow-modules.%s.workflows.%s.adapters.%s.%s"
+              .formatted(moduleId, workflowId, adapterId, Camunda8FetchVariables.REMOVED_KEY));
+        }
+        workflow.tasks().forEach((
+            taskId,
+            task) -> {
+          if (setsFetchVariables(task.adapters(), adapterId)) {
+            keys.add("vanillabp.workflow-modules.%s.workflows.%s.tasks.%s.adapters.%s.%s"
+                .formatted(moduleId, workflowId, taskId, adapterId, Camunda8FetchVariables.REMOVED_KEY));
+          }
+        });
+      });
+    });
+    return keys;
+
+  }
+
+  /**
+   * Whether one level sets the removed key for one adapter.
+   *
+   * @param level The <code>adapters</code> section of the level
+   * @param adapterId The adapter ID
+   * @return Whether the key is there
+   */
+  private static boolean setsFetchVariables(
+      final Map<String, ? extends Camunda8ScopedKeys> level,
+      final String adapterId) {
+
+    final var keys = level == null
+        ? null
+        : level.get(adapterId);
+    return (keys != null) && keys.fetchVariables().isPresent();
 
   }
 
@@ -668,13 +696,12 @@ public interface VanillaBpCamunda8Properties {
     Optional<Duration> retryBackoff();
 
     /**
-     * Whether the workers of this adapter instance ask the cluster for the variables the
-     * adapter derived or for all of them - adapter-level base of the most-specific-wins
-     * resolution. Default: <code>derived</code>.
+     * The removed key <code>fetch-variables</code>, bound only so the startup can refuse it
+     * with a guiding message instead of SmallRye's "does not map to any root".
      *
-     * @return The mode
+     * @return What somebody wrote under the removed key
      */
-    Optional<Camunda8FetchVariables.Mode> fetchVariables();
+    Optional<String> fetchVariables();
 
     /**
      * The window the lock of a job left open by a <code>&#64;TaskId</code> handler is
@@ -1024,11 +1051,12 @@ public interface VanillaBpCamunda8Properties {
     Optional<Duration> retryBackoff();
 
     /**
-     * Whether a worker fetches the derived variables or all of them, at this level.
+     * The removed key <code>fetch-variables</code> at this level, bound only so the startup
+     * can refuse it.
      *
-     * @return The mode
+     * @return What somebody wrote under the removed key
      */
-    Optional<Camunda8FetchVariables.Mode> fetchVariables();
+    Optional<String> fetchVariables();
 
     /**
      * How long the cluster keeps a published message, at this level.

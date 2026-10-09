@@ -3,6 +3,7 @@ package io.vanillabp.camunda8.deployment;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -25,7 +26,6 @@ import io.vanillabp.camunda8.TestCollaborators;
 import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactory;
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
-import io.vanillabp.camunda8.wiring.Camunda8FetchVariablesResolver;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
@@ -126,14 +126,12 @@ public class Camunda8FetchVariablesTest {
 
   /**
    * A deployment service whose core answers the given aggregate-ID variable per BPMN
-   * process, with the given <code>fetch-variables</code> resolution and no
-   * <code>&#64;TaskParam</code> anywhere.
+   * process and no <code>&#64;TaskParam</code> anywhere.
    */
   private Camunda8DeploymentService deploymentService(
-      final Function<String, String> aggregateIdNames,
-      final Camunda8FetchVariablesResolver fetchVariables) {
+      final Function<String, String> aggregateIdNames) {
 
-    return deploymentService(aggregateIdNames, fetchVariables, taskDefinition -> List.of());
+    return deploymentService(aggregateIdNames, taskDefinition -> List.of());
 
   }
 
@@ -144,14 +142,12 @@ public class Camunda8FetchVariablesTest {
    */
   private Camunda8DeploymentService deploymentService(
       final Function<String, String> aggregateIdNames,
-      final Camunda8FetchVariablesResolver fetchVariables,
       final Function<String, List<String>> taskParameters) {
 
     // decomposition is what a call activity of these models is for, so both processes are
     // served by one workflow service as long as the core knows them at all
     return deploymentService(
         aggregateIdNames,
-        fetchVariables,
         taskParameters,
         (
             bpmnProcessId,
@@ -167,7 +163,6 @@ public class Camunda8FetchVariablesTest {
    */
   private Camunda8DeploymentService deploymentService(
       final Function<String, String> aggregateIdNames,
-      final Camunda8FetchVariablesResolver fetchVariables,
       final Function<String, List<String>> taskParameters,
       final BiPredicate<String, String> shareTheWorkflowAggregate) {
 
@@ -215,7 +210,6 @@ public class Camunda8FetchVariablesTest {
             p,
             t) -> Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT,
         Duration.ofHours(1));
-    deploymentService.setFetchVariablesResolver(fetchVariables);
     return deploymentService;
 
   }
@@ -248,8 +242,7 @@ public class Camunda8FetchVariablesTest {
     final var deploymentService = deploymentService(
         bpmnProcessId -> "Loans".equals(bpmnProcessId)
             ? "loanId"
-            : "cardId",
-        null);
+            : "cardId");
     wire(deploymentService, TWO_PROCESSES);
 
     final var selection = deploymentService.fetchVariablesOf(
@@ -275,8 +268,7 @@ public class Camunda8FetchVariablesTest {
     final var deploymentService = deploymentService(
         bpmnProcessId -> "Loans".equals(bpmnProcessId)
             ? "loanId"
-            : "cardId",
-        null);
+            : "cardId");
     wire(deploymentService, TWO_PROCESSES);
 
     final var served = List
@@ -295,7 +287,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("a task in nested iterations fetches the multi-instance variables of all of them")
   public void theMultiInstanceContextIsPartOfTheList() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     wire(deploymentService, NESTED_MULTI_INSTANCE);
 
     final var selection = deploymentService.fetchVariablesOf(
@@ -323,7 +315,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("an element without iterations contributes the aggregate-ID variable alone")
   public void aPlainTaskFetchesOneVariable() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     wire(deploymentService, TWO_PROCESSES);
 
     assertEquals(
@@ -339,38 +331,10 @@ public class Camunda8FetchVariablesTest {
   }
 
   @Test
-  @DisplayName("'all' configured for ONE task of a worker makes that worker fetch everything")
-  public void theEscapeHatchWinsForTheWholeWorker() {
-
-    final var deploymentService = deploymentService(
-        bpmnProcessId -> "id",
-        (
-            workflowModuleId,
-            bpmnProcessId,
-            taskDefinition) -> "Cards".equals(bpmnProcessId)
-                ? Camunda8FetchVariables.Mode.ALL
-                : Camunda8FetchVariables.Mode.DERIVED);
-    wire(deploymentService, TWO_PROCESSES);
-
-    final var selection = deploymentService.fetchVariablesOf(
-        MODULE,
-        List
-            .of(
-                new Camunda8DeploymentService.ServedElement("Loans", "ApproveLoan", "approve"),
-                new Camunda8DeploymentService.ServedElement("Cards", "ApproveCard", "approve")));
-
-    assertTrue(
-        selection.all(),
-        "one worker serves one job type, and fetching more than derived is never wrong - so the "
-            + "escape hatch wins instead of failing the boot");
-
-  }
-
-  @Test
   @DisplayName("a BPMN process no workflow service serves is fetched blindly rather than incompletely")
   public void anUnknownAggregateFallsBackToEverything() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> null, null);
+    final var deploymentService = deploymentService(bpmnProcessId -> null);
     wire(deploymentService, TWO_PROCESSES);
 
     assertTrue(
@@ -389,7 +353,6 @@ public class Camunda8FetchVariablesTest {
 
     final var deploymentService = deploymentService(
         bpmnProcessId -> "id",
-        null,
         taskDefinition -> "rate".equals(taskDefinition)
             ? List.of("ratingProvider")
             : List.of());
@@ -413,7 +376,6 @@ public class Camunda8FetchVariablesTest {
 
     final var deploymentService = deploymentService(
         bpmnProcessId -> "id",
-        null,
         taskDefinition -> "approve".equals(taskDefinition)
             ? List.of("region", "amount")
             : List.of());
@@ -440,7 +402,6 @@ public class Camunda8FetchVariablesTest {
 
     final var deploymentService = deploymentService(
         bpmnProcessId -> "id",
-        null,
         taskDefinition -> List.of("bigPayload"));
     wire(deploymentService, TWO_PROCESSES);
 
@@ -452,7 +413,7 @@ public class Camunda8FetchVariablesTest {
                 List.of(new Camunda8DeploymentService.ServedElement("Loans", "ApproveLoan", "approve")))
             .names(),
         "the name comes from the method, so a value written past the model reaches the handler "
-            + "without the escape hatch");
+            + "without any configuration");
 
   }
 
@@ -464,7 +425,6 @@ public class Camunda8FetchVariablesTest {
     // by nothing else, so the job type answers nothing about it
     final var deploymentService = deploymentService(
         bpmnProcessId -> "id",
-        null,
         key -> "ApproveLoan".equals(key)
             ? List.of("bigPayload")
             : List.of());
@@ -486,7 +446,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("the workflow-end worker fetches the aggregate id and nothing the model declares")
   public void theWorkflowEndWorkerStaysAtOneVariable() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     wire(deploymentService, DECLARING_MODEL);
 
     assertEquals(
@@ -501,25 +461,54 @@ public class Camunda8FetchVariablesTest {
   }
 
   @Test
-  @DisplayName("the guiding messages name the escape hatch and its property key")
+  @DisplayName("the guiding messages name what the worker fetched and no removed key")
   public void theMessagesNameTheWayOut() {
 
     final var selection = Camunda8FetchVariables.Selection.of(List.of("id"));
 
     final var missing = Camunda8FetchVariables
-        .missingAggregateId("Job", 4711L, "approve", "Loans", "loanId", "c8", selection);
-    assertTrue(missing.contains("vanillabp.adapters.c8.fetch-variables"), missing);
+        .missingAggregateId("Job", 4711L, "approve", "Loans", "loanId", selection);
+    assertFalse(missing.contains("fetch-variables"), "the key is gone, so no message names it: "
+        + missing);
     assertTrue(missing.contains("[id]"), "the message names what the worker DID fetch, but was: "
         + missing);
 
-    final var unfetched = Camunda8FetchVariables.unfetchedTaskParameter("bigPayload", "approve", "c8", selection);
-    assertTrue(unfetched.contains("vanillabp.adapters.c8.fetch-variables"), unfetched);
+    final var unfetched = Camunda8FetchVariables.unfetchedTaskParameter("bigPayload", "approve", selection);
+    assertFalse(unfetched.contains("fetch-variables"), "the key is gone, so no message names it: "
+        + unfetched);
     assertTrue(unfetched.contains("bigPayload"), unfetched);
     assertTrue(
         unfetched.contains("@TaskParam(\"bigPayload\")"),
         "since the worker asks for every declared name, reaching this message means the name is "
             + "not on the method - and the message says where to put it, but was: "
             + unfetched);
+    assertTrue(unfetched.contains("workflow aggregate"), "the other way out is the aggregate: "
+        + unfetched);
+
+  }
+
+  @Test
+  @DisplayName("the removed key fetch-variables ends the start, naming every key which sets it")
+  public void theRemovedKeyEndsTheStart() {
+
+    Camunda8FetchVariables.rejectTheRemovedKey("c8", List.of());
+
+    final var keys = List.of(
+        "vanillabp.adapters.c8.fetch-variables",
+        "vanillabp.workflow-modules.loans.workflows.Loans.tasks.approve.adapters.c8.fetch-variables");
+    final var failure = assertThrows(
+        IllegalStateException.class,
+        () -> Camunda8FetchVariables.rejectTheRemovedKey("c8", keys));
+    final var message = failure.getMessage();
+    assertTrue(message.contains("does not exist any more"), message);
+    keys.forEach(key -> assertTrue(message.contains(key), "names "
+        + key
+        + ": "
+        + message));
+    assertTrue(message.contains("Remove the key"), "says what to do: "
+        + message);
+    assertTrue(message.contains("workflow aggregate"), "says what applies instead: "
+        + message);
 
   }
 
@@ -540,7 +529,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("a derived list reaches the worker builder, and 'all' leaves the builder alone")
   public void theListReachesTheWorkerBuilder() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     final var builder = Mockito
         .mock(JobWorkerBuilderStep1.JobWorkerBuilderStep3.class);
     Mockito
@@ -571,7 +560,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("every worker says at DEBUG what it fetches - the first question a missing variable raises")
   public void theStartupLineNamesTheList() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     final var builder = Mockito
         .mock(JobWorkerBuilderStep1.JobWorkerBuilderStep3.class);
     Mockito
@@ -606,24 +595,6 @@ public class Camunda8FetchVariablesTest {
             + logWatcher.list);
 
   }
-
-  @Test
-  @DisplayName("without a resolver the default is the derived list")
-  public void theDefaultIsDerived() {
-
-    assertEquals(
-        Camunda8FetchVariables.Mode.DERIVED,
-        Camunda8FetchVariablesResolver.resolve(null, MODULE, "Loans", "approve"));
-    assertEquals(
-        Camunda8FetchVariables.Mode.DERIVED,
-        Camunda8FetchVariablesResolver.resolve((
-            m,
-            p,
-            t) -> null, MODULE, "Loans", "approve"),
-        "a resolver answering nothing is a level configuring nothing");
-
-  }
-
 
   /**
    * Decomposition: the multi-instance subprocess is in the CALLER, the task asking for its
@@ -660,7 +631,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("a worker of a called process asks for the multi-instance variables of the call site")
   public void theListFollowsTheChainAcrossTheProcessBoundary() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     final var context = wire(deploymentService, CALLER_AND_CALLED);
     deploymentService.wireTheProcessesThisModuleCalls(MODULE, context);
 
@@ -686,7 +657,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("without the call graph the same worker asks for the aggregate id alone")
   public void theListIsEmptyUntilTheCallGraphIsBuilt() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     wire(deploymentService, CALLER_AND_CALLED);
 
     assertEquals(
@@ -708,7 +679,6 @@ public class Camunda8FetchVariablesTest {
 
     final var deploymentService = deploymentService(
         bpmnProcessId -> "id",
-        null,
         taskDefinition -> List.of(),
         (
             caller,
@@ -739,7 +709,7 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("a worker reporting a whole process rather than an element asks for the aggregate id alone")
   public void theWorkflowEndListenerAsksForOneName() {
 
-    final var deploymentService = deploymentService(bpmnProcessId -> "id", null);
+    final var deploymentService = deploymentService(bpmnProcessId -> "id");
     wire(deploymentService, TWO_PROCESSES);
 
     assertEquals(

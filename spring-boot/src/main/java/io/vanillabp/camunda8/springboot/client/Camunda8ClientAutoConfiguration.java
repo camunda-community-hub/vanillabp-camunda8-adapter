@@ -16,6 +16,7 @@ import io.vanillabp.camunda8.client.Camunda8StartupValidation;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentService;
 import io.vanillabp.camunda8.observability.MicrometerCamunda8Metrics;
 import io.vanillabp.camunda8.wiring.Camunda8Connectors;
+import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
 import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 import io.vanillabp.integration.adapter.migration.config.DeploymentFailurePolicy;
 import io.vanillabp.integration.config.VanillaBpConfigurationProperties;
@@ -75,6 +76,9 @@ public class Camunda8ClientAutoConfiguration {
           final var configuration = overlay
               .getAdapters()
               .getOrDefault(adapterId, new Camunda8AdapterConfiguration());
+          // a removed key is refused before anything else, wherever it is set: the
+          // workers no longer read it, and silence would hide that from the application
+          Camunda8FetchVariables.rejectTheRemovedKey(adapterId, overlay.fetchVariablesKeys(adapterId));
           Camunda8StartupValidation.validateAtStartup(
               adapterId,
               configuration,

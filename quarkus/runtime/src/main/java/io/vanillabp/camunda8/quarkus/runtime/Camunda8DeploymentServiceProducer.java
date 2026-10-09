@@ -138,13 +138,6 @@ public class Camunda8DeploymentServiceProducer {
           deploymentService
               .setConfiguredTenants(
                   workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));
-          // What each worker asks the cluster for, resolvable down to task
-          // level
-          deploymentService.setFetchVariablesResolver((
-              workflowModuleId,
-              bpmnProcessId,
-              taskDefinition) -> overlay.fetchVariablesFor(
-                  workflowModuleId, bpmnProcessId, taskDefinition, adapterId));
           // Which elements of a model this application leaves to the runtime which
           // owns them, resolvable down to the workflow
           deploymentService.setAllowConnectorsResolver((
