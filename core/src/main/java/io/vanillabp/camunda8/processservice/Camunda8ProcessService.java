@@ -1897,7 +1897,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
                   request.messageName(), request.correlationId(),
                   request.activationId()));
     }
-    final var timeToLive = messageTimeToLiveFor(request.workflowModuleId(), request.bpmnProcessId(),
+    final var timeToLive = messageTimeToLiveFor(
+        request.workflowModuleId(),
+        processWaitingForTheMessage(request.workflowModuleId(), request.bpmnProcessId(), request.messageName()),
         request.messageName());
     if (timeToLive != null) {
       // per message, because the number buffers AND deduplicates and those two want it
@@ -1943,6 +1945,89 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           request.bpmnProcessId(),
           request.workflowModuleId());
     }
+
+  }
+
+  /**
+   * The BPMN process whose model waits for a message, which is the process a time-to-live
+   * configured for that message belongs to.
+   * <p>
+   * A process service belongs to the process at the top, so the correlation names that
+   * process. The event which waits may sit in a called process, though, and whoever configures
+   * the time-to-live of that message writes it under the called process
+   * (<code>workflows.&lt;called process&gt;.messages.&lt;message&gt;</code>). The cluster does
+   * not say which subscription will take a message, and it may take one which is published
+   * before anything waits. So the deployed models answer: the process of the call where its own
+   * model waits for the message, otherwise the one other process of the workflow module whose
+   * model does. Where none does, or several others do, the process of the call stays the
+   * answer, as before. See decision 77 in the repository's DECISIONS.md.
+   *
+   * @param workflowModuleId The workflow module of the correlation
+   * @param bpmnProcessId The BPMN process of the call
+   * @param messageName The message name as the application wrote it
+   * @return The plain id of the process the time-to-live is read for
+   */
+  private String processWaitingForTheMessage(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String messageName) {
+
+    final var scopedMessageName = scopedIdentifier(workflowModuleId, messageName);
+    final var waiting = clientFactory
+        .getDeployedProcesses()
+        .ofWorkflowModule(workflowModuleId)
+        .stream()
+        .filter(deployed -> waitsForTheMessage(
+            deployed.model(),
+            scopedProcessId(workflowModuleId, deployed.bpmnProcessId()),
+            scopedMessageName))
+        .map(io.vanillabp.camunda8.deployment.Camunda8DeployedProcesses.DeployedProcess::bpmnProcessId)
+        .distinct()
+        .toList();
+    if (waiting.contains(bpmnProcessId) || (waiting.size() != 1)) {
+      return bpmnProcessId;
+    }
+    return waiting.getFirst();
+
+  }
+
+  /**
+   * Whether one process of a model waits for a message: a catch event or a receive task of that
+   * process which names it. A file may carry several processes, and only the elements of the
+   * given one count.
+   *
+   * @param model The model as deployed
+   * @param scopedProcessId The process as the cluster knows it
+   * @param scopedMessageName The message as the cluster knows it
+   * @return Whether that process waits for the message
+   */
+  private static boolean waitsForTheMessage(
+      final BpmnModelInstance model,
+      final String scopedProcessId,
+      final String scopedMessageName) {
+
+    final java.util.function.Predicate<org.camunda.bpm.model.xml.instance.ModelElementInstance> inTheProcess = element -> {
+      var current = element.getParentElement();
+      while (current != null) {
+        if (current instanceof Process process) {
+          return scopedProcessId.equals(process.getId());
+        }
+        current = current.getParentElement();
+      }
+      return false;
+    };
+    final var byAnEvent = model
+        .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.MessageEventDefinition.class)
+        .stream()
+        .filter(definition -> definition.getMessage() != null)
+        .filter(definition -> scopedMessageName.equals(definition.getMessage().getName()))
+        .anyMatch(inTheProcess);
+    return byAnEvent || model
+        .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.ReceiveTask.class)
+        .stream()
+        .filter(receiveTask -> receiveTask.getMessage() != null)
+        .filter(receiveTask -> scopedMessageName.equals(receiveTask.getMessage().getName()))
+        .anyMatch(inTheProcess);
 
   }
 
@@ -2046,7 +2131,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     final var variables = variablesOf(request.aggregatePersistence(), request.workflowAggregateId());
 
     if (request.taskId() == null) {
-      if (pushedIntoTheInstanceOfTheStartRow(request, variables)) {
+      final var keyOfTheStartRow = pushedIntoTheInstanceOfTheStartRow(request, variables);
+      if (keyOfTheStartRow != null) {
+        pushIntoTheCalledInstances(request, keyOfTheStartRow, variables);
         return;
       }
       final var processInstanceKey = processInstanceKeyOf(
@@ -2077,6 +2164,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           adapterId,
           request.workflowAggregateId(),
           processInstanceKey);
+      pushIntoTheCalledInstances(request, processInstanceKey, variables);
       return;
     }
 
@@ -2168,21 +2256,22 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    *
    * @param request The push
    * @param variables The values to write
-   * @return Whether the values were written, <code>false</code> where the caller has to search
+   * @return The process instance the values were written into, <code>null</code> where the
+   *         caller has to search
    */
-  private boolean pushedIntoTheInstanceOfTheStartRow(
+  private Long pushedIntoTheInstanceOfTheStartRow(
       final PhaseTwoRequest<A> request,
       final Map<String, Object> variables) {
 
     final var workflowId = request.workflowId();
     if ((workflowId == null) || workflowId.isBlank() || clientFactory.sharesItsCluster()) {
-      return false;
+      return null;
     }
     final long processInstanceKey;
     try {
       processInstanceKey = Long.parseLong(workflowId);
     } catch (final NumberFormatException e) {
-      return false;
+      return null;
     }
     try {
       clientFactory
@@ -2205,7 +2294,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
               adapterId,
               processInstanceKey,
               request.workflowAggregateId());
-      return false;
+      return null;
     }
     log
         .info(
@@ -2213,7 +2302,78 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
             adapterId,
             request.workflowAggregateId(),
             processInstanceKey);
-    return true;
+    return processInstanceKey;
+
+  }
+
+  /**
+   * Pushes the changed aggregate into every active called instance below a process instance
+   * which continues its aggregate, at any depth.
+   * <p>
+   * A called instance gets a copy of the caller's variables when the call activity starts it,
+   * and nothing the caller is told later. So a gateway in a called process decided on the
+   * values of the moment of the call, however often the aggregate was pushed since. A called
+   * instance continues the aggregate where it carries the aggregate's id, which is the variable
+   * the propagation of the call activity hands over. The walk stops at a called process which
+   * does not carry it: what that one calls is not this aggregate's business.
+   * <p>
+   * The called instances are found through the query API. A called instance the exporter has
+   * not reported yet is not found and keeps what it was given at the call. See decision 77 in
+   * the repository's DECISIONS.md.
+   *
+   * @param request The push
+   * @param processInstanceKey The instance at the top, which was written already
+   * @param variables The values to write
+   */
+  private void pushIntoTheCalledInstances(
+      final PhaseTwoRequest<A> request,
+      final long processInstanceKey,
+      final Map<String, Object> variables) {
+
+    final var idName = aggregateIdVariableName(request.aggregatePersistence());
+    var callers = List.of(processInstanceKey);
+    while (!callers.isEmpty()) {
+      final var called = new java.util.ArrayList<Long>();
+      for (final var caller : callers) {
+        clientFactory
+            .getClient()
+            .newProcessInstanceSearchRequest()
+            .filter(filter -> {
+              filter.state(ProcessInstanceState.ACTIVE);
+              filter.parentProcessInstanceKey(caller);
+              Camunda8Searches.byAggregateId(filter, idName, request.workflowAggregateId());
+            })
+            .send()
+            .join()
+            .items()
+            .forEach(instance -> called.add(instance.getProcessInstanceKey()));
+      }
+      for (final var calledInstanceKey : called) {
+        try {
+          clientFactory
+              .getClient()
+              .newSetVariablesCommand(calledInstanceKey)
+              .variables(variables)
+              .local(false)
+              .send()
+              .join();
+        } catch (final Exception e) {
+          if (!Camunda8Errors.notFound(e)) {
+            throw e;
+          }
+          // the called instance ended between the search and the write, which leaves
+          // nothing in it to tell
+          continue;
+        }
+        log
+            .info(
+                "Camunda8[{}]: pushed the changed aggregate '{}' into called process instance '{}'",
+                adapterId,
+                request.workflowAggregateId(),
+                calledInstanceKey);
+      }
+      callers = called;
+    }
 
   }
 
