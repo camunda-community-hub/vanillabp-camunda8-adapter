@@ -205,12 +205,14 @@ Camunda Community
 Hub](https://github.com/vanillabp/development-workspace#the-license-agreement-of-the-camunda-community-hub)
 says how.
 
-`main` carries a ruleset, and it requires six green checks before a merge: `publish`, the build of
-the current GA line; `orphaned-javadoc-check`; `api-identity`, which holds the public API the same
-on every line; `line-pins-verified`, which reads the GA lines out of the matrix;
+`main` carries a ruleset, and it requires eight green checks before a merge: `publish`, the build of
+the current GA line; `native-build`, which builds the adapter into a native image and starts it
+against a real cluster; `orphaned-javadoc-check`; `api-identity`, which holds the public API the
+same on every line; `line-pins-verified`, which reads the GA lines out of the matrix;
 `renovate-configuration`, which runs the Renovate validator over the configuration of this
-repository and over the shared preset; and `client-api-changes`, which says on the pull request what
-a client bump added. While one of them is red, GitHub does not offer the merge.
+repository and over the shared preset; `client-api-changes`, which says on the pull request what a
+client bump added; and `client-api-changes-selftest`, which holds that check against three
+published client bumps. While one of them is red, GitHub does not offer the merge.
 
 ## License
 
