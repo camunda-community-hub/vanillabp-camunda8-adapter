@@ -118,7 +118,7 @@ jobs:
       # runs whatever the build did.
       - name: Remove the containers this line started
         if: always()
-        # Same race as in publish-snapshots.yaml: Ryuk removes the same containers,
+        # Same race as in deploy-to-github-packages.yaml: Ryuk removes the same containers,
         # 'docker rm' then exits 123 on "removal ... is already in progress", and a line
         # whose tests were green went red on the cleanup. A belt does not decide a build.
         run: |

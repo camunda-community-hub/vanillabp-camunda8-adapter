@@ -11,7 +11,7 @@ concurrency:
   # will ask again.
   #
   # Cancelling is right here and wrong for the publish group of
-  # publish-snapshots.yaml. A publish which was stopped halfway cannot be
+  # deploy-to-github-packages.yaml. A publish which was stopped halfway cannot be
   # repeated, a check can. GitHub takes the older runs of a group and never the one which
   # just arrived, so 'line-pins-verified' reports for the commit somebody will merge.
   group: checks-${{ github.ref }}
