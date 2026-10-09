@@ -1,6 +1,8 @@
 package io.vanillabp.camunda8;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.vanillabp.integration.adapter.spi.AdapterCollaborators;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
@@ -85,7 +87,38 @@ public final class TestCollaborators {
       final NameClashAvoidanceSupport scoping,
       final WorkflowEndedInvoker workflowEnded) {
 
-    return of(core, scoping, workflowEnded, mock(BpmsInitiatedStartInvoker.class));
+    return of(core, scoping, workflowEnded, startingAWorkflowEverywhere());
+
+  }
+
+  /**
+   * A start entry of the core which answers what the core answers for a process that is no
+   * called process. A plain mock would answer <code>false</code> to
+   * <code>startsAWorkflowOfItsOwn</code>, and every process would look like a called one.
+   *
+   * @return The mock
+   */
+  public static BpmsInitiatedStartInvoker startingAWorkflowEverywhere() {
+
+    final var bpmsInitiatedStarts = mock(BpmsInitiatedStartInvoker.class);
+    when(bpmsInitiatedStarts.startsAWorkflowOfItsOwn(anyString(), anyString())).thenReturn(true);
+    return bpmsInitiatedStarts;
+
+  }
+
+  /**
+   * @param <T> A double playing both halves of the task SPI
+   * @param core The double
+   * @param workflowEnded What the test wants the core to answer about the end of a workflow
+   * @param bpmsInitiatedStarts What the test wants the core to answer about a start
+   * @return A complete set built around them
+   */
+  public static <T extends WorkflowTaskWiring & WorkflowTaskInvoker> AdapterCollaborators of(
+      final T core,
+      final WorkflowEndedInvoker workflowEnded,
+      final BpmsInitiatedStartInvoker bpmsInitiatedStarts) {
+
+    return of(core, mock(NameClashAvoidanceSupport.class), workflowEnded, bpmsInitiatedStarts);
 
   }
 

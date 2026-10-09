@@ -2082,6 +2082,9 @@ the model reaches the cluster with a listener on those and on nothing else.
 
 ### 49. The cluster holds the workflow's name in the variable named after the aggregate's id
 
+*Decision 76 leaves a called process out: it gets no start listener. That decision waits in
+`DECISIONS.pending/949.md` for its number.*
+
 The id of a workflow is the id of its workflow aggregate, the application assigns it in the
 `@WorkflowStartedByBpms` method, and nobody else does. Camunda 8 keeps no business key, so this
 adapter keeps that id in a PROCESS VARIABLE. The rule itself and what the core does with it are

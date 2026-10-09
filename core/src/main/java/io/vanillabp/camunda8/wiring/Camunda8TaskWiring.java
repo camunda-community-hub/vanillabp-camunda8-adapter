@@ -608,6 +608,27 @@ public final class Camunda8TaskWiring {
   }
 
   /**
+   * The start events of a called process, read without adding anything. A called process is no
+   * workflow of its own, so its start is no start the core has to hear about, and a listener on
+   * it would only hold the instance until a worker answered.
+   *
+   * @param model The model being deployed
+   * @param bpmnProcessId The process id as the CLUSTER knows it
+   * @param signalNameResolver Turns the scoped signal name of the model into the
+   *          plain one the application modelled
+   * @return The start events the model declares, so the core can still refuse one the
+   *         cluster fires on its own
+   */
+  public static List<Camunda8BpmsInitiatedStartToWire> startEventsOfACalledProcess(
+      final BpmnModelInstance model,
+      final String bpmnProcessId,
+      final UnaryOperator<String> signalNameResolver) {
+
+    return bpmsInitiatedStartsOf(model, bpmnProcessId, signalNameResolver, false);
+
+  }
+
+  /**
    * The start events the CLUSTER fires on its own in a model it already runs - read for
    * checks about versions an earlier application deployed, never for deploying. Nothing
    * is added here: the cluster accepted the model as it stands and carries the execution
