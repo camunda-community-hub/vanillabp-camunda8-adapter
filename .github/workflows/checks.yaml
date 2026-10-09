@@ -16,11 +16,6 @@ concurrency:
   # just arrived, so 'line-pins-verified' reports for the commit somebody will merge.
   group: checks-${{ github.ref }}
   cancel-in-progress: true
-env:
-  # The VanillaBP artifacts are snapshots and live in GitHub Packages until the release.
-  # Reading them needs a token, see github-packages-settings.xml.
-  USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
-  USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
 jobs:
   # Javadoc keeps the last block before an element and drops every earlier one without a
   # word, so a comment somebody wrote and keeps up to date appears nowhere. Neither the
@@ -52,8 +47,7 @@ jobs:
           cache: maven
       - name: The public API is the same on every line
         env:
-          MAVEN_ARGS: -s ${{ github.workspace }}/.github/workflows/github-packages-settings.xml
-            --update-snapshots
+          MAVEN_ARGS: --update-snapshots
         run: bin/api-identity.sh
 
   # A check which reports nothing looks exactly like a quiet week, so the script behind

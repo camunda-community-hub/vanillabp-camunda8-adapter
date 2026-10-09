@@ -37,11 +37,6 @@ name: Release lines
         value: "${{ jobs.ga-lines.outputs.broken }}"
 permissions:
   contents: read
-env:
-  # The VanillaBP artifacts are snapshots and live in GitHub Packages until the release.
-  # Reading them needs a token, see github-packages-settings.xml.
-  USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
-  USER_TOKEN: "${{ secrets.VANILLABP_USER_TOKEN }}"
 jobs:
   # The live lines are not maintained here: they are the line-* profiles of the parent
   # POM, which also carry the pins. So the matrix cannot fall behind the build.
@@ -96,8 +91,7 @@ jobs:
         # so the build proves the coordinates as well as the code. 'install' without
         # 'verify': install runs every phase verify has, and naming both compiled each
         # module twice for nothing.
-        run: mvn -s "$GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml"
-          --batch-mode --no-transfer-progress --update-snapshots
+        run: mvn --batch-mode --no-transfer-progress --update-snapshots
           -Pline-${{ matrix.line }} -Drevision=2.0.0-${{ matrix.line }}-SNAPSHOT
           clean install
       # A nightly line going red used to leave nothing behind, so whoever read the matrix
@@ -146,17 +140,17 @@ jobs:
           marker="${RUNNER_TEMP}/platform-snapshot-marker"
           snapshots="${HOME}/.m2/repository/io/vanillabp"
           # Maven writes one maven-metadata-<repository id>.xml per remote repository a
-          # snapshot came from, next to the jar it resolved. The ids of the VanillaBP
-          # repositories all begin with 'vanillabp-', see github-packages-settings.xml, so
-          # this reads what came from the platform and skips what this build installed
-          # itself, which carries no such file.
+          # snapshot came from, next to the jar it resolved. The VanillaBP snapshots come
+          # from the repository 'central-snapshots', which the root pom.xml names, so this
+          # reads what came from the platform and skips what this build installed itself,
+          # which carries no such file.
           mapfile -t metadata < <(find "$snapshots" \
-            -path '*-SNAPSHOT/maven-metadata-vanillabp-*.xml' -newer "$marker" \
+            -path '*-SNAPSHOT/maven-metadata-central-snapshots.xml' -newer "$marker" \
             2>/dev/null | sort)
           stale=""
           if [ "${#metadata[@]}" -eq 0 ]; then
             mapfile -t metadata < <(find "$snapshots" \
-              -path '*-SNAPSHOT/maven-metadata-vanillabp-*.xml' 2>/dev/null | sort)
+              -path '*-SNAPSHOT/maven-metadata-central-snapshots.xml' 2>/dev/null | sort)
             stale="Maven refreshed none of these while this run was going, so they are what
           the cache of the runner held and not necessarily what was built against."
           fi
@@ -180,9 +174,7 @@ jobs:
             fi
             printf -- '- `%s:%s` %s\n' "$group" "$artifact" "$resolved" >> "$out"
           done
-          # Every VanillaBP repository serves every VanillaBP package, so one artifact is
-          # answered by several of the repositories in the settings and written down once per
-          # repository. The same line several times says nothing twice.
+          # the same line several times says nothing twice
           sort -u -o "$out" "$out"
           if [ -n "$stale" ]; then
             printf '\n%s\n' "$stale" >> "$out"

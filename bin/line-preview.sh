@@ -3,9 +3,9 @@
 # Is a release line the preview line? The answer is the camunda8.line.preview property of
 # the line-<line> profile, and this script reads it out of the POM text.
 #
-# Asking Maven for it needs the credentials of whoever runs it. The POM of a repository
-# which uses the client-api-changes workflow imports the VanillaBP BOM as a snapshot from
-# GitHub Packages, and a job which only reports on a pull request has no token for that.
+# Asking Maven for it used to need the credentials of whoever ran it. The POM of a repository
+# which uses the client-api-changes workflow imported the VanillaBP BOM as a snapshot from
+# GitHub Packages, and a job which only reports on a pull request had no token for that.
 # The first run of that workflow in businesscockpit-camunda8-adapter died on exactly this.
 # Maven could not resolve the import. The message went into a command substitution instead
 # of into the log, so the preview line was read as a GA line, and the check went red over
