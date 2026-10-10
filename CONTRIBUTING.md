@@ -183,6 +183,10 @@ decision number you used while you were writing, and once a pull request is merg
 bin/check-decision-numbers.sh
 ```
 
+After you corrected a number, `bin/check-decision-citations.sh` says whether every citation of a
+decision still points at an entry of `DECISIONS.md`. The *Checks* workflow runs it on every pull
+request.
+
 Two workflows answer a pull request. *Publish to GitHub Packages* builds and tests the current GA
 line and publishes nothing from a branch. *Checks* runs what needs no cluster, the API identity of
 the lines among it, and it calls the matrix which builds every release line against that line's

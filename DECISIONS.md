@@ -215,6 +215,12 @@ cluster on any of the supported lines, only for the token request, and a propert
 configures something other than what its name says is worse than no property.
 See [Authenticating against a cluster](./README.md#authenticating-against-a-cluster).
 
+*Checked on 2026-10-10 against the sources of `camunda-client-java` 8.8.40, 8.9.22 and 8.10.0, the
+three current lines, and still true. The gRPC channel gets a trust manager and nothing else, and the
+REST client builds its `SSLContext` with trust managers and no key managers. A client keystore
+(`CAMUNDA_SSL_CLIENT_KEYSTORE_*`) and a client-assertion keystore exist only on the OAuth token
+request.*
+
 ### 11. The client an artifact was built against is the minimum cluster version
 
 Camunda does not promise that a newer client works against an older cluster, and it has been
@@ -705,7 +711,7 @@ Reporting an unproven finding is still better than silence. The mode which needs
 silent because nothing is provable would leave exactly that case unguarded. A cluster which cannot
 be searched is no cluster this adapter serves (decision 20), so there is no third answer to write.
 
-A finding warns and never ends a boot, which is the platform's decision 38 applied: whoever holds
+A finding warns and never ends a boot, which is the platform's decision 40 applied: whoever holds
 the name may be an application which is running correctly, and ending this boot would not help it.
 A diagnostic may never end a boot either way. Every search is wrapped twice, a failure is logged at
 debug and the questions which can still be put are still put. There is no property switching any of
@@ -981,9 +987,15 @@ An input mapping rather than a start listener. The cluster evaluates it in the s
 creates the called instance, so there is no window in which the variable is missing, and it
 evaluates it per multi-instance instance, so each called instance gets its own round. A listener
 would cost a job per instance for bookkeeping, a start listener at the process does not see the
-start variables, and an element listener on a call activity is not taken by any current line. A
-second such call activity further down appends its own entry, which is how a chain several
-processes long comes about.
+start variables, and a `cancel` listener on a call activity is not taken by any current line
+(decision 33). A second such call activity further down appends its own entry, which is how a
+chain several processes long comes about.
+
+*Corrected on 2026-10-10: the sentence above used to say that no current line takes an element
+listener on a call activity. That holds for `cancel` only. A `start` and an `end` execution listener
+on a call activity deploy on `camunda/camunda:8.8.40`, `8.9.22` and `8.10.0`; a `cancel` listener
+there is refused by all three. A start or end listener would still cost the job per instance named
+above, so the choice of the input mapping stands.*
 
 The values travel IN the entry rather than being named by it. A worker has one fetch list, fixed at
 registration, so it cannot read the variable, look inside and then ask for the names it finds.
@@ -1782,6 +1794,8 @@ The rest of decision 31 stands. A release still runs the matrix itself before it
 anything, and a line which breaks in the night still gets its issue. The release gate is the call
 of the whole matrix and not the name `lines-verified`, so the release keeps waiting for the preview
 line.
+
+*Until the first pre-release of the next release there is no preview line, see decision 52.*
 
 ### 43. On the preview line no test creates a Camunda-managed user task on a shared cluster
 
@@ -2986,7 +3000,7 @@ answer. Reading what VanillaBP itself wrote down about the start is the cheaper 
 The measurement can be repeated: `analysis/895/bin/run.sh` builds the cluster, runs the load, takes the read model
 away and prints whether every workflow ended exactly once.
 
-*Superseded in part on 2026-10-04: the three cases under "Where it does not hold yet" are closed for every workflow which has a start row. A planned operation is no longer dropped after a restart (`897`), waiting for the copy spends time and not attempts on every store (`898`, `902`), and a task-scoped push waits for its scope (`899`), into a user task as well (`903`, decision 66). A workflow without a start row, such as one started under version 1, still has the gaps described there.*
+*Superseded in part on 2026-10-04: the three cases under "Where it does not hold yet" are closed for every workflow which has a start row. A planned operation is no longer dropped after a restart (`897`), waiting for the copy spends time and not attempts on every store (`898`, `902`), and a task-scoped push waits for its scope (`899`), into a user task as well (`903`, decision 66). A workflow without a start row, such as one started under version 1, still has the gaps described there. The wiki page "When the read model fails" therefore no longer advises against restarting application pods while the exporter stands still. That advice still holds for a workflow without a start row, and only for it.*
 
 ### 65. A task-scoped push which cannot find its scope asks the engine before it gives up
 
