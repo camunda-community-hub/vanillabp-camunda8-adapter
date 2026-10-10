@@ -535,10 +535,15 @@ public class C8E2eWorkflowService {
    * which is deployed while the application runs - the way another node of a rolling
    * deployment does it. Which version carries which tag is read by searching the cluster,
    * which is one of the reasons the adapter requires one it can search.
+   * <p>
+   * The range is open at the top, like the one of the Spring Boot test: a start refuses the
+   * version it deploys if a task of it has no method for that version. This application boots
+   * once on a cluster of its own today, but a later boot on the same cluster would deploy the
+   * untagged model as a version after the tagged one, and exactly 'release-2' would fail it.
    *
    * @param aggregate The workflow aggregate
    */
-  @WorkflowTask(taskDefinition = "versionedTask", version = "release-2")
+  @WorkflowTask(taskDefinition = "versionedTask", version = ">=release-2")
   public void taggedVersion(
       final C8E2eAggregate aggregate) {
 
