@@ -8,20 +8,22 @@ import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import io.vanillabp.integration.utils.SpringDataUtil;
 
 /**
- * Minimal Spring Boot application used by {@code Camunda8AdapterDiscoveryTest} to prove
- * the Camunda 8 adapter is discovered when configured. It lives in a MAVEN MODULE of its
- * own, and so does its workflow module {@code smoke-app}: a workflow module is a
- * classpath entry carrying {@code META-INF/workflow-module}, so a scenario sharing that
- * entry with another one shares its workflow module - and every application is then asked
- * for the persistence of the other scenario's aggregates, which ends the startup. It provides a
- * {@link SpringDataUtil} stub so the test does not need a real database - no workflow is
- * ever started, so persistence is never actually used.
+ * A minimal Spring Boot application. {@code Camunda8AdapterDiscoveryTest} uses it to prove
+ * that the Camunda 8 adapter is found when it is configured.
  * <p>
- * It also says who owns {@link Aggregate}. An aggregate without a persistence ends
- * the startup, because the fallback would look for a Spring
- * Data repository and this application has no reason to have one. The double below is
- * that answer, and every method of it fails loudly so a test which starts persisting for
- * real hears about it.
+ * It lives in a MAVEN MODULE of its own, and so does its workflow module
+ * {@code smoke-app}. A workflow module is a classpath entry with
+ * {@code META-INF/workflow-module}. A scenario which shares that entry with another one
+ * shares its workflow module. Then every application is asked for the persistence of the
+ * other scenario's aggregates, and that ends the startup.
+ * <p>
+ * It provides a {@link SpringDataUtil} stub, so the test does not need a real database. No
+ * workflow is ever started, so the persistence is never used.
+ * <p>
+ * It also says who owns {@link Aggregate}. An aggregate without a persistence ends the
+ * startup, because the fallback would look for a Spring Data repository. This application
+ * has no reason to have one. The double below is the answer. Every method of it fails
+ * loudly, so a test which starts to persist for real hears about it.
  */
 @SpringBootApplication
 public class SmokeTestApplication {
@@ -33,8 +35,8 @@ public class SmokeTestApplication {
 
       @Override
       public Class<Object> getAggregateClass() {
-        // every aggregate is an Object, and at the greatest inheritance distance there is,
-        // so a double declared for a specific class would always win over this one
+        // every aggregate is an Object, at the greatest inheritance distance there is. So a
+        // double declared for a specific class would always win over this one
         return Object.class;
       }
 
@@ -58,7 +60,7 @@ public class SmokeTestApplication {
 
       @Override
       public Class<?> getAggregateIdType() {
-        // the contract's "not determinable": this double owns the serialized form, as far
+        // the contract's "not determinable". This double owns the serialized form, as far
         // as it owns anything at all
         return null;
       }

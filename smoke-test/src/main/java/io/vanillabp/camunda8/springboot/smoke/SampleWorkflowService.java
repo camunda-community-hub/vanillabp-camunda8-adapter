@@ -8,8 +8,8 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * A minimal workflow service so a {@link ProcessService} bean is built and the adapter
- * wiring is exercised. No BPMN file is provided, so deployment never runs.
+ * A minimal workflow service, so a {@link ProcessService} bean is built and the adapter
+ * wiring runs. There is no BPMN file, so the deployment never runs.
  */
 @Service
 @WorkflowService(workflowAggregateClass = Aggregate.class)
@@ -20,7 +20,7 @@ public class SampleWorkflowService {
 
   @WorkflowTask
   public void doSomething() {
-    // no-op; only used to trigger process-service wiring
+    // does nothing; it is only here to make the process service get wired
   }
 
 }
