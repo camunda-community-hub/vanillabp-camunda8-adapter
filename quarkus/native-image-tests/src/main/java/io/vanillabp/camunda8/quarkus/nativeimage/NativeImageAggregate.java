@@ -9,9 +9,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The workflow aggregate of the native-image application. Its status is how the
- * application learns that the cluster handed the job back to a handler inside the
- * binary.
+ * The workflow aggregate of the native-image application. Its status tells the
+ * application that the cluster handed the job back to a handler inside the binary.
  */
 @Entity
 @Table(name = "C8_NATIVE_AGGREGATE")
