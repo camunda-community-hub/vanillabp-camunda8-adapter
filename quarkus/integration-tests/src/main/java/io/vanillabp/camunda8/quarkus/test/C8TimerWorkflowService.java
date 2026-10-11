@@ -10,9 +10,9 @@ import io.vanillabp.spi.service.WorkflowTask;
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * The workflow service of the timer-started workflow. The cluster starts it, so the
- * aggregate is built here and nowhere else, and the task following the start event has
- * to find it through the aggregate-id variable the start listener wrote.
+ * The workflow service of the workflow a timer starts. The cluster starts it, so the
+ * aggregate is built here and nowhere else. The task after the start event has to find
+ * the aggregate through the aggregate-id variable the start listener wrote.
  */
 @ApplicationScoped
 @WorkflowService(
@@ -31,8 +31,8 @@ public class C8TimerWorkflowService {
       final BpmsStartTrigger trigger) {
 
     final var aggregate = new C8TimerAggregate();
-    // the name of the workflow is the application's choice, and the cluster keeps it in
-    // the process variable named after this aggregate's id attribute
+    // the application chooses the name of the workflow. The cluster keeps it in the
+    // process variable named after this aggregate's id attribute
     aggregate.setId("timer-"
         + java.util.UUID.randomUUID());
     aggregate.setStartedBy(trigger.kind().name());

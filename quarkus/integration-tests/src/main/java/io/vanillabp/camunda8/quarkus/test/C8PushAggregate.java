@@ -11,14 +11,14 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The workflow aggregate of the aggregateChanged tests. Every attribute is
- * shared with the cluster, so {@link #note} arrives there as a process variable - and
- * reading it back with its scope is how the test sees WHERE a push landed.
+ * The workflow aggregate of the aggregateChanged tests. Every attribute is shared with the
+ * cluster, so {@link #note} arrives there as a process variable. The test reads it back
+ * with its scope, and so it sees WHERE a push landed.
  * <p>
- * It carries a {@link Version} attribute because the multi-instance process runs two
- * iterations at once on the adapter's execution slots: without it the one committing
- * last would put back what it read, with it the loser of the conflict fails and the
- * cluster redelivers its job.
+ * It has a {@link Version} attribute, because the multi-instance process runs two
+ * iterations at once on the adapter's execution slots. Without it, the iteration which
+ * commits last would write back the old state it read. With it, the loser of the conflict
+ * fails, and the cluster delivers its job again.
  */
 @Entity
 @Table(name = "C8_E2E_PUSH_AGGREGATE")

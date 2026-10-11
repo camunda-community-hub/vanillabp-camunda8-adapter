@@ -12,13 +12,12 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The workflow aggregate of the Quarkus end-to-end application - a JPA entity on H2,
- * because the phase-two outbox Camunda 8 needs for every operation reaching the
- * cluster is attributed to the persistence technology of the aggregate.
+ * The workflow aggregate of the Quarkus end-to-end application. It is a JPA entity on H2.
+ * Camunda 8 needs the phase-two outbox for every operation which reaches the cluster, and
+ * that outbox belongs to the persistence technology of the aggregate.
  * <p>
- * Its attributes travel to the cluster as process variables, which is what the FEEL
- * gateway of {@code SyncProcess} evaluates and what a pushed aggregate is read back
- * from.
+ * Its attributes travel to the cluster as process variables. The FEEL gateway of
+ * {@code SyncProcess} evaluates them, and a pushed aggregate is read back from them.
  */
 @Entity
 @Table(name = "C8_E2E_AGGREGATE")
@@ -27,8 +26,8 @@ import lombok.Setter;
 public class C8E2eAggregate {
 
   /**
-   * An id range of its own: the aggregate's id identifies the workflow at the cluster,
-   * so the id spaces of the application's aggregates must not overlap.
+   * An id range of its own. The aggregate's id identifies the workflow at the cluster, so
+   * the id ranges of the application's aggregates must not overlap.
    */
   @Id
   @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "c8E2eSeq")
@@ -47,16 +46,15 @@ public class C8E2eAggregate {
   private String taskId;
 
   /**
-   * What the exclusive gateway of {@code SyncProcess} branches on. It is set by the
-   * {@code @WorkflowTask} method right in front of that gateway, so the cluster can
+   * What the exclusive gateway of {@code SyncProcess} branches on. The
+   * {@code @WorkflowTask} method right in front of that gateway sets it. So the cluster can
    * only evaluate it if the job completion pushed it.
    */
   private boolean approved;
 
   /**
-   * Never shared with the cluster. This single annotation also puts the class into
-   * the opt-out mode "share everything else", which is what all other attributes here
-   * rely on.
+   * Never shared with the cluster. This one annotation also puts the class into the
+   * opt-out mode "share everything else". All other attributes here rely on that.
    */
   @NoSyncWithBPMS
   private String secret;
