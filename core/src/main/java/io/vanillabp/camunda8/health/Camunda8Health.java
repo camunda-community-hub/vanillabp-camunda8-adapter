@@ -9,28 +9,28 @@ import io.vanillabp.camunda8.client.Camunda8ClientFactory;
 import io.vanillabp.integration.adapter.spi.health.AdapterHealth;
 
 /**
- * What one Camunda 8 adapter instance can say about its cluster: it asks for the
- * topology, which is the cheapest question a Camunda 8 cluster answers and the same one
- * Camunda's own Spring Boot starter asks in its health check.
+ * What one Camunda 8 adapter instance can say about its cluster. It asks for the
+ * topology. That is the cheapest question a Camunda 8 cluster answers. Camunda's own
+ * Spring Boot starter asks the same one in its health check.
  * <p>
  * Three answers are possible, and which one is given is decided before the cluster is
  * contacted:
  * <ul>
  * <li>the connection is not configured yet, or the check was switched off with
  * <code>health-timeout: PT0S</code>: UNKNOWN. An application which booted with a guiding
- * warning about missing properties must not be reported as an outage on top of it;</li>
+ * warning about missing properties must not be reported as an outage as well.</li>
  * <li>the cluster answered: UP, with its gateway version and how many brokers it
- * has;</li>
+ * has.</li>
  * <li>the cluster did not answer within the timeout, or answered with an error: DOWN,
  * with the reason.</li>
  * </ul>
- * Every answer carries the address, because the whole point of the detail is that an
- * operator can act on it without opening the application's configuration first.
+ * Every answer carries the address. The point of the detail is that an operator can act
+ * on it without opening the configuration of the application first.
  */
 public final class Camunda8Health {
 
   /**
-   * The adapter type this check belongs to, which is what the platform reports it under.
+   * The adapter type this check belongs to. The platform reports the check under it.
    */
   public static final String ADAPTER_TYPE = "camunda8";
 
@@ -84,9 +84,9 @@ public final class Camunda8Health {
     final var request = clientFactory
         .getClient()
         .newTopologyRequest()
-        // twice, on purpose: the client's own timeout stops the request, ours stops the
-        // waiting. Without the first one a cluster which never answers would leave the
-        // request running long after the health endpoint gave up on it
+        // twice, on purpose. The timeout of the client stops the request, ours stops the
+        // waiting. Without the first one, a cluster which never answers would leave the
+        // request running long after the health endpoint gave up on it.
         .requestTimeout(timeout)
         .send();
     try {
@@ -113,8 +113,8 @@ public final class Camunda8Health {
       request.cancel(true);
       return down(adapterId, address, "The health check was interrupted", timeout);
     } catch (final Exception e) {
-      // includes the TimeoutException of a cluster which is simply too slow to answer -
-      // for a health endpoint the two are the same thing said differently
+      // includes the TimeoutException of a cluster which is simply too slow to answer.
+      // For a health endpoint, a slow cluster and a failed request mean the same.
       request.cancel(true);
       return down(adapterId, address, describeFailure(e), timeout);
     }
@@ -141,8 +141,8 @@ public final class Camunda8Health {
   }
 
   /**
-   * The reason a cluster did not answer, as short as it can be said. A timeout carries no
-   * message of its own, so it is named rather than reported as an empty exception.
+   * The reason a cluster did not answer, as short as possible. A timeout carries no
+   * message of its own. So it is named, and not reported as an empty exception.
    *
    * @param failure What the request ended with
    * @return One line for a human
