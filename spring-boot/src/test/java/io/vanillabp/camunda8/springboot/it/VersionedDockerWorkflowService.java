@@ -49,15 +49,13 @@ public class VersionedDockerWorkflowService {
    * start refuses the version it deploys if a task of it has no method for that version, so with
    * 'release-2' alone every test class booting after this one would fail.
    * <p>
-   * The tag is named on its own and the later versions by number. A range starting at a tag
-   * needs the cluster to say which number the tag has, and on 8.9 that answer came too late for
-   * a version deployed while the test runs.
+   * The range starts at the tag, and the tagged version is deployed while the application runs.
+   * So this test also holds that a range starting at a tag finds a version which came after the
+   * start.
    *
    * @param aggregate The workflow aggregate
    */
-  @WorkflowTask(taskDefinition = "versionedTask", version = {
-      "release-2", ">2"
-  })
+  @WorkflowTask(taskDefinition = "versionedTask", version = ">=release-2")
   public void taggedVersion(
       final VersionedDockerAggregate aggregate) {
 
