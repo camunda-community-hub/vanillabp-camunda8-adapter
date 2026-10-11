@@ -19,17 +19,18 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 
 /**
- * Provides the Camunda 8 adapter's {@link Camunda8ProcessService} instances - ONE per
- * configured adapter id of type {@code camunda8} (multiple ids of one BPMS type = the
- * migration scenario, e.g. an on-prem and a SaaS cluster side by side). A CDI producer
- * cannot yield N element beans for N runtime-configured ids, so the adapter produces
- * ONE bean of type <code>List&lt;MigratableProcessService&gt;</code>; the platform's
- * collection point flattens List beans alongside element beans. The adapter id is a
- * CONSTRUCTOR parameter of each instance.
+ * Provides the {@link Camunda8ProcessService} instances of the Camunda 8 adapter, ONE per
+ * configured adapter id of type {@code camunda8}. Several ids of one BPMS type are the setup
+ * for a migration, for example an on-prem cluster and a SaaS cluster side by side.
  * <p>
- * The adapter-id set ALWAYS comes from the platform's core properties
- * ({@code adapterTypes()}); the adapter's configuration overlay is a per-known-id
- * lookup only.
+ * A CDI producer cannot yield one bean per id when the ids are only known at runtime. So
+ * the adapter produces ONE bean of type <code>List&lt;MigratableProcessService&gt;</code>.
+ * Where the platform collects the beans, it flattens list beans together with single
+ * beans. Each instance gets its adapter id as a CONSTRUCTOR parameter.
+ * <p>
+ * The set of adapter ids ALWAYS comes from the platform's core properties
+ * ({@code adapterTypes()}). The adapter's configuration overlay is only used to look up an
+ * id the core already knows.
  */
 @ApplicationScoped
 public class Camunda8ProcessServiceProducer {
@@ -43,8 +44,8 @@ public class Camunda8ProcessServiceProducer {
   /**
    * Builds one process service per configured adapter id of type <code>camunda8</code>.
    * <p>
-   * The list is what the platform looks up, because a CDI producer cannot yield one bean per id
-   * an application configures at runtime.
+   * The platform looks up the list, because a CDI producer cannot yield one bean per id when
+   * the application configures the ids at runtime.
    *
    * @param properties The platform's properties, which name the configured adapter ids and
    *          their types
@@ -85,8 +86,8 @@ public class Camunda8ProcessServiceProducer {
               adapterId, clientFactoryRegistry
                   .getFactory(adapterId), asyncTaskLockRenewal, preCommitRegistrar, aggregateSync);
           processService.setScoping(scoping);
-          // the tenant a module's operations run in, resolved per workflow module with
-          // the adapter's own name as the fallback
+          // the tenant a module's operations run in. It is resolved per workflow module,
+          // and the tenant name of the adapter is the fallback
           processService
               .setConfiguredTenants(
                   workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));

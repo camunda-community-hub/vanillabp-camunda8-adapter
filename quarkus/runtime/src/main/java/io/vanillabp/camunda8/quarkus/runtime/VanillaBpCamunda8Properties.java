@@ -25,16 +25,17 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 
 /**
  * The Camunda 8 adapter's OVERLAY of the shared <code>vanillabp.*</code> configuration
- * tree: the adapter's connection settings live at the canonical per-adapter location
- * <code>vanillabp.adapters.&lt;id&gt;.*</code> (see
- * {@link Camunda8AdapterConfiguration}). A second RUN_TIME {@code @ConfigMapping} over
- * the same prefix coexists with the platform's mapping; since the platform dropped the
- * blanket {@code withMappingIgnore}, this overlay doubles as the unknown-key
- * validation coverage for the adapter's keys.
+ * tree. The adapter's connection settings live where every adapter keeps them, at
+ * <code>vanillabp.adapters.&lt;id&gt;.*</code> (see {@link Camunda8AdapterConfiguration}).
  * <p>
- * The adapter-id set is NEVER derived from this overlay map - it always comes from the
- * platform's core properties ({@code adapterTypes()} filtered by type
- * {@code camunda8}); the overlay is a per-known-id lookup only.
+ * This is a second RUN_TIME {@code @ConfigMapping} over the same prefix. It lives next to
+ * the platform's mapping. The platform no longer ignores all unknown keys with
+ * {@code withMappingIgnore}. So this overlay is also what makes the adapter's keys known
+ * to the check for unknown keys.
+ * <p>
+ * The set of adapter ids is NEVER taken from this overlay map. It always comes from the
+ * platform's core properties ({@code adapterTypes()} filtered by type {@code camunda8}).
+ * The overlay is only used to look up an id the core already knows.
  */
 @StaticInitSafe
 @ConfigRoot(phase = ConfigPhase.RUN_TIME)
@@ -42,29 +43,37 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 public interface VanillaBpCamunda8Properties {
 
   /**
-   * The adapter sections of the shared tree, keyed by adapter ID - only the
-   * Camunda 8 connection keys are modeled here.
+   * The adapter sections of the shared tree, keyed by adapter ID. Only the Camunda 8
+   * connection keys are modeled here.
    *
    * @return The sections, keyed by adapter id, empty where the application wrote none
    */
   Map<String, Camunda8AdapterKeys> adapters();
 
   /**
-   * The workflow-module sections of the shared tree - the overlay mirrors the
-   * levels of the most-specific-wins resolution of scope-specific adapter keys
-   * (task &gt; workflow &gt; workflow-module &gt; adapter), currently:
-   * <code>job-timeout</code> and <code>retry-backoff</code>. <code>tenant-id</code> is here as well, with the workflow
-   * module as its ONLY level below the adapter: a tenant id is an attribute of the
-   * deployment, and this adapter deploys once per workflow module.
+   * The workflow-module sections of the shared tree. The overlay has the same levels as
+   * the resolution of the scope-specific adapter keys, where the most specific level wins
+   * (task &gt; workflow &gt; workflow-module &gt; adapter). These keys are resolved like
+   * this:
+   * <ul>
+   * <li><code>job-timeout</code> and <code>retry-backoff</code>, over all four levels.</li>
+   * <li><code>message-time-to-live</code>, with a MESSAGE instead of a task as the most
+   * specific level.</li>
+   * <li><code>allow-connectors</code> and <code>allow-listeners</code>, with the workflow
+   * as the most specific level.</li>
+   * <li><code>tenant-id</code>, with the workflow module as the ONLY level below the
+   * adapter. A tenant id belongs to the deployment, and this adapter deploys once per
+   * workflow module.</li>
+   * </ul>
    *
    * @return The workflow-module sections, keyed by workflow module ID
    */
   Map<String, ModuleOverlay> workflowModules();
 
   /**
-   * The Camunda 8 tenant configured for one workflow module of one adapter id: the module's
-   * own name where it has one, the adapter's otherwise. What the mode then makes of it is the
-   * adapter's business.
+   * The Camunda 8 tenant configured for one workflow module of one adapter id. It is the
+   * module's own tenant name if it has one, otherwise the adapter's. What the mode then
+   * does with it is up to the adapter.
    *
    * @param adapterId The adapter ID
    * @param workflowModuleId The workflow module ID
@@ -100,8 +109,8 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves the job timeout for a task with most-specific-wins semantics across
-   * the four levels; falls back to the adapter-level value and finally the
+   * Resolves the job timeout for a task over the four levels. The most specific level
+   * wins. Without a value at a scope level, the adapter level counts, and without that the
    * default.
    *
    * @param workflowModuleId The workflow module ID
@@ -133,8 +142,9 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves the backoff of a FAILED job with the same most-specific-wins semantics;
-   * falls back to the adapter-level value and finally the default of ten seconds.
+   * Resolves the backoff of a FAILED job in the same way: the most specific level wins.
+   * Without a value at a scope level, the adapter level counts, and without that the
+   * default of ten seconds.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -154,10 +164,10 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * The same answer, plus the one thing a BPMN model can argue with: whether the TASK
-   * level is where the value comes from. A task header
-   * {@value io.vanillabp.camunda8.wiring.Camunda8RetryBackoffHeader#HEADER_NAME} says as
-   * much about one task as that level does and beats every level above it.
+   * The same answer, plus whether the value comes from the TASK level. A BPMN model can
+   * only compete with that level. A task header
+   * {@value io.vanillabp.camunda8.wiring.Camunda8RetryBackoffHeader#HEADER_NAME} is as
+   * specific as the task level and beats every level above it.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -287,9 +297,9 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves whether the listeners somebody modelled are served, over the three levels
-   * <code>allow-connectors</code> is read at and with the same most-specific-wins rule in
-   * both directions.
+   * Resolves whether the listeners somebody modelled are served. It uses the three levels
+   * of <code>allow-connectors</code> and the same rule: the most specific value wins, both
+   * for on and for off.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID
@@ -334,8 +344,8 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Every <code>allow-listeners</code> this configuration puts at TASK level, fully spelled
-   * out - the level which does not resolve this key.
+   * Every <code>allow-listeners</code> this configuration puts at TASK level, as full keys.
+   * This key is not read at the task level.
    *
    * @param adapterId The adapter ID
    * @return The keys found
@@ -369,10 +379,10 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves the time-to-live of a published message with most-specific-wins semantics,
-   * where the MOST specific level is the message rather than a task; falls back to the
-   * adapter-level value and finally to <code>null</code>, which leaves the command alone
-   * and lets the client's own default apply.
+   * Resolves the time-to-live of a published message. The most specific level wins, and
+   * here the MOST specific level is the message, not a task. Without a value at a scope
+   * level, the adapter level counts. Without that the result is <code>null</code>: the
+   * command stays as it is, and the client's own default applies.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -404,10 +414,10 @@ public interface VanillaBpCamunda8Properties {
 
   /**
    * Resolves whether an element built from an element template is left to the runtime which
-   * owns it, over THREE levels rather than four: workflow, workflow module, adapter, the
-   * most specific configured value winning in both directions. Which is the deliberate
-   * difference to version 1, whose primitive booleans let a more specific level turn the
-   * flag on and never off.
+   * owns it. There are THREE levels here, not four: workflow, workflow module, adapter. The
+   * most specific configured value wins, both for on and for off. This is a deliberate
+   * difference to version 1. Its primitive booleans let a more specific level turn the flag
+   * on, but never off.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID
@@ -452,9 +462,9 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Every <code>allow-connectors</code> this configuration puts at TASK level, fully
-   * spelled out - the level which does not resolve this key, and where saying so is the
-   * only thing the boot can do about it.
+   * Every <code>allow-connectors</code> this configuration puts at TASK level, as full
+   * keys. This key is not read at the task level. All the boot can do about it is say
+   * so.
    *
    * @param adapterId The adapter ID
    * @return The keys found
@@ -489,10 +499,10 @@ public interface VanillaBpCamunda8Properties {
 
   /**
    * The <code>adapters.&lt;id&gt;</code> sections of the three levels below the adapter for
-   * a MESSAGE, most specific first. Separate from
+   * a MESSAGE, most specific first. This is separate from
    * {@link #scopedKeysMostSpecificFirst} because the most specific level is a different
-   * map: a message is not a task, and giving it the task level would make an override
-   * meant for one apply to the other.
+   * map. A message is not a task. If a message used the task level, a value meant for one
+   * would also apply to the other.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -535,7 +545,7 @@ public interface VanillaBpCamunda8Properties {
 
   /**
    * The <code>adapters.&lt;id&gt;</code> sections of the three levels below the adapter,
-   * most specific first - what every scope-specific key is resolved through.
+   * most specific first. Every scope-specific key is resolved through them.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -649,20 +659,19 @@ public interface VanillaBpCamunda8Properties {
     Optional<String> clientSecret();
 
     /**
-     * OPTIONAL acknowledgement that the application's identifiers are unique across
-     * all of its workflow modules - it silences the WARN logged while the
-     * name-clash-avoidance mode <code>none</code> applies. Default
-     * <code>false</code>.
+     * OPTIONAL. Confirms that the application's identifiers are unique across all of its
+     * workflow modules. It silences the WARN logged while the name-clash-avoidance mode
+     * <code>none</code> applies. Default <code>false</code>.
      *
      * @return Whether unscoped identifiers are accepted deliberately
      */
     Optional<Boolean> acceptUnscopedIdentifiers();
 
     /**
-     * OPTIONAL: whether an element built from an element template is left to the runtime
-     * which owns it, a Camunda connector in almost every case. Adapter-level base of a
-     * resolution over three levels (workflow &gt; workflow-module &gt; adapter), default
-     * <code>false</code>, see
+     * OPTIONAL. Whether an element built from an element template is left to the runtime
+     * which owns it. In almost every case that runtime is a Camunda connector. This is the
+     * adapter level of a resolution over three levels (workflow &gt; workflow-module &gt;
+     * adapter). Default <code>false</code>. See
      * {@link io.vanillabp.camunda8.wiring.Camunda8AllowConnectorsResolver}.
      *
      * @return Whether connectors are allowed for this adapter instance
@@ -670,9 +679,9 @@ public interface VanillaBpCamunda8Properties {
     Optional<Boolean> allowConnectors();
 
     /**
-     * OPTIONAL: whether the listeners somebody MODELLED are served by
-     * <code>@WorkflowTask</code> methods. Adapter-level base of a resolution over three levels
-     * (workflow &gt; workflow-module &gt; adapter), default <code>false</code>, see
+     * OPTIONAL. Whether <code>@WorkflowTask</code> methods serve the listeners somebody
+     * MODELLED. This is the adapter level of a resolution over three levels (workflow &gt;
+     * workflow-module &gt; adapter). Default <code>false</code>. See
      * {@link io.vanillabp.camunda8.wiring.Camunda8AllowListenersResolver}.
      *
      * @return Whether the modelled listeners are served for this adapter instance
@@ -680,24 +689,26 @@ public interface VanillaBpCamunda8Properties {
     Optional<Boolean> allowListeners();
 
     /**
-     * The worker's job timeout (lock duration) - adapter-level base of the
-     * most-specific-wins resolution.
+     * The worker's job timeout (how long a job stays locked). This is the adapter level of
+     * the resolution where the most specific level wins.
      *
      * @return The job timeout
      */
     Optional<Duration> jobTimeout();
 
     /**
-     * How long the cluster waits before it hands a FAILED job out again - adapter-level
-     * base of the most-specific-wins resolution. Default: ten seconds.
+     * How long the cluster waits before it hands a FAILED job out again. This is the
+     * adapter level of the resolution where the most specific level wins. Default: ten
+     * seconds.
      *
      * @return The backoff of a failed job
      */
     Optional<Duration> retryBackoff();
 
     /**
-     * The removed key <code>fetch-variables</code>, bound only so the startup can refuse it
-     * with a guiding message instead of SmallRye's "does not map to any root".
+     * The removed key <code>fetch-variables</code>. It is bound only so the startup can
+     * refuse it with a guiding message. Otherwise SmallRye would only say "does not map to
+     * any root".
      *
      * @return What somebody wrote under the removed key
      */
@@ -712,32 +723,33 @@ public interface VanillaBpCamunda8Properties {
     Optional<Duration> asyncTaskLockRenewal();
 
     /**
-     * The key which used to carry a dormancy horizon of days. Bound only so the boot can
-     * REJECT it with a message naming its successor.
+     * The key which used to carry a dormancy horizon of days. It is bound only so the boot
+     * can REJECT it with a message which names the key that replaced it.
      *
      * @return The removed key's value, if somebody still configures it
      */
     Optional<Duration> asyncTaskTimeout();
 
     /**
-     * How long the shutdown of a workflow module waits for the handlers this adapter has
-     * in flight before the client is closed under them. Default: 20 seconds.
+     * How long the shutdown of a workflow module waits for the handlers this adapter still
+     * runs. After that the client is closed, even if they still run. Default: 20
+     * seconds.
      *
      * @return The grace period
      */
     Optional<Duration> shutdownGrace();
 
     /**
-     * How long the health check waits for the cluster to answer its topology request,
-     * <code>PT0S</code> switching the check off.
+     * How long the health check waits for the cluster to answer its topology request.
+     * <code>PT0S</code> switches the check off.
      *
      * @return The timeout
      */
     Optional<Duration> healthTimeout();
 
     /**
-     * How long the start waits for a cluster which is not answering yet,
-     * <code>PT0S</code> switching the waiting off. Default: ten minutes.
+     * How long the start waits for a cluster which does not answer yet. <code>PT0S</code>
+     * switches the waiting off. Default: ten minutes.
      *
      * @return The wait
      */
@@ -752,18 +764,18 @@ public interface VanillaBpCamunda8Properties {
     Optional<Camunda8AdapterConfiguration.AsyncTaskMaxAgeAction> asyncTaskMaxAgeAction();
 
     /**
-     * How long a workflow this cluster holds may stay invisible to the query API
-     * the awareness probe searches (the exporter feeding it runs behind the
-     * engine). Zero switches the waiting off. Default: 10 seconds.
+     * How long a workflow this cluster holds may stay invisible to the query API which the
+     * awareness probe searches. The exporter which feeds that API runs behind the engine.
+     * Zero switches the waiting off. Default: 10 seconds.
      *
      * @return The visibility window
      */
     Optional<Duration> workflowVisibilityTimeout();
 
     /**
-     * The same window for a workflow the engine no longer holds, which is the case where
-     * only the END of it is still on its way into the read model. Zero switches the
-     * waiting off. Default: 3 seconds.
+     * The same window for a workflow the engine no longer holds. In this case only the END
+     * of the workflow is still on its way into the read model. Zero switches the waiting
+     * off. Default: 3 seconds.
      *
      * @return The visibility window of an ended workflow
      */
@@ -771,8 +783,8 @@ public interface VanillaBpCamunda8Properties {
 
     /**
      * Whether the jobs this adapter holds from the activation to the answer are activated
-     * with a lease. There is no default: on a release line whose cluster has a lease, the
-     * boot stops until this says which of the two the application wants.
+     * with a lease. There is no default. On a release line whose cluster has a lease, the
+     * boot stops until this key says which of the two the application wants.
      *
      * @return What the application decided
      */
@@ -780,8 +792,8 @@ public interface VanillaBpCamunda8Properties {
 
     /**
      * Whether a workflow this adapter starts carries the workflow aggregate's id as its
-     * business id, which is there to be read in Operate and nowhere read back by
-     * VanillaBP. Default: <code>false</code>.
+     * business id. The business id is there to be read in Operate. VanillaBP never reads
+     * it back. Default: <code>false</code>.
      *
      * @return Whether the aggregate's id is written there
      */
@@ -797,8 +809,9 @@ public interface VanillaBpCamunda8Properties {
     Optional<Boolean> probeOpenUserTasks();
 
     /**
-     * How this adapter instance runs what it delivers: a positive number of platform
-     * threads, or the literal <code>virtual</code>. Default: four platform threads.
+     * How this adapter instance runs what it delivers. Either a positive number of
+     * platform threads, or the word <code>virtual</code>. Default: four platform
+     * threads.
      *
      * @return The execution model
      */
@@ -829,8 +842,8 @@ public interface VanillaBpCamunda8Properties {
     Optional<Duration> pollInterval();
 
     /**
-     * How long a request to the cluster may take, which for an activation request is
-     * also the long-polling window. Default: the client's 10 seconds.
+     * How long a request to the cluster may take. For an activation request this is also
+     * the long-polling window. Default: the client's 10 seconds.
      *
      * @return The request timeout
      */
@@ -853,8 +866,8 @@ public interface VanillaBpCamunda8Properties {
     Optional<Duration> streamTimeout();
 
     /**
-     * How long the cluster buffers a published message waiting for a subscription,
-     * which is also the window a message id deduplicates in. Default: the client's one
+     * How long the cluster keeps a published message while it waits for a subscription.
+     * In the same window a message id removes duplicates. Default: the client's one
      * hour.
      *
      * @return The message time-to-live
@@ -899,15 +912,15 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * The <code>vanillabp.adapters.&lt;id&gt;.auth.*</code> keys (see
-   * {@link Camunda8AuthConfiguration} for the semantics and
-   * the defaults the Camunda client brings).
+   * The <code>vanillabp.adapters.&lt;id&gt;.auth.*</code> keys. See
+   * {@link Camunda8AuthConfiguration} for what they mean and for the defaults the Camunda
+   * client brings.
    */
   interface AuthKeys {
 
     /**
-     * <code>none</code>, <code>basic</code> or <code>oidc</code>. Absent means the
-     * method is detected from the keys which are set, and the detection is logged.
+     * <code>none</code>, <code>basic</code> or <code>oidc</code>. If it is not set, the
+     * method is detected from the keys which are set, and the result is logged.
      *
      * @return The method
      */
@@ -1067,17 +1080,17 @@ public interface VanillaBpCamunda8Properties {
 
     /**
      * Whether an element built from an element template is left to the runtime which owns
-     * it, at this level. Empty rather than <code>false</code> where nothing is configured,
-     * which is what lets a workflow module switch OFF what the adapter switched on.
+     * it, at this level. It is empty, not <code>false</code>, where nothing is configured.
+     * This lets a workflow module switch OFF what the adapter switched on.
      *
      * @return Whether connectors are allowed here
      */
     Optional<Boolean> allowConnectors();
 
     /**
-     * Whether the listeners somebody modelled are served at this level. Empty rather than
-     * <code>false</code> where nothing is configured, for the reason
-     * {@link #allowConnectors()} is.
+     * Whether the listeners somebody modelled are served at this level. It is empty, not
+     * <code>false</code>, where nothing is configured, for the same reason as
+     * {@link #allowConnectors()}.
      *
      * @return Whether the modelled listeners are served here
      */
@@ -1086,14 +1099,15 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * The Camunda 8 keys of one workflow module's adapter section: the scoped keys every level
-   * has, plus the tenant, which only a workflow module may override because a tenant id is an
-   * attribute of the deployment this adapter makes per workflow module.
+   * The Camunda 8 keys of one workflow module's adapter section. These are the scoped keys
+   * every level has, plus the tenant. Only a workflow module may override the tenant. A
+   * tenant id belongs to the deployment, and this adapter deploys once per workflow
+   * module.
    */
   interface Camunda8ModuleScopedKeys extends Camunda8ScopedKeys {
 
     /**
-     * The Camunda 8 tenant this workflow module is deployed into, overriding the name the
+     * The Camunda 8 tenant this workflow module is deployed into. It overrides the name the
      * adapter section gives every module of this application.
      *
      * @return The tenant of this workflow module
@@ -1143,8 +1157,8 @@ public interface VanillaBpCamunda8Properties {
     Map<String, TaskOverlay> tasks();
 
     /**
-     * The message sections of the workflow, keyed by message name - the most specific
-     * level of the keys which are about a MESSAGE rather than about a task.
+     * The message sections of the workflow, keyed by message name. They are the most
+     * specific level of the keys which are about a MESSAGE and not about a task.
      *
      * @return The message sections
      */
@@ -1153,8 +1167,8 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * The Camunda 8 adapter's view of one task section - the MOST specific level for a key
-   * about a job.
+   * The Camunda 8 adapter's view of one task section. It is the MOST specific level for a
+   * key about a job.
    */
   interface TaskOverlay {
 
@@ -1168,8 +1182,8 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * The Camunda 8 adapter's view of one message section - the MOST specific level for a
-   * key about a published message.
+   * The Camunda 8 adapter's view of one message section. It is the MOST specific level for
+   * a key about a published message.
    */
   interface MessageOverlay {
 

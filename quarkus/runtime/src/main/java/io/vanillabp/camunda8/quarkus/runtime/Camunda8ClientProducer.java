@@ -24,21 +24,25 @@ import jakarta.inject.Singleton;
 
 /**
  * Produces the {@link Camunda8ClientFactoryRegistry} (one lazily built
- * {@code CamundaClient} per Camunda 8 adapter ID) from the canonical per-adapter
- * configuration <code>vanillabp.adapters.&lt;id&gt;.*</code>, bound by the adapter's
- * overlay mapping ({@link VanillaBpCamunda8Properties}) - property names are NEVER
- * parsed programmatically (that pattern is lossy for environment-variable sources).
+ * {@code CamundaClient} per Camunda 8 adapter ID). It is built from the configuration of
+ * each adapter at <code>vanillabp.adapters.&lt;id&gt;.*</code>, which the adapter's overlay
+ * mapping ({@link VanillaBpCamunda8Properties}) binds. Property names are NEVER parsed in
+ * code, because that loses information when the values come from environment variables.
  * <p>
- * The adapter-id set comes from the platform's core properties (adapter ids of type
- * {@code camunda8}); the overlay map is used as a per-known-id lookup only. Every
- * instance's connection configuration is VALIDATED AT STARTUP (the
- * {@link Camunda8StartupObserver} forces this producer on {@code StartupEvent}):
- * a self-managed adapter without an address uses the address of the local cluster of its
- * release line, and the start warns about it. An inconsistently configured
- * adapter fails the boot (unless it is nowhere first priority and its
- * deployment-failure policy is 'warn'); clients of completely configured adapters
- * are built eagerly. The registry is closed on application shutdown via the
- * {@link #close(Camunda8ClientFactoryRegistry) disposer}, closing all clients.
+ * The set of adapter ids comes from the platform's core properties (the ids of type
+ * {@code camunda8}). The overlay map is only used to look up an id the core already knows.
+ * The connection configuration of every instance is VALIDATED AT STARTUP. The
+ * {@link Camunda8StartupObserver} makes this producer run on {@code StartupEvent}.
+ * <ul>
+ * <li>A self-managed adapter without an address uses the address of the local cluster of
+ * its release line, and the start warns about it.</li>
+ * <li>An adapter with an inconsistent configuration ends the boot. The exception is an
+ * adapter which is nowhere first priority and whose deployment-failure policy is
+ * 'warn'.</li>
+ * <li>The clients of completely configured adapters are built eagerly.</li>
+ * </ul>
+ * When the application shuts down, the {@link #close(Camunda8ClientFactoryRegistry)
+ * disposer} closes the registry and with it all clients.
  */
 @ApplicationScoped
 public class Camunda8ClientProducer {
@@ -79,7 +83,7 @@ public class Camunda8ClientProducer {
         .map(Map.Entry::getKey)
         .forEach(adapterId -> {
           final var configuration = toConfiguration(overlay.adapters().get(adapterId));
-          // a removed key is refused before anything else, wherever it is set: the
+          // a removed key is refused before anything else, wherever it is set. The
           // workers no longer read it, and silence would hide that from the application
           Camunda8FetchVariables.rejectTheRemovedKey(adapterId, overlay.fetchVariablesKeys(adapterId));
           Camunda8StartupValidation.validateAtStartup(
@@ -94,8 +98,8 @@ public class Camunda8ClientProducer {
               "quarkus.http.port",
               log::warn,
               log::info);
-          // a key at a level which does not resolve it changes nothing and would be
-          // silent, which is worse than a line saying where the key is read
+          // a key at a level which does not read it changes nothing. Saying nothing would
+          // be worse than a line which says where the key is read
           Camunda8Connectors.reportKeysSetAtTaskLevel(
               adapterId,
               overlay.allowConnectorsKeysAtTaskLevel(adapterId),
@@ -133,8 +137,8 @@ public class Camunda8ClientProducer {
     keys.jobTimeout().ifPresent(configuration::setJobTimeout);
     keys.retryBackoff().ifPresent(configuration::setRetryBackoff);
     keys.asyncTaskLockRenewal().ifPresent(configuration::setAsyncTaskLockRenewal);
-    // bound only so the removed key can be REJECTED with a guiding message instead of
-    // SmallRye's "does not map to any root"
+    // bound only so the removed key can be REJECTED with a guiding message. Otherwise
+    // SmallRye would only say "does not map to any root"
     keys.asyncTaskTimeout().ifPresent(configuration::setAsyncTaskTimeout);
     keys.asyncTaskMaxAgeAction().ifPresent(configuration::setAsyncTaskMaxAgeAction);
     keys.shutdownGrace().ifPresent(configuration::setShutdownGrace);
