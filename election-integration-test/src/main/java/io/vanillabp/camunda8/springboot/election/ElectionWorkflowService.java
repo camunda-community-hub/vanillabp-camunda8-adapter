@@ -11,8 +11,8 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow of the shared-cluster election test: it waits for a message
- * and records that the message arrived.
+ * The workflow of the shared-cluster election test. It waits for a message and records
+ * that the message arrived.
  */
 @Service
 @WorkflowService(
@@ -21,7 +21,7 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class ElectionWorkflowService {
 
   /**
-   * Counted down when the task behind the message catch ran, which only happens if the
+   * Counted down when the task behind the message catch ran. That only happens if the
    * message was correlated into the workflow the FIRST application started.
    */
   public static volatile CountDownLatch SERVED = new CountDownLatch(1);
