@@ -10,7 +10,7 @@ import com.oracle.svm.core.annotate.TargetClass;
  * <code>Discovered unresolved type during parsing:
  * com.aayushatharva.brotli4j.decoder.DecoderJNI$Wrapper</code>
  * <p>
- * Read by the image builder only; a JVM never loads this class.
+ * Only the image builder reads this class. A JVM never loads it.
  */
 @TargetClass(className = "org.apache.hc.client5.http.impl.Brotli4jRuntime")
 final class Brotli4jIsNotOnTheClasspath {

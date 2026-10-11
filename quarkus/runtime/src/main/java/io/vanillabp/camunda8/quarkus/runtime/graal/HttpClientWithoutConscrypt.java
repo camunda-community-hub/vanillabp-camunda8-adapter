@@ -11,21 +11,21 @@ import com.oracle.svm.core.annotate.TargetClass;
 /**
  * Takes Conscrypt out of the HTTP client a native image links.
  * <p>
- * The Camunda client talks REST through Apache HttpClient 5, whose connection-manager
- * builder names {@code ConscryptClientTlsStrategy} - a TLS strategy for an optional
- * library which is chosen on Java 8 and never afterwards. Nobody puts Conscrypt on the
- * classpath of a VanillaBP application, and on the JVM that costs nothing, because the
- * class is loaded only if it is used. A native image resolves every type a reachable
- * method names while it is built, so the absent library ends the build of every
- * application using this adapter:
+ * The Camunda client talks REST through Apache HttpClient 5. Its connection-manager builder
+ * names {@code ConscryptClientTlsStrategy}. That is a TLS strategy for an optional library,
+ * and the builder only picks it on Java 8. Nobody puts Conscrypt on the classpath of a
+ * VanillaBP application. On the JVM that costs nothing, because the class is only loaded if
+ * it is used. But a native image resolves every type a reachable method names while it is
+ * built. So the missing library ends the build of every application which uses this
+ * adapter:
  * <p>
  * <code>Discovered unresolved type during parsing: org.conscrypt.Conscrypt</code>
  * <p>
- * The two methods below are the only ones naming it. Substituted, they do what the
- * original does for an engine which is not a Conscrypt engine - which is every engine
- * these applications will ever see, since the strategy is picked on Java 8 alone.
+ * The two methods below are the only ones which name it. The substitutes do what the
+ * original does for an engine which is not a Conscrypt engine. These applications never see
+ * any other engine, because the strategy is only picked on Java 8.
  * <p>
- * Read by the image builder only; a JVM never loads this class.
+ * Only the image builder reads this class. A JVM never loads it.
  */
 @TargetClass(className = "org.apache.hc.client5.http.ssl.ConscryptClientTlsStrategy")
 final class HttpClientWithoutConscrypt {
