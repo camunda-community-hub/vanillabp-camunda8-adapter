@@ -20,17 +20,18 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * {@code allow-connectors} is on for its process.
  * <p>
  * Be clear about what this can prove and what it cannot. A connector runtime is a Camunda
- * component this project does not run, so nothing here executes a connector and the
- * workflow is expected to stand at the element forever. What the cluster proves is the
- * rest: the model deploys, a workflow starts on it, the adapter opened no worker for the
- * connector's job type, and the job waiting on the cluster carries that job type
- * UNPREFIXED although this workflow module runs with name-clash avoidance
- * {@code use-prefix}.
+ * component which this project does not run. So nothing here executes a connector, and the
+ * workflow is expected to wait at the element forever. The cluster proves the rest:
+ * <ul>
+ * <li>the model deploys, and a workflow starts on it,</li>
+ * <li>the adapter opened no worker for the connector's job type,</li>
+ * <li>the job waiting on the cluster has that job type UNPREFIXED, although this workflow
+ * module runs with name-clash avoidance {@code use-prefix}.</li>
+ * </ul>
  * <p>
- * The scenario brings its own application, its own configuration file and its own
- * resources location, see {@link ConnectorTestApplication}: a process which no
- * {@code @WorkflowTask} method serves is exactly the kind of thing the other integration
- * tests of this module must not be made to deploy.
+ * The scenario brings its own application, its own configuration file and its own resources
+ * location. See {@link ConnectorTestApplication}. The other integration tests of this module
+ * must not be made to deploy a process which no {@code @WorkflowTask} method serves.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -43,9 +44,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8ConnectorsIT extends SpringBootTestOnTheSharedCluster {
 
   /**
-   * The job type of the connector element, as the modeller wrote it. That the search below
-   * finds a job under this name at all is the assertion: a job type of this workflow module
-   * would carry the module and the process, because the module runs under 'use-prefix'.
+   * The job type of the connector element, as the modeller wrote it. The assertion is that the
+   * search below finds a job under this name at all. A job type of this workflow module would
+   * carry the module and the process, because the module runs under 'use-prefix'.
    */
   private static final String CONNECTOR_JOB_TYPE = "io.camunda:http-json:1";
 
@@ -75,8 +76,8 @@ public class Camunda8ConnectorsIT extends SpringBootTestOnTheSharedCluster {
         () -> "the job waiting on the cluster belongs to the connector element: "
             + elementWaitingForTheJob);
 
-    // the same run proves the other half: nothing of this application served that job,
-    // so the task behind the element was never reached
+    // the same run proves the other half. The task behind the element was never reached, so
+    // nothing of this application served that job
     Thread.sleep(5000);
     final var pastTheConnector = Boolean.TRUE
         .equals(
