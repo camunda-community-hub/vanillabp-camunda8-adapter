@@ -1,40 +1,40 @@
 package io.vanillabp.camunda8.client;
 
 /**
- * How one Camunda 8 adapter instance runs the code it delivers: the resolved value of
- * <code>vanillabp.adapters.&lt;id&gt;.worker-threads</code> together with the number of
+ * How one Camunda 8 adapter instance runs the code it delivers. It is the resolved value of
+ * <code>vanillabp.adapters.&lt;id&gt;.worker-threads</code>, together with the number of
  * handlers which may run at the same time.
  * <p>
- * The Camunda client owns ONE executor per client, and this adapter owns one client per
- * adapter id, so the number is not "how parallel may one task be" but "how much of
- * everything this adapter delivers may be in flight at once". Every worker of the adapter
- * shares it: the workers of the task definitions, of the user-task lifecycle listeners, of
- * the start events the cluster fires itself and of the processes whose end is reported -
- * across every workflow module that adapter serves.
+ * The Camunda client has ONE executor per client, and this adapter has one client per
+ * adapter id. So the number does not say "how parallel may one task be". It says "how much
+ * of everything this adapter delivers may be in flight at once". Every worker of the
+ * adapter shares it, across every workflow module the adapter serves. These are the
+ * workers of the task definitions, of the user-task lifecycle listeners, of the start
+ * events the cluster fires itself, and of the processes whose end is reported.
  * <p>
  * <b>The number counts handlers, not threads shared with the timing.</b> Whichever model is
  * configured, the adapter hands the client an executor of its own
- * ({@link Camunda8Executor}) which schedules the polls on threads no handler can occupy. So
- * the number below is what it says: how many handler invocations may be inside the
+ * ({@link Camunda8Executor}). It schedules the polls on threads which no handler can use.
+ * So the number below means what it says: how many handler invocations may be inside the
  * application at the same time.
  * <p>
- * <b>Why the default is four platform threads.</b> More than one, because one was the defect
- * this model exists for: nothing passed the number through, and the client's own default of
- * one thread ran the handler invocations AND the poll scheduling of every worker on the 8.8
- * line, so a blocking handler stopped the adapter from asking the cluster for work at all
- * (measured: an unrelated job of another worker waited 8013 ms, and 13 ms with four
- * threads). Small, because every concurrent handler holds a database connection inside
- * VanillaBP's transaction while it runs, and the usual pools are ten (Hikari) to twenty
- * (Agroal) connections wide, so four leaves room for the rest of the application. The number
- * to size against is therefore the connection pool, not the CPU.
+ * <b>Why the default is four platform threads.</b> It is more than one, because one was the
+ * defect this model exists for. Nothing passed the number through. On the 8.8 line, the
+ * client's own default of one thread ran the handler invocations AND the poll scheduling of
+ * every worker. So a blocking handler stopped the adapter from asking the cluster for work
+ * at all (measured: an unrelated job of another worker waited 8013 ms, and 13 ms with four
+ * threads). It is small, because every handler holds a database connection inside
+ * VanillaBP's transaction while it runs. The usual pools have ten (Hikari) to twenty
+ * (Agroal) connections, so four leaves room for the rest of the application. So size the
+ * number against the connection pool, not the CPU.
  * <p>
  * <b>The virtual mode.</b> <code>worker-threads: virtual</code> runs each handler on a
- * virtual thread of its own ({@link Camunda8VirtualThreadExecutor}) instead of on a pool of
- * platform threads. Virtual threads are unbounded by nature, and the client's own limit is
- * per worker (with N workers the ceiling would be N &times; <code>max-jobs-active</code>
- * concurrent transactions), so that model is bounded by a semaphore sized by
- * <code>worker-threads-bound</code>. Its default is the number the platform mode would use,
- * so switching the mode changes how threads are made, not how much runs at once.
+ * virtual thread of its own ({@link Camunda8VirtualThreadExecutor}), not on a pool of
+ * platform threads. Virtual threads have no limit by nature. The client's own limit is per
+ * worker, so with N workers the ceiling would be N &times; <code>max-jobs-active</code>
+ * transactions at once. So that model is limited by a semaphore, sized by
+ * <code>worker-threads-bound</code>. Its default is the number the platform mode would use.
+ * So switching the mode changes how threads are made, not how much runs at once.
  *
  * <p>
  * Why this adapter picks its own execution model instead of inheriting the client's single thread,
@@ -55,8 +55,8 @@ public record Camunda8ExecutionModel(
   public static final String VIRTUAL = "virtual";
 
   /**
-   * The number of execution slots an adapter has where nothing is configured - see the
-   * class javadoc for the reasoning.
+   * The number of execution slots an adapter has if nothing is configured. The class
+   * javadoc gives the reasons.
    */
   public static final int DEFAULT_SLOTS = 4;
 

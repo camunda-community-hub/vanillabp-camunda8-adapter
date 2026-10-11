@@ -10,35 +10,34 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 
 /**
  * What makes two configured <code>camunda8</code> adapter ids DIFFERENT clusters.
- * Camunda 8 is remote, so two ids are distinct if they address
- * different systems - or the same system with different credentials:
+ * Camunda 8 is remote. So two ids are distinct if they address different systems, or the
+ * same system with different credentials:
  * <ul>
- * <li><b>self-managed:</b> different <code>rest-address</code>/
- * <code>grpc-address</code>;</li>
+ * <li><b>self-managed:</b> a different <code>rest-address</code>/
+ * <code>grpc-address</code>.</li>
  * <li><b>SaaS:</b> a different COMBINATION of <code>cluster-id</code> and
- * <code>client-id</code> - addressing one cluster with two OAuth clients is a
- * legitimate setup (separated permissions or quotas per workflow module), so the
- * client id counts;</li>
- * <li>additionally the <code>tenant-id</code> of the ADAPTER section: the same cluster with
- * different multi-tenancy tenants are different systems from the application's view. A name
- * a single workflow module carries is not read here, because this question is about the
- * adapter id as a whole and a module's name says nothing about the other modules;</li>
- * <li>and a different <code>name-clash-avoidance</code> mode: the
- * identifiers of the SAME workflow module look different in each of them (a tenant
- * versus prefixed identifiers), which is exactly the setup used to MIGRATE from
- * tenants to prefixes: two ids on one cluster, differing only in that mode, the new
- * one first in <code>prioritized-adapters</code>.</li>
+ * <code>client-id</code>. Addressing one cluster with two OAuth clients is a valid setup
+ * (separate permissions or quotas per workflow module). So the client id counts.</li>
+ * <li>In addition, the <code>tenant-id</code> of the ADAPTER section. For the application,
+ * the same cluster with different multi-tenancy tenants is different systems. A name which
+ * a single workflow module carries is not read here. This question is about the adapter id
+ * as a whole, and the name of one module says nothing about the other modules.</li>
+ * <li>And a different <code>name-clash-avoidance</code> mode. The identifiers of the SAME
+ * workflow module look different in each mode (a tenant, or prefixed identifiers). That is
+ * exactly the setup used to MIGRATE from tenants to prefixes: two ids on one cluster, which
+ * differ only in that mode, with the new one first in
+ * <code>prioritized-adapters</code>.</li>
  * </ul>
- * Two ids whose relevant keys are identical are the same instance - configuring
- * them as separate adapters is an error.
+ * Two ids whose relevant keys are identical are the same instance. Configuring them as
+ * separate adapters is an error.
  * <p>
- * Two ids which ARE distinct and still address one CLUSTER pay for it. Job keys,
- * user-task keys and process-instance keys are unique per cluster and carry neither tenant
- * nor prefix, so the election has to look a key up to learn which of the two scopes it
- * belongs to, which is one search per elected task. What counts as one cluster there is
- * {@link #clusterIdentityOf}, which deliberately ignores the tenant and the credentials
+ * Two ids which ARE distinct but still address one CLUSTER pay for it. Job keys, user-task
+ * keys and process-instance keys are unique per cluster, and they carry neither tenant nor
+ * prefix. So the election has to look a key up to learn which of the two scopes it belongs
+ * to. That is one search per elected task. What counts as one cluster there is
+ * {@link #clusterIdentityOf}. It ignores, on purpose, the tenant and the credentials which
  * this identity includes. That the cluster answers such a search at all is a requirement of
- * the adapter rather than a property of this setup, see decision 20 in the repository's
+ * the adapter, not a property of this setup, see decision 20 in the repository's
  * DECISIONS.md.
  */
 public final class Camunda8InstanceIdentity {
@@ -80,11 +79,11 @@ public final class Camunda8InstanceIdentity {
   }
 
   /**
-   * What makes two adapter ids the SAME CLUSTER, which is a coarser question than
-   * {@link #identityOf}: neither the tenant nor the credentials matter here, because a
-   * job key, a user-task key and a process-instance key are unique per CLUSTER and not
-   * per tenant. Two ids sharing this identity can be handed each other's keys, which is
-   * what makes their awareness probes scope-sensitive.
+   * What makes two adapter ids the SAME CLUSTER. This is a coarser question than
+   * {@link #identityOf}. Neither the tenant nor the credentials matter here, because a job
+   * key, a user-task key and a process-instance key are unique per CLUSTER and not per
+   * tenant. Two ids with this identity can be handed each other's keys. That is why their
+   * awareness probes have to care about the scope.
    *
    * @param configuration The adapter id's connection configuration
    * @return The cluster identity, never <code>null</code>
@@ -119,9 +118,9 @@ public final class Camunda8InstanceIdentity {
           configuration.getClientId(),
           configuration.getTenantId());
     }
-    // who the adapter authenticates as is part of the identity: one
-    // self-managed cluster serving two applications with separate accounts is the same
-    // legitimate setup the SaaS client id already stood for
+    // who the adapter authenticates as is part of the identity. One self-managed cluster
+    // which serves two applications with separate accounts is a valid setup. The SaaS
+    // client id already stood for the same setup
     return "self-managed cluster (rest-address '%s', grpc-address '%s'), tenant '%s', authenticated as '%s'"
         .formatted(
             configuration.restAddressInUse(),
@@ -132,10 +131,9 @@ public final class Camunda8InstanceIdentity {
   }
 
   /**
-   * Fails the boot if two of the given adapter ids address the same cluster with
-   * the same credentials and tenant (see the class comment). Called through the
-   * adapter SPI hook
-   * {@code AdapterDeploymentService#validateDistinctAdapterInstances}.
+   * Fails the boot if two of the given adapter ids address the same cluster with the same
+   * credentials and tenant (see the class comment). The adapter SPI hook
+   * {@code AdapterDeploymentService#validateDistinctAdapterInstances} calls it.
    *
    * @param adapterIds The configured adapter ids of type <code>camunda8</code>
    * @param configurationResolver Resolves an adapter id's connection configuration
