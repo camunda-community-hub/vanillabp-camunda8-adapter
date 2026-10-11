@@ -152,8 +152,8 @@ jobs:
               echo "pull request. See decision 42 in DECISIONS.md."
               echo
               echo "The test reports and the application logs of that line are attached to"
-              echo "the run as \`test-reports-${line}\`, and GitHub keeps them for seven"
-              echo "days. The log of the job above is kept longer."
+              echo "the run as \`test-reports-${line}\`. The run page says how much longer"
+              echo "GitHub keeps them. The log of the job above is kept longer."
             } > "$work/body.md"
 
             if [ -n "$number" ]; then

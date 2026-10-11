@@ -2636,12 +2636,17 @@ of the version-1 shape instead of serving it. So the promise of decision 38 has 
 the adapter keeps that condition. The javadoc of `Camunda8UserTaskProbe` says so, so that nobody
 who rebuilds the question outside VanillaBP reads more out of a `404` than it says.
 
-For the record, here is what version 1 did differently, because somebody looking for Stephan's case
-will find this entry. Its existence check for a user task was a `UserTaskGet`. So it read the index
-and met the first row of the table above. It served both shapes of user task, so it met the second
-case as well. And its Business Cockpit wrote its record from the listener job. That is why the
-cockpit shows a task which the index does not have yet. `UPGRADE.md` says it where an application
-coming from version 1 will look.
+For the record, here is what version 1 did differently. Its existence check for a user task was a
+`UserTaskGet`. So it read the index and met the first row of the table above. It served both shapes
+of user task, so it met the second case as well. And its Business Cockpit wrote its record from the
+listener job. That is why the cockpit shows a task which the index does not have yet. `UPGRADE.md`
+says it where an application coming from version 1 will look.
+
+The same `404` has a simpler cause, and it is the one which actually came up: a user task the
+Business Cockpit showed as active while a check about it answered `404`. The code handed the key of
+the user task to `completeTask` instead of `completeUserTask`. `completeTask` asks about a JOB, and
+no job carries that key, so the answer is `404`. It says exactly what it always says. Whoever reads
+a `404` first checks which command asked and which kind of key that command asks about.
 
 ### 57. A 404 about a user task is asked about on the job side once, and only the sentence changes
 

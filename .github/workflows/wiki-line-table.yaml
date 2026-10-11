@@ -21,9 +21,9 @@ name: Wiki line table
 permissions:
   contents: read
 env:
-  # The wiki a reader opens is the one of the community-hub repository, which is where
-  # every link of the README points. It is NOT the wiki of this repository, so the token
-  # of this workflow run cannot write it and VANILLABP_USER_TOKEN is used instead. A token
+  # The wiki a reader opens is the one of this repository, which is where every link of
+  # the README points. The token of a workflow run cannot write a wiki, not even the one
+  # of its own repository, so VANILLABP_USER_TOKEN is used instead. A token
   # which cannot push turns this job red on main, which is the right noise: the page would
   # otherwise go on saying a pin nobody publishes any more.
   WIKI: camunda-community-hub/vanillabp-camunda8-adapter.wiki.git

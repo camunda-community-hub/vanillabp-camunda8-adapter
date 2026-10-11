@@ -171,8 +171,9 @@ jobs:
                   fi
                   echo
                   echo "The test reports and the application logs of that line are attached"
-                  echo "to the run as \`test-reports-${subject#line }\`, and GitHub keeps"
-                  echo "them for seven days. The log of the job above is kept longer."
+                  echo "to the run as \`test-reports-${subject#line }\`. The run page says"
+                  echo "how much longer GitHub keeps them. The log of the job above is kept"
+                  echo "longer."
                 fi
                 # What that line was built against, written down by the matrix. The version
                 # in the POM does not say it: the platform publishes under the same

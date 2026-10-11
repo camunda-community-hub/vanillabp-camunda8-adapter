@@ -278,39 +278,39 @@ jobs:
   # looks like every other pull request, and this says which one it was. See decision 42 in
   # the repository's DECISIONS.md.
   #
+  # It stays a job of its own for the same reason it no longer has an output: nothing waits
+  # for its answer. In front of the matrix it could stop a build over a sentence, and inside
+  # another job its failure would be read as that job's.
+  #
   # Only the ADDED and REMOVED lines carry that answer. A diff carries three lines of
   # context around every hunk, so reading the whole diff called every change near a pin a
   # pin move. The +++/--- file headers never carry the pattern, so the anchor is enough.
   pin-change:
     runs-on: ubuntu-latest
-    outputs:
-      pins: "${{ steps.diff.outputs.pins }}"
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
-      - id: diff
-        name: Does this pull request move a client pin
+          # A pull request is checked out as the merge commit, so its first parent is the
+          # base branch and the diff between the two is the whole pull request. Two commits
+          # are all that needs to arrive for that. The job used to clone every commit the
+          # repository has for one sentence.
+          fetch-depth: 2
+      - name: Does this pull request move a client pin
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "pins=true" >> "$GITHUB_OUTPUT"
             echo "A run started by hand has no base branch and therefore no diff to read,"
-            echo "so it builds every line instead of guessing that no pin moved."
+            echo "so nobody can be told here whether a pin moved."
             exit 0
           fi
-          git diff "origin/${{ github.base_ref }}...HEAD" -- pom.xml \
-            > "${RUNNER_TEMP}/pin.diff"
+          git diff HEAD^1 HEAD -- pom.xml > "${RUNNER_TEMP}/pin.diff"
           # the diff is a file and not a pipe on purpose: a failed 'git diff' has to fail
           # this step, and in a pipe its exit code is lost behind the one of grep. It was
-          # a pipe, and then a diff which could not be read answered 'no pin moved', which
-          # is the answer that skips the matrix
+          # a pipe, and then a diff which could not be read answered 'no pin moved'
           if grep -q '^[+-].*camunda8\.version\.line-' "${RUNNER_TEMP}/pin.diff"; then
-            echo "pins=true" >> "$GITHUB_OUTPUT"
-            echo "A client pin moves, so every line is built."
+            echo "A client pin moves in this pull request."
           else
-            echo "pins=false" >> "$GITHUB_OUTPUT"
-            echo "No client pin moves, so the nightly matrix keeps the other lines."
+            echo "No client pin moves in this pull request."
           fi
 
   # A pull request used to build the current GA line alone and leave the rest to the night.
