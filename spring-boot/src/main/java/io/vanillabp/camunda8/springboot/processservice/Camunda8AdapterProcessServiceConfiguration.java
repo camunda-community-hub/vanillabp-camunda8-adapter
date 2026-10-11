@@ -6,10 +6,10 @@ import org.springframework.context.annotation.Import;
 import io.vanillabp.camunda8.springboot.Camunda8AdapterBeanRegistrar;
 
 /**
- * Wires the Camunda 8 adapter's process-service and deployment-service beans: ONE
- * element bean per configured adapter id of type {@code camunda8}, registered by the
- * imported {@link Camunda8AdapterBeanRegistrar} (multiple ids of one BPMS type = the
- * migration scenario, e.g. an on-prem and a SaaS cluster side by side).
+ * Wires the process service and the deployment service of the Camunda 8 adapter. There is
+ * ONE bean of each per configured adapter id of type {@code camunda8}. The imported
+ * {@link Camunda8AdapterBeanRegistrar} registers them. Several ids of one BPMS type are the
+ * setup for a migration, for example an on-prem cluster and a SaaS cluster side by side.
  */
 @AutoConfiguration
 @Import(Camunda8AdapterBeanRegistrar.class)
