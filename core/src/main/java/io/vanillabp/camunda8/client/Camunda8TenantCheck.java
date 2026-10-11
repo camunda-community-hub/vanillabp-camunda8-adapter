@@ -10,21 +10,20 @@ import io.camunda.client.api.command.ProblemException;
  *
  * <h2>Why ask at all</h2>
  *
- * A cluster started from the stock image has multi-tenancy switched off and answers a
- * deploy command carrying a tenant id with <i>"Expected to handle request Deploy
+ * A cluster started from the stock image has multi-tenancy switched off. It answers a
+ * deploy command which carries a tenant id with <i>"Expected to handle request Deploy
  * Resources with tenant identifier 'loan-approval', but multi-tenancy is disabled"</i>.
- * That message names the tenant, but no VanillaBP property, so the developer has to
- * find the wiki before they can act. The same holds for a tenant which simply does not
- * exist on that cluster. Both are knowable BEFORE deploying, and both come out of this
- * check as a boot failure naming the property to change.
+ * That message names the tenant, but no VanillaBP property. So the developer has to find
+ * the wiki before they can act. The same holds for a tenant which does not exist on that
+ * cluster. Both can be known BEFORE deploying. This check turns both into a boot failure
+ * which names the property to change.
  *
  * <h2>What is NOT reported</h2>
  *
- * Only an answer OF the cluster is interpreted, recognizable by its RFC 7807 problem
- * detail. Anything else (an unreachable cluster, a timeout, a client error) is left
- * alone: the deploy command runs into the same problem right after and reports it as
- * what it is. A diagnostic must not turn a connection problem into a wrong statement
- * about tenants.
+ * Only an answer OF the cluster is read. It is recognised by its RFC 7807 problem detail.
+ * Anything else (an unreachable cluster, a timeout, a client error) is left alone. The
+ * deploy command runs into the same problem right after, and reports it as what it is. A
+ * diagnostic must not turn a connection problem into a wrong statement about tenants.
  */
 public final class Camunda8TenantCheck {
 
@@ -40,8 +39,8 @@ public final class Camunda8TenantCheck {
    * @param tenantId The tenant the module would be deployed into
    * @param client The client of this adapter instance
    * @throws IllegalStateException If the cluster has multi-tenancy switched off or does
-   *           not know the tenant - naming the workflow module, the tenant and the
-   *           properties leading out
+   *           not know the tenant. The message names the workflow module, the tenant and
+   *           the properties which lead out
    */
   public static void requireUsableTenant(
       final String adapterId,
@@ -110,7 +109,7 @@ public final class Camunda8TenantCheck {
                     adapterId), e);
       }
       // an answer, but about something else (e.g. missing permissions for the tenant
-      // API) - the deployment itself is the better place to fail
+      // API). The deployment itself is the better place to fail
     }
 
   }
@@ -124,7 +123,7 @@ public final class Camunda8TenantCheck {
 
   /**
    * The cluster's problem detail of the given failure, or <code>null</code> if the
-   * failure carries none (then the cluster did not answer).
+   * failure has none. Then the cluster did not answer.
    */
   private static ProblemDetail problemOf(
       final Throwable throwable) {
@@ -143,13 +142,13 @@ public final class Camunda8TenantCheck {
   /**
    * Whether the cluster refused BECAUSE multi-tenancy is switched off there.
    * <p>
-   * The only place in this adapter where a cluster's wording decides anything, and it
-   * decides which of two guiding messages a developer reads rather than what the adapter
-   * does. No code separates the two cases: the cluster answers every rejected argument
-   * with the same HTTP 400, and a request naming a tenant on a cluster without
-   * multi-tenancy is a rejected argument like any other. A reworded message therefore
-   * costs the sharper of two sentences and nothing else - the caller has already made
-   * sure an RFC 7807 answer of the cluster is what is being read.
+   * This is the only place in this adapter where the words of a cluster decide anything.
+   * They decide which of two guiding messages a developer reads, not what the adapter does.
+   * No code tells the two cases apart. The cluster answers every rejected argument with
+   * the same HTTP 400. A request which names a tenant on a cluster without multi-tenancy is
+   * a rejected argument like any other. So if the cluster rewords its message, only the
+   * sharper of two sentences is lost. The caller has already made sure that it reads an
+   * RFC 7807 answer of the cluster.
    *
    * @param throwable What the tenant request failed with
    * @return Whether the cluster named multi-tenancy as the reason
