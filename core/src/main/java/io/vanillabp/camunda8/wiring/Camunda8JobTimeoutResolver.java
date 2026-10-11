@@ -3,10 +3,10 @@ package io.vanillabp.camunda8.wiring;
 import java.time.Duration;
 
 /**
- * Resolves the job timeout (worker lock duration) for a task - implemented by the
- * platform modules on top of the adapter's configuration overlay with
- * most-specific-wins semantics across the four levels (task &gt; workflow &gt;
- * workflow-module &gt; adapter):
+ * Resolves the job timeout (how long a worker holds the lock) for a task. The platform
+ * modules implement it on top of the configuration overlay of the adapter. The most
+ * specific value wins, across the four levels (task &gt; workflow &gt; workflow-module &gt;
+ * adapter):
  *
  * <pre>
  * vanillabp.adapters.&lt;id&gt;.job-timeout

@@ -22,27 +22,27 @@ import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
  * <h2>What a modelled listener is</h2>
  *
  * A {@code zeebe:taskListener} of a Camunda-managed user task or a
- * {@code zeebe:executionListener} of any element. Both name a JOB TYPE, both produce a job
- * when the cluster reaches them, and a job type nothing subscribes to stops the workflow
- * right there without anything being logged. That silence is what this class exists for.
+ * {@code zeebe:executionListener} of any element. Both name a JOB TYPE. Both produce a job
+ * when the cluster reaches them. And a job type nothing subscribes to stops the workflow
+ * right there, without anything being logged. This class exists because of that silence.
  *
- * <h2>How the adapter's own listeners are kept out</h2>
+ * <h2>How the adapter keeps its own listeners out</h2>
  *
  * Every listener VanillaBP writes carries a job type starting with
  * {@value #VANILLABP_JOB_TYPE_PREFIX}: the user-task lifecycle listeners, the start
  * listeners of the start events the cluster fires on its own, and the end listener of a
  * process whose end is reported. The Business Cockpit extension writes its own under
- * {@code io.vanillabp.businesscockpit:}, which that prefix covers as well. Beyond the
- * prefix the moment helps: a listener of an extension is not in the model yet while the
- * collection below walks it. The moment an extension reaches a model is VanillaBP's
- * promise, not this adapter's, and the wiki page
+ * {@code io.vanillabp.businesscockpit:}, which that prefix covers as well. Besides the
+ * prefix, the moment helps. A listener of an extension is not in the model yet while the
+ * collection below walks it. VanillaBP promises the moment at which an extension reaches a
+ * model, not this adapter. The wiki page
  * <a href="https://github.com/vanillabp/adapter-platform-integration/wiki/Extensions">Extensions</a>
  * says what is promised and what is not.
  * <p>
- * A third-party extension choosing a prefix of its own is not known here, and nothing can
- * ask for one. That is why the startup report names every listener this adapter treats as
- * the modeller's: a job type a reader does not recognise is the one line worth a second
- * look.
+ * A third-party extension which chooses a prefix of its own is not known here, and nothing
+ * can ask for one. That is why the startup report names every listener which this adapter
+ * treats as written by the modeller. A job type a reader does not recognise is the one line
+ * worth a second look.
  */
 public final class Camunda8Listeners {
 
@@ -56,7 +56,7 @@ public final class Camunda8Listeners {
 
   /**
    * The job-type prefix of every listener VanillaBP and its extensions write. A listener
-   * carrying it belongs to the framework and is none of the application's business.
+   * carrying it belongs to the framework. It is none of the business of the application.
    */
   public static final String VANILLABP_JOB_TYPE_PREFIX = "io.vanillabp.";
 
@@ -83,7 +83,7 @@ public final class Camunda8Listeners {
     }
 
     /**
-     * The kind in words, so a message reads like a sentence rather than like an enum.
+     * The kind in words, so a message reads like a sentence and not like an enum.
      *
      * @return What a message calls this kind
      */
@@ -103,8 +103,8 @@ public final class Camunda8Listeners {
    *          it
    * @param elementId The BPMN element the listener sits on
    * @param kind Task listener or execution listener
-   * @param event The listener's event, as the model spells it
-   * @param taskDefinition The listener's job type, which is the task definition a
+   * @param event The event of the listener, as the model spells it
+   * @param taskDefinition The job type of the listener. It is the task definition a
    *          {@code @WorkflowTask} method names
    */
   public record ModelledListener(
@@ -115,7 +115,7 @@ public final class Camunda8Listeners {
                                  String taskDefinition) {
 
     /**
-     * The listener in one line, which is how the startup report and the guiding messages name
+     * The listener in one line. This is how the startup report and the guiding messages name
      * it.
      *
      * @return The listener as one line of a message
@@ -130,19 +130,19 @@ public final class Camunda8Listeners {
   }
 
   /**
-   * Whether this is a task listener on <code>updating</code> - the one event which fires on
-   * the empty update this adapter probes a user task with.
+   * Whether this is a task listener on <code>updating</code>. That is the one event which
+   * fires on the empty update with which this adapter probes a user task.
    * <p>
-   * The probe changes no attribute at all and the listener fires anyway, measured on 8.9 and
-   * on 8.10. So an element carrying such a listener is only probed where a worker of this
-   * application answers its job; anywhere else the probe would hold the task in
+   * The probe changes no attribute at all, and the listener fires anyway. This was measured
+   * on 8.9 and on 8.10. So an element carrying such a listener is only probed where a worker
+   * of this application answers its job. Anywhere else the probe would hold the task in
    * <code>UPDATING</code> for fifteen seconds. See decision 38 in the repository's
    * DECISIONS.md.
    * <p>
    * BOTH spellings count. The enum of the model API carries the old <code>update</code> next
-   * to today's <code>updating</code>, on every line this adapter builds against, and a model
+   * to the current <code>updating</code>, on every line this adapter builds against. A model
    * written with the old one produces the same job. Reading only the new spelling would send
-   * the probe at exactly the element this question exists to keep it away from.
+   * the probe to exactly the element this question should keep it away from.
    *
    * @param listener The listener as the model carries it
    * @return Whether it is a task listener on <code>updating</code>
@@ -204,20 +204,22 @@ public final class Camunda8Listeners {
   }
 
   /**
-   * The line which opens and closes the startup report. Plain ASCII, for the reason
-   * {@link Camunda8Connectors#FRAME_LINE} gives, and the same line: the two reports are
-   * read in the same boot log and a second width would look like a second kind of message.
+   * The line which opens and closes the startup report. It is plain ASCII, for the reason
+   * {@link Camunda8Connectors#FRAME_LINE} gives. It is also the same line. The two reports
+   * are read in the same boot log, and a second width would look like a second kind of
+   * message.
    */
   public static final String FRAME_LINE = Camunda8Connectors.FRAME_LINE;
 
   /**
    * What an application gives up while its modelled listeners are served, in the words of
-   * the startup report. Kept here because the same sentences belong into the refusal a boot
-   * WITHOUT the property writes, and a reader must meet them in both places unchanged.
+   * the startup report. It is kept here, because the same sentences also belong into the
+   * refusal which a boot WITHOUT the property writes. A reader must find them unchanged in
+   * both places.
    * <p>
-   * Word for word what the Camunda 7 adapter says, because the sentences are about
-   * VanillaBP rather than about a cluster, and a developer moving a module between the two
-   * must not have to work out whether two wordings mean the same thing.
+   * It is word for word what the Camunda 7 adapter says. The sentences are about VanillaBP,
+   * not about a cluster. A developer who moves a module between the two must not have to
+   * work out whether two wordings mean the same thing.
    */
   public static final String WHAT_IT_COSTS = """
       A listener is where a BPMS lets an application in at a moment the BPMS owns, and every \
@@ -229,10 +231,10 @@ public final class Camunda8Listeners {
       because TaskEvent.Event has no value for a listener's event.""";
 
   /**
-   * The sentences only Camunda 8 can say, and the reason the report carries more than
-   * {@link #WHAT_IT_COSTS}: what a listener may write into the process instance depends on the
-   * kind of listener and on its event. Measured against cluster and client 8.9.19 in September
-   * 2026; {@link Camunda8ModelledListenerHandler} is where the three cases are implemented.
+   * The sentences only Camunda 8 can say. They are the reason the report carries more than
+   * {@link #WHAT_IT_COSTS}. What a listener may write into the process instance depends on
+   * the kind of listener and on its event. Measured against cluster and client 8.9.19 in
+   * September 2026. {@link Camunda8ModelledListenerHandler} implements the three cases.
    */
   public static final String WHAT_CAMUNDA8_ADDS = """
       What a listener method may write into the process instance depends on the listener. An \
@@ -247,8 +249,8 @@ public final class Camunda8Listeners {
       workflow.""";
 
   /**
-   * The sentence about the one ambiguity this design leaves, said wherever listeners are
-   * named: an element may carry two listeners, and the element id names the element.
+   * The sentence about the one ambiguity this design leaves. It is said wherever listeners
+   * are named. An element may carry two listeners, and the element id names the element.
    */
   public static final String WHICH_METHOD_SERVES_WHICH = """
       A method serves a listener by naming its TASK DEFINITION and in no other way. \
@@ -257,12 +259,12 @@ public final class Camunda8Listeners {
       names is not served here: whatever else resolves it keeps resolving it.""";
 
   /**
-   * Reports keys the application set at TASK level, where this one does not resolve, and
-   * lets the boot go on: the value changes no answer, and ending a boot over a key which
-   * simply does nothing would be worse than saying so.
+   * Reports keys the application set at TASK level, where this one does not resolve. Then it
+   * lets the boot go on. The value changes no answer. Ending a boot over a key which simply
+   * does nothing would be worse than saying so.
    *
    * @param adapterId The adapter ID
-   * @param keysAtTaskLevel The keys found, fully spelled out; nothing is reported for an
+   * @param keysAtTaskLevel The keys found, fully spelled out. Nothing is reported for an
    *          empty list
    * @param warnLogger Where the guidance goes
    */
@@ -293,9 +295,9 @@ public final class Camunda8Listeners {
   /**
    * Every listener of one process which somebody modelled, in document order.
    * <p>
-   * Read off the model rather than off a list of element types, so a listener reaches this
-   * wherever the cluster lets one sit. A listener of VanillaBP or of one of its extensions
-   * is not among them, see the class comment.
+   * They are read from the model and not from a list of element types. So a listener is
+   * found wherever the cluster lets one sit. A listener of VanillaBP or of one of its
+   * extensions is not among them, see the class comment.
    *
    * @param model The BPMN model
    * @param bpmnProcessId The process id as it stands in the model at this point
@@ -340,12 +342,12 @@ public final class Camunda8Listeners {
 
   /**
    * The execution listeners of one process which the CLUSTER refuses: a {@code start} listener
-   * on a start event. Verified against 8.8, which is why VanillaBP attaches its own listener to
+   * on a start event. Verified against 8.8. That is why VanillaBP attaches its own listener to
    * a start event on {@code end} instead.
    * <p>
-   * Worth its own answer because the cluster refuses the FILE, not the element, so every process
-   * the file declares is lost and the message comes from the cluster rather than from anything a
-   * modeller can read.
+   * This is worth its own answer, because the cluster refuses the FILE, not the element. So
+   * every process the file declares is lost. And the message comes from the cluster, not from
+   * anything a modeller can read.
    *
    * @param model The BPMN model
    * @param bpmnProcessId The process id as it stands in the model at this point
@@ -377,7 +379,7 @@ public final class Camunda8Listeners {
   /**
    * Whether a job type belongs to VanillaBP or to one of its extensions.
    *
-   * @param jobType The listener's job type, may be <code>null</code> for a listener a
+   * @param jobType The job type of the listener. May be <code>null</code> for a listener a
    *          modeller left unfinished
    * @return Whether the framework owns it
    */
@@ -389,9 +391,9 @@ public final class Camunda8Listeners {
   }
 
   /**
-   * The listeners of one element which share a job type, which is the one case a served
-   * listener cannot be wired in: one method would serve two events and nothing could tell
-   * it which one it is being called for.
+   * The listeners of one element which share a job type. In this one case a served listener
+   * cannot be wired. One method would serve two events, and nothing could tell it which one
+   * it is called for.
    *
    * @param listeners The listeners of one process
    * @return Per element and job type the listeners sharing it, only where there is more

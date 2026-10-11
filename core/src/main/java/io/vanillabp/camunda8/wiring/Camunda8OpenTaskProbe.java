@@ -20,98 +20,102 @@ import lombok.extern.slf4j.Slf4j;
  * Asks the cluster whether the other tasks of a workflow are still there, every time it hands
  * this application a job.
  * <p>
- * Zeebe tells a worker nothing about a job it took away, so an application on this BPMS learns
- * nothing on its own: an asynchronous task whose element an interrupting boundary event
- * removed stays open in VanillaBP's own record forever. The core drives the check - the list,
- * the budget, the transaction and the <code>CANCELED</code> delivery are all its business -
- * and this class answers the one question an adapter can answer, for one task at a time.
+ * Zeebe tells a worker nothing about a job it took away. So an application on this BPMS learns
+ * nothing on its own. Take an asynchronous task whose element an interrupting boundary event
+ * removed: it stays open in the record of VanillaBP forever. The core drives the check.
+ * The list, the budget, the transaction and the <code>CANCELED</code> delivery are all its
+ * business. This class answers the one question an adapter can answer, for one task at a
+ * time.
  * <p>
- * It is called from the three handlers which are a wake-up of a workflow: the job handler,
- * after the outcome went back to the cluster, the user-task listener handler, after the
- * listener job was completed, and the handler of the listeners somebody modelled, inside its
- * listener work. The user-task one waits for the completion because that completion is what
- * ends state <code>CREATING</code> of the task the application was just told about, and a
- * task in that state refuses the completion the application may already have sent.
- * Not from the handler which reports the end of a workflow, because the end is a
- * stronger statement than a job and the core already derives the same cancelations from it,
- * and not from the handler which starts an instance, because an instance which has just
- * started has nothing else open.
+ * It is called from the three handlers which are a wake-up of a workflow:
+ * <ul>
+ * <li>the job handler, after the outcome went back to the cluster,</li>
+ * <li>the user-task listener handler, after the listener job was completed,</li>
+ * <li>the handler of the listeners somebody modelled, inside its listener work.</li>
+ * </ul>
+ * The user-task one waits for the completion. That completion ends state
+ * <code>CREATING</code> of the task the application was just told about. And a task in
+ * that state refuses the completion which the application may already have sent.
+ * <p>
+ * It is not called from the handler which reports the end of a workflow. The end is a
+ * stronger statement than a job, and the core already derives the same cancelations from
+ * it. It is not called from the handler which starts an instance either. An instance which
+ * has just started has nothing else open.
  *
  * <h2>The instance is asked first</h2>
  *
- * Every record the core asks about belongs to the ONE process instance of the wake-up, so the
- * cheapest question comes first: does the ENGINE still hold that instance? It is one command,
- * one to two milliseconds, and it is refused rather than carried out - which of the two
- * refusals is sent follows the release line and the business id, see
+ * Every record the core asks about belongs to the ONE process instance of the wake-up. So the
+ * cheapest question comes first: does the ENGINE still hold that instance? It is one command
+ * of one to two milliseconds. The engine refuses it and does not carry it out. Which of the
+ * two refusals is sent follows the release line and the business id, see
  * {@link Camunda8InstanceProbe} and decision 35 in the repository's DECISIONS.md. A
  * <code>404</code> answers the whole list at once, because an instance the engine has
- * forgotten holds nothing open, and the answer is remembered for the rest of that wake-up, so
+ * forgotten holds nothing open. The answer is remembered for the rest of that wake-up. So
  * twenty records cost one command.
  * <p>
- * The one instance is the core's doing: it reads the open tasks OF ONE WORKFLOW and asks about
- * those. A record naming another workflow id would therefore be a core which changed its mind,
- * and it is answered with {@link TaskExistence#CANNOT_SAY} rather than guessed at. Everything
- * below reads the BPMN process of the wake-up, the model of which is the one checked for the
- * element the instance probe reserves, and that reading only holds while the one instance
- * does.
+ * The core makes sure there is only one instance. It reads the open tasks OF ONE WORKFLOW and
+ * asks about those. So a record naming another workflow id would mean the core changed its
+ * mind. It is answered with {@link TaskExistence#CANNOT_SAY}, not guessed at. Everything below
+ * reads the BPMN process of the wake-up. Its model is the one checked for the element the
+ * instance probe reserves. That reading only holds while there is only one instance.
  * <p>
- * The <code>404</code> cannot tell an ended workflow from one which never existed, and it does
- * not have to here: the question is whether a task is still open, and both answers mean it is
- * not. That reading stays inside this check, for the reason decision 35 spells out.
+ * The <code>404</code> cannot tell an ended workflow from one which never existed. It does
+ * not have to here. The question is whether a task is still open, and both answers mean it
+ * is not. That reading stays inside this check, for the reason decision 35 gives.
  * <p>
- * And the <code>404</code> is not handed out early. A cancellation is not the end of an
- * instance - one carrying a Camunda-managed user task waits for the <code>canceling</code>
- * listener job of that task, and the engine answers <code>404</code> to a second cancellation
- * within milliseconds of the first. The probe does NOT do the same: measured on 2026-09-27
- * inside exactly that window, it answers <code>400</code> for as long as the engine holds the
- * instance and <code>404</code> only once the listener job was answered, on all three lines.
- * The user-task probe below answers <code>409</code> in the same window. What holds the window
- * open and reads both is {@code Camunda8ProbeWhileAnInstanceTerminatesIT}.
+ * And the <code>404</code> does not come early. A cancellation is not the end of an instance.
+ * An instance with a Camunda-managed user task waits for the <code>canceling</code> listener
+ * job of that task. The engine answers <code>404</code> to a second cancellation within
+ * milliseconds of the first. The probe does NOT do the same. Measured on 2026-09-27 inside
+ * exactly that window, on all three lines: it answers <code>400</code> for as long as the
+ * engine holds the instance, and <code>404</code> only once the listener job was answered.
+ * The user-task probe below answers <code>409</code> in the same window.
+ * {@code Camunda8ProbeWhileAnInstanceTerminatesIT} holds the window open and reads both.
  *
  * <h2>Then the task, and what kind of task decides how</h2>
  *
- * <b>A job.</b> <code>UpdateJobTimeout</code> for the task the record names, which is the
- * command the adapter sends for every open asynchronous task anyway. A 404 or a gRPC
+ * <b>A job.</b> <code>UpdateJobTimeout</code> for the task the record names. The adapter
+ * sends this command for every open asynchronous task anyway. A 404 or a gRPC
  * <code>NOT_FOUND</code> is gone. Everything else is "cannot say", including the 400 which
  * says the cluster holds the job and nobody has it activated right now: that answer means the
  * task is alive.
  * <p>
- * <b>A Camunda-managed user task.</b> Its key is not a job key: handed to a job command it
- * answers <code>NOT_FOUND</code> for as long as the task is open, which read as gone would
- * cancel a task the cluster is holding out to somebody. It holds the other way round as well,
- * and {@code Camunda8ProbeOfAnOpenUserTaskIT} measured both on 2026-09-28 against 8.8.39,
- * 8.9.21 and 8.10.0-rc1: each command answered <code>404</code> for a full minute about a key
- * of the other kind, while the task was open and the engine said it holds the instance. Which
- * kind of key a record carries is therefore the whole question, and that is what
- * {@link KindOfTask} is for. What answers for one of those is the
- * empty update of {@link Camunda8UserTaskProbe}, and it is sent only where
- * {@code probe-open-user-tasks} asked for it and only where the instance said it is still
- * there. Without the key the answer is {@link TaskExistence#CANNOT_SAY}, which costs an
- * application nothing: VanillaBP writes a <code>canceling</code> task listener next to every
- * user task it manages, and the cluster delivers <code>CANCELED</code> straight from there.
+ * <b>A Camunda-managed user task.</b> Its key is not a job key. Handed to a job command, it
+ * answers <code>NOT_FOUND</code> for as long as the task is open. Read as gone, that would
+ * cancel a task the cluster is offering to somebody. It holds the other way round as well.
+ * {@code Camunda8ProbeOfAnOpenUserTaskIT} measured both on 2026-09-28 against 8.8.39, 8.9.21
+ * and 8.10.0-rc1. Each command answered <code>404</code> for a full minute about a key of the
+ * other kind. All that time the task was open, and the engine said it holds the instance. So
+ * the kind of key a record carries is the whole question. {@link KindOfTask} is there for it.
+ * For a user task, the empty update of {@link Camunda8UserTaskProbe} gives the answer. It is
+ * sent only where {@code probe-open-user-tasks} asked for it, and only where the instance
+ * said it is still there. Without the key, the answer is {@link TaskExistence#CANNOT_SAY}.
+ * That costs an application nothing. VanillaBP writes a <code>canceling</code> task listener
+ * next to every user task it manages, and the cluster delivers <code>CANCELED</code> straight
+ * from there.
  * <p>
- * <b>Anything this adapter cannot tell apart.</b> A BPMN process this application declares
- * without deploying a model has no model to read, so a record of it may name either kind. And
- * a record which kept no task definition names nothing to look up, so it counts as the
- * ambiguous case wherever its process holds a user task at all. Both are answered with
- * {@link TaskExistence#CANNOT_SAY}: a wrong "gone" cancels work the cluster is waiting on. A
- * workflow the check says nothing about still hears about a task which went away, through the
- * end of the workflow and through the next operation which names the task.
+ * <b>Anything this adapter cannot tell apart.</b> A BPMN process which this application
+ * declares without deploying a model has no model to read. So a record of it may name either
+ * kind. And a record which kept no task definition names nothing to look up. So it counts as
+ * the ambiguous case wherever its process holds a user task at all. Both are answered with
+ * {@link TaskExistence#CANNOT_SAY}, because a wrong "gone" cancels work the cluster is waiting
+ * on. A workflow the check says nothing about still hears about a task which went away: at
+ * the end of the workflow, and with the next operation which names the task.
  * <p>
- * It is deliberately not {@code Camunda8ProcessService#awarenessOfTask}. That one asks which
- * scope a key belongs to first, which is a query-API round trip on a shared cluster and which
- * this check does not need - the record names the adapter which delivered the task, and the
- * core drops a record of another adapter before anything is sent. And it folds two answers into
- * one: its <code>UNKNOWN_TO_BPMS</code> means both "the cluster says 404" and "this is not my
- * adapter's task", and reading the second as a cancelation would report a living task as
- * canceled.
+ * It is not {@code Camunda8ProcessService#awarenessOfTask}, on purpose. That one first asks
+ * which scope a key belongs to. That is a round trip to the query API on a shared cluster,
+ * and this check does not need it. The record names the adapter which delivered the task, and
+ * the core drops a record of another adapter before anything is sent. And it folds two
+ * answers into one. Its <code>UNKNOWN_TO_BPMS</code> means both "the cluster says 404" and
+ * "this task is not from my adapter". Reading the second as a cancelation would report a
+ * living task as canceled.
  */
 @Slf4j
 public class Camunda8OpenTaskProbe {
 
   /**
-   * What kind of task a delivery record of this workflow module names, which is what decides
-   * which command can ask about it.
+   * What kind of task a delivery record of this workflow module names. It decides which
+   * command can ask about it.
    */
   public enum KindOfTask {
     /**
@@ -138,8 +142,8 @@ public class Camunda8OpenTaskProbe {
   private final WorkflowTaskInvoker workflowTaskInvoker;
 
   /**
-   * The client of this workflow module, asked for the client rather than holding one: the
-   * workers are opened with the client of the run, and a probe must use the same one.
+   * The client of this workflow module. It is asked for each time and not held. The workers
+   * are opened with the client of the run, and a probe must use the same one.
    */
   private final Supplier<CamundaClient> client;
 
@@ -151,24 +155,24 @@ public class Camunda8OpenTaskProbe {
   private final Supplier<Camunda8AdapterConfiguration> configuration;
 
   /**
-   * What the probe writes as the job's new deadline, which is the same value every other
+   * What the probe writes as the new deadline of the job. It is the same value every other
    * <code>UpdateJobTimeout</code> of this adapter writes. The command moves the deadline of a
-   * job somebody else is holding, so a value of its own would make a probe shorten or extend
-   * a lock behind that holder's back.
+   * job somebody else is holding. With a value of its own, a probe would shorten or extend a
+   * lock behind the back of that holder.
    */
   private final Duration asyncTaskLockRenewal;
 
   /**
-   * What a record of that PLAIN BPMN process id and PLAIN task definition names, which is
-   * read at deployment off the models of this workflow module.
+   * What a record of that PLAIN BPMN process id and PLAIN task definition names. It is read
+   * from the models of this workflow module at deployment.
    */
   private final BiFunction<String, String, KindOfTask> theKindOfTaskARecordNames;
 
   /**
    * Whether a model of that PLAIN BPMN process id carries the element the instance probe
-   * reserved. Where one does, the modification would ACTIVATE that element instead of being
-   * refused, which is a change to a running workflow nobody asked for - so the instance is
-   * not asked about at all.
+   * reserved. Where one does, the modification would ACTIVATE that element and would not be
+   * refused. That is a change to a running workflow nobody asked for. So the instance is not
+   * asked about at all.
    */
   private final Predicate<String> aModelCarriesTheReservedProbeElement;
 
@@ -177,11 +181,11 @@ public class Camunda8OpenTaskProbe {
    *
    * @param adapterId The adapter whose workers deliver the wake-ups
    * @param workflowModuleId The workflow module
-   * @param workflowTaskInvoker The core's runtime entry point, or <code>null</code> to ask
-   *          nothing
+   * @param workflowTaskInvoker The runtime entry point of the core, or <code>null</code> to
+   *          ask nothing
    * @param client The client of this workflow module
    * @param configuration The configuration of this adapter id
-   * @param asyncTaskLockRenewal What a job probe writes as the job's new deadline
+   * @param asyncTaskLockRenewal What a job probe writes as the new deadline of the job
    * @param theKindOfTaskARecordNames What a record of a process and a task definition names
    * @param aModelCarriesTheReservedProbeElement Whether a model of that process carries the
    *          element the instance probe reserved
@@ -212,8 +216,8 @@ public class Camunda8OpenTaskProbe {
    * are open in the same workflow.
    * <p>
    * Nothing here may cost the delivery which led to it. The job is answered by the time this
-   * runs, and a check which threw would otherwise turn a finished job into a failed one, so
-   * every failure ends here with one line.
+   * runs. A check which threw would turn a finished job into a failed one. So every failure
+   * ends here with one line.
    *
    * @param bpmnProcessId The BPMN process of the delivery, as the application knows it
    * @param wakeUp The context of that delivery
@@ -227,14 +231,14 @@ public class Camunda8OpenTaskProbe {
     }
     try {
       // what the engine answered about the instance of this wake-up, for as long as the
-      // wake-up is being served. It lives here rather than on the class because it is only
-      // true while the cluster is being asked: a workflow which was there a minute ago says
-      // nothing about the workflow of the next job
+      // wake-up is being served. It lives here and not on the class, because it is only true
+      // while the cluster is being asked. A workflow which was there a minute ago says
+      // nothing about the workflow of the next job.
       final var theInstance = new TheInstanceOfThisWakeUp(
           bpmnProcessId, wakeUp.getWorkflowId(), wakeUp.getWorkflowAggregateId());
-      // every record the core asks about belongs to that one instance, so they are all
-      // tasks of the BPMN process of this wake-up - what differs per record is the task
-      // definition, which is what the probe below reads
+      // every record the core asks about belongs to that one instance. So they are all
+      // tasks of the BPMN process of this wake-up. What differs per record is the task
+      // definition, and the probe below reads it.
       workflowTaskInvoker
           .reportTasksTheBpmsNoLongerHas(workflowModuleId, bpmnProcessId, wakeUp, new OpenTaskProbe() {
 
@@ -243,8 +247,8 @@ public class Camunda8OpenTaskProbe {
                 final String workflowId,
                 final String taskId) {
 
-              // the core asks the three-argument method, so this one is reached only by a
-              // caller which holds no task definition - which is the ambiguous case
+              // the core asks the three-argument method. So only a caller which holds no
+              // task definition reaches this one. That is the ambiguous case.
               return stillExists(workflowId, taskId, null);
 
             }
@@ -279,7 +283,7 @@ public class Camunda8OpenTaskProbe {
    *
    * @param theInstance What the engine already said about the instance of this wake-up
    * @param workflowId The process instance key the delivery record kept
-   * @param taskId The job key respectively the user-task key the delivery record kept
+   * @param taskId The job key or the user-task key the delivery record kept
    * @param taskDefinition The task definition of the record, or <code>null</code> where it
    *          kept none
    * @return What the cluster said
@@ -295,15 +299,15 @@ public class Camunda8OpenTaskProbe {
     }
     if (!theInstance.isTheOneOfThisWakeUp(workflowId)) {
       // the core asks about the open tasks of ONE workflow, so this cannot happen. If it
-      // ever does, the process id every answer below reads is the wrong one, and guessing
-      // with it could modify a workflow nobody asked about
+      // ever does, every answer below reads the wrong process id. Guessing with it could
+      // modify a workflow nobody asked about.
       return TaskExistence.CANNOT_SAY;
     }
     final var instance = theInstance.answer();
     if (instance == TaskExistence.GONE) {
       // an instance the engine has forgotten holds nothing open, whatever kind of task
-      // the record names - which is what makes this one command the answer to the whole
-      // list rather than the first of many
+      // the record names. That makes this one command the answer to the whole list, and
+      // not the first of many.
       return TaskExistence.GONE;
     }
     final var kind = theKindOfTaskARecordNames.apply(theInstance.bpmnProcessId(), taskDefinition);
@@ -337,8 +341,8 @@ public class Camunda8OpenTaskProbe {
       return TaskExistence.STILL_THERE;
     } catch (final Exception e) {
       if (Camunda8Errors.jobIsThereButNotActive(e)) {
-        // the cluster holds the job and nobody has it activated right now, which is what
-        // an asynchronous task whose lock ran out looks like
+        // the cluster holds the job and nobody has it activated right now. That is how
+        // an asynchronous task whose lock ran out looks.
         return TaskExistence.STILL_THERE;
       }
       if (Camunda8Errors.notFound(e)) {
@@ -358,16 +362,17 @@ public class Camunda8OpenTaskProbe {
   /**
    * Whether the cluster still holds the USER TASK of that key.
    * <p>
-   * Two things have to be true before the command is sent. The instance has to be there,
-   * because a user task of an instance the engine no longer holds was answered above, and
-   * the application has to have asked for the question: the empty update costs a command per
-   * task and fires a modelled <code>updating</code> listener while it is at it.
+   * Two things have to be true before the command is sent. First, the instance has to be
+   * there. A user task of an instance the engine no longer holds was answered above. Second,
+   * the application has to have asked for the question. The empty update costs a command per
+   * task, and on the way it fires a modelled <code>updating</code> listener.
    * <p>
-   * The command does not return until that listener job has been answered, and where this
-   * application serves the listener the answer comes from one of its own execution slots. So
-   * this call holds the slot it runs on while a second one serves the job. With the usual
-   * four slots there is room for both; with a single one the cluster's fifteen seconds pass
-   * and the answer is "cannot say", which harms no task and only makes the wake-up slow.
+   * The command does not return until that listener job has been answered. Where this
+   * application serves the listener, the answer comes from one of its own execution slots. So
+   * this call holds the slot it runs on, while a second one serves the job. With the usual
+   * four slots there is room for both. With a single one, the fifteen seconds of the cluster
+   * pass and the answer is "cannot say". That harms no task. It only makes the wake-up
+   * slow.
    */
   private TaskExistence theUserTaskStillExists(
       final TaskExistence instance,
@@ -377,8 +382,8 @@ public class Camunda8OpenTaskProbe {
       return TaskExistence.CANNOT_SAY;
     }
     if (instance != TaskExistence.STILL_THERE) {
-      // the engine did not say the instance is there, and a task of an instance nobody
-      // could ask about is not a task to send a second question about
+      // the engine did not say the instance is there. If nobody could ask about the
+      // instance, no second question is sent about its task.
       return TaskExistence.CANNOT_SAY;
     }
     final var key = keyOf(taskId);
@@ -393,8 +398,8 @@ public class Camunda8OpenTaskProbe {
         return TaskExistence.GONE;
       }
       if (Camunda8Errors.refusedAboutAUserTaskItHolds(e)) {
-        // a task standing in UPDATING and a task whose listener denied the update are both
-        // tasks the cluster has
+        // the cluster has a task standing in UPDATING, and also a task whose listener
+        // denied the update
         return TaskExistence.STILL_THERE;
       }
       log
@@ -428,10 +433,10 @@ public class Camunda8OpenTaskProbe {
       return TaskExistence.CANNOT_SAY;
     }
     try {
-      // nothing about a shared cluster is asked here, unlike in the election's probe: the
-      // record names the adapter which delivered the task and the core drops a record of
-      // another adapter before this is reached, so the instance asked about is this
-      // adapter's own
+      // nothing about a shared cluster is asked here, unlike in the probe of the election.
+      // The record names the adapter which delivered the task. The core drops a record of
+      // another adapter before this is reached. So the instance asked about belongs to this
+      // adapter.
       Camunda8InstanceProbe
           .askTheEngine(
               client.get(),
@@ -459,8 +464,8 @@ public class Camunda8OpenTaskProbe {
   }
 
   /**
-   * A key of this cluster as a number, or <code>null</code> where the id is none - a record
-   * naming something else was written by another BPMS and the core should not have asked.
+   * A key of this cluster as a number, or <code>null</code> where the id is none. A record
+   * naming something else was written by another BPMS, and the core should not have asked.
    * Saying so is still cheaper than guessing.
    */
   private static Long keyOf(
@@ -478,8 +483,8 @@ public class Camunda8OpenTaskProbe {
    * What the engine answered about the ONE process instance a wake-up belongs to.
    * <p>
    * It exists so that a list of twenty records of that workflow costs one instance command
-   * and not twenty. Not a cache beyond that: it is created per call and thrown away with it,
-   * because the answer is about a moment.
+   * and not twenty. It is no cache beyond that. It is created per call and thrown away with
+   * it, because the answer is about a moment.
    */
   final class TheInstanceOfThisWakeUp {
 
@@ -509,7 +514,7 @@ public class Camunda8OpenTaskProbe {
     }
 
     /**
-     * Whether a record naming that workflow id belongs to this wake-up's instance.
+     * Whether a record naming that workflow id belongs to the instance of this wake-up.
      *
      * @param recordWorkflowId What the delivery record kept
      * @return Whether the two are the same workflow

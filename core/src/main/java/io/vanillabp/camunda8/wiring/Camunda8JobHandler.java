@@ -26,64 +26,63 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * The job handler of one polling worker (one worker per adapter ID and task
- * definition): builds the neutral invocation context from the {@link ActivatedJob}
- * and dispatches through the core's {@link WorkflowTaskInvoker}. Camunda 8 job
- * workers deliver AT LEAST ONCE - the handler (and its completion) are idempotent
- * by design:
+ * definition). It builds the neutral invocation context from the {@link ActivatedJob}
+ * and dispatches through the {@link WorkflowTaskInvoker} of the core. Camunda 8 job
+ * workers deliver AT LEAST ONCE. So the handler and its completion are idempotent by
+ * design:
  * <ul>
- * <li>the business method runs in a NEW local transaction which commits BEFORE the
- * job is completed (order: open TX - load aggregate - invoke - save - commit -
- * complete job). A crash between commit and complete causes a redelivery which
- * converges: the handler runs again on the already-updated aggregate and the
- * completion succeeds;</li>
- * <li>completing a job that was already completed by a parallel redelivery is
- * tolerated (WARN - the documented at-least-once residual);</li>
+ * <li>the business method runs in a NEW local transaction. It commits BEFORE the job is
+ * completed (order: open TX - load aggregate - invoke - save - commit - complete job). A
+ * crash between commit and complete causes a redelivery which converges. The handler
+ * runs again on the aggregate which is already updated, and the completion
+ * succeeds.</li>
+ * <li>completing a job which a parallel redelivery already completed is tolerated. It
+ * logs a WARN, because this is the documented residual of at-least-once.</li>
  * <li>{@code TaskException} maps to a BPMN error (error-boundary routing, aggregate
- * changes committed);</li>
- * <li>any other exception fails the job with decremented retries - the local
- * transaction was already rolled back by the core;</li>
- * <li>the completion CARRIES THE AGGREGATE STATE: the values the
- * aggregate shares with the BPMS plus - always - the technical aggregate-ID
- * variable. Without them a gateway right after the service task would evaluate the
- * values of the last {@code ProcessService}-driven sync point, i.e. STALE data. The
- * values are read through the core's
- * {@link WorkflowTaskInvoker#syncedWorkflowAggregateValues} AFTER the local
- * transaction committed (in its own transaction) - a failing read never prevents
- * the completion, the job is then completed with the ID variable only. The same
- * holds for the BPMN_ERROR path: the error boundary's outgoing flow may branch on
- * the aggregate, too;</li>
- * <li>a {@code @TaskId} method returning without completing leaves the job OPEN:
- * its lock is extended by the adapter's <code>async-task-lock-renewal</code> (one
- * hour by default), so the handler is not re-invoked while the workflow waits for
- * the asynchronous completion (<code>ProcessService#completeTask</code>). When the
- * window passes, the cluster hands the job out again, the core answers that
- * redelivery from its delivery record with COMPLETION_PENDING, and the lock is
- * extended by another window - the renewal is driven by the cluster's own
- * redelivery and the application never notices it. The worker's regular job timeout
- * stays short: crash recovery of non-async tasks is not delayed.</li>
+ * changes committed).</li>
+ * <li>any other exception fails the job with one retry less. The core already rolled the
+ * local transaction back.</li>
+ * <li>the completion CARRIES THE AGGREGATE STATE: the values the aggregate shares with the
+ * BPMS, plus always the technical aggregate-ID variable. Without them, a gateway right
+ * after the service task would evaluate the values of the last sync point driven by
+ * {@code ProcessService}. That is STALE data. The values are read through
+ * {@link WorkflowTaskInvoker#syncedWorkflowAggregateValues} of the core, AFTER the local
+ * transaction committed, in a transaction of its own. A failing read never prevents the
+ * completion. The job is then completed with the ID variable only. The same holds for the
+ * BPMN_ERROR path, because the outgoing flow of the error boundary may branch on the
+ * aggregate too.</li>
+ * <li>a {@code @TaskId} method returning without completing leaves the job OPEN. The
+ * adapter extends its lock by <code>async-task-lock-renewal</code> (one hour by default).
+ * So the handler is not invoked again while the workflow waits for the asynchronous
+ * completion (<code>ProcessService#completeTask</code>). When the window passes, the
+ * cluster hands the job out again. The core answers that redelivery from its delivery
+ * record with COMPLETION_PENDING, and the lock is extended by another window. So the
+ * redelivery of the cluster drives the renewal, and the application never notices it.
+ * The regular job timeout of the worker stays short. So crash recovery of tasks which are
+ * not asynchronous is not delayed.</li>
  * <li>the command which reports the outcome is REPEATED where the cluster rejected it for
- * backpressure: a completion of work which is already committed must not cost
- * the job a retry just because the cluster was busy. The retry is bounded by the job's
- * remaining lock and by five attempts, see
- * {@link Camunda8CommandRetry} - a handler waiting occupies
- * an execution slot, which is why the bound is small. A job which is failed after all gets
- * a <code>retry-backoff</code>, which the element's own task header may name instead of the
- * configuration - see {@link Camunda8RetryBackoffHeader};</li>
+ * backpressure. A completion of work which is already committed must not cost the job a
+ * retry just because the cluster was busy. The retry is bounded by the remaining lock of
+ * the job and by five attempts, see {@link Camunda8CommandRetry}. A waiting handler
+ * occupies an execution slot, which is why the bound is small. A job which is failed after
+ * all gets a <code>retry-backoff</code>. The task header of the element may name it
+ * instead of the configuration, see {@link Camunda8RetryBackoffHeader}.</li>
  * <li>a failure, a BPMN error or an overdue failure which finds the job GONE is a late
- * answer and not a failure: a redelivery answered the job first, or its element or workflow
- * ended while the handler was working. The cluster has moved on, so the handler writes a
- * debug line and goes on, see {@link Camunda8CommandRetry#sendUnlessTheJobIsGone};</li>
- * <li>a delivery which fails while the workflow module is SHUTTING DOWN is not reported
- * as a job failure: the adapter's state decides, not the exception, because a
- * handler interrupted by the closing client throws like any other. The job keeps its lock
- * and its retries, the cluster hands it out again once the lock expires, and VanillaBP's
- * delivery record decides whether the work has to run again. Before that, the shutdown
- * WAITS for the handlers in flight - see {@link Camunda8Drain};</li>
- * <li>the core measures how long such a task has been open and says when it passed
+ * answer and not a failure. A redelivery answered the job first, or its element or
+ * workflow ended while the handler was working. The cluster has moved on. So the handler
+ * writes a debug line and goes on, see
+ * {@link Camunda8CommandRetry#sendUnlessTheJobIsGone}.</li>
+ * <li>a delivery which fails while the workflow module is SHUTTING DOWN is not reported as
+ * a job failure. The state of the adapter decides, not the exception, because a handler
+ * interrupted by the closing client throws like any other. The job keeps its lock and its
+ * retries. The cluster hands it out again once the lock expires. Then the delivery record
+ * of VanillaBP decides whether the work has to run again. Before that, the shutdown WAITS
+ * for the handlers in flight, see {@link Camunda8Drain}.</li>
+ * <li>the core measures how long such a task has been open. It says when the task passed
  * <code>vanillabp.delivery.max-task-age</code>. Where
  * <code>async-task-max-age-action</code> is <code>incident</code>, the renewal stops
- * there and the job is failed with a guiding message, so the cluster raises an
- * incident naming the workflow aggregate and the age.</li>
+ * there and the job is failed with a guiding message. So the cluster raises an incident
+ * which names the workflow aggregate and the age.</li>
  * </ul>
  * <p>
  * Why a job is not reported as failed while the adapter is shutting down is decision 6 in the
@@ -97,8 +96,8 @@ public class Camunda8JobHandler implements JobHandler {
   private final String workflowModuleId;
 
   /**
-   * The full client - job-lock extension (dormancy) is not part of the
-   * {@link JobClient} handed to handlers.
+   * The full client. The {@link JobClient} handed to handlers cannot extend a job lock
+   * (dormancy).
    */
   private final CamundaClient camundaClient;
 
@@ -113,10 +112,10 @@ public class Camunda8JobHandler implements JobHandler {
   private final Camunda8AdapterConfiguration.AsyncTaskMaxAgeAction asyncTaskMaxAgeAction;
 
   /**
-   * What the workflow module has in flight, and whether it is going down:
-   * this handler registers its delivery there, and a failure while the module is going
-   * down is the shutdown rather than the application. Never <code>null</code> - a handler
-   * built without one (tests) gets a drain of its own, which never shuts down.
+   * What the workflow module has in flight, and whether it is going down. This handler
+   * registers its delivery there. A failure while the module is going down comes from the
+   * shutdown and not from the application. Never <code>null</code>. A handler built
+   * without one (tests) gets a drain of its own, which never shuts down.
    */
   private final Camunda8Drain drain;
 
@@ -127,54 +126,55 @@ public class Camunda8JobHandler implements JobHandler {
 
   /**
    * Translates the identifiers the cluster reports back into the plain ones the core
-   * knows - a no-op unless the workflow module uses prefixes. May be
+   * knows. It does nothing unless the workflow module uses prefixes. May be
    * <code>null</code> (tests).
    */
   private final NameClashAvoidanceSupport scoping;
 
   /**
-   * Which multi-instance elements enclose the job's element. May be
-   * <code>null</code> (tests) - then no iteration is reported, which is what this
-   * adapter did before.
+   * Which multi-instance elements enclose the element of the job. May be
+   * <code>null</code> (tests). Then no iteration is reported, as this adapter did
+   * before.
    */
   private final Camunda8MultiInstance.Registry multiInstanceRegistry;
 
   /**
    * How long the cluster waits before it hands a failed job out again, resolved
-   * per task. May be <code>null</code> (tests) - then
+   * per task. May be <code>null</code> (tests). Then
    * {@link Camunda8RetryBackoffResolver#DEFAULT_RETRY_BACKOFF} applies.
    */
   private final Camunda8RetryBackoffResolver retryBackoffResolver;
 
   /**
-   * What the models say about the backoff of this worker's task, and what was already
-   * said about them. One per worker, and a worker serves one task definition, so a model
-   * which got its header wrong costs one line per element rather than one per job.
+   * What the models say about the backoff of the task of this worker, and what was
+   * already reported about them. There is one per worker, and a worker serves one task
+   * definition. So a model with a wrong header costs one line per element, not one per
+   * job.
    */
   private final Camunda8RetryBackoffHeader retryBackoffHeader;
 
   /**
-   * What this worker asked the cluster for - a job carries these variables and
-   * no others. Read twice: a missing aggregate-ID variable now has a second possible
-   * cause, and a <code>&#64;TaskParam</code> outside the list is a question this delivery
-   * cannot answer. Never <code>null</code>; a handler built without one (tests) sees
-   * every variable, which is what a worker naming no list gets.
+   * What this worker asked the cluster for. A job carries these variables and no others.
+   * It is read twice. A missing aggregate-ID variable now has a second possible cause. And
+   * a <code>&#64;TaskParam</code> outside the list is a question this delivery cannot
+   * answer. Never <code>null</code>. A handler built without one (tests) sees every
+   * variable, like a worker which names no list.
    */
   private final Camunda8FetchVariables.Selection fetchVariables;
 
   /**
    * Answers whether a workflow of (scoped process id, version) was started before the
-   * version this boot deployed - see
+   * version this boot deployed, see
    * {@link TaskInvocationContext#predatesDeployedVersion()}.
-   * A predicate rather than the version catalog itself: the handler needs one answer, and
-   * a test needs to hand it in without building a catalog.
+   * It is a predicate and not the version catalog itself. The handler needs one answer.
+   * And a test needs to hand it in without building a catalog.
    */
   private final BiPredicate<String, Integer> predatesDeployedVersion;
 
   /**
    * Asks the cluster about the OTHER tasks this workflow has open, once the outcome of this
-   * job went back. May be <code>null</code> (tests, and an adapter run of a core which does
-   * not drive the check), which asks nothing.
+   * job went back. May be <code>null</code>. Then it asks nothing. That is the case in tests,
+   * and with a core which does not drive the check.
    */
   private final Camunda8OpenTaskProbe openTaskProbe;
 
@@ -187,15 +187,16 @@ public class Camunda8JobHandler implements JobHandler {
    * @param workflowModuleId The workflow module the subscribed tasks belong to
    * @param camundaClient The full client, for the lock extension a {@link JobClient} has no
    *          command for
-   * @param workflowTaskInvoker The core's runtime entry point
-   * @param asyncTaskLockRenewal How long an open asynchronous task's job lock is extended by
-   * @param scoping Translates the cluster's identifiers back, or <code>null</code>
+   * @param workflowTaskInvoker The runtime entry point of the core
+   * @param asyncTaskLockRenewal How long the job lock of an open asynchronous task is
+   *          extended by
+   * @param scoping Translates the identifiers of the cluster back, or <code>null</code>
    * @param multiInstanceRegistry Which multi-instance elements enclose an element, or
    *          <code>null</code> for no iteration
    * @param asyncTaskMaxAgeAction What to do with an overdue task, or <code>null</code> for
    *          <code>report</code>
-   * @param drain What the workflow module has in flight, or <code>null</code> for a drain of
-   *          this handler's own which never shuts down
+   * @param drain What the workflow module has in flight, or <code>null</code> for a drain
+   *          of its own, which never shuts down
    * @param retryBackoffResolver How long the cluster waits before it hands a failed job out
    *          again, or <code>null</code> for the default backoff
    * @param fetchVariables What the worker asked for, or <code>null</code> for every variable
@@ -252,22 +253,22 @@ public class Camunda8JobHandler implements JobHandler {
       final JobClient client,
       final ActivatedJob job) {
 
-    // the cluster reports the identifiers IT knows - translate them back into the
-    // plain ones the core's registries are keyed by
+    // the cluster reports the identifiers IT knows. Translate them back into the
+    // plain ones which key the registries of the core.
     final var bpmnProcessId = NameClashAvoidanceSupport
         .plainProcessId(scoping, workflowModuleId, job.getBpmnProcessId(), adapterId);
     final var taskDefinition = NameClashAvoidanceSupport
         .plainTaskDefinition(scoping, workflowModuleId, bpmnProcessId, job.getType(), adapterId);
 
     // From here until the finally, the shutdown of this workflow module waits
-    // for this handler instead of pulling the client away from under it
+    // for this handler. It does not pull the client away from under it.
     drain.jobStarted(job.getKey(), KIND, taskDefinition, bpmnProcessId);
     try {
       handleJob(client, job, bpmnProcessId, taskDefinition);
     } catch (final RuntimeException e) {
       // what reaches this point is the way BACK to the cluster (a completion, a BPMN
-      // error, a lock renewal); the invocation itself is answered below. Letting it
-      // escape during a shutdown would make the client fail the job with one retry less
+      // error, a lock renewal). The invocation itself is answered below. If it escaped
+      // during a shutdown, the client would fail the job with one retry less.
       if (drain.leaveJobToItsLock(job.getKey(), KIND, taskDefinition, e)) {
         return;
       }
@@ -287,8 +288,8 @@ public class Camunda8JobHandler implements JobHandler {
     final WorkflowTaskOutcome outcome;
     final String aggregateIdName;
     final Object aggregateId;
-    // built once and read twice: the invocation is what it is for, and the check of the
-    // other open tasks of this workflow is handed the same context afterwards
+    // built once and read twice. The invocation is what it is for. Afterwards the check
+    // of the other open tasks of this workflow gets the same context.
     final Camunda8TaskInvocationContext context;
     try {
       aggregateIdName = workflowTaskInvoker.resolveWorkflowAggregateIdName(
@@ -310,13 +311,13 @@ public class Camunda8JobHandler implements JobHandler {
               .test(job.getBpmnProcessId(), job.getProcessDefinitionVersion()), fetchVariables);
       outcome = workflowTaskInvoker.invokeWorkflowTask(workflowModuleId, bpmnProcessId, context);
     } catch (final Exception e) {
-      // While the module is going down, the failure is the shutdown and not the
-      // application - the job keeps its lock and its retries
+      // While the module is going down, the failure comes from the shutdown and not from
+      // the application. The job keeps its lock and its retries.
       if (drain.leaveJobToItsLock(job.getKey(), KIND, taskDefinition, e)) {
         return;
       }
-      // the core rolled the local transaction back - fail the job so Camunda 8
-      // applies its retry semantics (retries reach 0 -> incident)
+      // the core rolled the local transaction back. Fail the job, so Camunda 8
+      // applies its retry semantics (retries reach 0 -> incident).
       final var retryBackoff = retryBackoffOf(job, bpmnProcessId, taskDefinition);
       log.warn(
           "Camunda8[{}]: processing job '{}' (type '{}') of BPMN process '{}' failed - failing the job "
@@ -340,12 +341,12 @@ public class Camunda8JobHandler implements JobHandler {
                   client
                       .newFailCommand(job.getKey())
                       .retries(job.getRetries() - 1)
-                      // without it the cluster hands the job out again at once, so a
-                      // handler failing on something which needs a moment burns its
-                      // retries before the cause has a chance to pass
+                      // without it, the cluster hands the job out again at once. A
+                      // handler failing on something which needs a moment would use up
+                      // its retries before the cause has a chance to pass.
                       .retryBackoff(retryBackoff)
-                      // the type belongs into the incident as much as the message does:
-                      // what a NullPointerException says on its own is 'null'
+                      // the type belongs into the incident as much as the message does.
+                      // On its own, a NullPointerException just says 'null'.
                       .errorMessage(Camunda8Errors.incidentMessage(e)),
                   Camunda8JobLease.tokenOf(job))
               .send()
@@ -360,8 +361,8 @@ public class Camunda8JobHandler implements JobHandler {
           taskDefinition,
           variablesOf(bpmnProcessId, aggregateIdName, aggregateId));
       case BPMN_ERROR -> {
-        // read ONCE and not per attempt: a repeated command carries what the handler
-        // produced, and reading the aggregate again would cost a transaction per retry
+        // read ONCE and not per attempt. A repeated command carries what the handler
+        // produced. Reading the aggregate again would cost a transaction per retry.
         final var errorVariables = variablesOf(bpmnProcessId, aggregateIdName, aggregateId);
         Camunda8CommandRetry.sendUnlessTheJobIsGone(
             adapterId,
@@ -374,21 +375,21 @@ public class Camunda8JobHandler implements JobHandler {
                 .withToken(
                     client
                         .newThrowErrorCommand(job.getKey())
-                        // the model's error codes are prefixed too, so the code the
+                        // the error codes of the model are prefixed too. So the code the
                         // business method raised has to be translated on its way to the
-                        // cluster. The prefix is this task's workflow module, which is the
-                        // catcher's module as well: a call activity of this engine names its
-                        // called process by id, that id carries the calling module's prefix
-                        // under 'use-prefix', and under 'by-adapter' the cluster resolves it
-                        // in the tenant of the calling instance. There is no attribute on a
-                        // called element which could name another one, so a call activity
-                        // cannot leave its workflow module here
+                        // cluster. The prefix is the workflow module of this task. It is
+                        // also the module of the catcher. A call activity of this engine
+                        // names its called process by id. Under 'use-prefix' that id carries
+                        // the prefix of the calling module. Under 'by-adapter' the cluster
+                        // resolves it in the tenant of the calling instance. No attribute on
+                        // a called element could name another one. So a call activity
+                        // cannot leave its workflow module here.
                         .errorCode(
                             NameClashAvoidanceSupport
                                 .scopedIdentifier(
                                     scoping, workflowModuleId, outcome.errorCode(), adapterId))
                         .errorMessage(String.valueOf(outcome.errorName()))
-                        // the error boundary's outgoing path may branch on the aggregate
+                        // the outgoing path of the error boundary may branch on the aggregate
                         .variables(errorVariables),
                     Camunda8JobLease.tokenOf(job))
                 .send()
@@ -397,8 +398,8 @@ public class Camunda8JobHandler implements JobHandler {
       case COMPLETION_PENDING -> {
         if (outcome
             .maxAgeExceeded() && (asyncTaskMaxAgeAction == Camunda8AdapterConfiguration.AsyncTaskMaxAgeAction.INCIDENT)) {
-          // the renewal stops here: a task nobody will ever complete belongs where
-          // operators look, and on Camunda 8 that is an incident rather than a log line
+          // the renewal stops here. A task nobody will ever complete belongs where
+          // operators look. On Camunda 8 that is an incident, not a log line.
           failAsOverdue(client, job, taskDefinition, bpmnProcessId, String.valueOf(aggregateId), outcome.openFor());
           return;
         }
@@ -406,9 +407,9 @@ public class Camunda8JobHandler implements JobHandler {
       }
     }
 
-    // and now, with the outcome of THIS job back at the cluster, the other tasks the core
-    // believes are open in the same workflow. After and not before, because the completion
-    // of this very job is what can fire the boundary event which takes another one away
+    // and now, with the outcome of THIS job back at the cluster, the other tasks which the
+    // core believes are open in the same workflow. After and not before, because the
+    // completion of this very job can fire the boundary event which takes another one away.
     if (openTaskProbe != null) {
       openTaskProbe.reportWhatTheClusterNoLongerHas(bpmnProcessId, context);
     }
@@ -416,16 +417,17 @@ public class Camunda8JobHandler implements JobHandler {
   }
 
   /**
-   * Extends the lock of a job whose task stays open by the renewal window, so the handler
+   * Extends the lock of a job whose task stays open by the renewal window. So the handler
    * is not run again while the workflow waits for <code>ProcessService#completeTask</code>.
-   * When the window passes, the cluster hands the job out again, the core answers from its
+   * When the window passes, the cluster hands the job out again. The core answers from its
    * delivery record, and this renews the lock once more.
    * <p>
    * The renewal can come too late, and that is not a failure. The task is open from the
    * moment the handler decides so, which is before the renewal reaches the cluster. An
    * application which completes the task in that gap closes the job first. The cluster then
-   * refuses the renewal: with HTTP <code>400</code> (gRPC <code>INVALID_ARGUMENT</code>)
-   * while it still holds the closed job, and with <code>404</code> once it does not. A lock
+   * refuses the renewal. It answers with HTTP <code>400</code> (gRPC
+   * <code>INVALID_ARGUMENT</code>) while it still holds the closed job, and with
+   * <code>404</code> once it does not. A lock
    * which ran out before the renewal arrived gets the <code>400</code> as well. In each case
    * there is no lock left to extend, and the cluster already holds what comes next: the
    * completion, or a redelivery which renews the lock again. So the refusal is a debug line
@@ -477,15 +479,15 @@ public class Camunda8JobHandler implements JobHandler {
 
   /**
    * Fails the job of a task which stayed open longer than
-   * <code>vanillabp.delivery.max-task-age</code> allows, with no retries left, so the
-   * cluster raises an incident right away. The message is what an operator sees in the
-   * incident, so it names the workflow aggregate, the age and both ways out.
+   * <code>vanillabp.delivery.max-task-age</code> allows. It has no retries left, so the
+   * cluster raises an incident right away. An operator sees the message in the incident.
+   * So it names the workflow aggregate, the age and both ways out.
    *
    * @param client The job client of this delivery
    * @param job The activated job of the open task
    * @param taskDefinition The task definition, as the core knows it
    * @param bpmnProcessId The BPMN process id, as the core knows it
-   * @param aggregateId The workflow aggregate's id
+   * @param aggregateId The id of the workflow aggregate
    * @param openFor How long the task has been open
    */
   private void failAsOverdue(
@@ -512,7 +514,7 @@ public class Camunda8JobHandler implements JobHandler {
             Camunda8AdapterConfiguration
                 .propertyKey(adapterId, "async-task-max-age-action"));
     log.warn("Camunda8[{}]: {}", adapterId, message);
-    // no retry backoff: with no retries left there is no next attempt to delay
+    // no retry backoff. With no retries left, there is no next attempt to delay.
     Camunda8CommandRetry.sendUnlessTheJobIsGone(
         adapterId,
         "overdue failure",
@@ -534,7 +536,7 @@ public class Camunda8JobHandler implements JobHandler {
 
   /**
    * How long the cluster waits before it hands a failed job of this task out again: what
-   * the element's own task header models, or the most specific configured
+   * the task header of the element models, or the most specific configured
    * <code>retry-backoff</code>, or ten seconds.
    *
    * @param job The job which is about to be failed
@@ -554,8 +556,8 @@ public class Camunda8JobHandler implements JobHandler {
       return configured.duration();
     }
     if (!configured.perTask()) {
-      // the header speaks about one task, so it outranks every level which speaks about
-      // more than that one
+      // the header speaks about one task. So it outranks every level which speaks about
+      // more than that one.
       return modelled;
     }
     retryBackoffHeader
@@ -565,16 +567,15 @@ public class Camunda8JobHandler implements JobHandler {
   }
 
   /**
-   * The variables the completion of a job carries: the values the workflow
-   * aggregate shares with the cluster (the {@code @WorkflowTask} method just changed
-   * it and a gateway right after this task has to see the NEW values; see decision 1
-   * in the repository's DECISIONS.md)
-   * plus - always, no matter what the sync model says - the technical variable
-   * holding the aggregate's ID.
+   * The variables the completion of a job carries. First, the values the workflow
+   * aggregate shares with the cluster. The {@code @WorkflowTask} method just changed it,
+   * and a gateway right after this task has to see the NEW values (see decision 1 in the
+   * repository's DECISIONS.md). Second, always and whatever the sync model says, the
+   * technical variable holding the ID of the aggregate.
    *
    * @param bpmnProcessId The BPMN process ID
-   * @param aggregateIdName The name of the aggregate's ID property
-   * @param aggregateId The aggregate's ID as it arrived in the job's variables
+   * @param aggregateIdName The name of the ID property of the aggregate
+   * @param aggregateId The ID of the aggregate as it arrived in the variables of the job
    * @return The variables (never <code>null</code>)
    */
   private Map<String, Object> variablesOf(
@@ -583,8 +584,8 @@ public class Camunda8JobHandler implements JobHandler {
       final Object aggregateId) {
 
     final var variables = new LinkedHashMap<String, Object>(
-        // the core loads the aggregate in its OWN transaction (the task's one is
-        // committed) and never throws - a failed read yields an empty map
+        // the core loads the aggregate in its OWN transaction (the one of the task is
+        // committed). It never throws. A failed read gives an empty map.
         workflowTaskInvoker.syncedWorkflowAggregateValues(
             workflowModuleId,
             bpmnProcessId,
@@ -596,8 +597,8 @@ public class Camunda8JobHandler implements JobHandler {
   }
 
   /**
-   * Completes the job, tolerating that a parallel redelivery (at-least-once) has
-   * already completed it - the documented residual of completing AFTER the local
+   * Completes the job. It tolerates that a parallel redelivery (at-least-once) has
+   * already completed it. That is the documented residual of completing AFTER the local
    * transaction committed.
    */
   private void completeTolerantly(
@@ -607,8 +608,8 @@ public class Camunda8JobHandler implements JobHandler {
       final Map<String, Object> variables) {
 
     try {
-      // the work is committed at this point, so a cluster which is momentarily too busy
-      // must not cost the job a retry
+      // the work is committed at this point. So a cluster which is too busy for a moment
+      // must not cost the job a retry.
       Camunda8CommandRetry.send(
           adapterId,
           "completion",
@@ -656,7 +657,7 @@ public class Camunda8JobHandler implements JobHandler {
 
     /**
      * Whether the workflow of this job was started before the version this boot
-     * deployed - computed by the handler, which is where the predicate lives.
+     * deployed. The handler computes it, because the predicate lives there.
      */
     private final boolean predatesDeployedVersion;
 
@@ -683,8 +684,8 @@ public class Camunda8JobHandler implements JobHandler {
 
     /**
      * What the cluster knows about the iteration this job belongs to. The
-     * registry is keyed by the process id the CLUSTER knows, which is what the job
-     * reports - element ids themselves are never scoped.
+     * registry is keyed by the process id the CLUSTER knows, and the job reports that
+     * one. Element ids themselves are never scoped.
      */
     @Override
     public Map<String, MultiInstanceValue> getMultiInstances() {
@@ -718,8 +719,8 @@ public class Camunda8JobHandler implements JobHandler {
     @Override
     public String getProcessVersion() {
 
-      // the version of the deployed process definition this job belongs to - the
-      // cluster ships it with every job, so nothing has to be queried
+      // the version of the deployed process definition this job belongs to. The
+      // cluster ships it with every job, so nothing has to be queried.
       return String.valueOf(job.getProcessDefinitionVersion());
 
     }
@@ -734,9 +735,9 @@ public class Camunda8JobHandler implements JobHandler {
     @Override
     public String getBpmnElementId() {
 
-      // the element of the model this job was created for. The task definition next to
-      // it is the job type, and a job type may be shared by several elements, so this is
-      // the answer to "which element of the model is this"
+      // the element of the model this job was created for. The task definition is the
+      // job type, and several elements may share a job type. So this is the answer to
+      // "which element of the model is this"
       return job.getElementId();
 
     }
@@ -744,7 +745,7 @@ public class Camunda8JobHandler implements JobHandler {
     @Override
     public String getWorkflowId() {
 
-      // the process instance key of the cluster - what Operate is searched by
+      // the process instance key of the cluster. Operate is searched by it.
       return String.valueOf(job.getProcessInstanceKey());
 
     }
@@ -752,7 +753,7 @@ public class Camunda8JobHandler implements JobHandler {
     @Override
     public String getTaskId() {
 
-      // the job key identifies the open job - used by ProcessService#completeTask
+      // the job key identifies the open job. ProcessService#completeTask uses it.
       return String.valueOf(job.getKey());
 
     }
@@ -762,8 +763,8 @@ public class Camunda8JobHandler implements JobHandler {
 
       // this handler serves jobs and nothing else, so the id above is a job key. The
       // cluster takes it back through UpdateJob and CompleteJob. The user-task commands of
-      // the same cluster find nothing under a job key, and saying exactly that is what the
-      // record is read for
+      // the same cluster find nothing under a job key. The record is read to say exactly
+      // that.
       return TaskKind.TASK;
 
     }
@@ -771,8 +772,8 @@ public class Camunda8JobHandler implements JobHandler {
     @Override
     public boolean predatesDeployedVersion() {
 
-      // both halves come from what is already at hand: the job names its process and
-      // its version, and the adapter remembers what it deployed. No query, no cost
+      // both halves come from what is already at hand. The job names its process and
+      // its version, and the adapter remembers what it deployed. No query, no cost.
       return predatesDeployedVersion;
 
     }
@@ -780,10 +781,10 @@ public class Camunda8JobHandler implements JobHandler {
     @Override
     public String getDeliveryId() {
 
-      // the job key is stable across redeliveries of the same job (a failed job is
-      // re-activated under its key, and the key of a completed job is never handed out
-      // again), while every new element activation creates a new job - exactly the
-      // identity the core remembers a processed delivery by
+      // the job key is stable across redeliveries of the same job. A failed job is
+      // activated again under its key, and the key of a completed job is never handed out
+      // again. But every new element activation creates a new job. That is exactly the
+      // identity by which the core remembers a processed delivery.
       return String.valueOf(job.getKey());
 
     }
@@ -791,11 +792,11 @@ public class Camunda8JobHandler implements JobHandler {
     @Override
     public String getActivationId() {
 
-      // the ELEMENT instance, not the job: the two elements of a multi-instance
-      // activity are two element instances, while a job created a second time for ONE
-      // element must not read as a new element. That the job key would answer this
-      // question as well today is not a reason to give it - it answers the delivery
-      // question, and the two contracts are opposite
+      // the ELEMENT instance, not the job. Two elements of a multi-instance activity are
+      // two element instances. But a job created a second time for ONE element must not
+      // read as a new element. Today the job key would answer this question as well. That
+      // is no reason to use it. It answers the delivery question, and the two contracts
+      // are opposite.
       return String.valueOf(job.getElementInstanceKey());
 
     }
@@ -812,9 +813,9 @@ public class Camunda8JobHandler implements JobHandler {
 
     }
 
-    // runInCurrentTransaction stays false: job workers run on client threads
-    // without a transaction - the core opens a NEW one which commits BEFORE the
-    // job is completed (at-least-once ordering)
+    // runInCurrentTransaction stays false. Job workers run on client threads
+    // without a transaction. The core opens a NEW one, which commits BEFORE the
+    // job is completed (at-least-once ordering).
 
   }
 

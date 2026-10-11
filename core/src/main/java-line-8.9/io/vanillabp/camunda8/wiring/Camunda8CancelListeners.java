@@ -7,18 +7,17 @@ import io.vanillabp.camunda8.Camunda8ReleaseLine;
 /**
  * How an instance of this release line says that it was canceled. This is the 8.9 variant.
  * <p>
- * It does not say it at all. A {@code cancel} execution listener arrived with 8.10, and the
- * cluster takes it on the PROCESS element, so an instance of this line is terminated without
- * a word and the boot of a workflow module says that out loud rather than leaving it to be
- * found.
+ * It does not say it at all. The {@code cancel} execution listener arrived with 8.10, and
+ * the cluster takes it on the PROCESS element only. So an instance of this line is
+ * terminated without a word. The boot of a workflow module says that out loud, so nobody
+ * has to find it later.
  * <p>
- * Both halves live here because both would fail to compile on this line:
- * {@code ZeebeExecutionListenerEventType.cancel} is what would write the listener into the
- * model, and {@code ListenerEventType.CANCEL} is what the job of such a listener would
- * report.
+ * Both halves live here, because both would fail to compile on this line.
+ * {@code ZeebeExecutionListenerEventType.cancel} would write the listener into the model.
+ * {@code ListenerEventType.CANCEL} is what the job of such a listener would report.
  * <p>
- * Public because an extension of this adapter's pipeline asks the same question about the
- * line it runs on (see decision 28 in the repository's DECISIONS.md).
+ * The class is public, because an extension of the pipeline of this adapter asks the same
+ * question about the line it runs on (see decision 28 in the repository's DECISIONS.md).
  */
 public final class Camunda8CancelListeners {
 
@@ -37,13 +36,13 @@ public final class Camunda8CancelListeners {
   }
 
   /**
-   * Never called on this line: the caller asks
+   * Never called on this line, because the caller asks
    * {@link #theProcessCanReportItsCancellation()} first. It is here so the shared code has
-   * one shape on every line, and it throws rather than doing nothing, because a silent no-op
-   * would turn a wiring mistake into a cancelation nobody ever hears.
+   * one shape on every line. It throws instead of doing nothing. A silent no-op would turn a
+   * wiring mistake into a cancelation nobody ever hears about.
    *
    * @param listeners The execution listeners of the PROCESS element
-   * @param jobType The job type the listener's job would carry
+   * @param jobType The job type the job of the listener would carry
    * @param retries What the listener would be modelled with
    */
   public static void addProcessCancelListener(

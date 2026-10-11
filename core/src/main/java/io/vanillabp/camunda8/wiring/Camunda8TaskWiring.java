@@ -58,9 +58,9 @@ import io.vanillabp.spi.service.BpmsStartTrigger;
 
 /**
  * Extracts the job-worker tasks of an executable BPMN process from the Camunda 8
- * model: service-like tasks carrying a <code>zeebe:taskDefinition</code> - its
- * <code>type</code> IS the VanillaBP task definition (job type). Used during
- * <code>wireBpmn</code> for the wiring validation and to know which job workers to
+ * model. These are service-like tasks carrying a <code>zeebe:taskDefinition</code>. Its
+ * <code>type</code> IS the VanillaBP task definition (job type). It is used during
+ * <code>wireBpmn</code> for the wiring validation, and to know which job workers to
  * open per workflow module.
  * <p>
  * Why user-task listeners and message correlation keys are injected into the model rather than
@@ -84,7 +84,7 @@ public final class Camunda8TaskWiring {
                                    String taskDefinition) {
 
     /**
-     * The task in the shape the platform's own checks read it.
+     * The task in the shape in which the checks of the platform read it.
      *
      * @return The element id and the task definition of this task
      */
@@ -97,16 +97,15 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The job-worker tasks of the given executable process (including tasks inside
-   * embedded subprocesses). Tasks without a <code>zeebe:taskDefinition</code> get a
-   * <code>null</code> task definition - reported by the wiring validation with a
-   * guiding message. A business rule task calling a decision
-   * (<code>zeebe:calledDecision</code>) is none of them: the cluster evaluates it.
+   * The job-worker tasks of the given executable process, including tasks inside
+   * embedded subprocesses. Tasks without a <code>zeebe:taskDefinition</code> get a
+   * <code>null</code> task definition. The wiring validation reports them with a guiding
+   * message. A business rule task calling a decision (<code>zeebe:calledDecision</code>)
+   * is none of them, because the cluster evaluates it.
    * <p>
    * The task definition is handed over as the model says it, expression or not. A job type
-   * written as an expression never reaches this method, because the deployment refuses or
-   * reports such a model while the file is prepared, see
-   * {@link #jobTypesWrittenAsAnExpressionOf}.
+   * written as an expression never reaches this method. The deployment refuses or reports
+   * such a model while the file is prepared, see {@link #jobTypesWrittenAsAnExpressionOf}.
    *
    * @param model The BPMN model
    * @param bpmnProcessId The process id as it stands in the model
@@ -128,16 +127,17 @@ public final class Camunda8TaskWiring {
         .map(Task.class::cast)
         .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
         .forEach(task -> {
-          // a business rule task calling a DECISION is served by the cluster, not by a
-          // job worker of the application: the decision was deployed with this process,
-          // and asking for a @WorkflowTask method would make DMN unusable here. A
-          // business rule task carrying a task definition is an ordinary VanillaBP task
+          // the cluster serves a business rule task calling a DECISION, not a job worker
+          // of the application. The decision was deployed with this process. Asking for a
+          // @WorkflowTask method would make DMN unusable here. A business rule task
+          // carrying a task definition is an ordinary VanillaBP task.
           if (task.getSingleExtensionElement(
               io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision.class) != null) {
             return;
           }
-          // an element built from an element template names a job type somebody else's
-          // runtime subscribes to, so this application neither validates nor serves it
+          // an element built from an element template names a job type which the runtime
+          // of somebody else subscribes to. So this application neither validates nor
+          // serves it.
           if (connectorsAreAllowed && Camunda8Connectors.isServedByAnotherRuntime(task)) {
             return;
           }
@@ -164,7 +164,7 @@ public final class Camunda8TaskWiring {
                                              String jobType) {
 
     /**
-     * The entry in one line, which is how the deployment names it.
+     * The entry in one line. This is how the deployment names it.
      *
      * @return Where the expression stands and what it says
      */
@@ -181,21 +181,21 @@ public final class Camunda8TaskWiring {
    * written as a FEEL expression.
    * <p>
    * A job type is the NAME a worker subscribes to. This adapter opens one worker per job type
-   * it reads out of the model and subscribes exactly the string the model says, so an
-   * expression leaves the element unserved whatever the cluster makes of it: where the cluster
-   * evaluates the expression, the job carries the result while the worker waits for the
-   * expression, and where it does not, the job carries the expression and no
-   * <code>&#64;WorkflowTask</code> method can be named after it. The deployment therefore
-   * refuses or reports such a model instead of letting {@link #tasksOf} hand the expression to
-   * the core, which would ask for a method nobody can write.
+   * it reads out of the model. It subscribes exactly the string the model says. So an
+   * expression leaves the element unserved, whatever the cluster makes of it. Where the
+   * cluster evaluates the expression, the job carries the result, while the worker waits for
+   * the expression. Where it does not, the job carries the expression, and no
+   * <code>&#64;WorkflowTask</code> method can be named after it. So the deployment refuses or
+   * reports such a model. It does not let {@link #tasksOf} hand the expression to the core,
+   * which would ask for a method nobody can write.
    * <p>
-   * The same elements {@link #tasksOf} reads, with the same two exceptions: a business rule
-   * task calling a decision carries no job type at all, and an element built from an element
-   * template names a job type somebody else's runtime subscribes to.
+   * It reads the same elements as {@link #tasksOf}, with the same two exceptions. A business
+   * rule task calling a decision carries no job type at all. And an element built from an
+   * element template names a job type which the runtime of somebody else subscribes to.
    * <p>
-   * Read while the model is still the modeller's. Under <code>use-prefix</code> every
-   * expression carries the frame of {@link Camunda8Scoping} afterwards, and a message quoting
-   * that would quote something nobody typed.
+   * This is read while the model is still as the modeller wrote it. Under
+   * <code>use-prefix</code>, every expression carries the frame of {@link Camunda8Scoping}
+   * afterwards. A message quoting that would quote something nobody typed.
    *
    * @param model The BPMN model, as it was read
    * @param bpmnProcessId The process id as it stands in the model
@@ -242,7 +242,7 @@ public final class Camunda8TaskWiring {
                                                    String formReference) {
 
     /**
-     * The entry in one line, which is how the deployment names it.
+     * The entry in one line. This is how the deployment names it.
      *
      * @return Where the expression stands and what it says
      */
@@ -258,23 +258,22 @@ public final class Camunda8TaskWiring {
    * The Camunda-managed user tasks of the given executable process whose external form
    * reference is written as a FEEL expression.
    * <p>
-   * Under VanillaBP's Camunda 8 convention the external form reference IS the task definition
-   * of a user task. The core finds the <code>&#64;WorkflowTask</code> method by it, and the job
-   * type of the lifecycle listeners is {@link #TASKDEFINITION_USERTASK_ZEEBE} plus the reference.
-   * That job type does not start with <code>=</code>, so the cluster takes it as written while
-   * it evaluates the reference itself. A method therefore matches only where its task
-   * definition repeats the expression, and under <code>use-prefix</code> not even then,
-   * because the frame of {@link Camunda8Scoping} is written into the expression. The
-   * deployment refuses or reports such a model instead, see
-   * decision 69 in the repository's DECISIONS.md.
+   * Under the Camunda 8 convention of VanillaBP, the external form reference IS the task
+   * definition of a user task. The core finds the <code>&#64;WorkflowTask</code> method by it.
+   * The job type of the lifecycle listeners is {@link #TASKDEFINITION_USERTASK_ZEEBE} plus the
+   * reference. That job type does not start with <code>=</code>. So the cluster takes it as
+   * written, while it evaluates the reference itself. So a method matches only where its task
+   * definition repeats the expression. Under <code>use-prefix</code> not even then, because
+   * the frame of {@link Camunda8Scoping} is written into the expression. So the deployment
+   * refuses or reports such a model, see decision 69 in the repository's DECISIONS.md.
    * <p>
-   * A user task served by a job worker is not read here: it has a job type instead, and the
-   * deployment refuses or reports it for that reason already. Nor is an element template a
-   * way out, because a Camunda-managed user task has no job type another runtime could
-   * subscribe to.
+   * A user task served by a job worker is not read here. It has a job type instead, and the
+   * deployment already refuses or reports it for that reason. An element template is no way
+   * out either. A Camunda-managed user task has no job type another runtime could subscribe
+   * to.
    * <p>
-   * Read while the model is still the modeller's, so a message quotes what was typed rather
-   * than the frame.
+   * This is read while the model is still as the modeller wrote it. So a message quotes what
+   * was typed, not the frame.
    *
    * @param model The BPMN model, as it was read
    * @param bpmnProcessId The process id as it stands in the model
@@ -304,35 +303,35 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The V1-compatible job-type prefix of user-task listeners: the listener type is
-   * this prefix plus the user task's external form reference. MUST NOT change. It is the
-   * name a worker subscribes to, and a version-1 application brings workflows whose user
-   * tasks carry listener jobs of the old name: a prefix of our own would leave those jobs
-   * to nobody.
+   * The V1-compatible job-type prefix of user-task listeners. The listener type is this
+   * prefix plus the external form reference of the user task. It MUST NOT change. It is the
+   * name a worker subscribes to. A version-1 application brings workflows whose user tasks
+   * carry listener jobs of the old name. With a prefix of our own, nobody would serve those
+   * jobs.
    */
   public static final String TASKDEFINITION_USERTASK_ZEEBE = "io.vanillabp.userTask:";
 
   /**
    * The job-type prefix of the start execution listeners VanillaBP attaches to start
-   * events the cluster fires on its own: this prefix plus the scoped BPMN
-   * process id plus the start event's id. The job type has to be unique across the
-   * tenant, hence the process id - and one worker serves exactly one start event.
+   * events the cluster fires on its own. The job type is this prefix plus the scoped BPMN
+   * process id plus the id of the start event. The job type has to be unique across the
+   * tenant, so it contains the process id. One worker serves exactly one start event.
    */
   public static final String TASKDEFINITION_BPMS_INITIATED_START = "io.vanillabp.bpmsStart:";
 
   /**
-   * The job-type prefix of the end execution listener VanillaBP attaches to a
-   * process whose application wants to be told that a workflow ended:
-   * this prefix plus the scoped BPMN process id.
+   * The job-type prefix of the end execution listener VanillaBP attaches to a process whose
+   * application wants to be told that a workflow ended. The job type is this prefix plus the
+   * scoped BPMN process id.
    */
   public static final String TASKDEFINITION_WORKFLOW_ENDED = "io.vanillabp.workflowEnd:";
 
   /**
-   * The job type of a process' end execution listener, built from the prefix above so the
-   * worker and the model agree on one string.
+   * The job type of the end execution listener of a process. It is built from the prefix
+   * above, so the worker and the model agree on one string.
    *
    * @param scopedBpmnProcessId The BPMN process id the cluster knows
-   * @return The job type of the process' end execution listener
+   * @return The job type of the end execution listener of the process
    */
   public static String workflowEndedJobTypeOf(
       final String scopedBpmnProcessId) {
@@ -345,12 +344,12 @@ public final class Camunda8TaskWiring {
    * The element id this adapter reserved for the probe which asks the engine whether it
    * holds a process instance.
    * <p>
-   * The probe is a process instance modification naming an element the model does not have:
-   * the cluster refuses it and the refusal is the answer, so nothing about the workflow
+   * The probe is a process instance modification naming an element the model does not have.
+   * The cluster refuses it, and the refusal is the answer. So nothing about the workflow
    * changes. An id which by accident matches an element of the model would be ACTIVATED
-   * instead, which is a change to a running workflow nobody asked for - so the models are
-   * read for it while they are deployed and a process which carries it gets no probe, see
-   * decision 35 in the repository's DECISIONS.md.
+   * instead. That is a change to a running workflow nobody asked for. So the models are
+   * searched for it while they are deployed, and a process which carries it gets no probe,
+   * see decision 35 in the repository's DECISIONS.md.
    */
   public static final String RESERVED_PROBE_ELEMENT_ID = "vanillabp-existence-probe";
 
@@ -358,9 +357,9 @@ public final class Camunda8TaskWiring {
    * Whether the given model carries the element id
    * {@link #RESERVED_PROBE_ELEMENT_ID reserved for the probe}.
    * <p>
-   * The whole FILE is read rather than the one process: a file is the deployment unit, an
-   * id is unique within it, and being one process too careful costs a search where being
-   * one too few costs a modification of a running workflow.
+   * The whole FILE is read, not the one process. A file is the deployment unit, and an id is
+   * unique within it. Being one process too careful costs a search. Being one process too
+   * few costs a modification of a running workflow.
    *
    * @param model The BPMN model
    * @return Whether anything in it carries the reserved id
@@ -373,9 +372,8 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The version tag the modeller gave the process
-   * (<code>zeebe:versionTag</code>) - the name a
-   * <code>&#64;WorkflowTask(version = "release-2026")</code> refers to.
+   * The version tag the modeller gave the process (<code>zeebe:versionTag</code>). It is
+   * the name a <code>&#64;WorkflowTask(version = "release-2026")</code> refers to.
    *
    * @param model The BPMN model as deployed
    * @param bpmnProcessId The SCOPED BPMN process id
@@ -403,10 +401,10 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * Attaches an <code>end</code> execution listener to the PROCESS element, which
-   * is what tells VanillaBP that a workflow ended. Only called where the
-   * application declared a <code>&#64;WorkflowEnded</code> method: a model must not
-   * pay for a notification nobody asked for.
+   * Attaches an <code>end</code> execution listener to the PROCESS element. It tells
+   * VanillaBP that a workflow ended. It is only called where the application declared a
+   * <code>&#64;WorkflowEnded</code> method. A model must not pay for a notification nobody
+   * asked for.
    *
    * @param model The BPMN model, already scoped by <code>prepareBpmn</code>
    * @param bpmnProcessId The SCOPED BPMN process id
@@ -430,24 +428,24 @@ public final class Camunda8TaskWiring {
     listener
         .setEventType(ZeebeExecutionListenerEventType.end);
     listener.setType(jobType);
-    // LAST listener: whatever the model itself does at the end of the process runs
-    // before the application is told the workflow ended
+    // LAST listener. Whatever the model itself does at the end of the process runs
+    // before the application is told the workflow ended.
     listeners.addChildElement(listener);
     return true;
 
   }
 
   /**
-   * Attaches a <code>cancel</code> execution listener to the PROCESS element, which is what
-   * tells VanillaBP that an instance was terminated. It carries the SAME job type as the
-   * end listener next to it, so one worker answers both and the handler tells the two apart
-   * by the event the job reports.
+   * Attaches a <code>cancel</code> execution listener to the PROCESS element. It tells
+   * VanillaBP that an instance was terminated. It carries the SAME job type as the end
+   * listener next to it. So one worker answers both, and the handler tells the two apart by
+   * the event the job reports.
    * <p>
-   * The construct belongs to the 8.10 line, so the caller asks
-   * {@link Camunda8CancelListeners#theProcessCanReportItsCancellation()} first. It is also
-   * the caller's business that a worker is opened for the job type: a listener nobody serves
-   * holds the instance until its job is answered, which turns a cancelation into a workflow
-   * which never goes away and which raises no incident either.
+   * The construct belongs to the 8.10 line. So the caller asks
+   * {@link Camunda8CancelListeners#theProcessCanReportItsCancellation()} first. The caller
+   * also has to open a worker for the job type. A listener nobody serves holds the instance
+   * until its job is answered. That turns a cancelation into a workflow which never goes
+   * away, and which raises no incident either.
    *
    * @param model The BPMN model, already scoped by <code>prepareBpmn</code>
    * @param bpmnProcessId The SCOPED BPMN process id
@@ -466,9 +464,9 @@ public final class Camunda8TaskWiring {
       return true;
     }
 
-    // the retries of the end listener, which are the model's default: a failed
-    // notification is failed with one attempt less and the last failure raises the
-    // incident an operator acts on
+    // the retries of the end listener, which are the default of the model. A failed
+    // notification is failed with one attempt less. The last failure raises the
+    // incident an operator acts on.
     Camunda8CancelListeners.addProcessCancelListener(listeners, jobType, null);
     return true;
 
@@ -511,8 +509,8 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * Whether the process already carries that listener, which is what re-wiring an
-   * already-processed model meets.
+   * Whether the process already carries that listener. Wiring a model again which was
+   * already processed runs into this.
    */
   private static boolean alreadyCarries(
       final ZeebeExecutionListeners listeners,
@@ -529,8 +527,8 @@ public final class Camunda8TaskWiring {
 
   /**
    * The event of an execution listener which fires while an INSTANCE is being terminated, as
-   * the model spells it. Written as the word rather than as the client's constant, because
-   * the constant arrived with the 8.10 client and this file is compiled on every line.
+   * the model spells it. It is written as the word and not as the constant of the client. The
+   * constant arrived with the 8.10 client, and this file is compiled on every line.
    */
   private static final String CANCELING_AN_INSTANCE = "cancel";
 
@@ -549,9 +547,9 @@ public final class Camunda8TaskWiring {
                                                  String signalName) {
 
     /**
-     * The job type of this start event's execution listener.
+     * The job type of the execution listener of this start event.
      *
-     * @return The job type of this start event's execution listener
+     * @return The job type of the execution listener of this start event
      */
     public String listenerJobType() {
 
@@ -562,12 +560,12 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The job type of a start event's execution listener. One worker serves one start event, so
-   * the element id is part of the job type.
+   * The job type of the execution listener of a start event. One worker serves one start
+   * event, so the element id is part of the job type.
    *
    * @param scopedBpmnProcessId The BPMN process id the cluster knows
    * @param startEventId The BPMN id of the start event
-   * @return The job type of the start event's execution listener
+   * @return The job type of the execution listener of the start event
    */
   public static String listenerJobTypeOf(
       final String scopedBpmnProcessId,
@@ -578,19 +576,19 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * EVERY start event of the given executable process - and attaches an execution listener
-   * to each of them, which is how VanillaBP learns about a start and gets to decide what it
-   * means before anything else of the process runs.
+   * EVERY start event of the given executable process. It also attaches an execution
+   * listener to each of them. That is how VanillaBP learns about a start. It can then decide
+   * what the start means before anything else of the process runs.
    * <p>
    * The plain and the message start event are among them. What a start MEANS is read from
-   * the state of the workflow and not from the kind of its start event, so a workflow the
+   * the state of the workflow, not from the kind of its start event. A workflow the
    * application started is told apart from one somebody started past VanillaBP by the name
-   * the cluster holds for it, whichever event began it - see decision 49 in the
-   * repository's DECISIONS.md. Camunda 8 has no conditional events at all; the kind
-   * is part of the model here so an unsupported model fails at the cluster, not silently.
+   * the cluster holds for it, whichever event began it. See decision 49 in the repository's
+   * DECISIONS.md. Camunda 8 has no conditional events at all. The kind is part of the model
+   * here, so an unsupported model fails at the cluster and not silently.
    * <p>
    * Only the start events the process itself holds are read. An event subprocess starts
-   * no workflow, which {@link #startsTheWorkflow(StartEvent)} says more about.
+   * no workflow. {@link #startsTheWorkflow(StartEvent)} says more about that.
    *
    * @param model The BPMN model, already scoped by <code>prepareBpmn</code>
    * @param bpmnProcessId The SCOPED BPMN process id
@@ -609,14 +607,14 @@ public final class Camunda8TaskWiring {
 
   /**
    * The start events of a called process, read without adding anything. A called process is no
-   * workflow of its own, so its start is no start the core has to hear about, and a listener on
-   * it would only hold the instance until a worker answered.
+   * workflow of its own. So the core does not have to hear about its start. A listener on it
+   * would only hold the instance until a worker answered.
    *
    * @param model The model being deployed
    * @param bpmnProcessId The process id as the CLUSTER knows it
    * @param signalNameResolver Turns the scoped signal name of the model into the
    *          plain one the application modelled
-   * @return The start events the model declares, so the core can still refuse one the
+   * @return The start events the model declares. So the core can still refuse one the
    *         cluster fires on its own
    */
   public static List<Camunda8BpmsInitiatedStartToWire> startEventsOfACalledProcess(
@@ -629,11 +627,11 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The start events the CLUSTER fires on its own in a model it already runs - read for
-   * checks about versions an earlier application deployed, never for deploying. Nothing
-   * is added here: the cluster accepted the model as it stands and carries the execution
-   * listener of the deployment which brought it, so a read on its behalf leaves it
-   * exactly as it is.
+   * The start events the CLUSTER fires on its own in a model it already runs. They are read
+   * for checks about versions an earlier application deployed, never for deploying. Nothing
+   * is added here. The cluster accepted the model as it stands. It carries the execution
+   * listener of the deployment which brought it. So a read on its behalf leaves it exactly
+   * as it is.
    *
    * @param model The model as the cluster holds it
    * @param bpmnProcessId The process id as the CLUSTER knows it
@@ -719,13 +717,13 @@ public final class Camunda8TaskWiring {
   /**
    * The names of the messages which start the given executable process, in the form the
    * application passes them to <code>startWorkflowByMessage</code>. Only the start events
-   * the process itself holds count: a message start event of an event subprocess starts no
+   * the process itself holds count. A message start event of an event subprocess starts no
    * workflow.
    * <p>
    * The answer is empty where one of the names cannot be known before the message is
-   * published: a message start event without a message or without a name, or a name which
-   * is a FEEL expression (it starts with <code>=</code>). A process like that cannot be
-   * checked, and the caller does not report it at all.
+   * published. That is a message start event without a message or without a name, or a
+   * name which is a FEEL expression (it starts with <code>=</code>). A process like that
+   * cannot be checked, and the caller does not report it at all.
    *
    * @param model The BPMN model, already scoped by <code>prepareBpmn</code>
    * @param bpmnProcessId The SCOPED BPMN process id
@@ -770,12 +768,12 @@ public final class Camunda8TaskWiring {
 
   /**
    * Attaches a <code>start</code> execution listener to the start event, unless the
-   * model already carries it (re-wiring an already-processed model). Retries stay at
-   * the Camunda default: unlike the user-task listeners, a failure here means the
-   * workflow has no aggregate, which is worth retrying before it becomes an incident.
+   * model already carries it (wiring a model again which was already processed). Retries
+   * stay at the Camunda default. Unlike with the user-task listeners, a failure here means
+   * the workflow has no aggregate. That is worth retrying before it becomes an incident.
    * <p>
-   * What it costs the model is one <code>zeebe:executionListeners</code> element per start
-   * event, which is what {@code Camunda8StartListenerCostTest} measures.
+   * It costs the model one <code>zeebe:executionListeners</code> element per start event.
+   * {@code Camunda8StartListenerCostTest} measures that.
    */
   private static void addStartExecutionListener(
       final StartEvent startEvent,
@@ -796,8 +794,8 @@ public final class Camunda8TaskWiring {
         return;
       }
     } else {
-      // a start event carrying no extension elements at all: the container has to
-      // be created before a listener can be added to it
+      // a start event carrying no extension elements at all. The container has to
+      // be created before a listener can be added to it.
       if (startEvent.getExtensionElements() == null) {
         startEvent
             .setExtensionElements(
@@ -813,15 +811,15 @@ public final class Camunda8TaskWiring {
     final var listener = startEvent
         .getModelInstance()
         .newInstance(ZeebeExecutionListener.class);
-    // 'end' on the start event, not 'start': the cluster rejects start execution
-    // listeners on start events (8.8), while an end listener still gates the
-    // transition - it runs before the flow leaves the start event, so nothing of
-    // the process can run before the workflow aggregate exists
+    // 'end' on the start event, not 'start'. The cluster rejects start execution
+    // listeners on start events (8.8). An end listener still gates the transition.
+    // It runs before the flow leaves the start event. So nothing of the process can
+    // run before the workflow aggregate exists.
     listener
         .setEventType(ZeebeExecutionListenerEventType.end);
     listener.setType(listenerJobType);
-    // the workflow aggregate is built here: VanillaBP's listener has to run before
-    // any listener the model brings along
+    // the workflow aggregate is built here. So the listener of VanillaBP has to run
+    // before any listener the model brings along.
     listeners.insertElementAfter(listener, null);
 
   }
@@ -840,7 +838,7 @@ public final class Camunda8TaskWiring {
                                        String externalFormReference) {
 
     /**
-     * The user task in the shape the platform's own checks read it.
+     * The user task in the shape in which the checks of the platform read it.
      *
      * @return The element id and the task definition of this user task
      */
@@ -851,7 +849,7 @@ public final class Camunda8TaskWiring {
     }
 
     /**
-     * The job type of this user task's lifecycle listeners.
+     * The job type of the lifecycle listeners of this user task.
      *
      * @return That job type
      */
@@ -864,24 +862,25 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The job type the cluster serves a job-worker user task with - the shape version 1 used
-   * up to its release 1.6.3. Version 2 opens no worker on it, and it does not accept the
-   * shape either, which is what {@link #jobWorkerUserTasksOf} exists to find.
+   * The job type with which the cluster serves a job-worker user task. Version 1 used that
+   * shape up to its release 1.6.3. Version 2 opens no worker on it, and it does not accept
+   * the shape either. {@link #jobWorkerUserTasksOf} exists to find it.
    */
   public static final String TASKDEFINITION_USERTASK_WORKER_V1 = "io.camunda.zeebe:userTask";
 
   /**
-   * The job-worker user tasks of one BPMN process, told apart by whether the model still
-   * carries version 1's <code>formKey</code>.
+   * The job-worker user tasks of one BPMN process. They are told apart by whether the model
+   * still carries the <code>formKey</code> of version 1.
    * <p>
-   * The shape is the same for both and the way out of both is the same, but only one of them
-   * can be found by searching a model for <code>formKey</code>, so the report has to keep
-   * them apart.
+   * The shape is the same for both, and the way out of both is the same. But only one of
+   * them can be found by searching a model for <code>formKey</code>. So the report has to
+   * keep them apart.
    *
    * @param withVersionOnesFormKey The element ids whose <code>zeebe:formDefinition</code>
-   *          names a <code>formKey</code>, which is what told version 1 the task definition
+   *          names a <code>formKey</code>. That told version 1 the task definition
    * @param withoutAFormKey The element ids of a job-worker user task carrying no
-   *          <code>formKey</code> at all - never a VanillaBP shape, and just as silent
+   *          <code>formKey</code> at all. That was never a VanillaBP shape, and it is just as
+   *          silent
    */
   public record Camunda8JobWorkerUserTasks(
                                            List<String> withVersionOnesFormKey,
@@ -899,10 +898,10 @@ public final class Camunda8TaskWiring {
     }
 
     /**
-     * Both shapes together, which is what the count in the report is about: the way out is the
+     * Both shapes together. The count in the report is about them, because the way out is the
      * same for all of them.
      *
-     * @return Every element id found, version 1's shape first
+     * @return Every element id found, the shape of version 1 first
      */
     public List<String> all() {
 
@@ -916,33 +915,33 @@ public final class Camunda8TaskWiring {
 
   /**
    * The user tasks of the given executable process which are modelled as a JOB-WORKER user
-   * task: a user task without a <code>zeebe:userTask</code> extension element and without a
-   * <code>zeebe:taskDefinition</code> of the application's own.
+   * task. That is a user task without a <code>zeebe:userTask</code> extension element, and
+   * without a <code>zeebe:taskDefinition</code> of the application itself.
    * <p>
-   * The question is the shape of the element and nothing else. A user task carrying
-   * <code>zeebe:userTask</code> is managed by the cluster and is the one shape this adapter
-   * takes; a user task without it is served by a job of
-   * {@value #TASKDEFINITION_USERTASK_WORKER_V1}, which is how VanillaBP 1 worked up to its
-   * release 1.6.3, and this adapter does not take that shape. So the reader asks neither
-   * whether something would fetch that job nor whether the element names a
-   * <code>formKey</code>. The deployment ends the boot over the answer for a process a workflow
-   * service of the application claims, and asks nothing about a process nobody claims.
+   * The question is the shape of the element and nothing else. The cluster manages a user
+   * task carrying <code>zeebe:userTask</code>, and that is the one shape this adapter takes.
+   * A user task without it is served by a job of {@value #TASKDEFINITION_USERTASK_WORKER_V1}.
+   * VanillaBP 1 worked that way up to its release 1.6.3, and this adapter does not take that
+   * shape. So the reader does not ask whether something would fetch that job. Nor does it
+   * ask whether the element names a <code>formKey</code>. For a process which a workflow
+   * service of the application claims, the deployment ends the boot over the answer. It asks
+   * nothing about a process nobody claims.
    * <p>
-   * The element carrying a <code>zeebe:taskDefinition</code> is left out, and it is the one
-   * case which is not this shape. Such an element is served by a worker of the APPLICATION
-   * under a job type the application chose, so it is no longer a user task VanillaBP is meant
-   * to serve: nothing here notifies anybody about it and nothing completes it. It falls
-   * through the rest as well, because {@link #tasksOf} reads service-like tasks only and
+   * The element carrying a <code>zeebe:taskDefinition</code> is left out. It is the one case
+   * which is not this shape. A worker of the APPLICATION serves such an element, under a job
+   * type the application chose. So it is no longer a user task VanillaBP is meant to serve.
+   * Nothing here notifies anybody about it, and nothing completes it. It falls through the
+   * rest as well, because {@link #tasksOf} reads service-like tasks only, and
    * {@link #userTasksOf} skips anything without a <code>zeebe:userTask</code>.
    * <p>
-   * Two shapes end up here and the message has to keep them apart. Up to release 1.6.3
-   * VanillaBP 1 served exactly this element and read its task definition off the
-   * <code>zeebe:formDefinition</code> <strong>formKey</strong>; release 1.7.0 replaced it with
-   * a Camunda-managed user task and kept serving the old one alongside. An application
+   * Two shapes end up here, and the message has to keep them apart. Up to release 1.6.3,
+   * VanillaBP 1 served exactly this element. It read its task definition from the
+   * <code>zeebe:formDefinition</code> <strong>formKey</strong>. Release 1.7.0 replaced it with
+   * a Camunda-managed user task, and kept serving the old one alongside. An application
    * upgrading from that version finds those elements by searching its models for
-   * <code>formKey</code>. A user task WITHOUT one is not version 1's convention and no search
-   * for a formKey finds it, while the cluster treats it exactly the same, which is why both
-   * are collected and reported apart.
+   * <code>formKey</code>. A user task WITHOUT one does not follow the convention of version 1,
+   * and no search for a formKey finds it. But the cluster treats it exactly the same. That is
+   * why both are collected and reported apart.
    *
    * @param model The BPMN model of one file
    * @param bpmnProcessId The process id as the CLUSTER will know it
@@ -956,9 +955,9 @@ public final class Camunda8TaskWiring {
         .getModelElementsByType(UserTask.class)
         .stream()
         .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
-        // a Camunda-managed user task is the shape this adapter takes, and a user task
-        // carrying a zeebe:taskDefinition is an element the application serves itself -
-        // neither of them is a job-worker user task of VanillaBP's
+        // a Camunda-managed user task is the shape this adapter takes. A user task
+        // carrying a zeebe:taskDefinition is an element the application serves itself.
+        // Neither of them is a job-worker user task of VanillaBP.
         .filter(task -> task.getSingleExtensionElement(ZeebeUserTask.class) == null)
         .filter(task -> task.getSingleExtensionElement(ZeebeTaskDefinition.class) == null)
         .collect(
@@ -972,10 +971,10 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * Whether a form definition names version 1's formKey, which is what told that adapter
-   * the user task's task definition.
+   * Whether a form definition names the formKey of version 1. It told that adapter the task
+   * definition of the user task.
    *
-   * @param formDefinition The element's form definition, may be <code>null</code>
+   * @param formDefinition The form definition of the element, may be <code>null</code>
    * @return <code>true</code> where a non-blank formKey is set
    */
   private static boolean namesAFormKey(
@@ -991,20 +990,20 @@ public final class Camunda8TaskWiring {
 
   /**
    * The Camunda-managed user tasks (<code>zeebe:userTask</code>) of the given executable
-   * process, READ and nothing else: the model is not touched here.
+   * process, READ and nothing else. The model is not touched here.
    * <p>
-   * A user task without an external form reference fails with a guiding message, because
-   * the reference IS the task definition under VanillaBP's Camunda 8 convention and a user
-   * task without one is a model this adapter cannot deploy. That is a question about the
-   * model rather than a change to it, so it is asked here and the answer is the same
-   * however often it is asked.
+   * A user task without an external form reference fails with a guiding message. Under the
+   * Camunda 8 convention of VanillaBP, the reference IS the task definition. A user task
+   * without one is a model this adapter cannot deploy. That is a question about the model,
+   * not a change to it. So it is asked here, and the answer is the same however often it is
+   * asked.
    * <p>
-   * Public and separate from {@link #userTasksOf} because an extension wiring its own
-   * listeners into the same file needs the same list. Calling the preparing method for it
-   * would mean a second party writing lifecycle listeners into a model the adapter owns. The
-   * adapter does run before every extension, so those listeners are already in the model when
-   * an extension reads it; writing them a second time would change nothing and still belongs
-   * to somebody else.
+   * It is public and separate from {@link #userTasksOf}, because an extension which wires
+   * its own listeners into the same file needs the same list. Calling the preparing method
+   * for it would mean that a second party writes lifecycle listeners into a model the
+   * adapter owns. The adapter does run before every extension. So those listeners are
+   * already in the model when an extension reads it. Writing them a second time would
+   * change nothing, and it would still be the business of somebody else.
    *
    * @param model The BPMN model of one file
    * @param bpmnProcessId The process id as the CLUSTER knows it
@@ -1049,17 +1048,17 @@ public final class Camunda8TaskWiring {
 
   /**
    * The Camunda-managed user tasks of the given executable process, as
-   * {@link #readUserTasksOf} reports them, AND the V1-compatible lifecycle task listeners
-   * written into the model: per user task a <code>creating</code> listener as the FIRST and
-   * a <code>canceling</code> listener as the LAST listener (custom modeller-defined
-   * listeners stay in between), both with <code>retries="1"</code> and the type
+   * {@link #readUserTasksOf} reports them. In addition it writes the V1-compatible lifecycle
+   * task listeners into the model. Per user task, a <code>creating</code> listener comes
+   * FIRST and a <code>canceling</code> listener comes LAST. Custom listeners which the
+   * modeller defined stay in between. Both have <code>retries="1"</code> and the type
    * {@link #TASKDEFINITION_USERTASK_ZEEBE} + external form reference.
    * <p>
-   * This is the deployment path and it CHANGES the model. A second call adds no second set
-   * of listeners - a user task which already carries this listener job type is left as it
-   * is, see {@code Camunda8UserTasksReadAndPrepareTest} - but a caller which only wants to
-   * know what the model declares asks {@link #readUserTasksOf} instead, because being
-   * harmless is not the same as being the caller's business.
+   * This is the deployment path, and it CHANGES the model. A second call adds no second set
+   * of listeners. A user task which already carries this listener job type is left as it
+   * is, see {@code Camunda8UserTasksReadAndPrepareTest}. But a caller which only wants to
+   * know what the model declares asks {@link #readUserTasksOf} instead. Being harmless is
+   * not the same as being the business of the caller.
    *
    * @param model The BPMN model of one file, modified in place
    * @param bpmnProcessId The process id as the CLUSTER knows it
@@ -1083,14 +1082,14 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The Camunda-managed user tasks of a model the CLUSTER already runs - read for
-   * checks about versions an earlier application deployed, never for deploying.
-   * Nothing is validated and nothing is added here: the cluster accepted the model
-   * as it stands, and a check may not refuse what is being read on its behalf - a
-   * model nobody can change any more. A user task without an external form
-   * reference is read by version 1's convention instead (its formKey WAS the task
-   * definition up to release 1.6.3), and one naming neither is skipped: VanillaBP
-   * serves it under no convention, whatever the application does.
+   * The Camunda-managed user tasks of a model the CLUSTER already runs. They are read for
+   * checks about versions an earlier application deployed, never for deploying. Nothing is
+   * validated and nothing is added here. The cluster accepted the model as it stands. A
+   * check may not refuse what is being read on its behalf, a model nobody can change any
+   * more. A user task without an external form reference is read by the convention of
+   * version 1 instead. Up to release 1.6.3 its formKey WAS the task definition. One which
+   * names neither is skipped. VanillaBP serves it under no convention, whatever the
+   * application does.
    *
    * @param model The model as the cluster holds it
    * @param bpmnProcessId The process id as the CLUSTER knows it
@@ -1127,13 +1126,13 @@ public final class Camunda8TaskWiring {
 
   /**
    * The job types of the user-task listeners VanillaBP wrote into a model the CLUSTER already
-   * runs, read off the listeners themselves.
+   * runs, read from the listeners themselves.
    * <p>
-   * The job type is read and not composed, because the model in the cluster carries it as it
-   * was written when that model was deployed: with the scoping of that deployment, and for
-   * every user task, served by a method or not. An application which declares an old process
-   * id after a rename has no model of its own for that id, so this is the only place which
-   * says which listener jobs the workflows of the old id produce.
+   * The job type is read and not put together. The model in the cluster carries it as it was
+   * written when that model was deployed: with the scoping of that deployment, and for every
+   * user task, served by a method or not. An application which declares an old process id
+   * after a rename has no model of its own for that id. So this is the only place which says
+   * which listener jobs the workflows of the old id produce.
    *
    * @param model The model as the cluster holds it
    * @param bpmnProcessId The process id as the CLUSTER knows it
@@ -1162,16 +1161,16 @@ public final class Camunda8TaskWiring {
    * What the lifecycle listeners of a user task are modelled with.
    * <p>
    * Version 1 wrote <code>retries="0"</code> here, and that number is not only what a failed
-   * notification has left. A gateway which cannot hand an activated batch to the request it
-   * was activated for fails the job back to the broker WITH THE RETRIES IT HAD, so a job
-   * modelled without one has nothing to be failed back with: the lost delivery becomes an
-   * incident and the user task stands in <code>CREATING</code> for good. One retry is what
-   * makes that job activatable again, which is the recovery this adapter documents for every
+   * notification has left. Sometimes a gateway cannot hand an activated batch to the request
+   * it was activated for. Then it fails the job back to the broker WITH THE RETRIES IT HAD.
+   * So a job modelled without one has nothing to be failed back with. The lost delivery
+   * becomes an incident, and the user task stands in <code>CREATING</code> for good. One
+   * retry makes that job activatable again. This adapter documents that recovery for every
    * other job.
    * <p>
    * It does not give a failed notification a second attempt. The handler fails such a job
-   * with no retries left whatever the model says, so the incident an operator acts on is
-   * raised by the first failure as before - see
+   * with no retries left, whatever the model says. So the first failure raises the incident
+   * an operator acts on, as before. See
    * {@link Camunda8UserTaskListenerHandler} and
    * {@code Camunda8ShutdownHandlingTest#aListenerFailingIsReported}.
    * <p>
@@ -1180,10 +1179,10 @@ public final class Camunda8TaskWiring {
   private static final String ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST = "1";
 
   /**
-   * V1 listener order per element: VanillaBP <code>creating</code> FIRST, any
-   * custom listeners in between, VanillaBP <code>canceling</code> LAST. Listeners
-   * already carrying the VanillaBP prefix are not duplicated (re-wiring an
-   * already-processed model).
+   * V1 listener order per element: VanillaBP <code>creating</code> FIRST, any custom
+   * listeners in between, VanillaBP <code>canceling</code> LAST. Listeners which already
+   * carry the VanillaBP prefix are not added twice (wiring a model again which was already
+   * processed).
    */
   private static void addUserTaskListeners(
       final UserTask task,
@@ -1231,31 +1230,30 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * Wires the correlation keys of the given executable process' MESSAGE
-   * subscriptions: publishing with
-   * <code>correlationKey = workflow-aggregate ID</code> only correlates if the
-   * deployed model's message subscriptions carry a matching
-   * <code>zeebe:subscription</code> correlation-key expression. For every message
-   * referenced by a catch element of this process WITHOUT such an expression the
-   * V2 convention <code>=&lt;aggregate-ID variable&gt;</code> is INJECTED (the
-   * engine-specific BPMN modification of the pipeline); an existing expression is
-   * left untouched (the modeller may correlate by an own variable, e.g. for
-   * correlation-id scenarios - V1 models keep working byte-identically). Message
-   * START events need no correlation key and are skipped.
+   * Wires the correlation keys of the MESSAGE subscriptions of the given executable
+   * process. Publishing with <code>correlationKey = workflow-aggregate ID</code> only
+   * correlates if the message subscriptions of the deployed model carry a matching
+   * <code>zeebe:subscription</code> correlation-key expression. A catch element of this
+   * process may point at a message WITHOUT such an expression. For every such message the
+   * V2 convention <code>=&lt;aggregate-ID variable&gt;</code> is INJECTED. That is the
+   * engine-specific BPMN modification of the pipeline. An existing expression is left
+   * untouched. The modeller may correlate by a variable of their own, for example for
+   * correlation-id scenarios, and V1 models keep working byte-identically. Message START
+   * events need no correlation key and are skipped.
    * <p>
-   * The injection is for a process the application serves a workflow of, and it is
-   * called for no other: the variable it names is the workflow aggregate's, and a
-   * process no <code>&#64;WorkflowService</code> class claims has no aggregate to name
-   * one after. What such a process owes the cluster is asked BEFORE any of the file is
-   * rewritten, by {@link #messagesWithoutACorrelationKey}, and the deployment refuses
-   * the file over it rather than putting a substitute into a model it does not own.
+   * The injection is for a process of which the application serves a workflow. It is
+   * called for no other. The variable it names belongs to the workflow aggregate. A process
+   * no <code>&#64;WorkflowService</code> class claims has no aggregate to name one after.
+   * What such a process owes the cluster is asked BEFORE any of the file is rewritten, by
+   * {@link #messagesWithoutACorrelationKey}. The deployment refuses the file over it. It
+   * does not put a substitute into a model it does not own.
    *
    * @param model The BPMN model (modified in place)
    * @param bpmnProcessId The executable process to wire
    * @param aggregateIdVariableName Supplies the name of the process variable
-   *          holding the workflow-aggregate ID - asked ONCE, and only if an
-   *          injection is actually necessary, so a process without message catch
-   *          elements does not require the aggregate's ID property to be resolvable
+   *          holding the workflow-aggregate ID. It is asked ONCE, and only if an
+   *          injection is really needed. So a process without message catch elements
+   *          does not need the ID property of the aggregate to be resolvable
    */
   public static void wireMessageSubscriptions(
       final BpmnModelInstance model,
@@ -1265,8 +1263,8 @@ public final class Camunda8TaskWiring {
     final var messages = new LinkedHashSet<Message>();
     messageCatchElementsOf(model, bpmnProcessId)
         .map(MessageCatchElement::message)
-        // the modeller correlates deliberately (e.g. by an own correlation-id
-        // variable) - leave it untouched, V1 models stay byte-identical
+        // the modeller correlates on purpose (for example by a correlation-id variable of
+        // their own). Leave it untouched, so V1 models stay byte-identical.
         .filter(message -> message.getSingleExtensionElement(ZeebeSubscription.class) == null)
         .forEach(messages::add);
     if (messages.isEmpty()) {
@@ -1296,13 +1294,13 @@ public final class Camunda8TaskWiring {
    * whose message carries no <code>zeebe:subscription</code>, in the order the model
    * declares them.
    * <p>
-   * Camunda 8 accepts no such element and rejects the whole FILE over one, so this is the
-   * question to ask about a process the application serves no workflow of: there is no
-   * workflow aggregate to name a correlation key after, and the deployment refuses the
-   * file rather than inventing one. Asked while the model is still the one the modeller
-   * wrote, so the answer does not depend on which process of a file was wired first - a
-   * message element belongs to the FILE, and an injection for one process would otherwise
-   * fill the gap of another.
+   * Camunda 8 accepts no such element and rejects the whole FILE over one. So this is the
+   * question to ask about a process of which the application serves no workflow. There is
+   * no workflow aggregate to name a correlation key after. So the deployment refuses the
+   * file and does not invent one. This is asked while the model is still as the modeller
+   * wrote it. So the answer does not depend on which process of a file was wired first. A
+   * message element belongs to the FILE. Otherwise an injection for one process would fill
+   * the gap of another.
    *
    * @param model The BPMN model
    * @param bpmnProcessId The executable process to look at
@@ -1337,8 +1335,8 @@ public final class Camunda8TaskWiring {
 
   /**
    * A catch element of a process together with the message element it points at. The
-   * message belongs to the FILE rather than to the process, so two processes of one file
-   * can point at the same one.
+   * message belongs to the FILE and not to the process. So two processes of one file can
+   * point at the same one.
    *
    * @param elementId The intermediate catch event, boundary event or receive task waiting
    * @param message The message it points at
@@ -1351,7 +1349,7 @@ public final class Camunda8TaskWiring {
   /**
    * Every element of the given executable process which waits for a message: an
    * intermediate catch event, a boundary event or a receive task. A message START event
-   * is not one of them, it correlates by name and needs no key.
+   * is not one of them. It correlates by name and needs no key.
    *
    * @param model The BPMN model of one file
    * @param bpmnProcessId The process id as it stands in the model
@@ -1389,22 +1387,22 @@ public final class Camunda8TaskWiring {
    * application and get none.
    * <p>
    * Camunda 8 knows two flavours of the element. In the one VanillaBP serves, the model
-   * itself says which activities to run:
+   * itself says which activities to run.
    * <code>zeebe:adHoc activeElementsCollection</code> is a FEEL expression over a process
-   * variable, so an attribute of the workflow aggregate decides and the activities inside
-   * the element are ordinary tasks with ordinary <code>&#64;WorkflowTask</code> methods
-   * behind them. In the other, the element carries a <code>zeebe:taskDefinition</code> of
-   * its own and a worker decides round by round which activities to activate, by
+   * variable. So an attribute of the workflow aggregate decides. The activities inside the
+   * element are ordinary tasks with ordinary <code>&#64;WorkflowTask</code> methods behind
+   * them. In the other flavour, the element carries a <code>zeebe:taskDefinition</code> of
+   * its own. A worker decides round by round which activities to activate. It does so by
    * completing the job with a result naming them. Neither the
-   * <code>&#64;WorkflowTask</code> contract nor the adapter SPI can express that outcome,
-   * so this adapter opens no worker for such an element.
+   * <code>&#64;WorkflowTask</code> contract nor the adapter SPI can express that outcome.
+   * So this adapter opens no worker for such an element.
    * <p>
-   * An element carrying a <code>zeebe:modelerTemplate</code> is left out, because then
-   * somebody else's runtime owns it: the Camunda AI agent is an element template on
-   * exactly this element, and a connector runtime subscribing to its job type serves it
-   * without this application being involved. That is the same marker
-   * {@link Camunda8Connectors} reads, and this method reads it through that class rather
-   * than looking for the attribute a second time.
+   * An element carrying a <code>zeebe:modelerTemplate</code> is left out, because then the
+   * runtime of somebody else owns it. The Camunda AI agent is an element template on exactly
+   * this element. A connector runtime subscribing to its job type serves it, without this
+   * application being involved. That is the same marker {@link Camunda8Connectors} reads.
+   * This method reads it through that class and does not look for the attribute a second
+   * time.
    *
    * @param model The BPMN model of one file
    * @param bpmnProcessId The process id as the CLUSTER will know it
@@ -1428,23 +1426,22 @@ public final class Camunda8TaskWiring {
    * a parallel or inclusive gateway forking into more than one sequence flow, an
    * activity marked as a PARALLEL multi-instance, an event subprocess whose start
    * event does not interrupt the process, and an ad-hoc subprocess. Two tokens are two
-   * branches writing the same workflow aggregate - what that means is the core's
-   * decision, this method only reads the model.
+   * branches writing the same workflow aggregate. The core decides what that means. This
+   * method only reads the model.
    * <p>
-   * The ad-hoc subprocess is reported whichever flavour the model uses and however few
-   * activities it looks as if it would run. Its
-   * <code>zeebe:adHoc activeElementsCollection</code> is an expression evaluated when the
-   * workflow enters the element, so a list which is one entry long today is two entries
-   * long as soon as the data behind it changes, and the job worker flavour lets a worker
-   * activate several elements in one result. A warning which appears only after such a
-   * change is worse than one which appears always.
+   * The ad-hoc subprocess is reported whichever flavour the model uses, and however few
+   * activities it seems to run. Its <code>zeebe:adHoc activeElementsCollection</code> is an
+   * expression evaluated when the workflow enters the element. So a list which is one entry
+   * long today is two entries long as soon as the data behind it changes. And the job worker
+   * flavour lets a worker activate several elements in one result. A warning which appears
+   * only after such a change is worse than one which appears always.
    * <p>
-   * The activities INSIDE the element are not reported. The subprocess is where the
-   * second token comes from, and naming five inner tasks instead of the one element
-   * would make the warning unreadable.
+   * The activities INSIDE the element are not reported. The second token comes from the
+   * subprocess. Naming five inner tasks instead of the one element would make the warning
+   * unreadable.
    *
    * @param model The BPMN model
-   * @param bpmnProcessId The process' ID as the model knows it (the SCOPED ID)
+   * @param bpmnProcessId The ID of the process as the model knows it (the SCOPED ID)
    * @return The element IDs, possibly empty
    */
   public static List<String> concurrentTokenElementIdsOf(
@@ -1475,20 +1472,20 @@ public final class Camunda8TaskWiring {
    * The compensation throw events of a BPMN process which start MORE THAN ONE handler,
    * each with the handlers it starts.
    * <p>
-   * Compensation is a second token drawn differently: from the throw event the workflow
-   * holds a token per handler, and every one of those handlers is an ordinary workflow task
+   * Compensation is a second token, drawn differently. From the throw event on, the workflow
+   * holds a token per handler. Every one of those handlers is an ordinary workflow task
    * writing the same workflow aggregate. Camunda 8 hands out both handler jobs together, and
    * the two handlers then run at the same time on two threads. Each handler is a job of its
-   * own, so it commits and is retried on its own: when one throws, only that one runs again.
+   * own. So it commits and is retried on its own. When one throws, only that one runs again.
    * {@code Camunda8CompensationIT} measures this against a cluster.
    * <p>
-   * A throw event which names ONE activity compensates that activity's handler and nothing
-   * else, so it leaves the workflow with the one token it already had. Such an event is read
-   * here and dropped by the caller, which is where the rule that one handler is no finding
-   * lives.
+   * A throw event which names ONE activity compensates the handler of that activity and
+   * nothing else. So it leaves the workflow with the one token it already had. Such an event
+   * is read here, and the caller drops it. The rule that one handler is no finding lives
+   * there.
    *
    * @param model The BPMN model
-   * @param bpmnProcessId The process' ID as the CLUSTER will know it (the SCOPED ID)
+   * @param bpmnProcessId The ID of the process as the CLUSTER will know it (the SCOPED ID)
    * @return The throw events with their handlers, in model order, possibly empty
    */
   public static List<CompensationSpec> compensationOf(
@@ -1542,8 +1539,8 @@ public final class Camunda8TaskWiring {
                 ? List.of()
                 : List.of(handler.getId());
           } else {
-            // no activity is named, so everything of the throw event's scope which was
-            // compensated is compensated at once
+            // no activity is named. So everything in the scope of the throw event which was
+            // compensated is compensated at once.
             final var scope = compensationScopeOf(throwEvent);
             handlers = compensatedActivities
                 .entrySet()
@@ -1560,8 +1557,8 @@ public final class Camunda8TaskWiring {
 
   /**
    * The compensation handler an association points at, starting from the compensation
-   * boundary event. Only an activity marked as one which compensates counts: an association
-   * may reach a text annotation as well, and that is documentation rather than a handler.
+   * boundary event. Only an activity marked as one which compensates counts. An association
+   * may reach a text annotation as well, and that is documentation, not a handler.
    */
   private static Activity handlerAttachedTo(
       final BpmnModelInstance model,
@@ -1581,12 +1578,12 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * The scope a compensation throw event which names no activity compensates: the subprocess
-   * around it, or the process.
+   * The scope which a compensation throw event naming no activity compensates: the
+   * subprocess around it, or the process.
    * <p>
-   * An EVENT subprocess is walked through rather than taken as the scope. Such a subprocess
-   * handles what happened in the scope AROUND it, so a throw event inside it undoes the
-   * activities of that scope and not the ones of the handler it sits in.
+   * An EVENT subprocess is walked through and not taken as the scope. Such a subprocess
+   * handles what happened in the scope AROUND it. So a throw event inside it undoes the
+   * activities of that scope, not the ones of the handler it sits in.
    */
   private static ModelElementInstance compensationScopeOf(
       final FlowElement throwEvent) {
@@ -1662,11 +1659,11 @@ public final class Camunda8TaskWiring {
    * process itself holds and of no other.
    * <p>
    * A start event of an event subprocess fires while the workflow already runs and
-   * already has its aggregate, so it starts no workflow. Counting it as one would refuse
-   * every such model at startup, because an application has to serve each start of a
-   * workflow with a <code>&#64;WorkflowStartedByBpms</code> method, and the execution
-   * listener injected into it would ask the application for a second aggregate of a
-   * workflow which already owns one.
+   * already has its aggregate. So it starts no workflow. Counting it as one would refuse
+   * every such model at startup. An application has to serve each start of a workflow with
+   * a <code>&#64;WorkflowStartedByBpms</code> method. And the execution listener injected
+   * into it would ask the application for a second aggregate of a workflow which already
+   * owns one.
    *
    * @param startEvent The start event as the BPMN model carries it
    * @return Whether the process itself holds it
