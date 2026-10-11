@@ -8,19 +8,19 @@ import java.util.stream.Collectors;
 
 /**
  * Holds the {@link Camunda8ClientFactory} of every configured Camunda 8 adapter
- * instance, keyed by adapter ID. Created ONCE per application by the platform
- * integration (Spring Boot / Quarkus) with the factories built EAGERLY - one per
- * configured adapter id of type {@code camunda8}, each validated at startup (see
- * {@link Camunda8StartupValidation}). Registered as a managed bean so its
- * {@link #close()} is invoked on application shutdown, closing all clients.
+ * instance, keyed by adapter ID. The platform integration (Spring Boot / Quarkus) creates
+ * it ONCE per application. It builds the factories EAGERLY, one per configured adapter id
+ * of type {@code camunda8}, and each is validated at startup (see
+ * {@link Camunda8StartupValidation}). It is registered as a managed bean. So its
+ * {@link #close()} runs on application shutdown and closes all clients.
  */
 public class Camunda8ClientFactoryRegistry implements AutoCloseable {
 
   private final Map<String, Camunda8ClientFactory> factories;
 
   /**
-   * Builds one factory per configured adapter id, eagerly, so a connection nobody can use is
-   * found while the application boots.
+   * Builds one factory per configured adapter id, eagerly. So a connection which nobody can
+   * use is found while the application boots.
    *
    * @param configurationsByAdapterId The connection configuration of every
    *          configured adapter id of type {@code camunda8} (the id set always
@@ -42,11 +42,11 @@ public class Camunda8ClientFactoryRegistry implements AutoCloseable {
   /**
    * Which adapter ids address the SAME cluster.
    * <p>
-   * A job key, a user-task key and a process-instance key are unique per cluster, so two
-   * ids sharing one are handed each other's keys and their awareness probes have to check
-   * which scope a key belongs to before they answer. Nobody but this registry sees all
-   * configured ids at once, so this is where the question is answered - once, at startup,
-   * rather than per probe.
+   * A job key, a user-task key and a process-instance key are unique per cluster. So two
+   * ids which share one cluster are handed each other's keys. Their awareness probes have
+   * to check which scope a key belongs to before they answer. Only this registry sees all
+   * configured ids at once. So the question is answered here, once at startup and not per
+   * probe.
    *
    * @param configurationsByAdapterId The connection configuration of every configured id
    */
@@ -76,14 +76,14 @@ public class Camunda8ClientFactoryRegistry implements AutoCloseable {
   }
 
   /**
-   * The factory of one adapter id, which is how everything else in this adapter reaches a
-   * client.
+   * The factory of one adapter id. Everything else in this adapter reaches a client through
+   * it.
    *
    * @param adapterId The adapter ID
    * @return The client factory of the given adapter instance
-   * @throws IllegalStateException If no Camunda 8 adapter of that id is configured -
-   *           the id set always comes from the platform's core properties, so an
-   *           unknown id indicates a wiring bug
+   * @throws IllegalStateException If no Camunda 8 adapter of that id is configured. The
+   *           id set always comes from the platform's core properties, so an unknown id
+   *           points to a wiring bug
    */
   public Camunda8ClientFactory getFactory(
       final String adapterId) {

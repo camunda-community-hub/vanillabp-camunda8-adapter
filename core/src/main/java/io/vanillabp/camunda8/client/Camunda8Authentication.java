@@ -14,19 +14,19 @@ import io.camunda.client.impl.NoopCredentialsProvider;
  * cluster refuses them.
  * <p>
  * Two things happen here. The first is building the client's own
- * {@link CredentialsProvider} from the adapter's <code>auth.*</code> block, reusing the
- * client's builders rather than handling tokens here: the OIDC provider caches its token
- * on disk and refreshes it lazily, which is work nobody should do twice.
+ * {@link CredentialsProvider} from the adapter's <code>auth.*</code> block. It uses the
+ * builders of the client and does not handle tokens itself. The OIDC provider caches its
+ * token on disk and refreshes it only when needed, and nobody should do that work twice.
  * <p>
- * The second is a message. Whether a cluster accepts a credential can only be learned by
- * asking it, so nothing about it is knowable at startup - but the client asks
- * {@link CredentialsProvider#shouldRetryRequest(CredentialsProvider.StatusCode)} on every
- * request the cluster refused, on both transports and for commands as well as for job
- * activation. That one method is therefore the place where an adapter learns that its
- * credentials are wrong, or that it sent none where some were wanted, and the provider
- * built here is wrapped to say so once per adapter id.
+ * The second is a message. You only learn whether a cluster accepts a credential by
+ * asking it, so nothing about it is known at startup. But the client calls
+ * {@link CredentialsProvider#shouldRetryRequest(CredentialsProvider.StatusCode)} for every
+ * request the cluster refused. It does so on both transports, for commands and for job
+ * activation. So this one method is where an adapter learns that its credentials are
+ * wrong, or that it sent none where some were wanted. The provider built here is wrapped,
+ * and the wrapper says so once per adapter id.
  * <p>
- * Nothing logged here carries a secret, not even its length: the messages name property
+ * Nothing logged here carries a secret, not even its length. The messages name property
  * keys, the method and the address.
  * <p>
  * Why the runtime message hangs on the credentials provider rather than on the error classification
@@ -38,9 +38,9 @@ public final class Camunda8Authentication {
 
   /**
    * Environment variables from which the CLIENT would build a credentials provider of its
-   * own - but only while the application set none. Once this adapter sets one, they stop
-   * choosing the method, which is a behaviour change for a deployment that relied on them
-   * (see {@link Camunda8EnvironmentOverrides}).
+   * own. It does so only while the application set none. Once this adapter sets one, the
+   * variables no longer choose the method. That changes the behaviour for a deployment
+   * which relied on them (see {@link Camunda8EnvironmentOverrides}).
    */
   static final String[] ENVIRONMENT_CREDENTIAL_VARIABLES = {
       "CAMUNDA_CLIENT_ID", "CAMUNDA_CLIENT_SECRET", "ZEEBE_CLIENT_ID", "ZEEBE_CLIENT_SECRET", "CAMUNDA_BASIC_AUTH_USERNAME", "CAMUNDA_BASIC_AUTH_PASSWORD"
@@ -91,9 +91,9 @@ public final class Camunda8Authentication {
     final var detected = !auth.isMethodExplicit();
 
     if ((method == Camunda8AuthConfiguration.Method.NONE) && environmentCarriesCredentials(environment)) {
-      // the client installs a provider of its own from those variables, but only while
-      // the application set none - so this adapter sets none, and says whose credentials
-      // are in play
+      // the client builds a provider of its own from those variables, but only while the
+      // application set none. So this adapter sets none, and says whose credentials are
+      // used
       return new Camunda8Authentication(adapterId, method, detected, null, null);
     }
 
@@ -119,8 +119,8 @@ public final class Camunda8Authentication {
   }
 
   /**
-   * How this adapter instance authenticates, for the startup line - the method, whether
-   * it was detected rather than named, and who it authenticates as.
+   * How this adapter instance authenticates, for the startup line. It gives the method,
+   * whether it was detected and not named, and who the adapter authenticates as.
    *
    * @return The description
    */
@@ -139,8 +139,8 @@ public final class Camunda8Authentication {
   }
 
   /**
-   * The provider behind the wrapper this class puts around it - what the client would
-   * have got without the reporting.
+   * The provider behind the wrapper which this class puts around it. It is what the client
+   * would have got without the reporting.
    *
    * @param provider What a built client reports
    * @return The Camunda client's own provider
@@ -219,7 +219,7 @@ public final class Camunda8Authentication {
   }
 
   /**
-   * gRPC counts its own codes from zero, HTTP starts at 100, so the number itself says
+   * gRPC counts its codes from zero, and HTTP starts at 100. So the number itself says
    * which transport answered.
    */
   private static String describeStatus(
@@ -254,8 +254,8 @@ public final class Camunda8Authentication {
       return true;
     }
     final var code = statusCode.code();
-    // 401/403 on HTTP, UNAUTHENTICATED (16) and PERMISSION_DENIED (7) on gRPC - the two
-    // numbering schemes cannot collide, HTTP has no status below 100
+    // 401/403 on HTTP, UNAUTHENTICATED (16) and PERMISSION_DENIED (7) on gRPC. The two
+    // sets of numbers cannot collide, because HTTP has no status below 100
     return (code == 401) || (code == 403) || (code == 7) || (code == 16);
 
   }
@@ -300,8 +300,8 @@ public final class Camunda8Authentication {
 
     final var auth = configuration.getAuth();
     final var saas = configuration.getMode() == Camunda8AdapterConfiguration.Mode.SAAS;
-    // SaaS is an OIDC client with two presets, so it takes the same path: the cluster's
-    // audience and Camunda's login endpoint, both overridable for a setup which needs it
+    // SaaS is an OIDC client with two presets, so it takes the same path. The presets are
+    // the audience of the cluster and Camunda's login endpoint. A setup can override both
     final var builder = CredentialsProvider
         .newCredentialsProviderBuilder()
         .clientId(
