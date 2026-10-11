@@ -47,40 +47,40 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * while one module waits only for its own workers - so it was open whether the second
  * module pays again or walks straight through.</li>
  * </ul>
- * <b>How it is measured.</b> One client, configured the way an application configures one,
- * and its workers split into groups of thirty: a group is a workflow module, each with a
- * {@link Camunda8Drain} of its own, the same object the adapter gives a module. The groups
- * are left alone long enough for every activation request to be parked at the cluster, and
- * then the shutdown is replayed exactly as the platform drives it - last module first, one
- * module at a time, each closing its own workers and then calling
- * {@link Camunda8Drain#awaitQuiet} with the whole grace. What is read is the wait of each
+ * <b>How it is measured.</b> One client, configured the way an application configures one.
+ * Its workers are split into groups of thirty. A group is a workflow module, each with a
+ * {@link Camunda8Drain} of its own, the same object which the adapter gives a module. The
+ * groups are left alone long enough for every activation request to be parked at the
+ * cluster. Then the shutdown is replayed exactly as the platform drives it: last module
+ * first, one module at a time. Each module closes its own workers and then calls
+ * {@link Camunda8Drain#awaitQuiet} with the whole grace. The test reads the wait of each
  * module and the sum over them.
  * <p>
- * The same cases are read a second time with every module's workers closed BEFORE anything
- * is waited for, which is the other way an adapter can do it: the modules are then one wait
- * rather than a wait each. Both readings are in the same block, because the decision this
- * measurement was taken for is the choice between them.
+ * The same cases are read a second time, with every module's workers closed BEFORE anything
+ * is waited for. That is the other way an adapter can do it. Then the modules cost one wait,
+ * not a wait each. Both readings are in the same block, because this measurement was taken to
+ * choose between them.
  * <p>
  * The pool is large enough for every case to be one round of it ({@value
- * #MAX_HTTP_CONNECTIONS} connections against at most ninety workers). That is on purpose:
- * {@code Camunda8WhatADrainWaitsForIT} measures what the ROUNDS of the pool cost, and
- * leaving them out here is what makes the number of MODULES the only thing which varies.
+ * #MAX_HTTP_CONNECTIONS} connections against at most ninety workers). That is on purpose.
+ * {@code Camunda8WhatADrainWaitsForIT} measures what the ROUNDS of the pool cost. Leaving
+ * them out here makes the number of MODULES the only thing which varies.
  * <p>
- * {@code whatOneRealApplicationPaysForItsShutdown} is the anchor: a booted application
- * with one real workflow module and every worker the test suite deploys, so the groups above
- * can be read against a module nobody built for the measurement.
+ * {@code whatOneRealApplicationPaysForItsShutdown} is the anchor: a booted application with
+ * one real workflow module and every worker which the test suite deploys. So the groups above
+ * can be compared with a module which nobody built for the measurement.
  * <p>
  * <b>Why the groups do not start together.</b> What a module pays depends on where in its
- * request cycle it was when its workers were closed, and opening every group in the same
+ * request cycle it was when its workers were closed. Opening every group in the same
  * millisecond puts every module at the same point of that cycle. A shutdown then meets all
- * of them right after their requests came back, finds nothing parked, and the per-module
- * waits do not add up. That reading was taken once, before the groups were offset, and it is
- * the one case a real application does not have: its modules start one after another. So each
- * group opens three seconds after the one before it, and the cases
- * which can move with the phase are read twice.
+ * of them right after their requests came back and finds nothing parked. Then the per-module
+ * waits do not add up. That reading was taken once, before the groups were offset. It is the
+ * one case which a real application does not have, because its modules start one after
+ * another. So each group opens three seconds after the one before it. The cases which can
+ * move with the phase are read twice.
  * <p>
- * The numbers this produced are in the README, section "Shutting down while work is in
- * flight", with the machine they were taken on.
+ * The README has the numbers which this produced, together with the machine they were taken
+ * on, in the section "Shutting down while work is in flight".
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -90,46 +90,46 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheSharedCluster {
 
   /**
-   * The pool the client of this class gets. Big enough that ninety workers are one round of
-   * it, so what varies between the cases is the number of workflow modules and nothing else.
+   * The pool which the client of this class gets. It is big enough that ninety workers are
+   * one round of it. So only the number of workflow modules varies between the cases.
    */
   private static final int MAX_HTTP_CONNECTIONS = 256;
 
   /**
-   * How long a worker's activation request waits at the cluster, and the unit every number
-   * below is read in. It is the client's own default, which is also what the lower bound of
-   * a drain is computed from.
+   * How long a worker's activation request waits at the cluster. Every number below is read
+   * in this unit. It is the client's own default, and the lower bound of a drain is computed
+   * from it as well.
    */
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
   /**
-   * How many workers one group opens. A workflow module of the suite below opens some
-   * eighty-five, and the anchor says whether the number inside a group matters at all; what
-   * these cases are about is how many groups there are.
+   * How many workers one group opens. A workflow module of the suite below opens about
+   * eighty-five. The anchor says whether the number inside a group matters at all. These
+   * cases are about how many groups there are.
    */
   private static final int WORKERS_PER_MODULE = 30;
 
   /**
-   * The grace every wait of this class is given: the adapter's default, which is the number
-   * an application has unless it configured one.
+   * The grace which every wait of this class is given: the adapter's default. An application
+   * has this number unless it configured one.
    */
   private static final Duration GRACE = Camunda8AdapterConfiguration.DEFAULT_SHUTDOWN_GRACE;
 
   /**
-   * What the runtime around the application grants its shutdown, and therefore the number
-   * every total below is read against.
+   * What the runtime around the application grants its shutdown. So every total below is
+   * compared with this number.
    */
   private static final Duration PLATFORM_SHUTDOWN_BUDGET = Camunda8AdapterConfiguration.PLATFORM_SHUTDOWN_BUDGET;
 
   /**
    * One case: how many workflow modules, which of the two ways of draining them, and how
-   * often it is read.
+   * often the case is read.
    *
    * @param modules How many workflow modules
    * @param closeThemAllFirst Whether every module's workers are closed before anything is
    *          waited for
    * @param readings How often the case is read. Two where the reading moves with the phase
-   *          the close falls into, one where the case has no phase to fall into
+   *          in which the close falls, one where the case has no phase to fall into
    */
   private record Case(
                       int modules,
@@ -140,8 +140,8 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
 
   /**
    * What is read, in this order. The cases with several modules drained one after another are
-   * read twice, because what one of them costs depends on where in its request cycle each
-   * module was when its workers were closed.
+   * read twice. What one of them costs depends on where in its request cycle each module was
+   * when its workers were closed.
    */
   private static final List<Case> CASES = List
       .of(
@@ -153,27 +153,28 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
 
   /**
    * How long the workers are left alone before anything is closed. A whole request timeout
-   * plus five seconds, so every request has been parked once and the close falls into the
-   * middle of a round rather than onto its edge, where it would be anybody's guess which
-   * round a reading belongs to.
+   * plus five seconds. So every request has been parked once, and the close falls into the
+   * middle of a round and not onto its edge. On the edge, nobody could tell which round a
+   * reading belongs to.
    */
   private static final Duration UNTIL_EVERY_REQUEST_IS_PARKED = REQUEST_TIMEOUT.plusSeconds(5);
 
   /**
    * How long one module's workers are open before the next module's are opened.
    * <p>
-   * An application starts its workflow modules one after another, and a module takes seconds
-   * to deploy and open its workers, so the request cycles of two modules are offset against
-   * each other. Opening every group in the same millisecond would synchronise them instead,
-   * and a shutdown would then meet every module at the same point of its cycle - which is
-   * the one case where the per-module waits do NOT add up, and the one case a real
-   * application does not have.
+   * An application starts its workflow modules one after another. A module takes seconds to
+   * deploy and open its workers. So the request cycles of two modules are offset against each
+   * other. Opening every group in the same millisecond would synchronise them instead. Then a
+   * shutdown would meet every module at the same point of its cycle. That is the one case
+   * where the per-module waits do NOT add up, and the one case which a real application does
+   * not have.
    */
   private static final Duration BETWEEN_TWO_MODULES_STARTING = Duration.ofSeconds(3);
 
   /**
    * Tells the class which runs next that a request of this one can be parked for a whole
-   * {@link #REQUEST_TIMEOUT}, which is longer than the five seconds the suite configures.
+   * {@link #REQUEST_TIMEOUT}. That is longer than the five seconds which the suite
+   * configures.
    */
   @BeforeAll
   static void aRequestOfThisClassLivesLongerThanTheSuiteExpects() {
@@ -224,8 +225,9 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
                     Integer.valueOf(Runtime.getRuntime().availableProcessors())));
     report(reporter, "what-several-modules-pay-for-a-shutdown", measured);
 
-    // the first thing the decision rests on: a module stopped after another one still has an
-    // activation request of its own to wait for, so the waits add up instead of overlapping
+    // the first thing which the decision rests on. A module stopped after another one still
+    // has an activation request of its own to wait for. So the waits add up and do not
+    // overlap
     assertTrue(
         longestWaitOfAModuleStoppedLater.compareTo(REQUEST_TIMEOUT.dividedBy(2)) > 0,
         "A workflow module which is stopped after another one is supposed to have an activation request "
@@ -239,9 +241,9 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
             + "measured: "
             + String.join(" | ", measured));
 
-    // and the second: closing the workers of every module before anything is waited for
-    // turns those waits into one wait, whatever the number of modules, which is what makes
-    // the grace a number of the application rather than a number per module
+    // and the second. Closing the workers of every module before anything is waited for
+    // turns those waits into one wait, whatever the number of modules. That makes the grace
+    // a number of the application, not a number per module
     assertTrue(
         longestShutdownOfOneWait.compareTo(REQUEST_TIMEOUT.multipliedBy(2)) < 0,
         "A shutdown which closes the workers of every workflow module and then waits once is supposed to "
@@ -274,12 +276,13 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
 
   /**
    * The anchor: a booted application with one real workflow module, every BPMN process of
-   * this suite and every worker they need, shut down while nothing is in flight.
+   * this suite and every worker they need. It is shut down while nothing is in flight.
    * <p>
-   * It says two things the groups above cannot. The wait of a real module is read on the
-   * workers an application really opens, so the thirty of a group are shown to be neither
-   * too few nor too many; and the number it produces is the whole {@code close()} of a Spring
-   * Boot application, which is what has to fit into the budget of the runtime.
+   * It says two things which the groups above cannot. First, the wait of a real module is
+   * read on the workers which an application really opens. So it shows whether the thirty of
+   * a group are too few or too many. Second, the number it produces is the whole
+   * {@code close()} of a Spring Boot application. That is what has to fit into the budget of
+   * the runtime.
    *
    * @param reporter Where the reading goes
    */
@@ -296,8 +299,8 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
                 + restAddress(),
             "--vanillabp.adapters.c8.grpc-address="
                 + grpcAddress(),
-            // the default, so the reading is the one an application gets without saying
-            // anything about its shutdown
+            // the default. So the reading is the one which an application gets without
+            // saying anything about its shutdown
             "--vanillabp.adapters.c8.shutdown-grace="
                 + GRACE);
     final long closedIn;
@@ -327,7 +330,7 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
                         Integer.valueOf(Runtime.getRuntime().availableProcessors()))));
 
     // the one thing asserted here: a single module stays well inside the budget of the
-    // runtime, which is why the multiple of it is what had to be measured
+    // runtime. That is why the test had to measure several modules
     assertTrue(
         closedIn < PLATFORM_SHUTDOWN_BUDGET.toMillis(),
         "An application with ONE workflow module is supposed to shut down within the "
@@ -344,9 +347,9 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
    *
    * @param wholeShutdown What the whole shutdown of that reading took
    * @param longestWaitOfAModuleStoppedLater The longest wait of a module which was not the
-   *          first one stopped. It is the number this measurement is about: the first module
-   *          stopped pays whatever its own request has left, and what the modules after it
-   *          pay is what nobody had measured
+   *          first one stopped. This measurement is about this number. The first module
+   *          stopped pays whatever its own request has left. Nobody had measured what the
+   *          modules after it pay
    */
   private record Reading(
                          Duration wholeShutdown,
@@ -355,7 +358,7 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
   }
 
   /**
-   * Opens the groups of one case, lets every activation request park, and replays the
+   * Opens the groups of one case and lets every activation request park. Then it replays the
    * shutdown over them.
    *
    * @param testCase What to read
@@ -373,14 +376,14 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
     final var drainOfModule = new LinkedHashMap<String, Camunda8Drain>();
     try (final var client = client()) {
 
-      // the client has talked to the cluster once before any worker is opened, so the
-      // connection an ordinary command uses is not one the workers are waiting for
+      // the client has talked to the cluster once before any worker is opened. So the
+      // workers do not wait for the connection which an ordinary command uses
       client.newTopologyRequest().send().join();
 
       for (var module = 1; module <= testCase.modules(); ++module) {
         if (module > 1) {
-          // the modules of an application do not start in the same millisecond, and their
-          // request cycles are offset by what the start of one of them takes
+          // the modules of an application do not start in the same millisecond. Their
+          // request cycles are offset by the time which the start of one of them takes
           TimeUnit.MILLISECONDS.sleep(BETWEEN_TWO_MODULES_STARTING.toMillis());
         }
         final var workflowModuleId = "module-%d-of-%d%s-%d".formatted(
@@ -470,8 +473,8 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
   }
 
   /**
-   * The other way: every module's workers are closed first and the grace is then spent once,
-   * on all of them together.
+   * The other way: every module's workers are closed first. Then the grace is spent once, on
+   * all of them together.
    *
    * @param workersOfModule The workers per workflow module
    * @param drainOfModule The drain per workflow module
@@ -503,7 +506,7 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
   }
 
   /**
-   * The order the platform stops the modules in: the one started last goes down first.
+   * The order in which the platform stops the modules: the one started last goes down first.
    *
    * @param workersOfModule The workers per workflow module, in the order they were started
    * @return The workflow module ids in the order they are stopped
@@ -545,8 +548,8 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
   }
 
   /**
-   * One group of workers of one workflow module: job types nothing ever produces, so no
-   * handler of this class runs and what is read is a worker which waits.
+   * One group of workers of one workflow module. Nothing ever produces their job types. So no
+   * handler of this class runs, and the test reads a worker which waits.
    *
    * @param client The client every module of a case shares, the way the modules of an
    *          adapter instance share one
@@ -590,9 +593,9 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
   }
 
   /**
-   * Puts a reading where it can be read after a build: into the test report of the runner
-   * respectively an IDE, and into a file of its own, because the console output of a test
-   * which passes is suppressed.
+   * Puts a reading where it can be read after a build: into the test report of the runner or
+   * of an IDE, and into a file of its own. The console output of a test which passes is
+   * suppressed.
    *
    * @param reporter The JUnit reporter
    * @param name What the reading is called, which is also the name of its file

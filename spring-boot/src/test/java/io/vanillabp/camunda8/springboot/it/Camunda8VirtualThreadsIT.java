@@ -22,14 +22,14 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The virtual-thread execution model end to end against a real cluster: a
- * <code>@WorkflowTask</code> method really runs on a virtual thread, and a blocking
- * handler does not delay the job of another worker there either.
+ * The virtual-thread execution model end to end against a real cluster. A
+ * <code>@WorkflowTask</code> method really runs on a virtual thread. And a blocking handler
+ * does not delay the job of another worker there either.
  * <p>
- * The bound of the executor is unit-tested ({@code Camunda8ExecutorTest}) and the builder
+ * The bound of the executor has a unit test ({@code Camunda8ExecutorTest}). The builder
  * methods which carry it to the client are asserted per release line
- * ({@code Camunda8JobExecutorsTest}). What only a cluster can show is that a handler of a
- * booted application really ends up on one of those threads.
+ * ({@code Camunda8JobExecutorsTest}). Only a cluster can show that a handler of a booted
+ * application really ends up on one of those threads.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -101,10 +101,10 @@ public class Camunda8VirtualThreadsIT extends SpringBootTestOnTheSharedCluster {
         .execute(status -> quickWorkflowService.startWorkflow().getId());
     assertNotNull(quick);
 
-    // the wait is a generous guard against a job which never came; that the two really
-    // ran at the same time is what the flag below says, read by the quick handler itself.
-    // A wait as long as the block would carry that claim instead, and a machine carrying
-    // several builds stops this JVM for seconds at a time
+    // the long wait is only a safety margin against a job which never came. The flag below
+    // says that the two really ran at the same time, and the quick handler itself reads it.
+    // With a wait as long as the block, the wait would have to prove that instead. And a
+    // machine which runs several builds stops this JVM for seconds at a time
     assertTrue(
         WorkerThreadsDockerWorkflowService.QUICK_SERVED
             .await(30, TimeUnit.SECONDS),

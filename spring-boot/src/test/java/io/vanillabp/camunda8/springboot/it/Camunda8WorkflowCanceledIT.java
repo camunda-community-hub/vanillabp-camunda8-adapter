@@ -22,23 +22,24 @@ import io.vanillabp.spi.service.WorkflowEnd;
 /**
  * An instance canceled through the API, against a real cluster.
  * <p>
- * This is the test which measures the claim the unit tests can only pin down halfway: they
- * hold what the adapter writes into a model and what it makes of a job, while only a cluster
- * of the line really runs the listener when somebody terminates an instance. The two are
- * worth telling apart, because a line which stopped running the listener would otherwise show
- * up as a workflow which is canceled without a word and nothing here would turn red.
+ * This test measures a claim which the unit tests can only pin down halfway. They hold what
+ * the adapter writes into a model and what it makes of a job. Only a cluster of the line
+ * really runs the listener when somebody terminates an instance. The two are worth telling
+ * apart. Otherwise a line which stopped running the listener would show up as a workflow
+ * which is canceled without a word, and nothing here would turn red.
  * <p>
- * It runs on the 8.10 line and nowhere else: the <code>cancel</code> execution listener of
- * the process element arrived there, and the class is skipped rather than failed on the older
- * lines, so their run costs no container for it. That line is GA, so every pull request runs
+ * It runs on the 8.10 line and nowhere else. The <code>cancel</code> execution listener of
+ * the process element arrived there. On the older lines the class is skipped and does not
+ * fail, so their run costs no container for it. That line is GA, so every pull request runs
  * this class.
  * <p>
- * The instance waits at a SERVICE task, and that was once the only shape which could be
- * canceled here. On 8.10.0-alpha5 an instance holding a Camunda-managed user task could not be
- * canceled at all: the <code>canceling</code> task-listener job was created and never handed
- * out, so the instance stayed ACTIVE and the process listener never fired, because the cluster
- * runs it only after every child element has terminated. That is camunda/camunda#58193 and it
- * is fixed from 8.10.0-rc1 on. Widening this class to a user task is open work.
+ * The instance waits at a SERVICE task. Once, that was the only shape which could be
+ * canceled here. On 8.10.0-alpha5 an instance which held a Camunda-managed user task could
+ * not be canceled at all. The <code>canceling</code> task-listener job was created and never
+ * handed out. So the instance stayed ACTIVE, and the process listener never fired, because
+ * the cluster runs it only after every child element has terminated. That is
+ * camunda/camunda#58193, and it is fixed from 8.10.0-rc1 on. Widening this class to a user
+ * task is open work.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -49,9 +50,9 @@ import io.vanillabp.spi.service.WorkflowEnd;
 public class Camunda8WorkflowCanceledIT extends SpringBootTestOnTheSharedCluster {
 
   /**
-   * Whether the release line this build belongs to reports the cancelation of an instance at
-   * all. Read before the container of this class is started, so a line without the construct
-   * pays nothing for a test which could not pass.
+   * Whether the release line of this build reports the cancelation of an instance at all. It
+   * is read before the container of this class starts. So a line without the construct pays
+   * nothing for a test which could not pass.
    *
    * @return Whether to run this class
    */
@@ -94,9 +95,9 @@ public class Camunda8WorkflowCanceledIT extends SpringBootTestOnTheSharedCluster
         .send()
         .join();
 
-    // the aggregate and not the map: the handler fills both, but the map is written inside
-    // the transaction of the delivery and is therefore visible before that transaction has
-    // committed, so a reader of the database would still see the aggregate as it was
+    // the aggregate and not the map. The handler fills both. But the map is written inside
+    // the transaction of the delivery, so it is visible before that transaction committed.
+    // At that moment a reader of the database would still see the aggregate as it was
     awaitUntil(
         () -> endedAsOf(aggregateId) != null,
         60000,
@@ -114,7 +115,7 @@ public class Camunda8WorkflowCanceledIT extends SpringBootTestOnTheSharedCluster
   }
 
   /**
-   * How the workflow of that aggregate ended as the aggregate itself holds it, or
+   * How the workflow of that aggregate ended, as the aggregate itself holds it. Or
    * <code>null</code> while the transaction of the delivery has not committed yet.
    */
   private String endedAsOf(
@@ -126,7 +127,7 @@ public class Camunda8WorkflowCanceledIT extends SpringBootTestOnTheSharedCluster
   }
 
   /**
-   * The job key the asynchronous task handler wrote, or <code>null</code> while the
+   * The job key which the asynchronous task handler wrote, or <code>null</code> while the
    * instance has not reached the task yet.
    */
   private String openTaskOf(
@@ -138,11 +139,11 @@ public class Camunda8WorkflowCanceledIT extends SpringBootTestOnTheSharedCluster
   }
 
   /**
-   * The process instance key of the workflow of that aggregate, read from the job the
-   * application is holding open.
+   * The process instance key of the workflow of that aggregate. It is read from the job which
+   * the application holds open.
    * <p>
-   * The read goes through the search, which an exporter feeds asynchronously, so it waits
-   * for the job to turn up rather than reading once.
+   * The read goes through the search, and an exporter feeds the search asynchronously. So
+   * the method waits for the job to turn up and does not read only once.
    */
   private long theInstanceOf(
       final Long aggregateId) throws Exception {

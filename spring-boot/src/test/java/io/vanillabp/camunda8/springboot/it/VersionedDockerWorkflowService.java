@@ -8,10 +8,10 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the process-version integration test: one BPMN
- * task served by two methods, told apart by the version of the deployed process
- * definition - the first version by its number, the second one (and every one after it) by
- * the <code>zeebe:versionTag</code> its model carries.
+ * The workflow service of the process-version integration test. Two methods serve one BPMN
+ * task. The version of the deployed process definition tells them apart: the first version
+ * by its number, the second one (and every one after it) by the
+ * <code>zeebe:versionTag</code> which its model carries.
  */
 @Service
 @WorkflowService(
@@ -43,15 +43,15 @@ public class VersionedDockerWorkflowService {
   }
 
   /**
-   * Serves the tagged version and every version after it. Exactly 'release-2' is not enough:
-   * every other test class of this module deploys the untagged model as well, and on the cluster
-   * all of them share it that model becomes a version after the tagged one once this test ran. A
-   * start refuses the version it deploys if a task of it has no method for that version, so with
-   * 'release-2' alone every test class booting after this one would fail.
+   * Serves the tagged version and every version after it. Exactly 'release-2' is not enough.
+   * Every other test class of this module deploys the untagged model as well. All of them share
+   * the cluster. So once this test ran, that model becomes a version after the tagged one. A
+   * start refuses the version it deploys if a task of it has no method for that version. So with
+   * 'release-2' alone, every test class which boots after this one would fail.
    * <p>
    * The range starts at the tag, and the tagged version is deployed while the application runs.
-   * So this test also holds that a range starting at a tag finds a version which came after the
-   * start.
+   * So this test also holds that a range which starts at a tag finds a version which came after
+   * the start.
    *
    * @param aggregate The workflow aggregate
    */

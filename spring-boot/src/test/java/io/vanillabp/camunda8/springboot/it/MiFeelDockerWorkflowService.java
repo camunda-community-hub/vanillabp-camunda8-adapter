@@ -11,8 +11,8 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the test about a process called by an expression. Two BPMN
- * processes on one workflow aggregate, and every call between them names the called process
- * by <code>=whichProcess</code>, so the deployment cannot link the two models.
+ * processes on one workflow aggregate. Every call between them names the called process by
+ * <code>=whichProcess</code>, so the deployment cannot link the two models.
  */
 @Service
 @WorkflowService(
@@ -39,7 +39,7 @@ public class MiFeelDockerWorkflowService {
   }
 
   /**
-   * The task of the called process. It names no level of its own: every iteration it runs in
+   * The task of the called process. It names no level of its own. Every iteration it runs in
    * belongs to the caller, and the caller handed them over in a variable.
    */
   @WorkflowTask

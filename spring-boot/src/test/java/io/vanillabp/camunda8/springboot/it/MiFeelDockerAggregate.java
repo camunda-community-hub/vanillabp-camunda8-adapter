@@ -11,8 +11,8 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of the test about a process called by an expression. The caller and
- * the called process share it, which is what makes the call decomposition rather than the
- * start of a business case of its own.
+ * the called process share it. That makes the call a decomposition, and not the start of a
+ * business case of its own.
  */
 @Entity
 @Table(name = "C8_MI_FEEL_AGGREGATE")
@@ -25,9 +25,9 @@ public class MiFeelDockerAggregate {
   private Long id;
 
   /**
-   * The process the call activities name, read by the expression
-   * <code>=whichProcess</code>. It travels to the cluster as a start variable, so the model
-   * says which process it calls without the deployment being able to say it.
+   * The process which the call activities name, read by the expression
+   * <code>=whichProcess</code>. It travels to the cluster as a start variable. So the model
+   * says which process it calls, and the deployment cannot know it.
    */
   @Column(length = 200)
   private String whichProcess;

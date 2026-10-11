@@ -11,7 +11,7 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of the test which lets a boundary event take one of two open tasks
- * away. What it records is what the application was told about each of them.
+ * away. It records what the application was told about each of them.
  */
 @Entity
 @Table(name = "C8_OTHER_OPEN_TASKS_AGGREGATE")
@@ -24,28 +24,27 @@ public class OtherOpenTasksDockerAggregate {
   private Long id;
 
   /**
-   * The two branches of the parallel gateway load this aggregate and save it, each writing
-   * an attribute of its own. Without a version attribute the one committing last puts back
-   * what it read and the other one's write is gone without any error - which is what the
-   * boot warns about for this very model. With it the collision becomes an exception
-   * VanillaBP reports and the cluster retries.
+   * The two branches of the parallel gateway load this aggregate and save it. Each writes an
+   * attribute of its own. Without a version attribute, the one which commits last puts back
+   * what it read, and the other one's write is gone without any error. The boot warns about
+   * that for this very model. With the version attribute, the collision becomes an exception
+   * which VanillaBP reports and the cluster retries.
    */
   @Version
   private Long version;
 
   /**
-   * The job key of the task the boundary event takes away.
+   * The job key of the task which the boundary event takes away.
    */
   private String takenAwayTaskId;
 
   /**
-   * The job key of the task which stays open, and whose next wake-up is what runs the
-   * check.
+   * The job key of the task which stays open. Its next wake-up runs the check.
    */
   private String stayingTaskId;
 
   /**
-   * What the application heard about the task the boundary event took away.
+   * What the application heard about the task which the boundary event took away.
    */
   private String whatHappenedToTheTakenTask;
 

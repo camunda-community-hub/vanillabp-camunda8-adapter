@@ -14,8 +14,8 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The two workflows of the shutdown integration test: one handler outlives the
- * grace period and is cut off by the closing client, the other one finishes inside it.
+ * The two workflows of the shutdown integration test. One handler outlives the grace period,
+ * and the closing client cuts it off. The other one finishes inside the grace period.
  */
 @Service
 @WorkflowService(
@@ -25,13 +25,13 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class ShutdownDockerWorkflowService {
 
   /**
-   * How long the handler which is meant to be cut off holds its execution slot - long
-   * enough to outlive any grace period the test configures.
+   * How long the handler which is meant to be cut off holds its execution slot. It is long
+   * enough to outlive any grace period which the test configures.
    */
   public static final long BLOCK_MILLIS = 60000;
 
   /**
-   * How long the handler which is meant to finish holds its slot - well below the grace.
+   * How long the handler which is meant to finish holds its slot. It is well below the grace.
    */
   public static final long SHORT_MILLIS = 500;
 
@@ -46,7 +46,7 @@ public class ShutdownDockerWorkflowService {
   public static volatile CountDownLatch GRACEFUL_ENTERED = new CountDownLatch(1);
 
   /**
-   * Counted down when that handler returned - the shutdown has to wait for exactly this.
+   * Counted down when that handler returned. The shutdown has to wait for exactly this.
    */
   public static volatile CountDownLatch GRACEFUL_RETURNED = new CountDownLatch(1);
 
@@ -56,14 +56,14 @@ public class ShutdownDockerWorkflowService {
   public static final AtomicInteger BLOCKING_INVOCATIONS = new AtomicInteger();
 
   /**
-   * Whether the blocking handler already blocked once. A redelivery must return right
-   * away: the block is the test's setup, not the handler's business.
+   * Whether the blocking handler already blocked once. A redelivery must return right away.
+   * The block is the test's setup, not the handler's business.
    */
   private static final AtomicBoolean ALREADY_BLOCKED = new AtomicBoolean();
 
   /**
-   * Puts the shared observations back to their initial state - called by the test which
-   * uses them, so nothing a class left behind reaches the next one.
+   * Puts the shared observations back to their initial state. The test which uses them calls
+   * it, so nothing which a class left behind reaches the next one.
    */
   public static void reset() {
 

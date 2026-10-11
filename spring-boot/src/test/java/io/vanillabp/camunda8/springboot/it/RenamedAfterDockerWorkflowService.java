@@ -9,11 +9,11 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The same application AFTER the rename: the BPMN process carries the new id, and the old
- * one is declared as a secondary process so the workflows which are still on it keep
- * being served by these very methods.
+ * The same application AFTER the rename. The BPMN process carries the new id. The old id is
+ * declared as a secondary process, so these very methods keep serving the workflows which
+ * are still on it.
  * <p>
- * Nothing else about the class says that a rename happened, which is the point of the
+ * Nothing else about the class says that a rename happened. That is the point of the
  * feature: the aggregate is the same, the tasks are the same, and the workflows started
  * under the old id end under it.
  */
@@ -41,9 +41,9 @@ public class RenamedAfterDockerWorkflowService {
   public void continueWorkflow(
       final Long orderId) {
 
-    // the OLD name: this generation's model declares 'RenameContinueV2' only, so the
-    // name below lives in the model the cluster still holds under the old id - which
-    // is exactly what a workflow started before the rename waits for
+    // the OLD name. This generation's model declares only 'RenameContinueV2'. So the name
+    // below lives in the model which the cluster still holds under the old id. A workflow
+    // started before the rename waits for exactly that name
     processService.correlateMessage(repository.findById(orderId).orElseThrow(), "RenameContinue");
 
   }

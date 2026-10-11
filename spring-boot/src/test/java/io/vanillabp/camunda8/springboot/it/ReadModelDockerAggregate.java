@@ -10,12 +10,12 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of {@code Camunda8AnOperationWithoutTheReadModelIT}. Every attribute
- * is shared with Camunda 8, so the cluster holds {@link #note} as a process variable, which
- * is what the test reads back to see that a push arrived.
+ * is shared with Camunda 8, so the cluster holds {@link #note} as a process variable. The
+ * test reads it back to see that a push arrived.
  * <p>
- * Its process is used by no other test class. The ids of every class start at 1 and the
- * cluster is shared, so a finished workflow of the same process and the same aggregate id
- * would be found by the search of a later class and taken for its own.
+ * No other test class uses its process. The ids of every class start at 1, and the cluster
+ * is shared. So the search of a later class would find a finished workflow of the same
+ * process and the same aggregate id, and take it for its own.
  */
 @Entity
 @Table(name = "C8_READ_MODEL_AGGREGATE")
@@ -30,7 +30,7 @@ public class ReadModelDockerAggregate {
   private String note;
 
   /**
-   * The task the workflow parks at once the message arrived.
+   * The task at which the workflow parks once the message arrived.
    */
   private String taskId;
 

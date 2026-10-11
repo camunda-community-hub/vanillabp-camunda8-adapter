@@ -8,8 +8,8 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of the timer-start integration test. Nobody starts this workflow
- * through the {@code ProcessService}, so the <code>@WorkflowStartedByBpms</code> method is
- * the one moment at which it gets a name.
+ * through the {@code ProcessService}. So it gets its name only in the
+ * <code>@WorkflowStartedByBpms</code> method.
  */
 @Entity
 @Table(name = "C8_TIMER_START_AGGREGATE")

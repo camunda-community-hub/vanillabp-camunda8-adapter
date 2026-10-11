@@ -9,8 +9,8 @@ import io.vanillabp.spi.service.WorkflowService;
 
 /**
  * The application of {@code Camunda8UnservedUserTaskOfARenamedProcessIT} AFTER the rename. It
- * deploys the model under the new id and declares the old one, and like the generation
- * before it, it serves no task.
+ * deploys the model under the new id and declares the old one. Like the generation before
+ * it, it serves no task.
  */
 @Service
 @Profile("unserved-rename-after")
@@ -36,8 +36,8 @@ public class UnservedRenameAfterDockerWorkflowService {
   public void continueWorkflow(
       final Long orderId) {
 
-    // the name the OLD model declares, which is what the workflow started before the
-    // rename waits for
+    // the name which the OLD model declares. The workflow started before the rename waits
+    // for it
     processService.correlateMessage(repository.findById(orderId).orElseThrow(), "UnservedContinue");
 
   }

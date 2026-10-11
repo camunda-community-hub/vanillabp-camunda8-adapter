@@ -11,10 +11,10 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the multi-instance integration test: every
- * iteration writes down what the adapter handed it, so the test can assert the
- * element, the index and the total - including the outer iteration a nested task
- * runs in, which is the part Camunda 8 shadows and the adapter makes readable again.
+ * The workflow service of the multi-instance integration test. Every iteration writes down
+ * what the adapter handed it. So the test can assert the element, the index and the total.
+ * That includes the outer iteration which a nested task runs in. Camunda 8 shadows that
+ * part, and the adapter makes it readable again.
  */
 @Service
 @WorkflowService(

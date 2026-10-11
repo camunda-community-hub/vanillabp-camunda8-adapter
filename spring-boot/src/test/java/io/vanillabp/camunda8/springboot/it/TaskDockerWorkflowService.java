@@ -40,14 +40,14 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class TaskDockerWorkflowService {
 
   /**
-   * Invocation counters per (task definition + aggregate ID) - inspected by the
-   * integration test.
+   * Invocation counters per (task definition + aggregate ID). The integration test reads
+   * them.
    */
   public static final Map<String, AtomicInteger> INVOCATIONS = new ConcurrentHashMap<>();
 
   /**
-   * When each invocation happened, per (task definition + aggregate ID) - what the
-   * retry-backoff test measures the distance between two deliveries with.
+   * When each invocation happened, per (task definition + aggregate ID). The retry-backoff
+   * test measures the distance between two deliveries with it.
    */
   public static final Map<String, List<Long>> INVOCATION_TIMES = new ConcurrentHashMap<>();
 
@@ -88,7 +88,7 @@ public class TaskDockerWorkflowService {
       final TaskDockerAggregate aggregate) {
 
     countInvocation("happyTask", aggregate);
-    // idempotent: keyed on aggregate state, not on call count
+    // idempotent: it depends on the aggregate's state, not on the call count
     if ((aggregate.getResults() == null) || !aggregate.getResults().contains("happy")) {
       aggregate.appendResult("happy");
     }
@@ -99,9 +99,9 @@ public class TaskDockerWorkflowService {
   public void retryTask(
       final TaskDockerAggregate aggregate) {
 
-    // the FIRST delivery fails technically (local transaction rolled back, job
-    // failed with decremented retries) - Camunda 8 REDELIVERS the same task and
-    // the second delivery converges idempotently: at-least-once proven
+    // the FIRST delivery fails technically (local transaction rolled back, job failed with
+    // decremented retries). Camunda 8 delivers the same task AGAIN, and the second delivery
+    // converges idempotently. That proves at-least-once delivery
     if (countInvocation("retryTask", aggregate) == 1) {
       throw new IllegalStateException("first delivery fails - forcing a redelivery");
     }
@@ -116,7 +116,7 @@ public class TaskDockerWorkflowService {
       final TaskDockerAggregate aggregate) {
 
     countInvocation("errorTask", aggregate);
-    // the mutation has to be COMMITTED although the handler throws - the V1
+    // the change has to be COMMITTED although the handler throws. That is the V1
     // TaskException contract (BPMN error, no rollback)
     aggregate.appendResult("error-raised");
     throw new TaskException("PaymentFailed", "PAYMENT_FAILED");
@@ -137,8 +137,8 @@ public class TaskDockerWorkflowService {
       final TaskDockerAggregate aggregate) {
 
     countInvocation("alwaysFails", aggregate);
-    // must NEVER become visible: a technical exception rolls back the local
-    // transaction; the job is failed with decremented retries
+    // must NEVER become visible. A technical exception rolls back the local transaction,
+    // and the job is failed with decremented retries
     aggregate.appendResult("must-never-be-visible");
     throw new IllegalStateException("boom-c8");
 
@@ -149,8 +149,8 @@ public class TaskDockerWorkflowService {
       final TaskDockerAggregate aggregate) {
 
     countInvocation("modelledBackoffFails", aggregate);
-    // its element carries the task header 'retryBackoff', which is what decides how
-    // long the cluster waits before the next delivery
+    // its element carries the task header 'retryBackoff'. That decides how long the cluster
+    // waits before the next delivery
     throw new IllegalStateException("boom-modelled-backoff");
 
   }
@@ -261,7 +261,7 @@ public class TaskDockerWorkflowService {
   }
 
   /**
-   * The variables the cluster delivered to {@code syncApproved} - i.e. what the
+   * The variables which the cluster delivered to {@code syncApproved}. That is what the
    * completion of {@code syncTask} pushed.
    */
   public static final Map<String, Object> OBSERVED_VARIABLES = new ConcurrentHashMap<>();
@@ -271,8 +271,8 @@ public class TaskDockerWorkflowService {
       final TaskDockerAggregate aggregate) {
 
     countInvocation("syncTask", aggregate);
-    // both changes happen AFTER the workflow was started, so the cluster can only
-    // know them if the job completion pushes the aggregate state
+    // both changes happen AFTER the workflow was started. So the cluster can only know them
+    // if the job completion pushes the aggregate state
     aggregate.setApproved(true);
     aggregate.setSecret("s3cr3t");
     aggregate.appendResult("sync-task");
@@ -312,15 +312,15 @@ public class TaskDockerWorkflowService {
       final TaskDockerAggregate aggregate) {
 
     countInvocation("syncRejected", aggregate);
-    // reached only if the gateway evaluated STALE data
+    // reached only if the gateway evaluated OLD data
     aggregate.appendResult("sync-rejected");
 
   }
 
   /**
-   * The first of three tasks reading {@code bigPayload}, a variable which appears in no
-   * BPMN model. Nothing is configured for it, and its worker asks the cluster for the
-   * variable because the method declares it.
+   * The first of three tasks which read {@code bigPayload}, a variable which appears in no
+   * BPMN model. Nothing is configured for it. Its worker asks the cluster for the variable
+   * because the method declares it.
    */
   @WorkflowTask
   public void fetchAllTask(
@@ -336,11 +336,10 @@ public class TaskDockerWorkflowService {
   }
 
   /**
-   * The default: nothing is configured for this task and {@code bigPayload}
-   * appears in no BPMN model - it was handed to the workflow when it was started. Its
-   * worker still asks the cluster for that variable, because the core reports the
-   * {@code @TaskParam} names of the methods serving a task while the application wires
-   * itself.
+   * The default: nothing is configured for this task, and {@code bigPayload} appears in no
+   * BPMN model. It was handed to the workflow when it was started. Its worker still asks the
+   * cluster for that variable. The core reports the {@code @TaskParam} names of the methods
+   * which serve a task while the application wires itself.
    */
   @WorkflowTask
   public void fetchDerivedTask(
@@ -356,14 +355,14 @@ public class TaskDockerWorkflowService {
   }
 
   /**
-   * A method wired to the ELEMENT id instead of to the task definition. The job type of
-   * this task is named after nothing in this class, so only {@code id = "FE_byId"}
-   * reaches the method, which is what this test is here for.
+   * A method wired to the ELEMENT id instead of to the task definition. The job type of this
+   * task is named after nothing in this class. So only {@code id = "FE_byId"} reaches the
+   * method. This test is here for that.
    * <p>
-   * It declares a {@code @TaskParam} as well, and the worker has to ask the cluster for
-   * {@code bigPayload} all the same: the fetch list is derived from both keys, because
-   * asking for the job type alone left this method without its variable and the worker
-   * failed the job rather than passing null.
+   * It declares a {@code @TaskParam} as well, and the worker still has to ask the cluster for
+   * {@code bigPayload}. The fetch list is derived from both keys. Asking for the job type
+   * alone left this method without its variable, and the worker failed the job instead of
+   * passing null.
    */
   @WorkflowTask(id = "FE_byId")
   public void fetchByElementId(

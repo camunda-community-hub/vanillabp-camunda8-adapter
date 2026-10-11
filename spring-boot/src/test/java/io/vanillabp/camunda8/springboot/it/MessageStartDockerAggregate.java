@@ -7,9 +7,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the process which starts on a message. It has a workflow
- * service of its own, because <code>startWorkflowByMessage</code> starts the process of
- * its own process service and no other.
+ * JPA workflow aggregate of the process which starts on a message. It has a workflow service
+ * of its own, because <code>startWorkflowByMessage</code> starts only the process of its own
+ * process service.
  */
 @Entity
 @Table(name = "C8_MESSAGE_START_AGGREGATE")

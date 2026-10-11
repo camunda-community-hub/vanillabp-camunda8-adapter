@@ -10,18 +10,16 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the aggregateChanged integration test. Every
- * attribute is shared with Camunda 8 (this adapter's sync mode is FULL), so the
- * cluster holds {@link #note} as a process variable - which is what the test reads
- * back to see WHERE a push landed.
+ * JPA workflow aggregate of the aggregateChanged integration test. Every attribute is shared
+ * with Camunda 8 (this adapter's sync mode is FULL). So the cluster holds {@link #note} as a
+ * process variable. The test reads it back to see WHERE a push landed.
  * <p>
- * It carries a {@link Version} attribute because the multi-instance process of that test
- * runs two iterations which both append to {@link #taskIds}. An adapter runs its
- * handlers on several execution slots, so those two iterations
- * really do run at the same time, and without the version attribute the one committing
- * last would put back what it read. With it the loser of the conflict fails, the cluster
- * redelivers its job and the retry appends to what the winner wrote - which is the path
- * described in
+ * It carries a {@link Version} attribute, because the multi-instance process of that test
+ * runs two iterations which both append to {@link #taskIds}. An adapter runs its handlers on
+ * several execution slots. So those two iterations really do run at the same time. Without
+ * the version attribute, the one which commits last would put back what it read. With it,
+ * the loser of the conflict fails, the cluster delivers its job again, and the retry appends
+ * to what the winner wrote. That is the path described in
  * <a href="https://github.com/vanillabp/adapter-platform-integration/wiki/Workflow-aggregates">two
  * writers on one aggregate</a>.
  */
@@ -43,8 +41,8 @@ public class PushDockerAggregate {
   private String taskIds;
 
   /**
-   * See the class comment: two multi-instance iterations write this aggregate at the
-   * same time, and this is what turns a lost update into a conflict the cluster retries.
+   * See the class comment. Two multi-instance iterations write this aggregate at the same
+   * time. This turns a lost update into a conflict which the cluster retries.
    */
   @Version
   private Long version;

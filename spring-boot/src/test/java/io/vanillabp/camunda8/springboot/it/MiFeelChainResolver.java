@@ -10,14 +10,14 @@ import org.springframework.stereotype.Component;
 import io.vanillabp.spi.service.MultiInstanceElementResolver;
 
 /**
- * Writes down every iteration the task was told about, in the order it arrived. A resolver
- * rather than one parameter per level, because a case which loses the chain reports nothing
- * at all and a named parameter could not say so.
+ * Writes down every iteration which the task was told about, in the order it arrived. It is
+ * a resolver and not one parameter per level. A case which loses the chain reports nothing
+ * at all, and a named parameter could not say so.
  */
 @Component
 public class MiFeelChainResolver implements MultiInstanceElementResolver<MiFeelDockerAggregate, String> {
 
-  /** What this resolver reads, which all belongs to the calling process. */
+  /** What this resolver reads. All of it belongs to the calling process. */
   @Override
   public Collection<String> getNames() {
 

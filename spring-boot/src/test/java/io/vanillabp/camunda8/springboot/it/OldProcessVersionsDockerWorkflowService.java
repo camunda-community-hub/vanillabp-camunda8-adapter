@@ -8,10 +8,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the old-process-versions test: the task which
- * survives into version 2 is served for every version, the task which was dropped is
- * served for version 1 only - and whether the cluster still holds a version needing it
- * is what the startup check answers.
+ * The workflow service of the old-process-versions test. The task which survives into
+ * version 2 is served for every version. The task which was dropped is served for version 1
+ * only. The startup check answers whether the cluster still holds a version which needs it.
  */
 @Service
 @WorkflowService(

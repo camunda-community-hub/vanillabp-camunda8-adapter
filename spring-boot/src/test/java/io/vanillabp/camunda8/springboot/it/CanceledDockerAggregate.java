@@ -9,8 +9,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the test which cancels a running instance. What it records is
- * what the application was told: the task it is waiting at, and how the workflow ended.
+ * JPA workflow aggregate of the test which cancels a running instance. It records what the
+ * application was told: the task it waits at, and how the workflow ended.
  */
 @Entity
 @Table(name = "C8_CANCELED_AGGREGATE")
@@ -23,13 +23,13 @@ public class CanceledDockerAggregate {
   private Long id;
 
   /**
-   * The job key of the asynchronous task the instance waits at, written by its handler.
+   * The job key of the asynchronous task which the instance waits at. Its handler writes it.
    */
   private String openTaskId;
 
   /**
-   * Set by the <code>&#64;WorkflowEnded</code> method, so the test reads the kind the
-   * adapter reported rather than a log line.
+   * Set by the <code>&#64;WorkflowEnded</code> method. So the test reads the kind which the
+   * adapter reported, and not a log line.
    */
   private String endedAs;
 

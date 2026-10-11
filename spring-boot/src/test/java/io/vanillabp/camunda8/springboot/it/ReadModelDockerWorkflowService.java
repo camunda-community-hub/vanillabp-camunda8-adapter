@@ -9,9 +9,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service behind {@code Camunda8AnOperationWithoutTheReadModelIT}: the workflow
- * waits for a message and then parks in an asynchronous task, so the test can correlate the
- * message and afterwards push into the workflow's own scope.
+ * The workflow service behind {@code Camunda8AnOperationWithoutTheReadModelIT}. The workflow
+ * waits for a message and then parks in an asynchronous task. So the test can correlate the
+ * message, and afterwards push into the workflow's own scope.
  */
 @Service
 @WorkflowService(
@@ -81,7 +81,7 @@ public class ReadModelDockerWorkflowService {
       final ReadModelDockerAggregate aggregate,
       @TaskId final String taskId) {
 
-    // parks the workflow: the instance stays in the cluster until the test finishes it
+    // parks the workflow. The instance stays in the cluster until the test finishes it
     aggregate.setTaskId(taskId);
 
   }
