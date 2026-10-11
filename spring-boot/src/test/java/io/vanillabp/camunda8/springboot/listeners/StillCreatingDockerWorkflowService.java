@@ -14,9 +14,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the test which completes a user task the cluster is still creating:
- * one user task carrying a second <code>creating</code> listener nobody answers, and one
- * service task behind it which runs only once the completion arrived.
+ * The workflow service of the test which completes a user task the cluster is still creating.
+ * The model has one user task with a second <code>creating</code> listener which nobody
+ * answers. Behind it is one service task, which runs only once the completion arrived.
  */
 @Service
 @WorkflowService(
@@ -25,14 +25,14 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class StillCreatingDockerWorkflowService {
 
   /**
-   * The key of the user task, by aggregate id. It is written from the notification, which
-   * reaches the application from the <code>creating</code> listener VanillaBP wrote - so the
+   * The key of the user task, by aggregate id. The notification writes it. The notification
+   * comes from the <code>creating</code> listener which VanillaBP wrote into the model. So the
    * application holds the key while the cluster is still creating the task.
    */
   public static final Map<Long, String> TASK_IDS = new ConcurrentHashMap<>();
 
   /**
-   * The aggregates whose workflow moved past the user task, which is what says the completion
+   * The aggregates whose workflow moved past the user task. This shows that the completion
    * reached the cluster.
    */
   public static final Map<Long, String> WHAT_CAME_AFTER = new ConcurrentHashMap<>();
