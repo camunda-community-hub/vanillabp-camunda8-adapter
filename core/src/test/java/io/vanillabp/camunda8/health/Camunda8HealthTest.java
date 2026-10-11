@@ -26,11 +26,11 @@ import io.vanillabp.integration.adapter.spi.health.AdapterHealth;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What one Camunda 8 adapter instance answers when the health endpoint asks
- * it. The rules being pinned here are the ones easy to get wrong: a SaaS adapter which is
- * not configured yet must not read as an outage, and every answer has to name the
- * address, because that is what an operator acts on. That includes the address of the local
- * cluster, which an adapter without an address of its own talks to.
+ * What one Camunda 8 adapter instance answers when the health endpoint asks it. This test
+ * pins the rules which are easy to get wrong. A SaaS adapter which is not configured yet must
+ * not read as an outage. And every answer has to name the address, because an operator acts
+ * on it. That includes the address of the local cluster, which an adapter without an address
+ * of its own talks to.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8HealthTest {
@@ -219,8 +219,8 @@ public class Camunda8HealthTest {
     configuration.setClusterId("0123abcd-4567-89ef-0123-456789abcdef");
     configuration.setRegion("bru-2");
 
-    // an operator of a SaaS cluster has no address to ping; what they act on is the
-    // cluster and the region, and every answer has to carry it
+    // an operator of a SaaS cluster has no address to ping. They act on the cluster and
+    // the region, so every answer has to carry them
     final var health = Camunda8Health.check("cloud", factoryWith(configuration, null));
 
     assertEquals(
@@ -233,8 +233,8 @@ public class Camunda8HealthTest {
   @DisplayName("A health check interrupted while waiting is DOWN, and the interrupt survives")
   public void anInterruptedCheckIsDown() throws Exception {
 
-    // the endpoint's thread may be interrupted while the request is in flight; swallowing
-    // that leaves a thread which cannot be stopped, and answering UP would be a lie
+    // the thread of the endpoint may be interrupted while the request is in flight.
+    // Swallowing that leaves a thread which cannot be stopped, and answering UP would be a lie
     try {
       final var health = Camunda8Health
           .check("c8", factoryWith(configured(), clientAnswering(null, new InterruptedException())));
