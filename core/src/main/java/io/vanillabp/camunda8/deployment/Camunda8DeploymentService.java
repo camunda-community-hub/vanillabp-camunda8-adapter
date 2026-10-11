@@ -2521,6 +2521,26 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   }
 
   /**
+   * The tenant as the INFO line after a deployment names it. Where the application set no
+   * tenant, the line says {@code '<none>'}, the same word the Camunda 7 adapter writes for
+   * it, and adds where the cluster puts the resources then. That place is the tenant whose
+   * id on Camunda 8 is {@code <default>}, so the id keeps its own spelling and is not taken
+   * for a second word meaning "none".
+   *
+   * @param tenantId The tenant the deployment named, or {@code null} for none
+   * @return The tenant in quotes, or {@code '<none>'} together with the cluster's tenant
+   */
+  static String tenantForTheLog(
+      final String tenantId) {
+
+    if ((tenantId == null) || tenantId.isBlank()) {
+      return "'<none>' (cluster tenant <default>)";
+    }
+    return "'%s'".formatted(tenantId);
+
+  }
+
+  /**
    * @param elementIds The element ids to name
    * @return Them in quotes, comma separated
    */
@@ -3342,12 +3362,12 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
                 .toList());
       }
       log.info("Deployed {} BPMN resource(s) of workflow module '{}' to Camunda 8 "
-          + "(adapter '{}', deployment key {}, tenant '{}'): {}",
+          + "(adapter '{}', deployment key {}, tenant {}): {}",
           bpmsProcessingContext.getResources().size(),
           workflowModuleId,
           adapterId,
           deployment.getKey(),
-          tenantId != null && !tenantId.isBlank() ? tenantId : "<default>",
+          tenantForTheLog(tenantId),
           bpmsProcessingContext.getResources().keySet());
     } catch (final RuntimeException e) {
       throw new IllegalStateException(
