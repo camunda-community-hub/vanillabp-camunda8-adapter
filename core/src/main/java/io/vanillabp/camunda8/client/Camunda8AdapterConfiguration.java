@@ -11,15 +11,15 @@ import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 
 /**
- * Resolved, platform-neutral connection configuration of one Camunda 8 adapter instance
- * (keyed by adapter ID). The platform modules (Spring Boot, Quarkus) read their
- * respective configuration source and populate this object; the plain-Java
+ * The resolved connection configuration of one Camunda 8 adapter instance, keyed by
+ * adapter ID. It does not depend on a platform. The platform modules (Spring Boot,
+ * Quarkus) read their own configuration source and fill this object. The plain-Java
  * {@link Camunda8ClientFactory} turns it into a {@code CamundaClient}.
  * <p>
- * <b>Canonical configuration namespace</b> (documented in the repository-root
- * {@code README.md}), keyed by adapter ID - the adapter's keys live in the shared
- * VanillaBP tree at {@code vanillabp.adapters.<adapter-id>.*} (contributed via the
- * platform overlays, see the platform modules):
+ * <b>Canonical configuration namespace</b>, documented in the {@code README.md} at the
+ * repository root. It is keyed by adapter ID. The keys of the adapter live in the shared
+ * VanillaBP tree at {@code vanillabp.adapters.<adapter-id>.*}. The platform overlays add
+ * them, see the platform modules:
  * <ul>
  *   <li>{@code vanillabp.adapters.<adapter-id>.mode} - {@code self-managed} (default) or
  *       {@code saas}</li>
@@ -29,16 +29,16 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  *       {@link #usesTheLocalClusterAddress()})</li>
  *   <li>saas: {@code .cluster-id}, {@code .region}, {@code .client-id},
  *       {@code .client-secret} (all required)</li>
- *   <li>{@code .tenant-id} (optional, both modes) - Camunda 8 multi-tenancy tenant. One
- *       workflow module may carry a name of its own under
- *       {@code vanillabp.workflow-modules.<module>.adapters.<id>.tenant-id}, which wins over
- *       this one</li>
+ *   <li>{@code .tenant-id} (optional, both modes) - the tenant of Camunda 8 multi-tenancy.
+ *       One workflow module may name a tenant of its own under
+ *       {@code vanillabp.workflow-modules.<module>.adapters.<id>.tenant-id}. That one wins
+ *       over this one</li>
  *   <li>{@code .prefer-rest-over-grpc} (optional, default {@code true}) - whether the
  *       client uses the REST API (recommended) or gRPC for its commands</li>
  *   <li>{@code .auth.*} - how the adapter authenticates, see
  *       {@link Camunda8AuthConfiguration}</li>
- *   <li>{@code .async-task-lock-renewal} (optional, default one hour) - the window the
- *       lock of a job left open by a {@code @TaskId} handler is renewed in, see
+ *   <li>{@code .async-task-lock-renewal} (optional, default one hour) - the window in
+ *       which the lock of a job is renewed which a {@code @TaskId} handler left open, see
  *       {@link #asyncTaskLockRenewal}</li>
  *   <li>{@code .async-task-max-age-action} (optional, default {@code report}) - what
  *       this adapter does with a task the core reports as older than
@@ -53,8 +53,8 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  *       is left to the runtime which owns it, see
  *       {@link io.vanillabp.camunda8.wiring.Camunda8Connectors}</li>
  *   <li>{@code .allow-listeners} (optional, default {@code false}, resolvable per
- *       workflow module and workflow) - whether the listeners somebody modelled are served
- *       by {@code @WorkflowTask} methods, see
+ *       workflow module and workflow) - whether {@code @WorkflowTask} methods serve the
+ *       listeners somebody modelled, see
  *       {@link io.vanillabp.camunda8.wiring.Camunda8Listeners}</li>
  *   <li>{@code .health-timeout} (optional, default {@value #DEFAULT_HEALTH_TIMEOUT_ISO}) -
  *       how long the health check waits for the cluster's topology, see
@@ -71,17 +71,17 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  *   <li>{@code .ended-workflow-visibility-timeout} (optional, default 3 seconds) - the same
  *       window for a workflow the engine no longer holds, see
  *       {@link #endedWorkflowVisibilityWindow()}</li>
- *   <li>{@code .job-lease} ({@code use} or {@code do-not-use}, REQUIRED on a release line
- *       whose cluster has a lease, accepted and ignored on the others) - whether the jobs
- *       this adapter holds from the activation to the answer are leased, see
+ *   <li>{@code .job-lease} ({@code use} or {@code do-not-use}) - REQUIRED on a release
+ *       line whose cluster has a lease, accepted and ignored on the others. It says whether
+ *       the jobs this adapter holds from the activation to the answer are leased, see
  *       {@link #validateJobLease(String, Consumer)}</li>
  *   <li>{@code .aggregate-id-as-business-id} (optional, default {@code false}) - whether a
- *       workflow this adapter starts carries the workflow aggregate's id as its business
- *       id, which is there to be read and nothing else, see
+ *       workflow this adapter starts carries the id of the workflow aggregate as its
+ *       business id. That id is there to be read and for nothing else, see
  *       {@link #validateAggregateIdAsBusinessId(String, Consumer)}</li>
- *   <li>{@code .probe-open-user-tasks} (optional, default {@code false}) - whether the
- *       check which looks at the other open tasks of a workflow asks the cluster about
- *       each Camunda-managed user task of a running instance, see
+ *   <li>{@code .probe-open-user-tasks} (optional, default {@code false}) - a check looks
+ *       at the other open tasks of a workflow. This key says whether that check asks the
+ *       cluster about each Camunda-managed user task of a running instance, see
  *       {@link #validateProbeOpenUserTasks(String, Consumer)}</li>
  * </ul>
  * All fields are optional at binding time. The start validates them (see
@@ -98,8 +98,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The prefix of the canonical per-adapter configuration namespace (see class
-   * javadoc) - the shared VanillaBP tree's adapters section.
+   * The prefix of the canonical configuration namespace of each adapter (see the class
+   * javadoc). It is the adapters section of the shared VanillaBP tree.
    */
   public static final String CONFIGURATION_PREFIX = "vanillabp.adapters";
 
@@ -139,15 +139,15 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The REST address a self-managed adapter uses where none is configured. It is a cluster on
-   * this machine, started with Camunda's docker compose of this release line, so the port
-   * depends on the line.
+   * The REST address a self-managed adapter uses where none is configured. It points to a
+   * cluster on this machine, started with Camunda's docker compose of this release line. So
+   * the port depends on the line.
    */
   public static final String LOCAL_CLUSTER_REST_ADDRESS = Camunda8LocalCluster.REST_ADDRESS;
 
   /**
-   * The gRPC address a self-managed adapter uses where none is configured, with the same
-   * meaning as {@link #LOCAL_CLUSTER_REST_ADDRESS}.
+   * The gRPC address a self-managed adapter uses where none is configured. It means the
+   * same as {@link #LOCAL_CLUSTER_REST_ADDRESS}.
    */
   public static final String LOCAL_CLUSTER_GRPC_ADDRESS = Camunda8LocalCluster.GRPC_ADDRESS;
 
@@ -236,8 +236,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether a self-managed adapter has no address for the protocol its client talks, so it
-   * uses the address of the local cluster.
+   * Whether a self-managed adapter has no address for the protocol its client talks. Then
+   * it uses the address of the local cluster.
    *
    * @return Whether the address of the local cluster is used
    */
@@ -253,8 +253,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The REST address the client of a self-managed adapter uses: the configured one, or the
-   * address of the local cluster.
+   * The REST address the client of a self-managed adapter uses. It is the configured one,
+   * or else the address of the local cluster.
    *
    * @return The address, never <code>null</code>
    */
@@ -267,8 +267,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The gRPC address the client of a self-managed adapter uses: the configured one, or the
-   * address of the local cluster.
+   * The gRPC address the client of a self-managed adapter uses. It is the configured one,
+   * or else the address of the local cluster.
    *
    * @return The address, never <code>null</code>
    */
@@ -436,10 +436,10 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How this adapter instance proves who it is - the block
-   * <code>vanillabp.adapters.&lt;id&gt;.auth.*</code>. Never <code>null</code>: an
-   * adapter without the block authenticates with <code>none</code>, which is what every
-   * configuration without it does.
+   * How this adapter instance proves who it is. This is the block
+   * <code>vanillabp.adapters.&lt;id&gt;.auth.*</code>. It is never <code>null</code>. An
+   * adapter without the block authenticates with <code>none</code>, like every
+   * configuration without it.
    */
   private Camunda8AuthConfiguration auth = new Camunda8AuthConfiguration();
 
@@ -467,9 +467,9 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The worker's job timeout (lock duration) - adapter-level base of the
-   * most-specific-wins resolution (task &gt; workflow &gt; workflow-module &gt;
-   * adapter). Default: 5 minutes.
+   * The job timeout of the worker, which is how long a job stays locked. This is the
+   * adapter level of the resolution where the most specific value wins (task &gt;
+   * workflow &gt; workflow-module &gt; adapter). Default: 5 minutes.
    */
   private Duration jobTimeout;
 
@@ -498,10 +498,10 @@ public class Camunda8AdapterConfiguration {
 
   /**
    * Whether the application states that its identifiers are unique across all of its
-   * workflow modules, which is what the name-clash-avoidance mode <code>none</code>
-   * relies on. It silences the WARN the adapter logs per workflow module while that
-   * mode applies - a deliberate acknowledgement, not a log-level setting: with a wrong
-   * one, two workflow modules address the same processes and jobs. Default
+   * workflow modules. The name-clash-avoidance mode <code>none</code> relies on that. The
+   * key silences the WARN which the adapter logs per workflow module while that mode
+   * applies. It is a deliberate acknowledgement, not a log-level setting. If the statement
+   * is wrong, two workflow modules address the same processes and jobs. Default
    * <code>false</code>.
    */
   private boolean acceptUnscopedIdentifiers = false;
@@ -532,24 +532,24 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether this application honours the element-template marker of a model, so an element
-   * built from one is left to the runtime which owns it - a Camunda connector in almost
-   * every case. Adapter-level base of the most-specific-wins resolution over three levels
-   * (workflow &gt; workflow-module &gt; adapter), see
-   * {@link io.vanillabp.camunda8.wiring.Camunda8AllowConnectorsResolver}. Default
-   * <code>false</code>.
+   * Whether this application honours the element-template marker of a model. If it does,
+   * an element built from a template is left to the runtime which owns it. In almost every
+   * case that is a Camunda connector. This is the adapter level of the resolution where
+   * the most specific value wins, over three levels (workflow &gt; workflow-module &gt;
+   * adapter), see {@link io.vanillabp.camunda8.wiring.Camunda8AllowConnectorsResolver}.
+   * Default <code>false</code>.
    * <p>
-   * What it costs is written into the boot log of every workflow module it applies to, and
-   * no key silences that: VanillaBP validates such an element against nothing, opens no
-   * worker for its job type and cannot tell whether anything serves it. The model also
-   * stops being portable, because a connector is a Camunda 8 element, and what the
-   * connector does runs outside the transaction VanillaBP owns.
+   * The boot log of every workflow module it applies to says what it costs, and no key
+   * silences that. VanillaBP validates such an element against nothing. It opens no worker
+   * for its job type, and it cannot tell whether anything serves it. The model also stops
+   * being portable, because a connector is a Camunda 8 element. And what the connector
+   * does runs outside the transaction VanillaBP owns.
    * <p>
-   * There is deliberately no TASK level, although the keys next to this one have one: that
-   * level is keyed by the task DEFINITION, and the task definition of a connector is the
-   * connector's own type, which every element using that connector shares and which carries
-   * dots and colons a relaxed binder splits on. Which element another runtime serves is
-   * decided by the model instead, by <code>zeebe:modelerTemplate</code> on the element.
+   * There is no TASK level on purpose, although the keys next to this one have one. That
+   * level is keyed by the task DEFINITION. The task definition of a connector is the
+   * connector's own type. Every element using that connector shares it, and it carries
+   * dots and colons which a relaxed binder splits on. So the model decides instead which
+   * element another runtime serves, by <code>zeebe:modelerTemplate</code> on the element.
    */
   private boolean allowConnectors = false;
 
@@ -579,21 +579,21 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether the listeners somebody MODELLED are served by <code>@WorkflowTask</code> methods.
-   * Adapter-level base of the most-specific-wins resolution over three levels (workflow &gt;
-   * workflow-module &gt; adapter), see
+   * Whether <code>@WorkflowTask</code> methods serve the listeners somebody MODELLED. This is
+   * the adapter level of the resolution where the most specific value wins, over three levels
+   * (workflow &gt; workflow-module &gt; adapter), see
    * {@link io.vanillabp.camunda8.wiring.Camunda8AllowListenersResolver}. Default
    * <code>false</code>.
    * <p>
-   * Without it a model carrying such a listener does not boot: the cluster creates a job for
-   * every listener and a job type nothing subscribes to stops the workflow there with no
-   * incident and no message, which is worse than a boot which says so. With it the listener is
-   * a task like any other - a method is asked for and a method serving no listener is reported
-   * - and what that costs is written into the boot log of every workflow module it applies to.
+   * Without it, a model with such a listener does not boot. The cluster creates a job for
+   * every listener. A job type which nothing subscribes to stops the workflow there, with no
+   * incident and no message. A boot which says so is better. With the key, the listener is a
+   * task like any other. The adapter asks for a method, and it reports a method which serves
+   * no listener. The boot log of every workflow module it applies to says what that costs.
    * <p>
-   * There is deliberately no TASK level, although the keys next to this one have one: that
-   * level is keyed by a task DEFINITION, and whether a listener becomes a task at all is what
-   * this key decides.
+   * There is no TASK level on purpose, although the keys next to this one have one. That
+   * level is keyed by a task DEFINITION. But this key decides whether a listener becomes a
+   * task at all.
    */
   private boolean allowListeners = false;
 
@@ -623,32 +623,31 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the lock of a job left open by a <code>&#64;TaskId</code> handler is
-   * extended for, and with it how often that lock is renewed: the cluster hands the
-   * job out again when the window passed, VanillaBP answers the redelivery from the
-   * record it wrote when the handler ran, and the adapter extends the lock by another
-   * window. The renewal is therefore driven by the cluster's own redelivery, and the
-   * application never notices it. Default: {@value #DEFAULT_ASYNC_TASK_LOCK_RENEWAL_ISO}.
+   * How long the lock of a job is extended which a <code>&#64;TaskId</code> handler left
+   * open. This also sets how often that lock is renewed. When the window has passed, the
+   * cluster hands the job out again. VanillaBP answers this redelivery from the record it
+   * wrote when the handler ran. Then the adapter extends the lock by another window. So the
+   * cluster's own redelivery drives the renewal, and the application never notices it.
+   * Default: {@value #DEFAULT_ASYNC_TASK_LOCK_RENEWAL_ISO}.
    * <p>
-   * <b>Why an hour.</b> The window has to sit clearly below
-   * <code>vanillabp.delivery.retention</code> (seven days by default), because the record
-   * is what answers the redelivery: once it is cleaned up, the redelivery reaches the
-   * application's method a second time. An hour is a factor of 168 below the default
-   * retention, which survives a retention somebody lowered without thinking. The cost is
-   * one activation, one read of the delivery record and one lock command per open task
-   * per window - with 1.000 open asynchronous tasks that is 0,28 per second, with 10.000
-   * it is 2,8 per second - and those renewals run on the same execution slots as real
-   * work ({@link #workerThreads}), which is the reason not to make the window minutes.
-   * The granularity of the age check follows the window, and hourly is fine for
-   * something measured in days.
+   * <b>Why an hour.</b> The window has to stay clearly below
+   * <code>vanillabp.delivery.retention</code> (seven days by default). The record is what
+   * answers the redelivery. Once it is cleaned up, the redelivery reaches the method of the
+   * application a second time. An hour is 168 times shorter than the default retention. So
+   * it still works if somebody lowers the retention without thinking. Per open task and
+   * window, the cost is one activation, one read of the delivery record and one lock
+   * command. With 1.000 open asynchronous tasks that is 0,28 per second, with 10.000 it is
+   * 2,8 per second. Those renewals run on the same execution slots as real work
+   * ({@link #workerThreads}). That is why the window is not a few minutes. The age check is
+   * only as fine as the window. Hourly is fine for something measured in days.
    * <p>
-   * <b>No callback into the application.</b> There is deliberately no keep-alive hook and
-   * no aware interface asking whether an open task is still wanted. An application which
-   * knows its task is obsolete has <code>ProcessService#cancelTask</code>, which is
-   * BPMS-neutral and exists; an application which lost track of the task could not answer
-   * a liveness question truthfully anyway. What VanillaBP does instead is measure how long
-   * the task has been open (<code>vanillabp.delivery.max-task-age</code>) and let this
-   * adapter react to it, see {@link #asyncTaskMaxAgeAction}.
+   * <b>No callback into the application.</b> There is no keep-alive hook on purpose, and no
+   * aware interface which asks whether an open task is still wanted. An application which
+   * knows its task is obsolete has <code>ProcessService#cancelTask</code>. That exists and
+   * does not depend on the BPMS. An application which lost track of the task could not give
+   * a true answer to such a question anyway. Instead, VanillaBP measures how long the task
+   * has been open (<code>vanillabp.delivery.max-task-age</code>). This adapter then reacts
+   * to it, see {@link #asyncTaskMaxAgeAction}.
    */
   private Duration asyncTaskLockRenewal;
 
@@ -678,11 +677,10 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the cluster waits before it hands a FAILED job out again - adapter-level base
-   * of the most-specific-wins resolution (task &gt; workflow &gt; workflow-module &gt;
-   * adapter), see
-   * {@link Camunda8RetryBackoffResolver} for the reasoning
-   * behind the default of ten seconds.
+   * How long the cluster waits before it hands a FAILED job out again. This is the adapter
+   * level of the resolution where the most specific value wins (task &gt; workflow &gt;
+   * workflow-module &gt; adapter). {@link Camunda8RetryBackoffResolver} explains the default
+   * of ten seconds.
    */
   private Duration retryBackoff;
 
@@ -714,7 +712,7 @@ public class Camunda8AdapterConfiguration {
   /**
    * The removed key <code>fetch-variables</code> at adapter level. It exists only to be
    * REJECTED at startup, see {@link Camunda8FetchVariables#rejectTheRemovedKey}. It is a
-   * text, so every value somebody wrote reaches that message rather than a conversion
+   * text. So every value somebody wrote reaches that message, and not a conversion
    * error.
    */
   private String fetchVariables;
@@ -758,11 +756,11 @@ public class Camunda8AdapterConfiguration {
       .parse(DEFAULT_ASYNC_TASK_LOCK_RENEWAL_ISO);
 
   /**
-   * The key this adapter used before the renewal window was named after what it is. It
-   * exists only to be REJECTED at startup: it carried a horizon of fourteen days, which
-   * outlived the retention of the delivery records and made every asynchronous task open
-   * longer than that run the application's method a second time. VanillaBP 2 is not
-   * released, so a loud rename is better than a silent one.
+   * The key this adapter used before the renewal window got a name which says what it is.
+   * It exists only to be REJECTED at startup. It carried a horizon of fourteen days, which
+   * was longer than the retention of the delivery records. So every asynchronous task which
+   * stayed open longer than that retention ran the method of the application a second
+   * time. VanillaBP 2 is not released, so a loud rename is better than a silent one.
    */
   private Duration asyncTaskTimeout;
 
@@ -797,14 +795,14 @@ public class Camunda8AdapterConfiguration {
    */
   public enum AsyncTaskMaxAgeAction {
     /**
-     * Nothing beyond the report the core writes anyway - the default, and what every
-     * BPMS without a lock to renew is limited to.
+     * Nothing beyond the report the core writes anyway. This is the default. It is also
+     * all that a BPMS without a lock to renew can do.
      */
     REPORT,
     /**
-     * Stop renewing the job's lock and fail the job, so the cluster raises an incident
-     * naming the workflow aggregate and the age. Operators watch incidents, which is
-     * more than can be said for a log line.
+     * Stop renewing the lock of the job and fail the job. Then the cluster raises an
+     * incident which names the workflow aggregate and the age. Operators watch incidents.
+     * A log line is easier to miss.
      */
     INCIDENT
   }
@@ -815,21 +813,21 @@ public class Camunda8AdapterConfiguration {
    */
   public enum JobLease {
     /**
-     * Activate with a lease. The cluster then takes the answer of the CURRENT activation
-     * only, so a run whose lock expired while it worked is refused instead of overwriting
+     * Activate with a lease. Then the cluster takes the answer of the CURRENT activation
+     * only. A run whose lock expired while it worked is refused. So it cannot overwrite
      * what the newer run wrote.
      */
     USE,
     /**
-     * Activate without one, which is what every line before 8.10 does and what an
-     * application rolling back to such a line needs.
+     * Activate without a lease. Every line before 8.10 does that, and an application
+     * which rolls back to such a line needs it.
      */
     DO_NOT_USE
   }
 
   /**
    * Whether the jobs this adapter holds from the activation to the answer are leased. There
-   * is NO default: on a line which can lease, the boot stops until the application says
+   * is NO default. On a line which can lease, the boot stops until the application says
    * which of the two it wants, see {@link #validateJobLease(String, Consumer)}.
    */
   private JobLease jobLease;
@@ -860,13 +858,13 @@ public class Camunda8AdapterConfiguration {
   /**
    * What this adapter does about a task which stayed open longer than
    * <code>vanillabp.delivery.max-task-age</code> allows (thirty days by default). Default:
-   * {@link AsyncTaskMaxAgeAction#REPORT}, which leaves it at the core's message.
+   * {@link AsyncTaskMaxAgeAction#REPORT}, which leaves it at the message of the core.
    * <p>
-   * <code>incident</code> is what a cluster can do beyond a log line: the adapter stops
-   * renewing the lock and fails the job with a message naming the aggregate and the age,
-   * so the incident shows up where operators already look. It is deliberately not the
-   * default - a task waiting for a person or for a partner may legitimately run for
-   * weeks, and an incident on such a task would be worse than the leak the age looks for.
+   * <code>incident</code> is what a cluster can do beyond a log line. The adapter stops
+   * renewing the lock. It fails the job with a message which names the aggregate and the
+   * age. So the incident shows up where operators already look. It is not the default, on
+   * purpose. A task which waits for a person or for a partner may rightly run for weeks. An
+   * incident on such a task would be worse than the leak the age check looks for.
    */
   private AsyncTaskMaxAgeAction asyncTaskMaxAgeAction = AsyncTaskMaxAgeAction.REPORT;
 
@@ -894,35 +892,35 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the shutdown of this adapter instance waits for the handlers it has in flight
-   * before the client is closed under them. Default:
+   * How long the shutdown of this adapter instance waits for the handlers it has in flight.
+   * After that, the client is closed under them. Default:
    * {@value #DEFAULT_SHUTDOWN_GRACE_ISO}.
    * <p>
    * <b>It is the budget of the whole shutdown, not of one workflow module.</b> The platform
-   * stops the modules one after another, so an adapter which spent this number per module
-   * would spend it as often as the application has modules, and the number nobody could then
-   * hold against the runtime's budget is the only number which matters. So the key stays at
-   * adapter level and is not resolvable per workflow module, per workflow or per task: it is
-   * read against one shutdown budget, and only the application has one of those. The workers
-   * of a module are closed as that module is stopped, and the module stopped last waits for
-   * all of them at once (see {@code Camunda8Drain#awaitEveryModuleQuiet}).
+   * stops the modules one after another. An adapter which spent this number per module would
+   * spend it once for each module of the application. Then nobody could hold the total
+   * against the budget of the runtime, and that total is the only number which matters. So
+   * the key stays at adapter level. It is not resolvable per workflow module, per workflow
+   * or per task. It is read against one shutdown budget, and only the application has one.
+   * The workers of a module are closed when that module is stopped. The module stopped last
+   * waits for all of them at once (see {@code Camunda8Drain#awaitEveryModuleQuiet}).
    * <p>
-   * <b>Why twenty seconds.</b> The Camunda client does not drain: closing a worker returns
-   * without waiting for the jobs it already activated, and closing the client interrupts
-   * the running handlers within milliseconds. An interrupted handler throws, and a handler
-   * which throws used to have its job failed with one retry less - so every restart cost a
-   * retry per job in flight. The number therefore has to be longer than an ordinary handler
-   * (a remote call plus a commit) and shorter than the shutdown budget of whatever runs the
-   * application, so VanillaBP is never the reason a container is killed: Spring Boot's
+   * <b>Why twenty seconds.</b> The Camunda client does not drain. Closing a worker returns
+   * without waiting for the jobs it already activated. Closing the client interrupts the
+   * running handlers within milliseconds. An interrupted handler throws. A handler which
+   * threw used to have its job failed with one retry less. So every restart cost one retry
+   * per job in flight. So the number has to be longer than an ordinary handler (a remote
+   * call plus a commit). And it has to be shorter than the shutdown budget of whatever runs
+   * the application, so VanillaBP is never the reason a container is killed. Spring Boot's
    * <code>spring.lifecycle.timeout-per-shutdown-phase</code> and Kubernetes'
-   * <code>terminationGracePeriodSeconds</code> both default to thirty seconds, and twenty
-   * leaves both of them a margin. Raising this value means raising those two as well, which
-   * is what the startup warning says.
+   * <code>terminationGracePeriodSeconds</code> both default to thirty seconds. Twenty leaves
+   * a margin to both. If you raise this value, raise those two as well. The startup warning
+   * says so.
    * <p>
-   * <code>PT0S</code> switches the drain off: the workers are closed and the client goes
-   * down right behind them. Nothing is lost by that either - a handler cut off this way has
-   * its job left to its lock rather than failed - but the work it did up to the interrupt is
-   * repeated on the redelivery.
+   * <code>PT0S</code> switches the drain off. The workers are closed, and the client goes
+   * down right after them. Nothing is lost that way either. A handler cut off this way
+   * leaves its job to its lock, and the job is not failed. But the work it did up to the
+   * interrupt is done again on the redelivery.
    */
   private Duration shutdownGrace;
 
@@ -953,17 +951,17 @@ public class Camunda8AdapterConfiguration {
    * How long the health check of this adapter instance waits for the cluster to answer its
    * topology request. Default: {@value #DEFAULT_HEALTH_TIMEOUT_ISO}.
    * <p>
-   * <b>Why two seconds.</b> The check runs on the thread serving the health request, and
-   * whatever polls that endpoint has a timeout of its own - Kubernetes' readiness probe
+   * <b>Why two seconds.</b> The check runs on the thread which serves the health request.
+   * Whatever polls that endpoint has a timeout of its own. The readiness probe of Kubernetes
    * defaults to one second and gives up after three failures. A check which waits longer
-   * than the probe turns a slow cluster into a failing probe without ever reporting DOWN,
-   * which is the worst of both. Two seconds is far above the round trip to a healthy cluster
-   * and below what a probe is willing to wait. The client's own
-   * <code>request-timeout</code> is deliberately NOT reused: ten seconds is right for a
-   * command carrying work and wrong for a question about liveness.
+   * than the probe turns a slow cluster into a failing probe, and it never reports DOWN.
+   * That is the worst of both. Two seconds is far above the round trip to a healthy cluster,
+   * and below what a probe is willing to wait. The client's own <code>request-timeout</code>
+   * is NOT reused, on purpose. Ten seconds is right for a command which carries work, and
+   * wrong for a question about liveness.
    * <p>
-   * <code>PT0S</code> switches the check off: the adapter then reports UNKNOWN with a note
-   * saying so, and the endpoint stops talking to the cluster at all.
+   * <code>PT0S</code> switches the check off. Then the adapter reports UNKNOWN with a note
+   * which says so, and the endpoint stops talking to the cluster at all.
    */
   private Duration healthTimeout;
 
@@ -991,22 +989,22 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the start of this adapter instance waits for its cluster to answer before it
-   * makes the first round which decides anything. Default:
+   * How long the start of this adapter instance waits for its cluster to answer. Only then
+   * does it make the first round which decides anything. Default:
    * {@value #DEFAULT_STARTUP_WAIT_ISO}.
    * <p>
-   * <b>Why the default is long.</b> The case it is there for is a cluster booting together
-   * with the application, and that takes minutes rather than seconds. Waiting is paid for
-   * with a late abort and not with a late DIAGNOSIS: the wait writes an INFO line every few
-   * seconds naming the address, the time gone and the cluster's last answer, so a typo in
-   * the address reads as "connection refused" from the first attempt on, and an answer the
-   * cluster will repeat ends the start at once rather than after the deadline.
+   * <b>Why the default is long.</b> It is there for a cluster which boots together with the
+   * application, and that takes minutes rather than seconds. The price of waiting is a late
+   * abort, but not a late DIAGNOSIS. Every few seconds the wait writes an INFO line with the
+   * address, the time gone and the last answer of the cluster. So a typo in the address
+   * shows as "connection refused" from the first attempt on. And an answer which the cluster
+   * will repeat ends the start at once, not after the deadline.
    * <p>
-   * <code>PT0S</code> switches the waiting off, and the start then fails on the first round
+   * <code>PT0S</code> switches the waiting off. Then the start fails on the first round
    * which cannot reach the cluster.
    * <p>
-   * Adapter level only: what is waited for is the cluster, and a cluster does not belong to
-   * a workflow module.
+   * Adapter level only. The start waits for the cluster, and a cluster does not belong to a
+   * workflow module.
    */
   private Duration startupWait;
 
@@ -1073,13 +1071,13 @@ public class Camunda8AdapterConfiguration {
   public static final Duration PLATFORM_SHUTDOWN_BUDGET = Duration.ofSeconds(30);
 
   /**
-   * How this adapter instance runs what it delivers: a positive number of platform
+   * How this adapter instance runs what it delivers. It is a positive number of platform
    * threads, or the literal <code>virtual</code>. Default: four platform threads.
    * <p>
-   * The number is adapter-wide on purpose: the Camunda client owns one executor and
-   * this adapter owns one client per adapter id, so every worker of the adapter shares
-   * it, across every workflow module that adapter serves. See
-   * {@link Camunda8ExecutionModel} for what the number should be sized against.
+   * The number applies to the whole adapter, on purpose. The Camunda client owns one
+   * executor, and this adapter owns one client per adapter id. So every worker of the
+   * adapter shares that executor, across every workflow module the adapter serves.
+   * {@link Camunda8ExecutionModel} says what to size the number against.
    */
   private String workerThreads;
 
@@ -1109,12 +1107,11 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How many handlers may run at the same time while
-   * {@link #workerThreads} is <code>virtual</code> - virtual threads have no limit of
-   * their own, and the client's limit is per worker. Default: the number the
-   * platform-thread mode would use, so switching the mode changes how threads are made
-   * and not how much runs at once. Configuring it without the virtual mode fails the
-   * boot, because it would be ignored.
+   * How many handlers may run at the same time while {@link #workerThreads} is
+   * <code>virtual</code>. Virtual threads have no limit of their own, and the limit of the
+   * client is per worker. Default: the number the platform-thread mode would use. So
+   * switching the mode changes how threads are made, but not how much runs at once. If it
+   * is set without the virtual mode, the boot fails, because it would be ignored.
    */
   private Integer workerThreadsBound;
 
@@ -1143,10 +1140,10 @@ public class Camunda8AdapterConfiguration {
 
   /**
    * How many jobs one worker may hold at the same time (the client's
-   * <code>maxJobsActive</code>). Default: eight per execution slot, capped at the
-   * client's own 32 - so the last job of a batch waits for at most seven handler
-   * runtimes at the default of four threads instead of the thirty-one it would wait
-   * with one thread. Camunda's rule is
+   * <code>maxJobsActive</code>). Default: eight per execution slot, but no more than the
+   * client's own 32. So at the default of four threads, the last job of a batch waits for
+   * at most seven handler runtimes. With one thread it would wait for thirty-one.
+   * Camunda's rule is
    * <code>maxJobsActive &lt; threads &times; (jobTimeout / avgHandlerDuration)</code>.
    */
   private Integer maxJobsActive;
@@ -1204,7 +1201,7 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long a request to the cluster may take, which for an activation request is also
+   * How long a request to the cluster may take. For an activation request this is also
    * the long-polling window. Default: the client's 10 seconds.
    */
   private Duration requestTimeout;
@@ -1235,8 +1232,9 @@ public class Camunda8AdapterConfiguration {
   /**
    * Whether the cluster PUSHES jobs to the workers instead of only answering their
    * polls. Default: the client's <code>false</code>. It lowers the delivery latency and
-   * adds no concurrency, and it makes the client wrap the execution slots in a second
-   * semaphore of {@link #maxJobsActive} permits whose acquire waits for the job timeout.
+   * adds no concurrency. It also makes the client wrap the execution slots in a second
+   * semaphore of {@link #maxJobsActive} permits. Acquiring a permit waits up to the job
+   * timeout.
    */
   private Boolean streamEnabled;
 
@@ -1294,26 +1292,26 @@ public class Camunda8AdapterConfiguration {
 
   /**
    * How long the cluster keeps a published message. The number does two jobs which pull in
-   * opposite directions, which is why it is resolvable per workflow module, workflow and
-   * MESSAGE and not only per adapter (see {@link Camunda8MessageTimeToLiveResolver}):
+   * opposite directions. That is why it is resolvable per workflow module, workflow and
+   * MESSAGE, and not only per adapter (see {@link Camunda8MessageTimeToLiveResolver}):
    * <ul>
-   * <li>it BUFFERS a message published before its subscription exists, which wants it
-   * large - a message correlated while the workflow is still two steps away from its catch
-   * event is only correlated because the cluster held it;</li>
-   * <li>it is the window a message id DEDUPLICATES in, which wants it small - for as long
-   * as the message lives, a second and entirely legitimate publication of the same id is
-   * dropped without a word.</li>
+   * <li>It BUFFERS a message published before its subscription exists. For that it should
+   * be large. Say the workflow is still two steps away from its catch event. The message
+   * is only correlated because the cluster held it.</li>
+   * <li>It is the window in which a message id is DEDUPLICATED. For that it should be
+   * small. As long as the message lives, a second publication of the same id is dropped
+   * without a word, even if it is fully legitimate.</li>
    * </ul>
-   * Default: whatever the client uses, one hour at the time of writing. VanillaBP sets
-   * nothing on the command where nothing is configured.
+   * Default: whatever the client uses, one hour at the time of writing. If nothing is
+   * configured, VanillaBP sets nothing on the command.
    * <p>
-   * <b>Shortening it does not buy a short deduplication window.</b> The cluster forgets an
-   * expired message id on a sweep of its own rather than at the moment it expires. Measured
-   * against camunda/camunda:8.9.16 on 2026-08-27, a two-second time-to-live was still
-   * deduplicating five seconds later and forgotten after 75
+   * <b>Shortening it does not give a short deduplication window.</b> The cluster forgets an
+   * expired message id on a sweep of its own, not at the moment it expires. We measured it
+   * against camunda/camunda:8.9.16 on 2026-08-27. A two-second time-to-live still
+   * deduplicated five seconds later, and the id was forgotten after 75
    * (see {@code Camunda8TaskProcessingIT#theTimeToLiveDecidesHowLongTheClustersNetLasts}).
-   * What tells two legitimate correlations apart is what they carry - a correlation id
-   * which varies, or the activation VanillaBP puts into the message id.
+   * Two legitimate correlations are told apart by what they carry. That is a correlation
+   * id which varies, or the activation which VanillaBP puts into the message id.
    */
   private Duration messageTimeToLive;
 
@@ -1341,7 +1339,7 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The client's maximum inbound message size in bytes. Default: the client's.
+   * The largest inbound message the client accepts, in bytes. Default: the client's.
    */
   private Integer maxMessageSize;
 
@@ -1425,8 +1423,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The authority the TLS certificate is verified against, for a gateway reached under
-   * another name than the certificate carries. Default: none.
+   * The authority the TLS certificate is verified against. It is for a gateway reached
+   * under another name than the one in its certificate. Default: none.
    */
   private String overrideAuthority;
 
@@ -1454,14 +1452,14 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long a workflow this cluster holds may stay invisible to the query API the
-   * awareness probe searches: the exporter feeding that read model runs behind the
-   * engine, so a workflow started moments ago is not findable yet.
+   * How long a workflow this cluster holds may stay invisible to the query API. The
+   * awareness probe searches that API. The exporter which feeds this read model runs behind
+   * the engine. So a workflow started moments ago cannot be found yet.
    * <p>
-   * VanillaBP waits this out where it knows the workflow is here (after a start it
-   * dispatched, or after this cluster delivered a job of that workflow), and never
-   * for a workflow nobody ever heard of. Raise it for a slow exporter, set it to
-   * zero to switch the waiting off. Default: 10 seconds.
+   * VanillaBP waits this out where it knows the workflow is here. That is after a start it
+   * dispatched, or after this cluster delivered a job of that workflow. It never waits for
+   * a workflow nobody ever heard of. Raise it for a slow exporter. Set it to zero to switch
+   * the waiting off. Default: 10 seconds.
    */
   private Duration workflowVisibilityTimeout;
 
@@ -1489,19 +1487,19 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The same window for a workflow the ENGINE has already forgotten, which is a much
-   * shorter one.
+   * The same window for a workflow the ENGINE has already forgotten. This window is much
+   * shorter.
    * <p>
-   * The long window above exists for a workflow which has just been started: the engine
+   * The long window above is there for a workflow which has just been started. The engine
    * holds it, and the read model needs a moment to hear about it. A workflow the engine no
-   * longer holds is a different case. It ended, or it never existed, and it has been in
-   * the read model for as long as it ran - so what is left to wait for is only the moment
-   * the END of it needs to arrive there.
+   * longer holds is a different case. It ended, or it never existed. It has been in the
+   * read model for as long as it ran. So the only thing left to wait for is its END to
+   * arrive there.
    * <p>
-   * The engine is asked before the search
-   * ({@code Camunda8ProcessService#awarenessOfWorkflow}), so the adapter knows which of
-   * the two cases it is in. Raise it where an exporter is slow, set it to zero to answer
-   * at once. Default: 3 seconds.
+   * The adapter asks the engine before the search
+   * ({@code Camunda8ProcessService#awarenessOfWorkflow}). So it knows which of the two cases
+   * it is in. Raise it where an exporter is slow. Set it to zero to answer at once.
+   * Default: 3 seconds.
    */
   private Duration endedWorkflowVisibilityTimeout;
 
@@ -1529,17 +1527,17 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether a workflow this adapter starts carries the workflow aggregate's id as its
+   * Whether a workflow this adapter starts carries the id of the workflow aggregate as its
    * business id. Default: <code>false</code>.
    * <p>
    * It is there for the eye and for nothing else. Operate shows the business id where a
-   * reader looks first, and the aggregate's id is otherwise a process variable two clicks
-   * further away. VanillaBP never reads the value back, on any line, so switching the key
+   * reader looks first. Otherwise the id of the aggregate is a process variable two clicks
+   * further away. VanillaBP never reads the value back, on any line. So switching the key
    * on changes nothing about how a workflow is found again.
    * <p>
-   * Off by default because the field is the application's until this adapter takes it: the
-   * assignment is single and irreversible, and an installation which wants its own value
-   * there would lose it without ever being asked. See
+   * It is off by default because the field belongs to the application until this adapter
+   * takes it. The value can be set only once and never changed. An installation which
+   * wants its own value there would lose it without ever being asked. See
    * {@link #validateAggregateIdAsBusinessId(String, Consumer)} and decision 37 in the
    * repository's DECISIONS.md.
    */
@@ -1571,17 +1569,16 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Whether the per task probe of {@code Camunda8OpenTaskProbe} is sent for the
+   * Whether the probe of {@code Camunda8OpenTaskProbe} is sent per task for the
    * Camunda-managed user tasks this adapter serves. Default: <code>false</code>.
    * <p>
-   * The check which looks at the other open tasks of a workflow asks the ENGINE about the
-   * process instance first, and a <code>404</code> there answers every record of that
-   * workflow at once. What this key adds is the second question, one round trip per user
-   * task of an instance which is still running: whether THAT task is still open. It is off
-   * by default because the answer costs a command per task and fires a modelled
-   * <code>updating</code> listener while it is at it, and most applications learn about a
-   * canceled user task from its cancel listener anyway. See decision 38 in the repository's
-   * DECISIONS.md.
+   * A check looks at the other open tasks of a workflow. It first asks the ENGINE about the
+   * process instance. A <code>404</code> there answers every record of that workflow at
+   * once. This key adds a second question, one round trip per user task of an instance
+   * which is still running: is THAT task still open? It is off by default. The answer costs
+   * a command per task, and it also fires a modelled <code>updating</code> listener. And
+   * most applications learn about a canceled user task from its cancel listener anyway. See
+   * decision 38 in the repository's DECISIONS.md.
    */
   private boolean probeOpenUserTasks = false;
 
@@ -1612,17 +1609,17 @@ public class Camunda8AdapterConfiguration {
 
   /**
    * How many characters a business id may carry. The cluster refuses a longer one with
-   * "The provided businessId exceeds the limit of 256 characters", and a refusal at the
-   * START of a workflow is the worst place for one, so a longer aggregate id is cut rather
-   * than rejected - nothing reads the value back.
+   * "The provided businessId exceeds the limit of 256 characters". The START of a workflow
+   * is the worst place for a refusal. So a longer aggregate id is cut and not rejected.
+   * Nothing reads the value back anyway.
    */
   public static final int BUSINESS_ID_LIMIT = 256;
 
   /**
-   * The connection properties required for the configured {@link #mode} which are
-   * not set (property KEY names relative to
-   * <code>vanillabp.adapters.&lt;id&gt;.</code> - values are never part of
-   * messages). An empty list means the configuration is complete.
+   * The connection properties which the configured {@link #mode} requires and which are
+   * not set. These are property KEY names relative to
+   * <code>vanillabp.adapters.&lt;id&gt;.</code>. Values are never part of messages. An
+   * empty list means the configuration is complete.
    * <p>
    * Only SaaS requires keys. A self-managed adapter without an address uses the address of
    * the local cluster (see
@@ -1654,10 +1651,10 @@ public class Camunda8AdapterConfiguration {
   /**
    * Validates that all properties required for the configured {@link #mode} are
    * present. The PRIMARY validation happens at startup
-   * ({@link Camunda8StartupValidation}); this method remains the runtime BACKSTOP
-   * called before the client is used, so a degraded adapter (startup policy
-   * <code>warn</code>) still fails its first use with a guiding message instead of
-   * an obscure connection error.
+   * ({@link Camunda8StartupValidation}). This method stays as the BACKSTOP at runtime,
+   * called before the client is used. So a degraded adapter (startup policy
+   * <code>warn</code>) still fails its first use with a guiding message, and not with an
+   * obscure connection error.
    *
    * @param adapterId The adapter ID (used to build the property names in error messages)
    * @throws IllegalStateException If a required property is missing, naming the exact
@@ -1684,8 +1681,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The client's own default for <code>max-jobs-active</code>, which is also the cap of
-   * this adapter's default.
+   * The client's own default for <code>max-jobs-active</code>. The default of this adapter
+   * never goes above it.
    */
   public static final int CLIENT_MAX_JOBS_ACTIVE = 32;
 
@@ -1710,9 +1707,9 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The resolved <code>max-jobs-active</code> of this adapter instance: the configured
-   * value, or {@value #JOBS_PER_SLOT} per execution slot capped at the client's
-   * {@value #CLIENT_MAX_JOBS_ACTIVE}.
+   * The resolved <code>max-jobs-active</code> of this adapter instance. It is the
+   * configured value, or else {@value #JOBS_PER_SLOT} per execution slot, but no more than
+   * the client's {@value #CLIENT_MAX_JOBS_ACTIVE}.
    *
    * @param adapterId The adapter id (used to build property keys in messages)
    * @return How many jobs one worker of this adapter may hold at the same time
@@ -1749,8 +1746,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The renewal window of this adapter instance's open asynchronous tasks: the
-   * configured value or {@link #DEFAULT_ASYNC_TASK_LOCK_RENEWAL}.
+   * The renewal window for the open asynchronous tasks of this adapter instance. It is the
+   * configured value, or else {@link #DEFAULT_ASYNC_TASK_LOCK_RENEWAL}.
    *
    * @return The window a dormant job's lock is extended by
    */
@@ -1763,7 +1760,7 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The adapter-level backoff of a failed job: the configured value or
+   * The backoff of a failed job at adapter level. It is the configured value, or else
    * {@link Camunda8RetryBackoffResolver#DEFAULT_RETRY_BACKOFF}.
    *
    * @return The backoff, never <code>null</code>
@@ -1777,15 +1774,15 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates how long the cluster keeps a message this adapter publishes - AT STARTUP,
-   * because what it decides is silent at runtime in both directions: too short and a
-   * message published before its subscription exists is gone, too long and a second
-   * legitimate correlation of the same id is dropped without a word.
+   * Validates how long the cluster keeps a message this adapter publishes. It runs AT
+   * STARTUP, because at runtime a wrong value fails silently, in both directions. If it is
+   * too short, a message published before its subscription exists is gone. If it is too
+   * long, a second legitimate correlation of the same id is dropped without a word.
    * <p>
-   * Only the ADAPTER level is checked here, the same bound {@link #validateRetryBackoff}
-   * has: the deeper levels live in the platform's configuration overlay and are not
-   * visible from this class. A typo there shows when that message is published, which is
-   * the price of not duplicating the overlay walk in two platform modules.
+   * Only the ADAPTER level is checked here, the same limit {@link #validateRetryBackoff}
+   * has. The deeper levels live in the configuration overlay of the platform, and this class
+   * cannot see them. A typo there shows when that message is published. That is the price
+   * of not walking the overlay twice, once in each platform module.
    *
    * @param adapterId The adapter id
    * @throws IllegalStateException If the time-to-live is zero or negative
@@ -1815,8 +1812,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates the backoff of a failed job - AT STARTUP, because what it decides happens
-   * long after the boot and only when something already went wrong.
+   * Validates the backoff of a failed job. It runs AT STARTUP, because the backoff only
+   * matters long after the boot, when something has already gone wrong.
    *
    * @param adapterId The adapter id
    * @throws IllegalStateException If the backoff is negative
@@ -1842,8 +1839,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the health check of this adapter instance waits for the cluster: the configured
-   * value or {@link #DEFAULT_HEALTH_TIMEOUT}.
+   * How long the health check of this adapter instance waits for the cluster. It is the
+   * configured value, or else {@link #DEFAULT_HEALTH_TIMEOUT}.
    *
    * @return The timeout, never <code>null</code>
    */
@@ -1856,8 +1853,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates the health timeout of this adapter instance - AT STARTUP, because a health
-   * endpoint is read when something is already wrong and must not be the second problem.
+   * Validates the health timeout of this adapter instance. It runs AT STARTUP. People read
+   * a health endpoint when something is already wrong, so it must not be a second problem.
    *
    * @param adapterId The adapter id
    * @throws IllegalStateException If the timeout is negative
@@ -1882,15 +1879,16 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The client's own default for {@link #requestTimeout}, which is also the window an
-   * activation request waits at the cluster. Named here because the shutdown has to
-   * outlast it and the check has to know it even where nothing is configured.
+   * The client's own default for {@link #requestTimeout}. It is also the window in which an
+   * activation request waits at the cluster. It is named here because the shutdown has to
+   * outlast it. And the check has to know it even where nothing is configured.
    */
   public static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
   /**
-   * How long a request of this adapter instance may take, which for an activation request
-   * is the long-polling window: the configured value or {@link #DEFAULT_REQUEST_TIMEOUT}.
+   * How long a request of this adapter instance may take. For an activation request this
+   * is the long-polling window. It is the configured value, or else
+   * {@link #DEFAULT_REQUEST_TIMEOUT}.
    *
    * @return The request timeout, never <code>null</code>
    */
@@ -1903,11 +1901,11 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * The shortest request timeout this adapter reports as usable. Below it a deployment of a
-   * workflow module's models and a search over a busy cluster run out of time against a
-   * cluster which is perfectly healthy, and the activation request stops being a long poll:
-   * the worker then asks again every <code>poll-interval</code> instead of waiting at the
-   * cluster.
+   * The shortest request timeout this adapter reports as usable. Below it, two things run
+   * out of time even against a perfectly healthy cluster: the deployment of the models of a
+   * workflow module, and a search over a busy cluster. And the activation request stops
+   * being a long poll. The worker then asks again every <code>poll-interval</code>, and it
+   * does not wait at the cluster.
    */
   public static final Duration SHORTEST_USABLE_REQUEST_TIMEOUT = Duration.ofSeconds(1);
 
@@ -1961,8 +1959,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the start of this adapter instance waits for its cluster: the configured value
-   * or {@link #DEFAULT_STARTUP_WAIT}.
+   * How long the start of this adapter instance waits for its cluster. It is the configured
+   * value, or else {@link #DEFAULT_STARTUP_WAIT}.
    *
    * @return The wait, never <code>null</code>
    */
@@ -1975,7 +1973,7 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates how long the start of this adapter instance waits for its cluster - AT
+   * Validates how long the start of this adapter instance waits for its cluster. It runs AT
    * STARTUP, which is also the only moment the value is read.
    *
    * @param adapterId The adapter id
@@ -2001,13 +1999,13 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Where this adapter instance talks to, as an operator would write it down - the SaaS
-   * cluster and its region, or the address of a self-managed gateway.
+   * Where this adapter instance talks to, as an operator would write it down. That is the
+   * SaaS cluster and its region, or the address of a self-managed gateway.
    * <p>
-   * Every message about reaching the cluster carries it, because the point of such a
-   * message is that somebody can act on it without opening the application's configuration
-   * first. A self-managed adapter is described by the address of the protocol its client
-   * talks, and that is the address of the local cluster where none is configured.
+   * Every message about reaching the cluster carries it. Somebody should be able to act on
+   * such a message without first opening the configuration of the application. A
+   * self-managed adapter is described by the address of the protocol its client talks.
+   * Where none is configured, that is the address of the local cluster.
    *
    * @return The address, or <code>null</code> for a SaaS adapter without cluster and region
    */
@@ -2025,8 +2023,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long this adapter instance's shutdown waits for the handlers it has in flight: the
-   * configured value or {@link #DEFAULT_SHUTDOWN_GRACE}.
+   * How long the shutdown of this adapter instance waits for the handlers it has in flight.
+   * It is the configured value, or else {@link #DEFAULT_SHUTDOWN_GRACE}.
    *
    * @return The grace period, never <code>null</code>
    */
@@ -2040,32 +2038,32 @@ public class Camunda8AdapterConfiguration {
 
   /**
    * How long VanillaBP waits for a workflow this cluster holds to become findable by the
-   * query API. Ten seconds is generous for a healthy exporter and still short enough to stay
-   * inside the caller's transaction, which the waiting keeps open.
+   * query API. Ten seconds is generous for a healthy exporter. It is still short enough to
+   * stay inside the transaction of the caller, which stays open while VanillaBP waits.
    */
   public static final Duration DEFAULT_WORKFLOW_VISIBILITY_TIMEOUT = Duration.ofSeconds(10);
 
   /**
    * How long VanillaBP waits for the read model to report the END of a workflow the engine
-   * no longer holds. Three seconds is the slowest line's measurement rounded up, and the
-   * case behind it is answered by the engine rather than waited out, see
+   * no longer holds. Three seconds is the measurement of the slowest line, rounded up. The
+   * engine answers the case behind it, so nothing has to be waited out there, see
    * {@link #endedWorkflowVisibilityWindow()}.
    */
   public static final Duration DEFAULT_ENDED_WORKFLOW_VISIBILITY_TIMEOUT = Duration.ofSeconds(3);
 
   /**
-   * How long a read of this cluster may meet an answer the exporter has not caught up with
-   * yet: the configured {@code workflow-visibility-timeout} or
+   * How long a read of this cluster may get an answer which the exporter has not caught up
+   * with yet. It is the configured {@code workflow-visibility-timeout}, or else
    * {@link #DEFAULT_WORKFLOW_VISIBILITY_TIMEOUT}.
    * <p>
-   * Camunda 8 answers every search from a read model an exporter feeds asynchronously, so
-   * something written a moment ago is not findable yet. This window is how long anybody
-   * reading THIS cluster may treat "not there" as "not there yet" before treating it as an
-   * answer. Zero or less switches the waiting off.
+   * Camunda 8 answers every search from a read model. An exporter feeds that model
+   * asynchronously. So something written a moment ago cannot be found yet. For this window,
+   * anybody who reads THIS cluster may take "not there" as "not there yet". After it, "not
+   * there" is the answer. Zero or less switches the waiting off.
    * <p>
-   * Public because an extension reads the same cluster and meets the same lag. The number
-   * belongs to the cluster and not to the reader: an operator who raises it for a slow
-   * exporter raises it once, and a reader which hard-codes a window of its own keeps
+   * It is public because an extension reads the same cluster and meets the same lag. The
+   * number belongs to the cluster and not to the reader. An operator who raises it for a
+   * slow exporter raises it once. A reader with a window of its own in the code keeps
    * dropping what the adapter now waits for.
    *
    * @return The window, never <code>null</code>
@@ -2082,17 +2080,17 @@ public class Camunda8AdapterConfiguration {
    * How long VanillaBP waits for the END of a workflow to become findable by the query API,
    * once the engine has said it does not hold that workflow any more.
    * <p>
-   * Measured in September 2026 on all three lines: after an instance was canceled the read
+   * Measured in September 2026 on all three lines. After an instance was canceled, the read
    * model needed 176, 199 and 445 ms on 8.10.0-alpha5, 255 ms on 8.9.19 and 2068 ms on
-   * 8.8.37. Three seconds covers the slowest of them with room to spare, which is why it is
-   * ONE number for every line rather than one per line: the release line reaches the
-   * runtime for messages and not for behaviour (see {@code Camunda8ReleaseLine}), and a
-   * cluster is free to be newer than the line a build was compiled against.
+   * 8.8.37. Three seconds covers the slowest of them with room to spare. So it is ONE number
+   * for every line, not one per line. The release line reaches the runtime for messages,
+   * not for behaviour (see {@code Camunda8ReleaseLine}). And a cluster may be newer than
+   * the line a build was compiled against.
    * <p>
    * Why it is not zero: a workflow which starts and ends within a few milliseconds is gone
-   * from the engine before the read model has heard of it at all, and answering
-   * {@code UNKNOWN_TO_BPMS} for a workflow which really is {@code COMPLETED} is what sends
-   * the next operation of a migration to the wrong BPMS.
+   * from the engine before the read model has heard of it at all. The answer would then be
+   * {@code UNKNOWN_TO_BPMS} for a workflow which really is {@code COMPLETED}. That answer
+   * sends the next operation of a migration to the wrong BPMS.
    *
    * @return The window, never <code>null</code>
    */
@@ -2107,24 +2105,24 @@ public class Camunda8AdapterConfiguration {
   /**
    * Whether the business id an instance of this cluster carries is one this adapter wrote.
    * <p>
-   * Read by the probe which asks the engine whether it holds an instance
-   * ({@code Camunda8ProcessService#awarenessOfWorkflow}). Where the answer is yes and the
-   * release line has the command, the probe sends the business id assignment, which such an
-   * instance refuses with <code>409</code> and which therefore writes nothing at all.
-   * Everywhere else it sends the process instance modification, which is refused just as
-   * cleanly and needs neither 8.10 nor a business id.
+   * The probe which asks the engine whether it holds an instance reads it
+   * ({@code Camunda8ProcessService#awarenessOfWorkflow}). If the answer is yes and the
+   * release line has the command, the probe sends the business id assignment. Such an
+   * instance refuses it with <code>409</code>, so it writes nothing at all. Everywhere else
+   * the probe sends the process instance modification. That is refused just as cleanly, and
+   * it needs neither 8.10 nor a business id.
    * <p>
-   * The answer follows {@code aggregate-id-as-business-id} and the release line. It is asked
-   * rather than assumed, because of the trap the assignment carries: an instance which
-   * carries NO business id ACCEPTS it, and then a probe has written into a field the
-   * application may have wanted for something else, which cannot be undone. Where this
-   * adapter writes the field itself there is nothing to take away, so the assignment is sent
-   * there and nowhere else.
+   * The answer follows {@code aggregate-id-as-business-id} and the release line. The probe
+   * asks this method and does not assume the answer, because the assignment has a trap. An
+   * instance which carries NO business id ACCEPTS it. Then a probe has written into a field
+   * which the application may have wanted for something else, and this cannot be undone.
+   * Where this adapter writes the field itself, nothing is taken away. So the assignment is
+   * sent there and nowhere else.
    * <p>
-   * One case is left and it is deliberate. A workflow started BEFORE the key was switched on
-   * carries no business id, so the first probe of it is accepted and writes one. What it
-   * writes is the value the start would have written, which is why it is accepted rather
-   * than guarded against. Why is decision 35 in the repository's DECISIONS.md.
+   * One case is left, on purpose. A workflow started BEFORE the key was switched on carries
+   * no business id. So the first probe of it is accepted and writes one. It writes the value
+   * the start would have written. That is why it is accepted and not guarded against.
+   * Decision 35 in the repository's DECISIONS.md says why.
    *
    * @return Whether the business id of an instance is this adapter's to write
    */
@@ -2137,10 +2135,10 @@ public class Camunda8AdapterConfiguration {
   /**
    * The business id this adapter writes for a workflow aggregate, ready to be sent.
    * <p>
-   * One place answers it, because two commands carry the value: the create of a workflow
-   * writes it, and on the 8.10 line the probe of {@link Camunda8InstanceProbe} sends the
-   * same value as a question. A probe carrying a different string than the create wrote
-   * would be accepted where it should be refused, which turns a question into a change.
+   * One place answers it, because two commands carry the value. The create of a workflow
+   * writes it. On the 8.10 line, the probe of {@link Camunda8InstanceProbe} sends the same
+   * value as a question. If the probe carried a different string than the create wrote, it
+   * would be accepted where it should be refused. Then a question would become a change.
    *
    * @param workflowAggregateId The workflow aggregate's id
    * @return What to send, or <code>null</code> where this adapter writes none
@@ -2153,8 +2151,8 @@ public class Camunda8AdapterConfiguration {
     }
     final var id = String.valueOf(workflowAggregateId);
     if (id.isBlank()) {
-      // the cluster answers "No businessId provided" for an empty string and for a single
-      // blank, and an aggregate with an id like that has bigger problems than its display
+      // The cluster answers "No businessId provided" for an empty string and for a single
+      // blank. An aggregate with an id like that has bigger problems than how it shows.
       return null;
     }
     return id.length() > BUSINESS_ID_LIMIT
@@ -2164,10 +2162,10 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Says what {@code probe-open-user-tasks} does here - AT STARTUP, because it is the key
-   * which costs a command per open user task, fires a listener somebody modelled and holds
-   * the task against every other sender while it runs. A key with that much behind it says
-   * so once rather than being found in a cluster's logs.
+   * Says what {@code probe-open-user-tasks} does here. It runs AT STARTUP. This key costs a
+   * command per open user task. It fires a listener somebody modelled. And while it runs,
+   * it holds the task against every other sender. A key with that much behind it should say
+   * so once, and not be found later in the logs of a cluster.
    *
    * @param adapterId The adapter id
    * @param logger Sink for that line
@@ -2199,15 +2197,15 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Says what {@code aggregate-id-as-business-id} does here - AT STARTUP, once per adapter
-   * id, because everything it decides afterwards happens per started workflow and a line
+   * Says what {@code aggregate-id-as-business-id} does here. It runs AT STARTUP, once per
+   * adapter id. Everything the key decides later happens per started workflow, and a line
    * per workflow would drown the log.
    * <p>
-   * Two things are worth saying and neither is a warning. On a release line without the
-   * field the key is accepted and nothing is sent, which is what lets one configuration
-   * serve an application on either line. And where the key is on, an aggregate id longer
-   * than the cluster's limit is CUT, which is a thing to know before somebody reads a
-   * truncated id in Operate and looks for a defect.
+   * Two things are worth saying, and neither is a warning. On a release line without the
+   * field, the key is accepted and nothing is sent. So one configuration can serve an
+   * application on either line. And where the key is on, an aggregate id longer than the
+   * limit of the cluster is CUT. People should know that before they read a cut id in
+   * Operate and look for a defect.
    *
    * @param adapterId The adapter id
    * @param logger Sink for that line
@@ -2246,15 +2244,14 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates the shutdown grace of this adapter instance - AT STARTUP, because what it
-   * decides happens when nobody is watching. A negative value is a typo and fails the boot;
-   * a value which does not fit into the shutdown budget of the runtime is legitimate but
-   * only works if that budget is raised too, so it is a guiding warning rather than a
-   * failure.
+   * Validates the shutdown grace of this adapter instance. It runs AT STARTUP, because the
+   * grace matters when nobody is watching. A negative value is a typo and fails the boot. A
+   * value which does not fit into the shutdown budget of the runtime is legitimate. But it
+   * only works if that budget is raised too. So it gets a guiding warning, not a failure.
    * <p>
    * The two warnings read the grace in force, not the property. They compare it with other
-   * values, and a default can clash with one of those as much as a written value can: a
-   * request timeout raised to thirty seconds outlasts the default grace of twenty. Only
+   * values. A default can clash with one of those just as a written value can. For example,
+   * a request timeout raised to thirty seconds outlasts the default grace of twenty. Only
    * the typo check is about what somebody wrote, and a default is never negative.
    *
    * @param adapterId The adapter id
@@ -2278,7 +2275,7 @@ public class Camunda8AdapterConfiguration {
                   grace,
                   DEFAULT_SHUTDOWN_GRACE_ISO));
     }
-    // a warning about a value nobody wrote has to say where the value came from
+    // A warning about a value nobody wrote has to say where the value came from.
     final var whereTheGraceComesFrom = (shutdownGrace == null
         ? "runs on the default '%s: %s'"
         : "has '%s: %s'").formatted(propertyKey(adapterId, "shutdown-grace"), grace);
@@ -2319,17 +2316,18 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates that the application said whether it wants the jobs of this adapter leased -
-   * AT STARTUP, because a lease cannot be taken back per job once one was handed out.
+   * Validates that the application said whether it wants the jobs of this adapter leased.
+   * It runs AT STARTUP, because a lease cannot be taken back from a job once it was handed
+   * out.
    * <p>
-   * On a release line whose client has no lease the key is accepted and ignored, with one
-   * line saying so: an application moves between lines with one configuration, and refusing
-   * a key there would be the one thing that makes such a move hurt.
+   * On a release line whose client has no lease, the key is accepted and ignored. One log
+   * line says so. An application moves between lines with one configuration. Refusing a key
+   * there would be the one thing that makes such a move hurt.
    *
    * @param adapterId The adapter id
-   * @param logger Sink for the line saying the key does nothing here. It is not a warning:
-   *          the key is right where it stands, and carrying it on a line which has no
-   *          lease is what lets one configuration serve an application on either line
+   * @param logger Sink for the line which says the key does nothing here. It is not a
+   *          warning. The key is right where it stands. Because it is kept on a line which
+   *          has no lease, one configuration can serve an application on either line
    * @throws IllegalStateException On a line which can lease, where the key is not set
    */
   public void validateJobLease(
@@ -2404,19 +2402,19 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates how this adapter instance keeps an open asynchronous task alive - AT
+   * Validates how this adapter instance keeps an open asynchronous task alive. It runs AT
    * STARTUP, for every configured adapter id. Two things can be wrong here, and both are
    * silent at runtime:
    * <ul>
-   * <li>the removed key <code>async-task-timeout</code> is still configured. It used to
-   * be a horizon of days; it is a renewal window now, and a value meant as the one would
-   * be a defect as the other;</li>
-   * <li>the window is not shorter than <code>vanillabp.delivery.retention</code>. The
-   * record of the delivery is what answers the redelivery which renews the lock, so a
-   * window outliving the retention means the application's method runs a second time -
-   * exactly the defect this window exists to fix. It is the DELIVERY retention and not the
-   * outbox one: those two were one property until they were told apart, and this check
-   * always argued about the delivery half.</li>
+   * <li>The removed key <code>async-task-timeout</code> is still configured. It used to be
+   * a horizon of days. Now it is a renewal window. A value meant as the one would be a
+   * defect as the other.</li>
+   * <li>The window is not shorter than <code>vanillabp.delivery.retention</code>. The
+   * record of the delivery answers the redelivery which renews the lock. If the window
+   * outlives the retention, the method of the application runs a second time. That is
+   * exactly the defect this window is there to fix. It is the DELIVERY retention, not the
+   * outbox one. Those two were one property until they were split, and this check was
+   * always about the delivery half.</li>
    * </ul>
    *
    * @param adapterId The adapter id
@@ -2472,10 +2470,10 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates everything about the way this adapter instance runs its workers - the
-   * execution model, its bound and <code>max-jobs-active</code>. Called AT STARTUP for
-   * every configured adapter id, independently of whether the connection configuration
-   * is complete: a number which cannot work is a typo, and a typo is worth the boot.
+   * Validates everything about the way this adapter instance runs its workers. That is the
+   * execution model, its bound and <code>max-jobs-active</code>. It is called AT STARTUP for
+   * every configured adapter id, whether the connection configuration is complete or not. A
+   * number which cannot work is a typo, and a typo is worth stopping the boot for.
    *
    * @param adapterId The adapter id
    * @throws IllegalStateException If a value is not usable, naming the property and the
@@ -2489,8 +2487,8 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates how this adapter instance authenticates - AT STARTUP, for every configured
-   * adapter id, and independently of whether the connection configuration is complete.
+   * Validates how this adapter instance authenticates. It runs AT STARTUP, for every
+   * configured adapter id, whether the connection configuration is complete or not.
    * Credentials which cannot be built are a defect of their own.
    *
    * @param adapterId The adapter id
