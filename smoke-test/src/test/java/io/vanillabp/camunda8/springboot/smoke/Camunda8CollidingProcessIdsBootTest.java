@@ -18,16 +18,16 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Two workflow modules bringing the same BPMN process id, judged by the real core against the
  * real adapter.
  * <p>
- * A deployment is per workflow module, so the adapter hands over the processes of the module it
- * is deploying and the core holds what the earlier modules of the boot brought. Whether two
- * equal process ids are a clash is then the adapter's answer, because the mode which applies
- * by default leaves the ids plain and the scope which keeps the modules apart is the cluster's
- * tenant. The configuration decides the outcome: a tenant per workflow module separates them,
- * one <code>tenant-id</code> for the whole adapter does not.
+ * A deployment is per workflow module. So the adapter hands over the processes of the module
+ * it is deploying, and the core holds what the earlier modules of the boot brought. The
+ * adapter then answers whether two equal process ids are a clash. The default mode leaves the
+ * ids plain, and the cluster's tenant is the scope which keeps the modules apart. The
+ * configuration decides the outcome. A tenant per workflow module separates them. One
+ * <code>tenant-id</code> for the whole adapter does not.
  * <p>
- * No cluster is needed for any of it. The question is put to the core the way the adapter puts
- * it while deploying, and neither side asks the cluster anything to answer it, which is why
- * this is a boot test and not an integration test.
+ * No cluster is needed for any of it. The test asks the core the way the adapter asks it while
+ * deploying. Neither side asks the cluster anything to answer it. That is why this is a boot
+ * test and not an integration test.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CollidingProcessIdsBootTest {
@@ -74,7 +74,7 @@ public class Camunda8CollidingProcessIdsBootTest {
 
       final var scoping = context.getBean(NameClashAvoidanceSupport.class);
 
-      // the first module gets into the cluster, because nothing it collides with was
+      // the first module gets into the cluster, because nothing it could collide with was
       // deployed yet
       Assertions.assertDoesNotThrow(() -> deploying(scoping, ONE_MODULE));
 
@@ -106,7 +106,7 @@ public class Camunda8CollidingProcessIdsBootTest {
   @Test
   public void theRefusalDoesNotDependOnWhichModuleDeploysFirst() {
 
-    // the order of the workflow modules is not the application's choice, so the other order
+    // the application does not choose the order of the workflow modules. So the other order
     // has to end the same way
     try (var context = run(
         "vanillabp.adapters.c8.rest-address=http://localhost:65535",
@@ -132,9 +132,9 @@ public class Camunda8CollidingProcessIdsBootTest {
   @Test
   public void aTenantPerWorkflowModuleLetsBothModulesDeploy() {
 
-    // the default mode with nothing configured, which is what most applications run: the
-    // tenant is named after the workflow module, so the two process ids never meet. An
-    // application like this boots today and has to keep booting
+    // the default mode with nothing configured. Most applications run like this. The tenant
+    // is named after the workflow module, so the two process ids never meet. An application
+    // like this boots today and has to keep booting
     try (var context = run("vanillabp.adapters.c8.rest-address=http://localhost:65535")) {
 
       final var scoping = context.getBean(NameClashAvoidanceSupport.class);
@@ -153,8 +153,8 @@ public class Camunda8CollidingProcessIdsBootTest {
   public void aTenantForOneWorkflowModuleIsTheWayOutTheMessageOffers() {
 
     // the refusal above tells the developer to give one of the two modules a scope of its
-    // own and names that key. This is the boot which follows that advice: everything else
-    // stays in the shared tenant, and both modules deploy
+    // own, and it names that key. This boot follows that advice. Everything else stays in the
+    // shared tenant, and both modules deploy
     try (var context = run(
         "vanillabp.adapters.c8.rest-address=http://localhost:65535",
         "vanillabp.adapters.c8.tenant-id=one-tenant-for-all",
@@ -175,8 +175,8 @@ public class Camunda8CollidingProcessIdsBootTest {
   @Test
   public void oneModuleDeployedTwiceIsNoClash() {
 
-    // a BPMN file holding several processes and a workflow module deployed to two adapter
-    // ids both report the same pair twice, and neither is two processes under one id
+    // a BPMN file with several processes reports the same pair twice. So does a workflow
+    // module deployed to two adapter ids. Neither is two processes under one id
     try (var context = run(
         "vanillabp.adapters.c8.rest-address=http://localhost:65535",
         "vanillabp.adapters.c8.tenant-id=one-tenant-for-all")) {

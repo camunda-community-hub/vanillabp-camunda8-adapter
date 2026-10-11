@@ -17,8 +17,8 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Boot tests of the Camunda 8 startup validation: configuration is
- * validated AT STARTUP, never first at runtime.
+ * Boot tests of the Camunda 8 startup validation. The configuration is validated AT STARTUP,
+ * never first at runtime.
  * <ul>
  *   <li>no cluster address → the application BOOTS with a client for the local cluster of
  *       the release line, and a WARN names that address and the key which changes it;</li>
@@ -41,8 +41,8 @@ public class Camunda8StartupValidationBootTest {
   private ConfigurableApplicationContext run(
       final String... properties) {
 
-    // command-line arguments (highest precedence) so the scenarios override the
-    // application.yaml defaults
+    // command-line arguments have the highest precedence. So the scenarios override the
+    // defaults of application.yaml
     final var args = Stream
         .concat(
             Stream.of(DEPLOYMENT_EXCLUDE), Stream.of(properties))
@@ -84,9 +84,9 @@ public class Camunda8StartupValidationBootTest {
     Assertions.assertTrue(log.contains("Set 'vanillabp.adapters.c8.rest-address' to connect to another cluster"), log);
     Assertions.assertTrue(log.contains("vanillabp.adapters.c8.mode"));
     Assertions.assertTrue(log.contains("vanillabp.adapters.c8.client-secret"));
-    // where the local cluster of the line takes port 8080, the default port of Spring Boot,
-    // the warning names the key which moves the application. Which lines that are is held
-    // by Camunda8LocalClusterTest of each line
+    // on some lines the local cluster takes port 8080, the default port of Spring Boot.
+    // There the warning names the key which moves the application to another port.
+    // Camunda8LocalClusterTest of each line holds which lines these are
     Assertions.assertEquals(
         Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS.endsWith(":8080"),
         log.contains("so this application needs another port. Set 'server.port' to pick one."),
@@ -98,8 +98,8 @@ public class Camunda8StartupValidationBootTest {
   @Test
   public void inconsistentFirstPriorityAdapterFailsTheBoot() {
 
-    // 'c8' is first priority and configured inconsistently: saas without any
-    // credential - a genuine defect has to fail the boot naming the missing keys
+    // 'c8' is first priority and configured inconsistently: saas without any credential. A
+    // real defect has to fail the boot and name the missing keys
     final var exception = Assertions.assertThrows(
         Exception.class,
         () -> run("vanillabp.adapters.c8.mode=saas").close());
@@ -123,8 +123,8 @@ public class Camunda8StartupValidationBootTest {
 
     final var before = output.getAll().length();
 
-    // 'c8-two' is nowhere first ('c8' leads everywhere) and its policy is 'warn':
-    // the inconsistent config degrades to a warning instead of failing the boot
+    // 'c8-two' is nowhere first ('c8' leads everywhere), and its policy is 'warn'. So the
+    // inconsistent config becomes a warning and does not fail the boot
     try (var context = run(
         "vanillabp.prioritized-adapters=c8,c8-two",
         "vanillabp.adapters.c8.rest-address=http://localhost:8080",
@@ -171,7 +171,7 @@ public class Camunda8StartupValidationBootTest {
         log.contains("configured inconsistently"),
         "no warning expected for a fully configured adapter but got: "
             + log);
-    // hard rule: values - especially credentials - are never echoed
+    // hard rule: values are never echoed, credentials least of all
     Assertions.assertFalse(
         log.contains(secret),
         "the configured client-secret must never appear in the log");

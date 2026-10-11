@@ -16,12 +16,12 @@ import io.vanillabp.integration.adapter.spi.MigratableProcessService;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Discovery test of the per-adapter-id bean convention (the adapter config model): TWO
- * adapter ids of type {@code camunda8} (e.g. an on-prem and a SaaS cluster
- * side by side - the migration scenario) yield one {@code Camunda8ProcessService} and
- * one {@code Camunda8DeploymentService} element bean PER configured id, each with its
- * own client factory. No cluster or Docker involved (deployment lifecycle disabled,
- * clients built lazily).
+ * Discovery test of the bean convention per adapter id (the adapter config model). Take TWO
+ * adapter ids of type {@code camunda8}, for example an on-prem and a SaaS cluster side by side.
+ * That is the migration scenario. They yield one {@code Camunda8ProcessService} and one
+ * {@code Camunda8DeploymentService} bean PER configured id. Each has its own client factory.
+ * No cluster or Docker is involved: the deployment lifecycle is disabled, and the clients are
+ * built lazily.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SpringBootTest(
@@ -54,7 +54,7 @@ public class Camunda8TwoAdapterIdsDiscoveryTest {
         .collect(Collectors.toSet());
     Assertions.assertEquals(Set.of("c8", "c8-two"), deploymentServiceIds);
 
-    // each id owns its own client factory fed from its own overlay section
+    // each id has its own client factory, fed from its own overlay section
     Assertions.assertNotNull(clientFactoryRegistry.getFactory("c8"));
     Assertions.assertNotNull(clientFactoryRegistry.getFactory("c8-two"));
 

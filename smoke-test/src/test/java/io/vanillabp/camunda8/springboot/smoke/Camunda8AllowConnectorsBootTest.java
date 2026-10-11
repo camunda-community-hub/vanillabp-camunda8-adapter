@@ -17,8 +17,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Where the Spring binding reads <code>allow-connectors</code>, and what it says about a
  * value written at a level it does not read.
  * <p>
- * Three levels resolve it, the most specific configured one winning in both directions -
- * which includes the case VanillaBP 1 could not express, a workflow module switching OFF
+ * Three levels resolve it. The most specific configured level wins, in both directions. That
+ * includes a case which VanillaBP 1 could not express: a workflow module which switches OFF
  * what the adapter switched on.
  */
 @ExtendWith(SuppressOutputExtension.class)

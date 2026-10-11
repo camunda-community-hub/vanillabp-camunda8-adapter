@@ -21,9 +21,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * BPMN files are provided and the deployment lifecycle is disabled, so no cluster
  * connection is needed.
  * <p>
- * {@code DeploymentAutoConfiguration} is excluded because it runs the deployment
- * pipeline on context start - real deployment against a cluster is covered by the
- * Testcontainers-based ITs.
+ * {@code DeploymentAutoConfiguration} is excluded, because it runs the deployment pipeline
+ * when the context starts. The Testcontainers-based ITs cover a real deployment to a cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SpringBootTest(
@@ -40,8 +39,8 @@ public class Camunda8AdapterDiscoveryTest {
   @Test
   public void adapterIsDiscovered() {
 
-    // element-bean convention: one AdapterDeploymentService bean per adapter
-    // (never a List bean) so several adapter types can coexist
+    // the element-bean convention: one AdapterDeploymentService bean per adapter, never a
+    // List bean. So several adapter types can live side by side
     final var deploymentService = context.getBean(AdapterDeploymentService.class);
     Assertions.assertInstanceOf(Camunda8DeploymentService.class, deploymentService);
     Assertions.assertEquals("c8", deploymentService.getAdapterId());
@@ -56,10 +55,10 @@ public class Camunda8AdapterDiscoveryTest {
   @Test
   public void anAdapterWithoutAnAddressAsksTheLocalCluster() {
 
-    // This application configures the adapter but no cluster address, so the client uses
+    // This application configures the adapter but no cluster address. So the client uses
     // the address of the local cluster of its release line. The health check asks that
-    // cluster. No cluster runs there in this test, but one may on a developer's machine,
-    // so the answer is UP or DOWN, and never UNKNOWN
+    // cluster. No cluster runs there in this test, but one may run there on a developer's
+    // machine. So the answer is UP or DOWN, and never UNKNOWN
     final var deploymentService = context.getBean(AdapterDeploymentService.class);
     final var health = deploymentService.checkHealth();
 
