@@ -3034,6 +3034,9 @@ away and prints whether every workflow ended exactly once.
 *Replaced in part by decision 66: the engine is asked only about a task the row of the
 delivery log says rests. Without such a row the push waits for the read model.*
 
+*Replaced in part by decision 78: phase two searches for the scope once.
+It no longer waits up to the window before it asks the engine or gives the entry back.*
+
 `aggregateChanged(aggregate, taskId)` writes into the scope the task runs in. Camunda 8 has no command which names
 that scope, so the adapter reads it from the query API: first the job behind the task id, then the scopes from the
 process instance down to the job. The query API is fed by an exporter. While that exporter stands still, it knows
@@ -3593,3 +3596,35 @@ call activity and the fix.
 `Camunda8SettingsOfACalledProcessTest` holds the time-to-live and the push,
 `Camunda8ViewerUnderAPrefixTest` the viewer, and `Camunda8FetchVariablesTest#theMessagesNameTheWayOut`
 the message.
+
+### 78. A task-scoped push searches for its scope once, and phase two does not sleep
+
+*Replaces in part decision 65: the paragraph "What it costs" and the first point under "What was not chosen".*
+
+`aggregateChanged(aggregate, taskId)` writes into the scope the task runs in, and the adapter reads that scope from
+the query API (decisions 65 and 66). Until now phase two repeated that search for as long as the
+`workflow-visibility-timeout` allowed, and slept between the searches. This waiting ran on the thread which
+dispatches the outbox entry, and it held that thread and a database connection for the whole window.
+
+Analysis `960` measured it with the exporter paused: two attempts of 10.1 seconds each, about 40 searches each. The
+answer at the end was right. The price was a dispatching thread and a connection for each push while the exporter
+stood still.
+
+Decision 49 of the platform says that phase two does not sleep. A dispatch which cannot run yet ends, and it gives
+the entry back with the time it is due again. So the push now searches once. If the query API reports the scope,
+the push writes there, as before. If it does not, the push goes on as it did after the window ran out: it asks the
+engine where the row of the delivery log says that the task rests (decision 66), and otherwise throws
+`PhaseTwoRetryLater` with the visibility window. The outbox brings the entry back after that window, and the core
+counts this wait in time and not in attempts.
+
+**What it costs.** The everyday case, a read model a moment behind, is no longer answered in the first attempt. The
+entry comes back one window later, ten seconds with the defaults. Where the row says that the task rests, the engine
+is asked in that first attempt already. That question is harmless for a task which rests, because the adapter
+renews the lock of its job to the same value anyway.
+
+**What was not chosen.** A short sleep for the everyday case only. Any sleep in phase two holds a thread and a
+connection, and decision 49 of the platform makes no exception for a short one.
+
+`Camunda8TaskScopedPushWaitsForItsScopeTest` holds it without a cluster: with a window of 30 seconds, a scope the
+query API does not know is given back at once, after one search. `Camunda8AggregateChangedIT` still pauses the
+exporter, pushes into a task created after that and waits for the value.

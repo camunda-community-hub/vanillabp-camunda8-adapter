@@ -209,6 +209,53 @@ public class Camunda8TaskScopedPushWaitsForItsScopeTest {
   }
 
   @Test
+  @DisplayName("A scope the query API does not know is given back at once, and the window is not slept")
+  public void anUnknownScopeIsGivenBackWithoutSleeping() {
+
+    theQueryApiDoesNotKnowTheJob();
+    theEngineAnswersTheJobCommand(null);
+    final var longWindow = Duration.ofSeconds(30);
+
+    final var started = System.nanoTime();
+    final var retryLater = assertThrows(
+        PhaseTwoRetryLater.class,
+        () -> pushIntoTheScopeOfTheTask(longWindow),
+        "the entry goes back to the outbox, which brings it back when it is due");
+    final var took = Duration.ofNanos(System.nanoTime() - started);
+
+    assertTrue(
+        took.compareTo(Duration.ofSeconds(5)) < 0,
+        "phase two does not wait for the read model, but it took "
+            + took);
+    assertEquals(longWindow, retryLater.getRetryAfter(), "the outbox waits the window, not the dispatching thread");
+    Mockito.verify(client, Mockito.times(1)).newJobSearchRequest();
+    assertEquals(List.of(Long.valueOf(TASK_ID)), engineAskedAbout, "the engine is asked once, right after the search");
+
+  }
+
+  @Test
+  @DisplayName("Without a row the task is searched for once, and the entry is given back at once")
+  public void withoutARowTheTaskIsSearchedForOnce() {
+
+    theQueryApiDoesNotKnowTheJob();
+    theQueryApiDoesNotKnowTheUserTask();
+    final var longWindow = Duration.ofSeconds(30);
+
+    final var started = System.nanoTime();
+    final var retryLater = assertThrows(PhaseTwoRetryLater.class, () -> pushWithTheRow(longWindow, null));
+    final var took = Duration.ofNanos(System.nanoTime() - started);
+
+    assertTrue(
+        took.compareTo(Duration.ofSeconds(5)) < 0,
+        "phase two does not wait for the read model, but it took "
+            + took);
+    assertEquals(longWindow, retryLater.getRetryAfter());
+    Mockito.verify(client, Mockito.times(1)).newJobSearchRequest();
+    Mockito.verify(client, Mockito.times(1)).newUserTaskSearchRequest();
+
+  }
+
+  @Test
   @DisplayName("A cluster which does not answer the question is an outage the outbox repeats")
   public void anOutageIsThrownAsItIs() {
 
