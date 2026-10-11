@@ -4,12 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * How the INFO line after a deployment names the tenant. An application which sets no tenant
  * reads {@code '<none>'}, the word the Camunda 7 adapter uses as well, and next to it the
  * tenant the cluster deploys into, whose id on Camunda 8 is {@code <default>}.
  */
+@ExtendWith(SuppressOutputExtension.class)
 public class Camunda8TenantInTheDeployLogTest {
 
   @Test
