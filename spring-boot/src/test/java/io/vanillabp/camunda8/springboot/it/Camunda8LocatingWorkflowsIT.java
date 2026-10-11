@@ -24,14 +24,14 @@ import io.vanillabp.integration.adapter.spi.MigratableProcessService;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Locating a running workflow by its aggregate's id, which is what the adapter requires a
- * searchable cluster for: the election probe, the correlation which depends on it, and the
- * viewer.
+ * Locating a running workflow by its aggregate's id. This is why the adapter requires a
+ * searchable cluster: for the election probe, for the correlation which depends on it, and
+ * for the viewer.
  * <p>
- * The search is what a filter matching nothing used to break silently. The probe answered
- * "no BPMS knows this workflow" for every workflow, and every operation electing its BPMS
- * by probing failed on real clusters while all tests were green, because no test ran
- * against a cluster the probe could search at all.
+ * A filter which matched nothing used to break this search without a sign. The probe
+ * answered "no BPMS knows this workflow" for every workflow. Every operation which elects
+ * its BPMS by probing failed on real clusters, while all tests were green. No test ran
+ * against a cluster which the probe could search at all.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -71,8 +71,8 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
   @DisplayName("The adapter reports that it can locate workflows, which is what a searchable cluster is for")
   public void theAdapterReportsItCanLocateWorkflows() {
 
-    // the answer comes from the probe rather than from a constant, and a cluster which
-    // would answer 'no' never got the application this far
+    // the answer comes from the probe, not from a constant. A cluster which would answer
+    // 'no' never got the application this far
     assertTrue(
         processServices
             .getFirst()
@@ -93,8 +93,8 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
 
-    // generous: the cluster exports to Elasticsearch before the query API can answer,
-    // and that pipeline is the slowest part of the test
+    // long on purpose. The cluster exports to Elasticsearch before the query API can
+    // answer, and that pipeline is the slowest part of the test
     final var deadline = System.currentTimeMillis() + 240_000;
     while (!Boolean.TRUE.equals(condition.get())) {
       if (System.currentTimeMillis() > deadline) {
@@ -107,9 +107,9 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
   }
 
   /**
-   * Whether the query API knows the workflow of the aggregate - the very search the
-   * adapter's awareness probe runs, with the value encoded the way the cluster stores
-   * it (JSON, so a String carries its quotes).
+   * Whether the query API knows the workflow of the aggregate. This is the same search
+   * which the adapter's awareness probe runs. The value is encoded the way the cluster
+   * stores it (JSON, so a String carries its quotes).
    */
   private boolean queryApiKnows(
       final Long aggregateId) {
@@ -140,9 +140,9 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
 
     final var aggregateId = startedWorkflow();
 
-    // before the fix this threw WorkflowNotFoundException: the probe searched the
-    // aggregate-ID variable without its JSON quotes, matched nothing, and reported
-    // that no BPMS knows the workflow
+    // before the fix this threw WorkflowNotFoundException. The probe searched the
+    // aggregate-ID variable without its JSON quotes, matched nothing, and reported that
+    // no BPMS knows the workflow
     transactionTemplate.executeWithoutResult(status -> workflowService.correlate(aggregateId));
 
     awaitUntil(
@@ -159,10 +159,10 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
   @DisplayName("correlating RIGHT AFTER the start works - the core waits out the query API's lag")
   public void correlatingRightAfterTheStartWorks() throws Exception {
 
-    // deliberately NO awaitUntil(queryApiKnows(...)) here: this is the everyday
-    // sequence "start a workflow, then correlate the message which lets it
-    // continue", which must not fail with a WorkflowNotFoundException just because
-    // the exporter has not fed the query API yet
+    // NO awaitUntil(queryApiKnows(...)) here, on purpose. This is the everyday sequence
+    // "start a workflow, then correlate the message which lets it continue". It must not
+    // fail with a WorkflowNotFoundException just because the exporter has not fed the
+    // query API yet
     final var aggregateId = transactionTemplate
         .execute(status -> workflowService.startWorkflow().getLoanRequestId());
     assertNotNull(aggregateId);
@@ -183,10 +183,10 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
   @DisplayName("the viewer RIGHT AFTER the start works - a read waits out the query API's lag too")
   public void theViewerRightAfterTheStartWorks() {
 
-    // again deliberately NO awaitUntil(queryApiKnows(...)): a viewer opened by the
-    // application which just started the workflow is as everyday as the correlation
-    // above, and unlike it there is no outbox entry behind the call which could ask
-    // again later - the read waits for the exporter or the application sees an error
+    // again NO awaitUntil(queryApiKnows(...)), on purpose. A viewer opened by the
+    // application which just started the workflow is as everyday as the correlation above.
+    // But unlike the correlation, no outbox entry stands behind the call which could ask
+    // again later. So the read waits for the exporter, or the application sees an error
     final var aggregateId = transactionTemplate
         .execute(status -> workflowService.startWorkflow().getLoanRequestId());
     assertNotNull(aggregateId);
@@ -213,7 +213,7 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
                 .orElse(null)),
         "the task behind the message catch event to run");
 
-    // the instance ends right after that task, and the exporter needs a moment to say so
+    // the instance ends right after that task. The exporter needs a moment to say so
     awaitUntil(
         () -> {
           final var history = transactionTemplate.execute(status -> workflowService.historyOf(aggregateId));
@@ -221,9 +221,9 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
         },
         "the query API to report the workflow as ended");
 
-    // the probe must answer COMPLETED here rather than UNKNOWN_TO_BPMS: an ended
-    // workflow still has definitions and a history, and 'unknown' is what makes the
-    // core raise WorkflowNotFoundException
+    // the probe must answer COMPLETED here, not UNKNOWN_TO_BPMS. An ended workflow still
+    // has definitions and a history. And 'unknown' makes the core raise
+    // WorkflowNotFoundException
     final var definitions = transactionTemplate
         .execute(status -> workflowService.definitionsOf(aggregateId));
     assertNotNull(definitions);

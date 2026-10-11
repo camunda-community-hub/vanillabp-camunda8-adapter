@@ -34,8 +34,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * Camunda 8 has no business key and no command addressing a workflow by one of its
  * variables, so a search is the only way from an aggregate ID to the process-instance and
- * element-instance keys {@code SetVariables} needs. Which is one of the reasons the
- * adapter requires a cluster it can search rather than serving half of this.
+ * element-instance keys {@code SetVariables} needs. This is one of the reasons why the
+ * adapter requires a cluster it can search, instead of serving only half of this.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -68,8 +68,8 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
 
-    // generous on purpose: this cluster exports to Elasticsearch before the query
-    // API can answer, and that pipeline is the slowest part of the test
+    // long on purpose. This cluster exports to Elasticsearch before the query API can
+    // answer, and that pipeline is the slowest part of the test
     final var deadline = System.currentTimeMillis() + 240_000;
     while (!Boolean.TRUE.equals(condition.get())) {
       if (System.currentTimeMillis() > deadline) {
@@ -82,8 +82,8 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
   }
 
   /**
-   * The variables named 'note' of the workflow of the given aggregate, as the query
-   * API reports them (with the scope they belong to).
+   * The variables named 'note' of the given workflow, as the query API reports them (with the
+   * scope they belong to).
    */
   private List<Variable> notesOf(
       final Long processInstanceKey) {
@@ -103,9 +103,9 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
    * The workflow of the given aggregate, as the cluster knows it.
    * <p>
    * The aggregate id alone does not name it. Every class of this module has a database of its
-   * own, so their aggregate ids all start at 1, and the cluster they share holds what the
+   * own, so their aggregate ids all start at 1. The cluster they share still holds what the
    * classes before this one left. So the search is bound to a process this class owns, and
-   * the caller says which of its two it means.
+   * the caller says which of its processes it means.
    *
    * @param bpmnProcessId The process as the CLUSTER knows it, prefixed by the workflow module
    * @param aggregateId The aggregate whose workflow is looked for
@@ -117,7 +117,7 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
 
     final var found = client()
         .newProcessInstanceSearchRequest()
-        // variable values are stored as JSON: a String value is searched WITH its quotes
+        // variable values are stored as JSON, so a String value is searched WITH its quotes
         .filter(filter -> filter
             .processDefinitionId(bpmnProcessId)
             .variables(Map.of("id", "\"%s\"".formatted(aggregateId)))
@@ -146,7 +146,7 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
   /**
    * The process of the test which pushes into a subprocess whose task was created while the
    * exporter stood still, as the cluster knows it. A timer of twenty seconds lies between
-   * the start and the subprocess, so the exporter can be stopped after the workflow became
+   * the start and the subprocess. So the test can stop the exporter after the workflow became
    * searchable and before the task exists.
    */
   private static final String THE_PUSH_AFTER_TIMER_PROCESS = "test-app__AggregateChangedAfterTimerProcess";
@@ -164,7 +164,7 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
   private static final String THE_MULTI_INSTANCE_USER_TASK_PUSH_PROCESS = "test-app__AggregateChangedUserTaskMultiInstanceProcess";
 
   /**
-   * The element instance of a user task itself - the scope a push must NOT write into.
+   * The element instance of a user task itself. A push must NOT write into this scope.
    */
   private Long elementInstanceKeyOfUserTask(
       final String userTaskKey) {
@@ -300,7 +300,7 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
           .executeWithoutResult(
               status -> workflowService.pushInto(aggregateId, "pushed-without-a-read-model", userTaskKey));
       // the row of the user task names its process instance, and the engine takes the
-      // write by key: nothing has to be searched, so the push is done while the exporter
+      // write by key. Nothing has to be searched, so the push is done while the exporter
       // still stands
       awaitUntil(
           () -> output
@@ -322,7 +322,7 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
   }
 
   /**
-   * The element instance of the task itself - the scope a push must NOT write into.
+   * The element instance of the task itself. A push must NOT write into this scope.
    */
   private Long elementInstanceKeyOfTask(
       final String taskId) {
@@ -386,13 +386,13 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
         .execute(status -> workflowService.saveAggregate().getId());
     assertNotNull(aggregateId);
 
-    // the multi-instance process is started against the cluster: the injectable
-    // process service starts the primary process only
+    // the test starts the multi-instance process directly at the cluster. The injectable
+    // process service starts only the primary process
     client()
         .newCreateInstanceCommand()
         .bpmnProcessId(THE_MULTI_INSTANCE_PUSH_PROCESS)
         .latestVersion()
-        // one call: the client's variable() replaces what a previous call set
+        // one call, because the client's variable() replaces what a previous call set
         .variables(Map.of("id", String.valueOf(aggregateId), "note", "before"))
         .send()
         .join();
@@ -479,8 +479,8 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
           .executeWithoutResult(
               status -> workflowService.pushInto(aggregateId, "pushed-while-the-exporter-stands", taskId));
 
-      // longer than the visibility window of ten seconds: the push used to give up after
-      // it, and the value then never arrived
+      // longer than the visibility window of ten seconds. The push used to give up after
+      // that window, and then the value never arrived
       Thread.sleep(25_000);
     } finally {
       exporting("resume");
@@ -505,7 +505,7 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
 
   /**
    * Stops or restarts the exporter of the shared cluster through the management API of its
-   * broker. The engine keeps running either way, only the read model stops following it.
+   * broker. The engine keeps running either way. Only the read model stops following it.
    *
    * @param action <code>pause</code> or <code>resume</code>
    */

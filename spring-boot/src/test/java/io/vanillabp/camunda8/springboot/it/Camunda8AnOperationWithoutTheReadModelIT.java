@@ -31,17 +31,17 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * An operation on a workflow while the exporter of the cluster stands still, on a node which
- * has no hint about that workflow in its election cache.
+ * An operation on a workflow while the exporter of the cluster stands still. It runs on a
+ * node which has no hint about that workflow in its election cache.
  * <p>
- * Without the hint, "the search does not know this workflow" used to read as "nobody knows
- * it": phase one refused the operation, and phase two consumed an entry it had planned
- * before as stale. A restarted node, a second node and an expired hint all look like that.
- * What such a node still has is the start row VanillaBP wrote when the workflow started. It
- * names this adapter and the process instance key, so the engine answers by key and the read
- * model is not needed at all. That is what this class shows: a {@code correlateMessage} and
- * then a global {@code aggregateChanged} arrive while the exporter stands still, each sent
- * after this node forgot its hint.
+ * Without the hint, "the search does not know this workflow" used to mean "nobody knows it".
+ * Phase one refused the operation. Phase two treated an entry it had planned before as stale
+ * and consumed it. A restarted node, a second node and an expired hint all look like that.
+ * Such a node still has the start row which VanillaBP wrote when the workflow started. The
+ * row names this adapter and the process instance key. So the engine answers by key, and the
+ * read model is not needed at all. This class shows exactly that. A {@code correlateMessage}
+ * and then a global {@code aggregateChanged} arrive while the exporter stands still. The test
+ * sends each of them after this node forgot its hint.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -64,8 +64,8 @@ public class Camunda8AnOperationWithoutTheReadModelIT extends SpringBootTestOnTh
 
   /**
    * How long the election waits for a workflow it has a reason to expect, with the default
-   * 'workflow-visibility-timeout'. Phase one runs in the caller's transaction, so an engine
-   * which answers by key has to answer well within it.
+   * 'workflow-visibility-timeout'. Phase one runs in the caller's transaction. So an engine
+   * which answers by key has to answer well within this time.
    */
   private static final Duration THE_VISIBILITY_WINDOW = Duration.ofSeconds(10);
 
@@ -112,7 +112,7 @@ public class Camunda8AnOperationWithoutTheReadModelIT extends SpringBootTestOnTh
           phaseOneOfTheCorrelation.compareTo(THE_VISIBILITY_WINDOW) < 0,
           "phase one of the correlation took %s, so it waited for the read model instead of asking the engine"
               .formatted(phaseOneOfTheCorrelation));
-      // the message moves the workflow on to its next task, which the engine hands out
+      // the message moves the workflow on to its next task. The engine hands out that task
       // without any read model
       awaitUntil(() -> taskIdOf(aggregateId) != null, "the correlated message to move the workflow on");
 
@@ -148,15 +148,15 @@ public class Camunda8AnOperationWithoutTheReadModelIT extends SpringBootTestOnTh
         notes.getFirst().getScopeKey(),
         "the value has to live at the workflow's own scope");
 
-    // the parked workflow is ended, so the cluster this module shares holds nothing running
-    // of this class
+    // end the parked workflow. Then the cluster which this module shares holds nothing of
+    // this class which still runs
     transactionTemplate.executeWithoutResult(status -> workflowService.finish(aggregateId));
 
   }
 
   /**
-   * Waits for the row VanillaBP writes when it started a workflow, which is what a node
-   * without a cached hint reads instead. It names the adapter and the process instance key.
+   * Waits for the row which VanillaBP writes when it started a workflow. A node without a
+   * cached hint reads this row instead. It names the adapter and the process instance key.
    */
   private TaskDelivery awaitTheStartRowOf(
       final Long aggregateId) throws InterruptedException {
@@ -181,8 +181,8 @@ public class Camunda8AnOperationWithoutTheReadModelIT extends SpringBootTestOnTh
   }
 
   /**
-   * Makes this node forget what it remembered about the workflow, which is the state of a
-   * node that just started or never saw the start. The hint is read back first, so a key
+   * Makes this node forget what it remembered about the workflow. Then it is in the state of
+   * a node which just started or never saw the start. The hint is read back first. So a key
    * which does not match what the election wrote cannot let this test pass by accident.
    */
   private void forgetTheHintAbout(
@@ -271,7 +271,7 @@ public class Camunda8AnOperationWithoutTheReadModelIT extends SpringBootTestOnTh
 
   /**
    * Stops or restarts the exporter of the shared cluster through the management API of its
-   * broker. The engine keeps running either way, only the read model stops following it.
+   * broker. The engine keeps running either way. Only the read model stops following it.
    *
    * @param action <code>pause</code> or <code>resume</code>
    */

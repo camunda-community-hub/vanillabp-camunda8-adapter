@@ -23,17 +23,17 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A task nobody ever completes, against a real Camunda 8 cluster.
  * <p>
- * The renewal of an open job's lock is driven by the cluster's own redelivery, so nothing
- * in VanillaBP ever asks whether that task is still expected - except the age of its
- * delivery record. This test lets a <code>&#64;TaskId</code> handler leave a task open,
- * sets the maximum age to one second and the renewal window to two, and asks for the
- * reaction this BPMS can offer beyond a log line: with
- * <code>async-task-max-age-action: incident</code> the adapter stops renewing and fails
- * the job with no retries left, which is what makes the cluster raise an incident.
+ * The cluster's own redelivery drives the renewal of an open job's lock. So nothing in
+ * VanillaBP ever asks whether that task is still expected. Only the age of its delivery
+ * record does. This test lets a <code>&#64;TaskId</code> handler leave a task open. It sets
+ * the maximum age to one second and the renewal window to two seconds. Then it asks for the
+ * reaction which this BPMS can offer beyond a log line. With
+ * <code>async-task-max-age-action: incident</code> the adapter stops renewing and fails the
+ * job with no retries left. That makes the cluster raise an incident.
  * <p>
- * What is asserted is what the operator would see: the handler ran exactly once (the
- * incident is not a redelivery), the core reported the age once, and the adapter named
- * the aggregate and the age in the message the incident carries.
+ * The test asserts what the operator would see. The handler ran exactly once (the incident
+ * is not a redelivery). The core reported the age once. And the adapter named the aggregate
+ * and the age in the message the incident carries.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -89,7 +89,7 @@ public class Camunda8AsyncTaskAgeIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("A task older than the maximum age is reported once and fails its job into an incident")
   public void anOverdueTaskEndsInAnIncident() throws Exception {
 
-    // the age of an open task is measured and reported by the core's delivery records
+    // the core's delivery records measure and report the age of an open task
     final var coreMessages = appenderOn(DeliveryRecords.class);
     final var adapterMessages = appenderOn(Camunda8JobHandler.class);
 
@@ -140,8 +140,8 @@ public class Camunda8AsyncTaskAgeIT extends SpringBootTestOnTheSharedCluster {
       assertTrue(failed.contains(String.valueOf(aggregateId)), "the incident names the workflow aggregate");
       assertTrue(failed.contains("asyncTask"), "the incident names the task");
 
-      // the incident replaces the renewal: the job stays put instead of being handed
-      // out again, so the handler is not invoked a second time
+      // the incident replaces the renewal. The job stays where it is and is not handed out
+      // again, so the handler is not invoked a second time
       Thread.sleep(6000);
       assertEquals(
           1,

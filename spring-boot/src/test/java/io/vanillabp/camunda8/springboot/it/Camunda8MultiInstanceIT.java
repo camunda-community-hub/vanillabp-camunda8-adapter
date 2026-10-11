@@ -17,27 +17,26 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Multi-instance against a REAL Camunda 8 broker: the element, the index
- * and the total of every iteration reach the {@code @WorkflowTask} method, including
- * the iteration of the multi-instance SUBPROCESS a nested task runs in, and the one a
- * CALLED process was reached in.
+ * Multi-instance against a REAL Camunda 8 broker. The element, the index and the total of
+ * every iteration reach the {@code @WorkflowTask} method. That includes the iteration of the
+ * multi-instance SUBPROCESS which a nested task runs in, and the iteration in which a CALLED
+ * process was reached.
  *
  * <p>
- * A called process named by an EXPRESSION is here too, and it is the one case the deployment
- * cannot link: which process such a call activity reaches is decided per instance. The caller
- * writes its chain into the called instance instead, which also makes the variable it uses
- * something an application can overwrite - so the three cases of that are in this class as
- * well.
+ * A called process named by an EXPRESSION is here too. It is the one case which the
+ * deployment cannot link, because the process which such a call activity reaches is decided
+ * per instance. Instead, the caller writes its chain into the called instance. So the
+ * variable it uses is something an application can overwrite as well. The three cases of
+ * that are in this class too.
  * </p>
  *
  * <p>
- * That last part is what this engine cannot answer by itself. It puts the index of
- * an iteration into the variable {@code loopCounter} and the element into whatever
- * {@code inputElement} names, so an inner iteration shadows an outer one, and it has
- * no equivalent of {@code nrOfInstances} at all. The adapter therefore injects input
- * mappings while deploying, one set per multi-instance element, named after that
- * element - what this test proves is that the values arrive, unshadowed and in the
- * order the SPI defines.
+ * This engine cannot answer the iteration questions by itself. It puts the index of an
+ * iteration into the variable {@code loopCounter}, and the element into whatever
+ * {@code inputElement} names. So an inner iteration shadows an outer one. And it has no
+ * equivalent of {@code nrOfInstances} at all. So the adapter injects input mappings while
+ * deploying, one set per multi-instance element, named after that element. This test proves
+ * that the values arrive, not shadowed and in the order which the SPI defines.
  * </p>
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -102,13 +101,13 @@ public class Camunda8MultiInstanceIT extends SpringBootTestOnTheSharedCluster {
         .findById(aggregateId)
         .orElseThrow();
 
-    // the index counts from 0 like Camunda 7 does, although this engine counts from 1
+    // the index counts from 0 like in Camunda 7, although this engine counts from 1
     assertEquals(
         "a#0/2,b#1/2",
         aggregate.getFlat(),
         "element, index and total of the flat multi-instance task");
 
-    // two groups times three items, and every iteration knows about both levels
+    // two groups times three items. Every iteration knows about both levels
     assertEquals(
         "g1#0/2-x#0/3,g1#0/2-y#1/3,g1#0/2-z#2/3,g2#1/2-x#0/3,g2#1/2-y#1/3,g2#1/2-z#2/3",
         aggregate.getNested(),

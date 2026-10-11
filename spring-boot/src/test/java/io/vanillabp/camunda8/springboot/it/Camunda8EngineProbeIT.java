@@ -24,12 +24,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * The engine answers about an instance long before the search does, against a real cluster.
  * <p>
- * The numbers this is built on were measured on 8.10.0-alpha5, 8.9.19 and 8.8.37: the create
- * answered after 10 ms, the engine said "this instance exists" after 16 to 19 ms, and the
- * search found it after 167 to 1324 ms. What is asserted here is not the timing, which a test
- * runner cannot promise, but the ANSWERS - a fresh instance reads as ACTIVE while the search
- * may not know it yet, and everything the engine has forgotten still reads the way the search
- * reads it.
+ * The numbers behind this were measured on 8.10.0-alpha5, 8.9.19 and 8.8.37. The create
+ * answered after 10 ms. The engine said "this instance exists" after 16 to 19 ms. The search
+ * found it after 167 to 1324 ms. This class does not assert the timing, because a test
+ * runner cannot promise it. It asserts the ANSWERS. A fresh instance reads as ACTIVE while the
+ * search may not know it yet. Everything the engine has forgotten still reads the way the
+ * search reads it.
  * <p>
  * It runs on every line, because the answers were measured on every line.
  */
@@ -43,8 +43,8 @@ public class Camunda8EngineProbeIT extends SpringBootTestOnTheSharedCluster {
   private static final WorkflowScope SCOPE = WorkflowScope.of("test-app", "CancelableProcess");
 
   /**
-   * The probes take the aggregate's persistence because the aggregate-ID VARIABLE is named
-   * after its ID attribute, and that name is what the search filters by.
+   * The probes take the aggregate's persistence, because the aggregate-ID VARIABLE is named
+   * after its ID attribute. The search filters by that name.
    */
   private static final AggregatePersistenceAware<CanceledDockerAggregate> AGGREGATE_PERSISTENCE = new AggregatePersistenceAware<>() {
 
@@ -98,11 +98,10 @@ public class Camunda8EngineProbeIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("The engine answers where the search of the same moment does not")
   public void theEngineAnswersWhereTheSearchDoesNot() throws Exception {
 
-    // what makes this deterministic rather than a race against the exporter: the key names
-    // a live instance while the aggregate names a workflow nobody ever started. The search
-    // finds nothing for that aggregate and never will, so an ACTIVE can only have come
-    // from the engine. The contract says exactly this - the key is a hint and it shortens
-    // the yes
+    // this is no race against the exporter, for one reason. The key names a live instance,
+    // while the aggregate names a workflow nobody ever started. The search finds nothing for
+    // that aggregate and never will. So an ACTIVE can only have come from the engine. The
+    // contract says exactly this: the key is a hint, and it makes the yes come sooner
     final var aggregateId = startAndWaitForTheTask();
     final var instanceKey = theInstanceOf(aggregateId);
     final var anAggregateNobodyStarted = "an-aggregate-nobody-started";
@@ -134,8 +133,8 @@ public class Camunda8EngineProbeIT extends SpringBootTestOnTheSharedCluster {
         .send()
         .join();
 
-    // the engine forgets a canceled instance at once while the search needs a moment to
-    // agree, and the answer this test is about is the one the search gives
+    // the engine forgets a canceled instance at once, while the search needs a moment to
+    // agree. This test is about the answer which the search gives
     awaitUntil(
         () -> processService()
             .awarenessOfWorkflow(SCOPE, AGGREGATE_PERSISTENCE, aggregateId,
@@ -186,12 +185,12 @@ public class Camunda8EngineProbeIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The process instance key of the workflow of that aggregate, read from the job the
-   * application is holding open.
+   * The process instance key of the workflow of that aggregate. It is read from the job which
+   * the application holds open.
    * <p>
-   * The read goes through the search, which an exporter feeds asynchronously - which is the
-   * very lag this test class is about - so it waits for the job to turn up rather than
-   * reading once. What the tests then measure is the ANSWER of the election, not how fast
+   * The read goes through the search, and an exporter feeds the search asynchronously. That
+   * is the very lag this test class is about. So the method waits for the job to turn up and
+   * does not read only once. The tests then measure the ANSWER of the election, not how fast
    * the exporter was.
    */
   private long theInstanceOf(

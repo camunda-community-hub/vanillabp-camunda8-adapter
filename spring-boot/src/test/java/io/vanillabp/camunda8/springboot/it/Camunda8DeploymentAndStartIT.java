@@ -27,7 +27,7 @@ import io.vanillabp.spi.process.ProcessService;
 /**
  * End-to-end integration test of the Camunda 8 adapter against a real Camunda 8 cluster
  * (Testcontainers, the cluster of the active release line with its Elasticsearch,
- * unprotected API). It drives the <b>full two-phase workflow start through
+ * unprotected API). It runs the <b>full two-phase workflow start through
  * {@code ProcessService#startWorkflow}</b> inside a JPA transaction with the phase-two
  * outbox:
  * <ul>
@@ -71,8 +71,8 @@ public class Camunda8DeploymentAndStartIT extends SpringBootTestOnTheSharedClust
    * What this class asks about the phase-two outbox. It comes from the platform's test
    * tools, so the name of the table stays out of this class.
    * <p>
-   * This application runs the outbox table VanillaBP writes itself, so the reader is
-   * told which table to read instead of looking for the one which is there.
+   * This application runs the outbox table which VanillaBP writes itself. So the reader is
+   * told which table to read, and it does not look for the one which is there.
    */
   private PhaseTwoOutboxReader outbox;
 
@@ -83,8 +83,8 @@ public class Camunda8DeploymentAndStartIT extends SpringBootTestOnTheSharedClust
   private Camunda8ProcessService<DockerAggregate> camunda8ProcessService;
 
   /**
-   * The probes take the aggregate's persistence because the aggregate-ID VARIABLE is
-   * named after its ID attribute, and that name is what the search below filters by.
+   * The probes take the aggregate's persistence, because the aggregate-ID VARIABLE is named
+   * after its ID attribute. The search below filters by that name.
    */
   private static final AggregatePersistenceAware<DockerAggregate> AGGREGATE_PERSISTENCE = new AggregatePersistenceAware<>() {
 
@@ -134,7 +134,7 @@ public class Camunda8DeploymentAndStartIT extends SpringBootTestOnTheSharedClust
       final var aggregate = new DockerAggregate();
       aggregate.setContent("commit-test");
       final var saved = processService.startWorkflow(aggregate);
-      // phase two runs only after commit - within the transaction no instance exists yet,
+      // phase two runs only after commit. Within the transaction no instance exists yet,
       // so the worker cannot have seen anything
       assertTrue(DockerWorkflowService.ACTIVATED_AGGREGATE_IDS.isEmpty(),
           "no process instance may exist before the transaction commits");
@@ -143,8 +143,8 @@ public class Camunda8DeploymentAndStartIT extends SpringBootTestOnTheSharedClust
 
     final var expectedAggregateId = String.valueOf(attached.getId());
 
-    // after the commit the phase-two outbox dispatches the create; the worker eventually
-    // activates the service task of the started instance carrying the aggregateId
+    // after the commit, the phase-two outbox dispatches the create. Later the worker
+    // activates the service task of the started instance, which carries the aggregateId
     final var found = awaitAggregateId(expectedAggregateId, 20000);
     assertTrue(found,
         "expected a process instance with aggregateId '"
@@ -173,12 +173,11 @@ public class Camunda8DeploymentAndStartIT extends SpringBootTestOnTheSharedClust
     // the outbox entry was enlisted in the rolled-back transaction, so it is gone
     assertEquals(entriesBefore, countOutboxEntries());
 
-    // wait well beyond the outbox poll interval: no instance may ever be created, so the
-    // worker must never activate a job
-    // 3000ms is coupled to 'vanillabp.outbox.poll-interval: PT0.5S' in
-    // camunda8-it.yaml: it spans several poll cycles, so a phase-two dispatch WOULD
-    // have happened if the rollback had left an outbox entry behind - do not shrink
-    // one without the other
+    // wait well beyond the outbox poll interval. No instance may ever be created, so the
+    // worker must never activate a job.
+    // 3000ms is coupled to 'vanillabp.outbox.poll-interval: PT0.5S' in camunda8-it.yaml.
+    // It spans several poll cycles. So a phase-two dispatch WOULD have happened if the
+    // rollback had left an outbox entry behind. Do not shrink one without the other
     Thread.sleep(3000);
     assertTrue(DockerWorkflowService.ACTIVATED_AGGREGATE_IDS.isEmpty(),
         "no process instance may be created on rollback, but the worker saw "
@@ -192,11 +191,10 @@ public class Camunda8DeploymentAndStartIT extends SpringBootTestOnTheSharedClust
 
     final var neverStartedAggregateId = "no-such-aggregate";
 
-    // both probes search, and an empty result is an answer: no BPMS knows this
-    // workflow, which is what lets the core try the next adapter. Neither of them may
-    // guess an ACTIVE here - the election would route an operation to a BPMS which
-    // never held the workflow, and the re-dispatch probe would SKIP a recovered start
-    // and thereby lose it
+    // both probes search, and an empty result is an answer: no BPMS knows this workflow.
+    // That answer lets the core try the next adapter. Neither of them may guess ACTIVE
+    // here. Then the election would route an operation to a BPMS which never held the
+    // workflow. And the re-dispatch probe would SKIP a recovered start and so lose it
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
         camunda8ProcessService.awarenessOfWorkflow(SCOPE, AGGREGATE_PERSISTENCE, neverStartedAggregateId));

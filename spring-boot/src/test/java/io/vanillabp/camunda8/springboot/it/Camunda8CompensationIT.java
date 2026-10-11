@@ -24,9 +24,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * cluster. The model is <code>it/compensation.bpmn</code>: two finished service tasks, a
  * handler on each, and one throw event which compensates both.
  * <p>
- * Camunda 7 answers this with one unit of work: the engine runs the handlers one after the
- * other inside the transaction of the throw event, and a handler which throws makes both run
- * again. This cluster answers the other way round, and this test is what says so:
+ * Camunda 7 answers this with one unit of work. The engine runs the handlers one after the
+ * other, inside the transaction of the throw event. A handler which throws makes both run
+ * again. This cluster does the opposite, and this test shows it:
  * <ul>
  * <li>Both handler jobs are handed out together. Both handlers are inside their method at
  * the same moment, on two threads of the adapter.</li>
@@ -34,8 +34,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * one handler throws, only that one runs again, after the retry backoff. The handler which
  * succeeded runs once.</li>
  * </ul>
- * The ORDER of the two handlers is not asserted. It was not stable in the measurement: most
- * runs entered the handler of the later activity first, some the other one.
+ * The test does not assert the ORDER of the two handlers. It was not stable in the
+ * measurement. Most runs entered the handler of the later activity first, some the other one.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -77,7 +77,7 @@ public class Camunda8CompensationIT extends SpringBootTestOnTheSharedCluster {
         .execute(status -> workflowService.startWorkflow(refundFailsOnce).getId());
     assertNotNull(aggregateId);
 
-    // the task behind the throw event is activated only once both handlers completed
+    // the task after the throw event is activated only when both handlers completed
     awaitUntil(
         () -> repository
             .findById(aggregateId)

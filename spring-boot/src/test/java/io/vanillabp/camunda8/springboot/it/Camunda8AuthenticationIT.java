@@ -31,21 +31,21 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * The adapter against a cluster with its authentication SWITCHED ON.
  * <p>
- * This is the test whose absence let the gap live: every other cluster here runs with
- * {@code CAMUNDA_SECURITY_AUTHENTICATION_UNPROTECTEDAPI=true}, so an adapter which never
- * sent a credential passed all of them while it could not reach a single real
- * installation. Here nothing is unprotected, and everything the adapter does travels the
+ * The gap lived on because this test was missing. Every other cluster here runs with
+ * {@code CAMUNDA_SECURITY_AUTHENTICATION_UNPROTECTEDAPI=true}. So an adapter which never
+ * sent a credential passed all of them, while it could not reach a single real
+ * installation. Here nothing is unprotected. Everything the adapter does goes over the
  * authenticated connection: the deployment at startup, the command which starts a
  * workflow, the activation request of the worker and the completion of its job.
  * <p>
- * The second half is the message. An adapter authenticating with {@code none} cannot be
- * warned at startup - whether a cluster wants credentials is only learnable by asking it
- * - so a client of that kind is built against the same running cluster and the guiding
- * message it produces is asserted.
+ * The second half is about the message. An adapter which authenticates with {@code none}
+ * cannot be warned at startup. You only learn whether a cluster wants credentials by
+ * asking it. So the test builds a client of that kind against the same running cluster, and
+ * it asserts the guiding message which that client produces.
  * <p>
- * The cluster is this class's own, while the other tests of this module share one. A shared
+ * This class has a cluster of its own. The other tests of this module share one. A shared
  * cluster with authentication switched on for everybody would be a different module under
- * test: every other class would have to carry credentials, and the one thing this class is
+ * test. Every other class would have to carry credentials. And the one thing this class is
  * about would be what all of them do.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -54,8 +54,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 @SpringBootTest(
     classes = DockerTestApplication.class,
     properties = "spring.config.name=camunda8-it")
-// closed when the class is done: this context has a cluster of its own, Spring would keep
-// the context until the JVM exits, and a context outliving its cluster keeps its job
+// closed when the class is done. This context has a cluster of its own. Spring would keep
+// the context until the JVM exits. And a context which outlives its cluster keeps its job
 // workers polling an address nobody answers
 @DirtiesContext
 public class Camunda8AuthenticationIT {
@@ -79,7 +79,7 @@ public class Camunda8AuthenticationIT {
     registry.add("vanillabp.adapters.c8.rest-address", Camunda8AuthenticationIT::restAddress);
     registry.add("vanillabp.adapters.c8.auth.username", () -> ClusterUnderTest.USERNAME);
     registry.add("vanillabp.adapters.c8.auth.password", () -> ClusterUnderTest.PASSWORD);
-    // a cold container plus the outbox poll interval need more than the production
+    // a cold container plus the outbox poll interval need more time than the production
     // default of the exporter lag
     registry.add("vanillabp.adapters.c8.workflow-visibility-timeout", () -> "PT60S");
 
@@ -101,8 +101,8 @@ public class Camunda8AuthenticationIT {
   @DisplayName("basic credentials carry the whole round trip: deploy, start, activate, complete")
   public void credentialsCarryTheWholeRoundTrip() throws Exception {
 
-    // the deployment already happened at startup, through the authenticated connection -
-    // without credentials this context could not have booted at all
+    // the deployment already happened at startup, through the authenticated connection.
+    // Without credentials this context could not have booted at all
     final var aggregateId = transactionTemplate
         .execute(status -> workflowService.startWorkflow().getId());
     assertNotNull(aggregateId);
@@ -144,7 +144,7 @@ public class Camunda8AuthenticationIT {
       assertEquals(
           Camunda8AuthConfiguration.Method.NONE,
           factory.getAuthentication().getMethod());
-      // the cluster answers 401, which is where the adapter learns what a startup check
+      // the cluster answers 401. Only here does the adapter learn what a startup check
       // never could
       assertThrows(
           RuntimeException.class,

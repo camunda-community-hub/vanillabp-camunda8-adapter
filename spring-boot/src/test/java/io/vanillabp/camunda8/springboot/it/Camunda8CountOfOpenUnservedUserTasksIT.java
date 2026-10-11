@@ -31,40 +31,40 @@ import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The number the deployment writes about plain BPMN user tasks, read against a real cluster
- * with one such task open and one of them finished.
+ * The number which the deployment writes about plain BPMN user tasks. It is read against a
+ * real cluster, with one such task open and one finished.
  *
  * <h2>Why this class exists</h2>
  *
  * The number used to be the total of one search by process and job type. The index keeps a job
- * after it is over, so that total was every job of that type the process ever had, and an
- * application working through those tasks after an upgrade watched a number which never fell.
- * Measured on 2026-09-28 against {@code camunda/camunda:8.9.21}, a search on the key of a
- * completed job still answered with the job, as {@code TIMED_OUT} at once and {@code COMPLETED}
- * five seconds later.
+ * after it is over. So that total was every job of that type the process ever had. An
+ * application which worked through those tasks after an upgrade watched a number which never
+ * fell. Measured on 2026-09-28 against {@code camunda/camunda:8.9.21}: a search on the key of a
+ * completed job still answered with the job. It said {@code TIMED_OUT} at once and
+ * {@code COMPLETED} five seconds later.
  * <p>
- * So the search names the states a job does not leave again and takes those off the total, and
- * this class is where that is read from a cluster rather than argued about. Two workflows of one
- * process reach the same plain user task. One of them has its job activated and completed, the
- * other one's job is left alone, and the count has to say one.
+ * So the search names the states which a job never leaves again, and it takes those off the
+ * total. This class reads that from a cluster, so nobody has to argue about it. Two workflows
+ * of one process reach the same plain user task. The test activates and completes the job of
+ * one of them. It leaves the job of the other one alone. The count has to say one.
  *
  * <h2>What it writes down</h2>
  *
  * Which states the cluster names for an open job and for a finished one, line by line. An open
- * job stands in more than one state over its life, and the three lines do not have to agree
- * about them: 8.9.21 named an open job {@code CREATED} five seconds after its activation, where
- * 8.10.0-rc1 named the same job {@code TIMEOUT_UPDATED}. The record is the reason the search
- * names the end states rather than the open ones, and it is written to the test report and to a
- * file of its own, because the output of a test which passes is suppressed.
+ * job is in more than one state over its life, and the three lines do not have to agree about
+ * them. 8.9.21 named an open job {@code CREATED} five seconds after its activation. 8.10.0-rc1
+ * named the same job {@code TIMEOUT_UPDATED}. That record is the reason why the search names
+ * the end states and not the open ones. It is written to the test report and to a file of its
+ * own, because the output of a test which passes is suppressed.
  * <p>
  * What this class answered on 2026-10-01: {@code camunda/camunda:8.8.40}, {@code 8.9.21} and
  * {@code 8.10.0-rc3} all named the open job {@code CREATED} and the completed one
- * {@code COMPLETED}, and the count settled on one 674 to 1191 ms after the completion. The
- * numbers move with the machine, the states should not.
+ * {@code COMPLETED}. The count settled on one, 674 to 1191 ms after the completion. The
+ * numbers change with the machine. The states should not.
  * <p>
- * Nothing of VanillaBP is in the way: the model is deployed with the raw client, no worker of
- * this repository subscribes to the job type the cluster serves the element with, and the class
- * ends the workflow it left running. It is skipped when Docker is unavailable
+ * Nothing of VanillaBP is in the way. The model is deployed with the raw client. No worker of
+ * this repository subscribes to the job type with which the cluster serves the element. The
+ * class ends the workflow which it left running. It is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -76,10 +76,10 @@ public class Camunda8CountOfOpenUnservedUserTasksIT extends TestOnTheSharedClust
   private static final String ELEMENT_ID = "TheTaskNothingServes";
 
   /**
-   * A plain BPMN user task: no {@code zeebe:userTask} and no {@code zeebe:taskDefinition}, so
+   * A plain BPMN user task: no {@code zeebe:userTask} and no {@code zeebe:taskDefinition}. So
    * the cluster serves it with a job of
-   * {@link Camunda8TaskWiring#TASKDEFINITION_USERTASK_WORKER_V1} and this version serves it with
-   * nothing.
+   * {@link Camunda8TaskWiring#TASKDEFINITION_USERTASK_WORKER_V1}, and this version does not
+   * serve it at all.
    */
   private static final String MODEL = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -104,15 +104,16 @@ public class Camunda8CountOfOpenUnservedUserTasksIT extends TestOnTheSharedClust
       """.formatted(PROCESS_ID, ELEMENT_ID, ELEMENT_ID, ELEMENT_ID);
 
   /**
-   * How long the job of the task which gets finished is leased for. Long enough to complete it
-   * and short enough that a run which breaks off does not hold it for minutes.
+   * How long the job of the task which gets finished is leased for. It is long enough to
+   * complete the job. It is short enough that a run which breaks off does not hold the job for
+   * minutes.
    */
   private static final Duration THE_JOB_IS_HELD_FOR = Duration.ofSeconds(30);
 
   /**
-   * How long the index is given to catch up with the engine. Generous rather than tight: a
-   * loaded machine's exporter is what is being waited for, and story 741 measured over five
-   * seconds between a completed job and the state the index settled on.
+   * How long the index is given to catch up with the engine. The value is long on purpose. The
+   * test waits for the exporter of a loaded machine. Story 741 measured over five seconds
+   * between a completed job and the state the index settled on.
    */
   private static final Duration THE_INDEX_CATCHES_UP_WITHIN = Duration.ofSeconds(90);
 
@@ -137,8 +138,8 @@ public class Camunda8CountOfOpenUnservedUserTasksIT extends TestOnTheSharedClust
       measured.add("the deployment of a plain BPMN user task: "
           + deployed);
       if (!"accepted".equals(deployed)) {
-        // a line which refuses the shape has no such job to count, and that refusal is the
-        // finding rather than a failure of this test
+        // a line which refuses the shape has no such job to count. That refusal is the
+        // finding, not a failure of this test
         report(reporter, measured);
         return;
       }
@@ -258,8 +259,8 @@ public class Camunda8CountOfOpenUnservedUserTasksIT extends TestOnTheSharedClust
   }
 
   /**
-   * Takes the job of one workflow's user task, leased for long enough that completing it is not
-   * a race against a lock which ran out.
+   * Takes the job of one workflow's user task. The lease is long enough that completing the job
+   * is not a race against a lock which ran out.
    *
    * @param client The raw client of this measurement
    * @param instanceKey The workflow whose job is wanted
@@ -329,7 +330,7 @@ public class Camunda8CountOfOpenUnservedUserTasksIT extends TestOnTheSharedClust
 
   /**
    * Puts the measurement where it can be read after a build: into the test report of the runner
-   * respectively an IDE, and into a file of its own.
+   * or of an IDE, and into a file of its own.
    *
    * @param reporter The JUnit reporter
    * @param measured What the cluster answered, one line per reading

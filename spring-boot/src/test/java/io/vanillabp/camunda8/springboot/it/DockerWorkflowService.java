@@ -11,9 +11,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * Workflow service bound to the BPMN process {@code TestProcess} deployed to the Camunda 8
- * cluster. Since task wiring the BPMN service task is served by the
- * {@code @WorkflowTask} method below through the adapter's polling job worker.
+ * Workflow service bound to the BPMN process {@code TestProcess}, which is deployed to the
+ * Camunda 8 cluster. With task wiring, the adapter's polling job worker serves the BPMN
+ * service task through the {@code @WorkflowTask} method below.
  */
 @Service
 @WorkflowService(
@@ -38,7 +38,7 @@ public class DockerWorkflowService {
   }
 
   /**
-   * Aggregate IDs seen by the handler - inspected by the integration test.
+   * Aggregate IDs which the handler saw. The integration test reads them.
    */
   public static final List<String> ACTIVATED_AGGREGATE_IDS = new CopyOnWriteArrayList<>();
 

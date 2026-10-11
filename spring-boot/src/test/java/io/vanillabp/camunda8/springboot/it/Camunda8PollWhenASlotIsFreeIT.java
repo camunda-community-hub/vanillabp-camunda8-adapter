@@ -26,14 +26,15 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The designed back pressure against a real cluster: a worker of an adapter whose every
- * execution slot is busy does not ask the cluster for work, so a job nobody could run is
- * left where it is. It is the client's own activation counter which answers, because it
+ * The designed back pressure against a real cluster. A worker of an adapter whose every
+ * execution slot is busy does not ask the cluster for work. So a job which nobody could run
+ * is left where it is. The client's own activation counter gives the answer, because it
  * counts a job before VanillaBP sees anything of it.
  * <p>
- * The setup is the one the starvation was measured with, asked the other way round: one
- * blocking handler, a second worker, and the question whether a job is fetched which
- * nobody can run. One execution slot here, so the blocking handler occupies all of them.
+ * The setup is the one with which the starvation was measured, with the question turned
+ * around: one blocking handler, a second worker, and the question whether a job is fetched
+ * which nobody can run. There is one execution slot here, so the blocking handler occupies
+ * all of them.
  * <p>
  * Two settings make the measurement say what it should. The block lasts long enough to
  * outlive an activation request which was already parked at the cluster when the slot
@@ -58,9 +59,9 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
     registry.add("vanillabp.adapters.c8.worker-threads", () -> "1");
     registry.add("vanillabp.adapters.c8.request-timeout", () -> "PT2S");
     // the blocking handler holds the only slot for as long as this test reads from the
-    // counters, and it holds its job with it. Two minutes rather than the twenty seconds
-    // this workflow module configures elsewhere, so a machine which stops this JVM for
-    // seconds cannot walk the block into an expired lock
+    // counters, and it holds its job with it. Two minutes, not the twenty seconds which this
+    // workflow module configures elsewhere. So a machine which stops this JVM for seconds
+    // cannot stretch the block into an expired lock
     registry.add("vanillabp.workflow-modules.test-app.adapters.c8.job-timeout", () -> "PT2M");
 
   }
@@ -78,33 +79,33 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
   private MicrometerCamunda8Metrics metrics;
 
   /**
-   * How long the only execution slot may stay busy here. The test ends the block itself
-   * once it has read the counters, so this is the cap and not the length: a machine which
-   * leaves this JVM without a turn makes the block longer, not shorter, and a block which
+   * How long the only execution slot may stay busy here. The test ends the block itself once
+   * it has read the counters. So this is the upper limit and not the length. A machine which
+   * leaves this JVM without a turn makes the block longer, not shorter. And a block which
    * ended early would look exactly like a worker which fetched a job it could not run.
    * <p>
-   * Below the two minutes this test locks a job for, so the handler is never inside a job
-   * whose lock ran out.
+   * It is below the two minutes for which this test locks a job. So the handler is never
+   * inside a job whose lock ran out.
    */
   private static final long BLOCK_MILLIS = 90_000;
 
   /**
-   * How long the parked activation request of the quick worker is given to run out. Above
-   * the two seconds of <code>request-timeout</code>, which is how long such a request can
-   * outlive the moment the slot filled.
+   * How long the parked activation request of the quick worker is given to run out. It is
+   * above the two seconds of <code>request-timeout</code>. That is how long such a request
+   * can outlive the moment the slot filled.
    * <p>
-   * A guard and not a budget: a stopped JVM makes the wait longer, and everything the test
-   * reads afterwards is read while the slot is still busy.
+   * This is a safety margin, not a budget. A stopped JVM makes the wait longer, and the test
+   * reads everything afterwards while the slot is still busy.
    */
   private static final long UNTIL_A_PARKED_REQUEST_RAN_OUT = 3_000;
 
   /**
    * How long the start of the second workflow is given to reach the cluster before the
-   * counter is asked. Four seconds, which is eight of the half-second windows the outbox
-   * dispatches in here.
+   * counter is asked. Four seconds is eight of the half-second windows in which the outbox
+   * dispatches here.
    * <p>
-   * A guard as well: the job really being at the cluster is read at the end of this test,
-   * where the same counter goes up once the slot is free again.
+   * This is a safety margin as well. The end of this test reads that the job really is at
+   * the cluster: the same counter goes up once the slot is free again.
    */
   private static final long UNTIL_THE_START_REACHED_THE_CLUSTER = 4_000;
 
@@ -127,8 +128,8 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
   @DisplayName("a worker which has to ask again does not, while the only execution slot is busy")
   public void noJobIsFetchedWhileTheOnlySlotIsBusy() throws Exception {
 
-    // this application has no Actuator, which is what applies MeterBinder beans in a real
-    // one, so the meters of this adapter are bound by hand
+    // in a real application, Actuator applies MeterBinder beans. This application has no
+    // Actuator, so the meters of this adapter are bound by hand
     final var registry = new SimpleMeterRegistry();
     metrics.bindTo(registry);
 
@@ -139,9 +140,8 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
         WorkerThreadsDockerWorkflowService.BLOCKING_ENTERED.await(30, TimeUnit.SECONDS),
         "the blocking handler was delivered");
 
-    // the activation request the quick worker had parked at the cluster when the slot
-    // filled runs out within request-timeout, and everything it asks afterwards waits
-    // for a slot
+    // the activation request which the quick worker had parked at the cluster when the slot
+    // filled runs out within request-timeout. Everything it asks afterwards waits for a slot
     Thread.sleep(UNTIL_A_PARKED_REQUEST_RAN_OUT);
 
     final var quick = transactionTemplate
@@ -150,8 +150,8 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
 
     Thread.sleep(UNTIL_THE_START_REACHED_THE_CLUSTER);
 
-    // what the counters say below is about back pressure only while the slot really is
-    // busy, so that is read first rather than assumed
+    // the counters below say something about back pressure only while the slot really is
+    // busy. So the test reads that first and does not assume it
     assertTrue(
         WorkerThreadsDockerWorkflowService.isBlocking(),
         "the blocking handler is still inside its slot");
@@ -163,8 +163,8 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
         activated(registry, "quickTask"),
         "but no job is fetched for a worker of an adapter whose every slot is busy");
 
-    // the reading is done, so the slot is given back now instead of at the end of a
-    // window somebody guessed at
+    // the reading is done. So the slot is given back now, and not at the end of a window
+    // somebody guessed
     WorkerThreadsDockerWorkflowService.RELEASE_THE_SLOT.countDown();
 
     assertTrue(
@@ -178,8 +178,8 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
 
   /**
    * What the client counted for the worker of one task definition. The tag carries the job
-   * type the WORKER subscribes to, which is the scoped one wherever name-clash avoidance
-   * prefixes it.
+   * type which the WORKER subscribes to. Where name-clash avoidance prefixes it, that is the
+   * scoped one.
    *
    * @param registry Where the adapter's meters were bound
    * @param taskDefinition The task definition the worker serves
