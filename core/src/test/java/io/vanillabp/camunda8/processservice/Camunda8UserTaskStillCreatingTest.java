@@ -38,21 +38,19 @@ import io.vanillabp.spi.process.TaskNotFoundException;
  * Completing a user task the cluster has not finished creating.
  * <p>
  * VanillaBP tells an application about a Camunda-managed user task from the
- * <code>creating</code> listener of that task, and the task stands in state
- * <code>CREATING</code> until that listener job is answered. An application which completes
- * the task in the same breath therefore addresses a task which is still being created, and
- * the cluster answers HTTP <code>409</code> with the title <code>INVALID_STATE</code> to
- * every command against it - the empty update of phase one and the completion of phase two
- * alike.
+ * <code>creating</code> listener of that task. The task stays in state <code>CREATING</code>
+ * until that listener job is answered. An application which completes the task right away
+ * addresses a task which is still being created. The cluster answers HTTP <code>409</code>
+ * with the title <code>INVALID_STATE</code> to every command against it. That holds for the
+ * empty update of phase one and for the completion of phase two.
  * <p>
- * Both phases have to read that answer as "the task is there". Phase one aborts the caller's
- * transaction for a task which is GONE, and a task the cluster refuses a command ABOUT is not
- * gone. Phase two waits the state out instead of leaving the entry to the outbox, which would
- * park the completion for <code>attempt-frequency</code>.
+ * Both phases have to read that answer as "the task is there". Phase one aborts the
+ * caller's transaction for a task which is GONE. A task the cluster refuses a command
+ * ABOUT is not gone. Phase two waits the state out. It does not leave the entry to the
+ * outbox, which would park the completion for <code>attempt-frequency</code>.
  * <p>
- * The state is forced against a real cluster by
- * {@code Camunda8UserTaskStillCreatingIT}, with a model whose second
- * <code>creating</code> listener nobody answers.
+ * {@code Camunda8UserTaskStillCreatingIT} forces the state against a real cluster, with a
+ * model whose second <code>creating</code> listener nobody answers.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UserTaskStillCreatingTest {
@@ -66,8 +64,8 @@ public class Camunda8UserTaskStillCreatingTest {
   private final List<Runnable> preCommitChecks = new ArrayList<>();
 
   /**
-   * What the cluster answers about a user task it is still creating, measured against
-   * 8.9.16 and 8.9.19 for the update as well as for the completion.
+   * What the cluster answers about a user task it is still creating. Measured against 8.9.16
+   * and 8.9.19, for the update and for the completion.
    */
   private static ProblemException stillCreating(
       final String command) {
@@ -195,13 +193,13 @@ public class Camunda8UserTaskStillCreatingTest {
 
   /**
    * A process service alone on its cluster, so a probe goes straight to its command instead
-   * of asking the query API which scope the key belongs to. Its pre-commit checks are kept
-   * rather than run, which is what the two checks above read.
+   * of asking the query API which scope the key belongs to. Its pre-commit checks are kept,
+   * not run. The two tests of the check above read them.
    */
   private Camunda8ProcessService<Object> aService() {
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
@@ -244,7 +242,7 @@ public class Camunda8UserTaskStillCreatingTest {
       final RuntimeException... rejections) {
 
     final var command = mock(CompleteUserTaskCommandStep1.class, RETURNS_SELF);
-    // the future is built BEFORE the stubbing which returns it - mocking inside a
+    // the future is built BEFORE the stubbing which returns it. Mocking inside a
     // when(...) leaves Mockito with an unfinished stubbing
     @SuppressWarnings("unchecked")
     final CamundaFuture<CompleteUserTaskResponse> taken = mock(CamundaFuture.class);

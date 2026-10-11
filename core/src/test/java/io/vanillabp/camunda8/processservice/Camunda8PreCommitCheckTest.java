@@ -21,14 +21,13 @@ import io.vanillabp.integration.spi.PhaseTwoCall;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The pre-commit shape of the phase-one existence check:
- * {@code completeTaskPhaseOne}/{@code cancelTaskPhaseOne} do NOT
- * contact the cluster at method-call time - they only REGISTER the check, which
- * runs when the platform's transaction synchronization fires right before the
- * commit. This minimizes the window between check and phase-two dispatch (fewer
- * stale outbox entries). Proven without a cluster: the client points at a closed
- * port, so any contact raises - no exception until the hook runs, exception when
- * it runs.
+ * The pre-commit shape of the phase-one existence check. {@code completeTaskPhaseOne} and
+ * {@code cancelTaskPhaseOne} do NOT contact the cluster when the method is called. They
+ * only REGISTER the check. It runs when the transaction synchronization of the platform
+ * fires, right before the commit. This keeps the window between the check and the phase-two
+ * dispatch small, so fewer outbox entries go stale. Proven without a cluster: the client
+ * points at a closed port, so any contact raises. There is no exception until the hook
+ * runs, and an exception when it runs.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8PreCommitCheckTest {
@@ -44,8 +43,8 @@ public class Camunda8PreCommitCheckTest {
         final Class<?> workflowAggregateClass,
         final Runnable check) {
 
-      // The platform resolves the runner of THIS aggregate, so the adapter has
-      // to name it - the test keeps it to prove the adapter does
+      // The platform resolves the runner of THIS aggregate, so the adapter has to name
+      // it. The test keeps it to prove the adapter does
       aggregateClasses.add(workflowAggregateClass);
       registered.add(check);
 
@@ -60,7 +59,7 @@ public class Camunda8PreCommitCheckTest {
     final var configuration = new Camunda8AdapterConfiguration();
     // closed port: every cluster contact raises immediately
     configuration.setRestAddress("http://localhost:1");
-    // no waiting for the exporter in a unit test - the cluster is never contacted
+    // no waiting for the exporter in a unit test, the cluster is never contacted
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     return new Camunda8ProcessService<>(
         "c8", new Camunda8ClientFactory("c8", configuration), Duration.ofDays(14), registrar, null);
@@ -95,16 +94,16 @@ public class Camunda8PreCommitCheckTest {
     final var check = registrar.registered.getFirst();
     assertNotNull(check);
 
-    // the closed port proves the contact happens HERE - and an infrastructure
-    // failure aborts the commit (it propagates).
+    // the closed port proves that the contact happens HERE. And an infrastructure failure
+    // propagates, so it aborts the commit.
     //
-    // Exception and not Throwable, deliberately. What this assures is that an EXCEPTION
-    // comes out, which is what a 'catch (Exception)' around a pre-commit hook sees, so
-    // widening it here would assure something the production code does not do. An Error
-    // arriving instead is a finding rather than a test to loosen: it happened once, when a
-    // protobuf runtime older than the client's gencode turned the first command into an
-    // ExceptionInInitializerError, and this line is where it became visible. What guards
-    // that number now is Camunda8ProtobufPinTest.
+    // Exception and not Throwable, on purpose. This makes sure that an EXCEPTION comes out,
+    // which is what a 'catch (Exception)' around a pre-commit hook sees. Widening it here
+    // would make sure of something the production code does not do. If an Error arrives
+    // instead, that is a finding, not a reason to loosen the test. It happened once: a
+    // protobuf runtime older than the client's gencode turned the first command into
+    // an ExceptionInInitializerError, and this line made it visible. Camunda8ProtobufPinTest
+    // guards that number now.
     assertThrows(Exception.class, check::run);
 
   }

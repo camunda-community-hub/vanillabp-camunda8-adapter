@@ -12,9 +12,9 @@ import io.vanillabp.camunda8.client.Camunda8Errors;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What a task id which is not a Camunda 8 task key is told, and that saying it does not
- * change how the failure is classified. VanillaBP 1 could hand out hexadecimal task ids
- * and applications stored them, so this is the message an upgrade runs into.
+ * What the caller is told about a task id which is not a Camunda 8 task key. Saying it does
+ * not change how the failure is classified. VanillaBP 1 could hand out hexadecimal task ids,
+ * and applications stored them. So this is the message an upgrade runs into.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8TaskKeyTest {

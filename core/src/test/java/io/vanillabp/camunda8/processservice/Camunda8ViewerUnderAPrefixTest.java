@@ -45,7 +45,7 @@ public class Camunda8ViewerUnderAPrefixTest {
   private static final String MODULE = "orders";
 
   /**
-   * How this test prefixes an id, standing in for the core's name-clash avoidance.
+   * How this test prefixes an id. It stands in for the core's name-clash avoidance.
    */
   private static String prefixed(
       final String bpmnProcessId) {
@@ -143,8 +143,8 @@ public class Camunda8ViewerUnderAPrefixTest {
   @DisplayName("A definition only the cluster still holds is reported under its plain id as well")
   public void aDefinitionOfAPreviousVersionIsReportedUnderItsPlainId() {
 
-    // a workflow which runs on a definition an earlier version of the application deployed,
-    // so only the cluster knows it, and under its prefixed id
+    // a workflow which runs on a definition an earlier version of the application deployed.
+    // So only the cluster knows it, and only under its prefixed id
     final var instance = mock(ProcessInstance.class);
     when(instance.getProcessInstanceKey()).thenReturn(4711L);
     when(instance.getProcessDefinitionKey()).thenReturn(999L);

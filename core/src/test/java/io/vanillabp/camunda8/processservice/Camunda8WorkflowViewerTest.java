@@ -21,10 +21,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.process.WorkflowElementType;
 
 /**
- * Unit tests of the viewer/history API's Camunda 8 part against a cluster which answers
- * nothing at all: the degradation which stays. Whatever a search cannot answer, because
- * the cluster is unreachable or because the data is not visible yet, is served from what
- * this application version deployed - and never reported as an error.
+ * Unit tests of the Camunda 8 part of the viewer and history API, against a cluster which
+ * answers nothing at all. They hold the degradation which stays. Whatever a search cannot
+ * answer, because the cluster is unreachable or the data is not visible yet, is served from
+ * what this application version deployed. It is never reported as an error.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8WorkflowViewerTest {
@@ -61,8 +61,8 @@ public class Camunda8WorkflowViewerTest {
       """;
 
   /**
-   * A client factory whose cluster is never reachable - every query API call fails,
-   * which is exactly the situation the degradation is about.
+   * A client factory whose cluster is never reachable. Every query API call fails, and the
+   * degradation is about exactly that situation.
    */
   private static Camunda8ClientFactory unreachableClientFactory() {
 
@@ -108,8 +108,8 @@ public class Camunda8WorkflowViewerTest {
     assertEquals("ParentProcess", definitions.get(0).bpmnProcessId());
     assertEquals("3", definitions.get(0).version());
     assertNull(definitions.get(0).usedByElements());
-    // the call activity addressing its process by a FEEL expression is skipped -
-    // which definition it calls is only known at execution time
+    // the call activity which addresses its process by a FEEL expression is skipped. Which
+    // definition it calls is only known at execution time
     assertEquals("222", definitions.get(1).id());
     assertEquals(List.of("TheCallActivity"), definitions.get(1).usedByElements());
 
@@ -131,7 +131,7 @@ public class Camunda8WorkflowViewerTest {
               + deployedXml);
     }
 
-    // deployed by a previous application version: only the cluster would know it -
+    // deployed by a previous application version, so only the cluster would know it. It is
     // unreachable here, so the core turns the null into its guiding exception
     assertNull(viewer.getBpmnXml("999"));
     assertNull(viewer.getBpmnXml("not-a-key"));
@@ -153,8 +153,8 @@ public class Camunda8WorkflowViewerTest {
     assertNull(history.endTime());
     assertNull(history.elementsHistory(), "the SPI expresses 'no element history' as null");
 
-    // a secondary history context cannot be resolved where the cluster does not
-    // answer - the core turns that into its guiding WorkflowNotFoundException
+    // a secondary history context cannot be resolved where the cluster does not answer.
+    // The core turns that into its guiding WorkflowNotFoundException
     assertNull(viewer.getWorkflowHistory("test-module", "ParentProcess", "id", "42", "12345"));
     assertEquals(
         List.of(),

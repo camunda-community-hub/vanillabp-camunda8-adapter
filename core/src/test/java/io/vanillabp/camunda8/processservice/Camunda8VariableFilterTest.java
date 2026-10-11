@@ -13,12 +13,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * How an aggregate ID has to look in a variable filter. Camunda 8 compares
- * a variable against its stored JSON and the client passes the filter value through
- * verbatim, so a value which is not JSON matches nothing - and a search returning
- * nothing is indistinguishable from a workflow which does not exist. This defect cost
- * every operation electing its BPMS by probing, on every cluster WITH secondary
- * storage.
+ * How an aggregate ID has to look in a variable filter. Camunda 8 compares a variable
+ * against its stored JSON, and the client passes the filter value through as it is. So a
+ * value which is not JSON matches nothing. And a search which returns nothing looks exactly
+ * like a workflow which does not exist. This defect broke every operation which elects its
+ * BPMS by probing, on every cluster WITH secondary storage.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8VariableFilterTest {
@@ -27,8 +26,8 @@ public class Camunda8VariableFilterTest {
   @DisplayName("An aggregate ID is searched for as the JSON string the cluster holds")
   public void aggregateIdsAreSearchedForAsJsonStrings() {
 
-    // VanillaBP writes the ID as a string whatever its Java type is, so the filter
-    // quotes it whatever its Java type is - the two decisions belong together
+    // VanillaBP writes the ID as a string whatever its Java type is. So the filter quotes
+    // it whatever its Java type is. The two decisions belong together
     assertEquals("\"4711\"", Camunda8VariableFilters.aggregateIdSearchValue("4711"));
     assertEquals("\"4711\"", Camunda8VariableFilters.aggregateIdSearchValue(4711L));
 
@@ -52,9 +51,9 @@ public class Camunda8VariableFilterTest {
   @DisplayName("An ID which is missing is refused instead of searched for")
   public void aMissingIdIsRefused() {
 
-    // "null" is a searchable value like any other, so quoting it would ask the cluster
-    // for workflows whose aggregate id really is those four letters - and the empty
-    // answer to that is the failure this class exists to prevent
+    // "null" is a searchable value like any other. Quoting it would ask the cluster for
+    // workflows whose aggregate id really is those four letters. The empty answer to that
+    // is the failure this class exists to prevent
     final var refused = assertThrows(
         IllegalArgumentException.class,
         () -> Camunda8VariableFilters.aggregateIdSearchValue(null));

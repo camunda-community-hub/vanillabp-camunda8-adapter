@@ -30,19 +30,18 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What the election probe answers when its search fails: BPMS_UNAVAILABLE, and never a
  * guess about what the cluster holds.
  * <p>
- * The cluster of this adapter can be searched - the deployment refuses one which cannot -
- * so a failed search is an outage, and an outage is an answer nobody has rather than a
- * missing feature. The distinction the probe used to make was between those two, and it
- * is gone because only one of them is left. What stays worth pinning is that a failure
- * carrying the WORDS of a cluster without secondary storage still counts as an outage:
- * the capability was settled by a probe of its own, and nothing re-derives it from the
- * prose of a failure.
+ * The cluster of this adapter can be searched, because the deployment refuses one which
+ * cannot. So a failed search is an outage. An outage is an answer nobody has, not a missing
+ * feature. The probe used to tell those two apart. That is gone, because only one of them
+ * is left. One thing is still worth pinning. A failure which carries the WORDS of a cluster
+ * without secondary storage still counts as an outage. A probe of its own settled the
+ * capability, and nothing works it out again from the prose of a failure.
  * <p>
- * What a search which ANSWERS and finds nothing means is the other half of the contract,
- * and it belongs against a real cluster rather than against a mock:
+ * The other half of the contract is what a search means which ANSWERS and finds nothing.
+ * That belongs against a real cluster, not against a mock.
  * {@code Camunda8DeploymentAndStartIT#aWorkflowNobodyStartedIsUnknownToBothProbes} holds
- * that both probes answer UNKNOWN_TO_BPMS there, which is an answer of the cluster and not
- * the absence of one.
+ * that both probes answer UNKNOWN_TO_BPMS there. That is an answer of the cluster, not the
+ * absence of one.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8AwarenessWhenSearchFailsTest {
@@ -78,9 +77,9 @@ public class Camunda8AwarenessWhenSearchFailsTest {
   }
 
   /**
-   * A process service whose cluster is asked once whether it can be searched - the way the
-   * deployment asks before it deploys a workflow module - and fails every search after
-   * that.
+   * A process service whose cluster is asked once whether it can be searched, the way the
+   * deployment asks before it deploys a workflow module. The cluster fails every search
+   * after that.
    *
    * @param searchFailure What every search after the probe throws
    * @return The service under test, its capability settled
@@ -106,9 +105,9 @@ public class Camunda8AwarenessWhenSearchFailsTest {
     });
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock below
+    // nothing ever contacts this address, every request of this test meets the mock below
     configuration.setRestAddress("http://localhost:1");
-    // no waiting for the exporter in a unit test - the cluster is never contacted
+    // no waiting for the exporter in a unit test, the cluster is never contacted
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
 
@@ -122,9 +121,9 @@ public class Camunda8AwarenessWhenSearchFailsTest {
         "c8", clientFactory, Duration.ofDays(14), (
             aggregateClass,
             check) -> check.run(), null);
-    // what the deployment does before it deploys, and the only search which is allowed
-    // to succeed here: from now on the capability is settled and every later failure is
-    // read against it
+    // what the deployment does before it deploys. It is the only search which may succeed
+    // here. From now on the capability is settled, and every later failure is read against
+    // it
     clientFactory.getQueryApi().answers();
     return service;
 
@@ -135,7 +134,7 @@ public class Camunda8AwarenessWhenSearchFailsTest {
   public void aSearchableClusterFailingASearchIsUnavailable() {
 
     // the failure even carries the words a cluster without secondary storage uses, and
-    // they change nothing: this cluster answered the probe, so a search failing now is
+    // they change nothing. This cluster answered the probe, so a search which fails now is
     // an outage
     final var service = serviceOf(
         new IllegalStateException("This endpoint requires a secondary storage, but none is set"));

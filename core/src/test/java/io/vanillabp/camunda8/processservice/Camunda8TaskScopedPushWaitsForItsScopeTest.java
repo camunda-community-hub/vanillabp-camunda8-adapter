@@ -60,20 +60,20 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What a task-scoped push does when the query API does not report the scope of its task.
  * <p>
- * The read model of a cluster is fed by an exporter. When that exporter stands still, the
- * read model knows nothing about a task created after it stopped, so "the query API does not
- * know the task" is no answer to "is the task still there". The push used to read it as one
- * and dropped the changed aggregate after the visibility window. Now the ENGINE is asked,
- * and only its <code>404</code> lets the push go. It is asked only about a task the row of the
- * delivery log says the adapter left open, because the question cuts short the lock of a job a
- * handler may hold. Without such a row the push waits for the read model.
+ * An exporter feeds the read model of a cluster. When that exporter stands still, the read
+ * model knows nothing about a task created after it stopped. So "the query API does not know
+ * the task" is no answer to "is the task still there". The push used to read it as one, and
+ * dropped the changed aggregate after the visibility window. Now the ENGINE is asked, and
+ * only its <code>404</code> lets the push go. It is asked only about a task which, as the row
+ * of the delivery log says, the adapter left open. The question cuts short the lock of a job
+ * a handler may hold. Without such a row the push waits for the read model.
  * <p>
  * The same row names the process instance and the element of the task. Where the model this
  * application deployed puts the element directly into its process, the push writes into that
  * process instance without any search.
  * <p>
- * The cluster is played by mocks: a job search which knows nothing, the commands whose
- * answer each test chooses, and the command which writes the variables.
+ * Mocks play the cluster: a job search which knows nothing, the commands whose answer each
+ * test chooses, and the command which writes the variables.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8TaskScopedPushWaitsForItsScopeTest {
@@ -685,7 +685,7 @@ public class Camunda8TaskScopedPushWaitsForItsScopeTest {
       writtenTo.add(invocation.getArgument(0));
       return step1;
     });
-    // stubbing a second time calls the first stub once, with the matcher's value
+    // stubbing a second time calls the first stub once, with the value of the matcher
     writtenTo.clear();
 
   }

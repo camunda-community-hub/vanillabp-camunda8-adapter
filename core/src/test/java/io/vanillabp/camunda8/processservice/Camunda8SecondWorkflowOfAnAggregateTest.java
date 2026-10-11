@@ -39,13 +39,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <li>the core repeats the dispatch and first asks the adapter whether the workflow exists.</li>
  * </ol>
  * The search has no state filter, so it finds the first workflow. A probe which counts it
- * answers "it is there", the core consumes the entry, and the second workflow never starts.
- * The probe counts only the instances whose <code>startDate</code> is at or after the moment
- * the start was planned.
+ * answers "it is there". Then the core consumes the entry, and the second workflow never
+ * starts. So the probe counts only the instances whose <code>startDate</code> is at or after
+ * the moment the start was planned.
  * <p>
- * The search is a mock: what is under test is what the adapter does with the instances a
- * search returns. That the search finds an instance at all is held against a real cluster by
- * {@code Camunda8DeploymentAndStartIT}.
+ * The search is a mock. The test is about what the adapter does with the instances a search
+ * returns. {@code Camunda8DeploymentAndStartIT} holds against a real cluster that the search
+ * finds an instance at all.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8SecondWorkflowOfAnAggregateTest {
@@ -130,7 +130,7 @@ public class Camunda8SecondWorkflowOfAnAggregateTest {
     when(search.send()).thenReturn(answer);
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
@@ -153,7 +153,7 @@ public class Camunda8SecondWorkflowOfAnAggregateTest {
   public void theFirstWorkflowDoesNotCountForTheSecondStart() {
 
     // the second start was planned, and its first dispatch failed before the cluster created
-    // anything: the search finds the first workflow and nothing else
+    // anything. So the search finds the first workflow and nothing else
     final var service = serviceFinding(instance(FIRST_STARTED, ProcessInstanceState.COMPLETED));
 
     assertEquals(
@@ -208,8 +208,8 @@ public class Camunda8SecondWorkflowOfAnAggregateTest {
   @DisplayName("An instance without a start date does not count")
   public void anInstanceWithoutAStartDateDoesNotCount() {
 
-    // counting it could skip the start and lose the workflow, while not counting it costs at
-    // most a duplicate, which the at-least-once contract permits
+    // counting it could skip the start and lose the workflow. Not counting it costs at most
+    // a duplicate, and the at-least-once contract allows that
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
         serviceFinding(instance(null, ProcessInstanceState.ACTIVE))

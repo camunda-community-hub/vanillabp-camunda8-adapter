@@ -10,16 +10,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The id this adapter hands the cluster for a correlated message. It is what the cluster
- * deduplicates by for as long as the message lives, so its shape decides which
- * publications the cluster silently drops - a second net next to VanillaBP's own, and a
- * longer one.
+ * The id this adapter hands the cluster for a correlated message. The cluster drops
+ * duplicates by this id for as long as the message lives. So its shape decides which
+ * publications the cluster silently drops. It is a second net next to VanillaBP's own, and
+ * a longer one.
  * <p>
- * Two shapes are pinned here rather than one, because the difference between them IS the
- * feature: with the activation, the three elements of a multi-instance call activity reach
- * the cluster as three messages; without it - a correlation planned outside any activation
- * - the id is exactly what every earlier version sent, so nothing about a REST endpoint's
- * correlations changes.
+ * Two shapes are pinned here, not one, because the difference between them IS the feature.
+ * With the activation, the three elements of a multi-instance call activity reach the
+ * cluster as three messages. Without it, for a correlation planned outside any activation,
+ * the id is exactly what every earlier version sent. So nothing changes about the
+ * correlations of a REST endpoint.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8MessageIdTest {
@@ -50,8 +50,8 @@ public class Camunda8MessageIdTest {
   @DisplayName("Three multi-instance siblings of one aggregate derive three ids")
   public void siblingsOfOneAggregateDeriveDifferentIds() {
 
-    // everything but the activation is equal: a called process is a secondary workflow of
-    // the SAME aggregate, and a correlation id read from business data does not have to
+    // everything but the activation is equal. A called process is a secondary workflow of
+    // the SAME aggregate. And a correlation id read from business data does not have to
     // differ between the elements
     final var first = Camunda8ProcessService
         .messageIdOf("module", "Process", "4711", "OfferRequested", "partner-42", "element-1");
@@ -70,8 +70,8 @@ public class Camunda8MessageIdTest {
   @DisplayName("A redelivery of one activation derives the same id, which is what must not change")
   public void oneActivationAlwaysDerivesOneId() {
 
-    // the guarantee the activation must not cost: an at-least-once dispatch of the same
-    // entry publishes the same id, and the cluster drops the repetition - which is the
+    // the guarantee which the activation must not cost. An at-least-once dispatch of the
+    // same entry publishes the same id, and the cluster drops the repetition. That is the
     // one thing this net is there for
     assertEquals(
         Camunda8ProcessService

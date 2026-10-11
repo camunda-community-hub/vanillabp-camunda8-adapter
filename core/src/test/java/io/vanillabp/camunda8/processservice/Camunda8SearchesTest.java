@@ -20,11 +20,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * The three conditions a search of this adapter is built from, asked of the class an
- * EXTENSION calls - for the workflow itself and for the user tasks of it.
+ * EXTENSION calls. This holds for the workflow itself and for its user tasks.
  * <p>
- * The one which is easy to get wrong is the variable value, which travels as the JSON the
- * cluster stores rather than as the plain id. A search built one condition differently
- * answers nothing, and nothing reads like a workflow nobody started - which is why this is
+ * The one which is easy to get wrong is the variable value. It travels as the JSON the
+ * cluster stores, not as the plain id. A search with one condition built differently
+ * answers nothing, and nothing reads like a workflow nobody started. That is why this is
  * one class and not a rule written down twice.
  */
 @ExtendWith(SuppressOutputExtension.class)

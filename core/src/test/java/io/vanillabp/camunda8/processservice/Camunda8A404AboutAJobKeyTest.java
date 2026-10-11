@@ -44,21 +44,21 @@ import io.vanillabp.spi.process.TaskNotFoundException;
  * user-task key.
  * <p>
  * The command asks about a user-task key, so its {@code 404} means "no user task of that key".
- * For a real user-task key that is the same as "the task is over". For a job key it is not: a
- * user task served by a job worker, the shape VanillaBP modelled up to its release 1.6.3, has no
- * user-task record in the cluster at all, so every user-task command answers {@code 404} about
- * it however open the task is. An application meets such a key while it upgrades, because the
- * task ids of version 1 are data it brings along.
+ * For a real user-task key that is the same as "the task is over". For a job key it is not. A
+ * user task served by a job worker has no user-task record in the cluster at all. That is the
+ * shape VanillaBP modelled up to its release 1.6.3. So every user-task command answers
+ * {@code 404} about it, however open the task is. An application meets such a key while it
+ * upgrades, because the task ids of version 1 are data it brings along.
  * <p>
  * So the job side is asked once, on the {@code 404} and nowhere else, and the sentence says what
- * came back. Two questions make it up and they are not interchangeable: the ENGINE says whether it
- * holds a job of that key, with the {@code UpdateJobTimeout} this adapter sends as its existence
- * check anyway, and the index only names the element, the process and the state. Measured against a
- * cluster, the index answered "no job" about a job which was open and kept answering about one which
- * was over, so it can carry neither half of the question.
+ * came back. It is made of two questions, and one cannot replace the other. The ENGINE says
+ * whether it holds a job of that key. It answers the {@code UpdateJobTimeout} which this adapter
+ * sends as its existence check anyway. The index only names the element, the process and the
+ * state. Measured against a cluster, the index answered "no job" about a job which was open,
+ * and it kept answering about one which was over. So it can carry neither half of the question.
  * <p>
- * What the caller gets is unchanged, which is why every case below asserts the outcome next to the
- * words.
+ * What the caller gets is unchanged. That is why every case below asserts the outcome next to
+ * the words.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8A404AboutAJobKeyTest {
@@ -72,7 +72,7 @@ public class Camunda8A404AboutAJobKeyTest {
   private Camunda8ProcessService<Object> service() {
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
@@ -262,9 +262,9 @@ public class Camunda8A404AboutAJobKeyTest {
   }
 
   /**
-   * A cluster which HOLDS a job of the key asked about, answered the way it answers for a job
-   * nobody has activated: the engine refuses the timeout update with 400, which is what says the
-   * job is there. The index names it.
+   * A cluster which HOLDS a job of the key asked about. It answers the way it answers for a job
+   * nobody has activated: the engine refuses the timeout update with 400, and that says the job
+   * is there. The index names it.
    */
   private void theJobSideHolds(
       final String type,
@@ -281,7 +281,7 @@ public class Camunda8A404AboutAJobKeyTest {
   }
 
   /**
-   * A cluster which holds no job of that key either, which is the everyday case of a task which
+   * A cluster which holds no job of that key either. That is the everyday case of a task which
    * really is over.
    */
   private void theJobSideHoldsNothing() {
@@ -324,7 +324,7 @@ public class Camunda8A404AboutAJobKeyTest {
     @SuppressWarnings("unchecked")
     final SearchResponse<Job> found = mock(SearchResponse.class);
     Mockito.lenient().when(found.items()).thenReturn(jobs);
-    // the future is built BEFORE the stubbing which returns it - mocking inside a when(...)
+    // the future is built BEFORE the stubbing which returns it. Mocking inside a when(...)
     // leaves Mockito with an unfinished stubbing
     final var answer = future(found);
     Mockito.lenient().when(search.send()).thenReturn(answer);

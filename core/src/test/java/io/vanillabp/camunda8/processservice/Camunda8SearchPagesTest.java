@@ -21,10 +21,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * When the reading of a search stops, and what it says about where it stopped.
  * <p>
- * The three callers prove that every page is read. What is left over for here are the ends
- * of the paging, because each of them means something different to a caller: a page the
- * cluster could not fill is the end of the set, a bound reached is an answer which is only
- * a part, and a full page without a cursor to go on from is the second kind as well.
+ * The three callers prove that every page is read. What is left for this test are the ends
+ * of the paging, because each of them means something different to a caller. A page the
+ * cluster could not fill is the end of the set. A bound reached is an answer which is only a
+ * part. And a full page without a cursor to go on from is only a part as well.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8SearchPagesTest {
