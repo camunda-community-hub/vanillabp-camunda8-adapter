@@ -8,22 +8,22 @@ import io.camunda.client.api.response.ActivatedJob;
 import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 
 /**
- * The lease of a job activation. This is the 8.8 variant, and this line has none: the word
+ * The lease of a job activation. This is the 8.8 variant, and this line has none. The word
  * <code>lease</code> appears nowhere in <code>io.camunda.client.api</code> of the client
- * this line is compiled against, so every method here does nothing and says so.
+ * this line is compiled against. So every method here does nothing, and says so.
  * <p>
- * What a lease buys is described on the 8.10 variant of this class. An application on this
- * line answers a job the way it always did: the cluster takes the completion of whoever
- * sends one, so when a lock expires while the business method still runs, the run which
- * finished FIRST is the one the workflow continues with.
+ * The 8.10 variant of this class describes what a lease is good for. An application on this
+ * line answers a job the way it always did. The cluster takes the completion of whoever
+ * sends one. So when a lock expires while the business method still runs, the workflow
+ * goes on with the run which finished FIRST.
  * <p>
  * The configuration key is accepted here and ignored, and the boot says so in one line. An
- * application which moves between lines carries one configuration, and refusing the key
- * would break exactly that.
+ * application which moves between lines has one configuration, and refusing the key would
+ * break exactly that.
  * <p>
- * Public because the workers are opened in one package of this module and the answers are
- * sent from another. It is not on the list of what an extension of the pipeline is told, so
- * it stays the adapter's own and may move with the next change.
+ * It is public because the workers are opened in one package of this module, and the
+ * answers are sent from another. It is not on the list of what an extension of the pipeline
+ * is told. So it stays the adapter's own, and it may move with the next change.
  */
 public final class Camunda8JobLease {
 

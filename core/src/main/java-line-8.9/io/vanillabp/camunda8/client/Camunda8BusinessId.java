@@ -6,14 +6,14 @@ import io.camunda.client.api.command.CreateProcessInstanceCommandStep1;
  * The business id an instance carries in Operate. This is the 8.9 variant, and this line can
  * write one at creation.
  * <p>
- * What the id is for is described on the 8.10 variant of this class. What this line does not
- * have is the command which ASSIGNS a business id to an instance which is already running, so
- * the id is written at creation here and nowhere else, and the probe of
- * {@link Camunda8InstanceProbe} sends the modification instead of the assignment.
+ * The 8.10 variant of this class describes what the id is for. This line does not have the
+ * command which ASSIGNS a business id to an instance which is already running. So here the
+ * id is written at creation and nowhere else. And the probe of {@link Camunda8InstanceProbe}
+ * sends the modification and not the assignment.
  * <p>
- * Public because the process service which starts a workflow lives in another package of this
- * module. It is not on the list of what an extension of the pipeline is told, so it stays the
- * adapter's own and may move with the next change.
+ * It is public because the process service which starts a workflow lives in another package
+ * of this module. It is not on the list of what an extension of the pipeline is told. So it
+ * stays the adapter's own, and it may move with the next change.
  */
 public final class Camunda8BusinessId {
 

@@ -3,8 +3,8 @@ package io.vanillabp.camunda8.client;
 import java.util.Optional;
 
 /**
- * The local cluster of the 8.10 line: where an adapter without a cluster address connects to,
- * and what the start says about it.
+ * The local cluster of the 8.10 line. An adapter without a cluster address connects to it.
+ * This class also holds what the start says about it.
  * <p>
  * The addresses are the ones Camunda's docker compose for 8.10 publishes
  * (camunda/camunda-distributions, <code>docker-compose/versions/camunda-8.10</code>):
