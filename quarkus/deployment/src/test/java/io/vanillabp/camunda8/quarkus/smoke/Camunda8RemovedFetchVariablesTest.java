@@ -12,8 +12,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * The key <code>fetch-variables</code> was removed in version 2.0. An application which still
- * sets it does not start, and the message names every key which sets it, here one at the
- * adapter level and one at the task level, and says what applies instead.
+ * sets it does not start. The message names every key which sets it, and says what applies
+ * instead. Here one key is at the adapter level and one at the task level.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8RemovedFetchVariablesTest {

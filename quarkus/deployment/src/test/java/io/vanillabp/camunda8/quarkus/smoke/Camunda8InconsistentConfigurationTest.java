@@ -11,10 +11,10 @@ import io.quarkus.test.QuarkusExtensionTest;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Startup-validation boot test on Quarkus: an INCONSISTENTLY configured
- * first-priority adapter (here <code>mode: saas</code> without any credential) fails
- * the boot with a message naming the missing property keys - the developer learns
- * about the defect at startup, not when the first workflow is started.
+ * Startup-validation boot test on Quarkus. A first-priority adapter which is configured
+ * INCONSISTENTLY (here <code>mode: saas</code> without any credential) fails the boot. The
+ * message names the missing property keys. So the developer learns about the defect at
+ * startup, and not when the first workflow is started.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8InconsistentConfigurationTest {
@@ -48,7 +48,7 @@ public class Camunda8InconsistentConfigurationTest {
 
   @Test
   public void inconsistentConfigurationFailsTheBoot() {
-    // should never be executed due to the expected startup exception
+    // never runs, because the start fails as expected
   }
 
 }

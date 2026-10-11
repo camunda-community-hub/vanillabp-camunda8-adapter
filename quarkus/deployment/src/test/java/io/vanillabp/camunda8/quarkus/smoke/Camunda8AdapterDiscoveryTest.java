@@ -76,10 +76,10 @@ public class Camunda8AdapterDiscoveryTest {
     final var migratableProcessService = migratableProcessServices.getFirst();
     Assertions.assertEquals("c8", migratableProcessService.getAdapterId());
 
-    // the client-factory registry and the deployment service are produced (client and
-    // deployment-service creation are covered here; a Docker-based start test is not
-    // practical in a QuarkusExtensionTest - see the Spring Boot module's
-    // Camunda8DeploymentAndStartIT and the README)
+    // the client-factory registry and the deployment service are produced. This covers the
+    // creation of the client and of the deployment service. A Docker-based start test is not
+    // practical in a QuarkusExtensionTest. See the Spring Boot module's
+    // Camunda8DeploymentAndStartIT and the README
     Assertions.assertNotNull(clientFactoryRegistry.getFactory("c8"));
     Assertions.assertEquals(1, deploymentServices.size());
     Assertions.assertEquals("c8", deploymentServices.getFirst().getAdapterId());
@@ -90,10 +90,10 @@ public class Camunda8AdapterDiscoveryTest {
   @Test
   public void anAdapterWithoutAnAddressAsksTheLocalCluster() {
 
-    // This application configures the adapter but no cluster address, so the client uses
-    // the address of the local cluster of its release line. The readiness check asks
-    // that cluster. No cluster runs there in this test, but one may on a developer's
-    // machine, so the answer is UP or DOWN, and never UNKNOWN
+    // This application configures the adapter but no cluster address. So the client uses
+    // the address of the local cluster of its release line. The readiness check asks that
+    // cluster. No cluster runs there in this test, but one may run there on a developer's
+    // machine. So the answer is UP or DOWN, and never UNKNOWN
     final var health = deploymentServices
         .getFirst()
         .checkHealth();

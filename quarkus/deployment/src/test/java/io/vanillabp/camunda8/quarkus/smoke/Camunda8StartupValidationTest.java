@@ -14,10 +14,9 @@ import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Startup-validation boot test on Quarkus: an adapter WITHOUT a cluster address still
- * boots. The {@code StartupEvent} observer forces the validation, which warns that the
- * address of the local cluster of the release line is used, and names the key which changes
- * it.
+ * Startup-validation boot test on Quarkus. An adapter WITHOUT a cluster address still boots.
+ * The {@code StartupEvent} observer forces the validation. It warns that the address of the
+ * local cluster of the release line is used, and it names the key which changes it.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8StartupValidationTest {
@@ -52,9 +51,9 @@ public class Camunda8StartupValidationTest {
                                             .contains("vanillabp.adapters.c8.mode")),
             "expected the startup warning naming the local cluster but got: "
                 + messages);
-        // where the local cluster of the line takes port 8080, the default port of Quarkus,
-        // the warning names the key which moves the application. Which lines that are is
-        // held by Camunda8LocalClusterTest of each line
+        // on some lines the local cluster takes port 8080, the default port of Quarkus.
+        // There the warning names the key which moves the application to another port.
+        // Camunda8LocalClusterTest of each line holds which lines these are
         Assertions.assertEquals(
             Camunda8AdapterConfiguration.LOCAL_CLUSTER_REST_ADDRESS.endsWith(":8080"),
             messages
@@ -67,7 +66,7 @@ public class Camunda8StartupValidationTest {
 
   @Test
   public void anAdapterWithoutAnAddressBootsAndNamesTheLocalCluster() {
-    // the assertion happens on the collected log records after shutdown
+    // the assertion is on the log records collected after shutdown
   }
 
 }

@@ -5,10 +5,9 @@ import io.vanillabp.integration.spi.PhaseTwoOutbox;
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * A {@link PhaseTwoOutbox} stub for smoke tests booting WITHOUT a database: the
- * Camunda 8 adapter sends everything through phase two, and the
- * platform wants the outbox RESOLVABLE at startup. The smoke
- * tests never start workflows - any usage of the stub fails loudly.
+ * A {@link PhaseTwoOutbox} stub for smoke tests which boot WITHOUT a database. The Camunda 8
+ * adapter sends everything through phase two, and the platform wants the outbox RESOLVABLE at
+ * startup. The smoke tests never start workflows. Any use of the stub fails loudly.
  */
 @ApplicationScoped
 public class TestPhaseTwoOutbox implements PhaseTwoOutbox {

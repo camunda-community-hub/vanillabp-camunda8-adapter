@@ -20,16 +20,15 @@ import jakarta.inject.Inject;
  * Whether the core reaches this adapter on Quarkus when it asks whose isolation keeps two
  * workflow modules apart.
  * <p>
- * The question decides whether two workflow modules bringing one BPMN process id end the boot.
- * Under the default mode the cluster deploys each module into a tenant named after it, so the
- * two are kept apart and the deployment goes on. An answer the core cannot get reads as "my
- * isolation separates nothing", which would refuse an application that is perfectly correct,
- * and on Quarkus the adapter hands its deployment services over as one list bean per adapter
- * id rather than as element beans. So this is where that shape is proven. The refusal itself is
- * core logic and is held by the Spring Boot module's
- * {@code Camunda8CollidingProcessIdsBootTest}.
+ * The answer decides whether two workflow modules with the same BPMN process id end the boot.
+ * Under the default mode the cluster deploys each module into a tenant named after it. So the
+ * two are kept apart, and the deployment goes on. If the core cannot get an answer, it reads
+ * that as "my isolation separates nothing". That would refuse an application which is
+ * perfectly correct. On Quarkus the adapter hands over its deployment services as one list
+ * bean per adapter id, not as single beans. So this test proves that shape. The refusal itself
+ * is core logic. The Spring Boot module's {@code Camunda8CollidingProcessIdsBootTest} holds it.
  * <p>
- * No cluster is needed: the tenant a workflow module would be deployed to comes out of
+ * No cluster is needed. The tenant a workflow module would be deployed to comes from the
  * configuration.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -72,8 +71,8 @@ public class Camunda8CollidingProcessIdsTest {
   @Test
   public void twoModulesUnderOneProcessIdDeployIntoTheirOwnTenants() {
 
-    // what the adapter hands over while it deploys a workflow module, once per module,
-    // which is the only collection a deployment per module can have
+    // what the adapter hands over while it deploys a workflow module, once per module. A
+    // deployment per module cannot collect anything else
     Assertions
         .assertDoesNotThrow(
             () -> scoping

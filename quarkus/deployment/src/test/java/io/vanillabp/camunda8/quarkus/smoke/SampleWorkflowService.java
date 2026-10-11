@@ -41,8 +41,8 @@ public class SampleWorkflowService implements AggregatePersistenceAware<Aggregat
 
   @WorkflowTask(taskDefinition = "test-job")
   public void doSomething() {
-    // no-op; satisfies the task-wiring validation for the smoke
-    // BPMN's service task - never invoked in these tests
+    // does nothing. It satisfies the task-wiring validation for the service task of the
+    // smoke BPMN. These tests never call it
   }
 
 }

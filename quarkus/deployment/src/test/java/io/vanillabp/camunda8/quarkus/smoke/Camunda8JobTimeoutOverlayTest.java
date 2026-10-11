@@ -25,13 +25,13 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Proves the job timeout resolves through all FOUR configuration levels of the
- * Quarkus overlay mapping - task, workflow, workflow-module and
- * adapter level, most specific wins - and that the async-task-lock-renewal is read at
- * adapter level. It is also where the Quarkus overlay is checked key by key: every
- * client, worker and authentication key has to bind AND arrive at the client the adapter
- * id built. No BPMN resources are deployed (the workflow module's resources-location is
- * empty), so the boot succeeds without a cluster.
+ * Proves that the job timeout resolves through all FOUR configuration levels of the Quarkus
+ * overlay mapping: task, workflow, workflow-module and adapter level. The most specific level
+ * wins. It also proves that the async-task-lock-renewal is read at adapter level. This class
+ * also checks the Quarkus overlay key by key. Every client, worker and authentication key has
+ * to bind AND arrive at the client which the adapter id built. No BPMN resources are deployed,
+ * because the workflow module's resources-location is empty. So the boot succeeds without a
+ * cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8JobTimeoutOverlayTest {
@@ -84,8 +84,8 @@ public class Camunda8JobTimeoutOverlayTest {
 
     final var overlay = overlay();
 
-    // message level (most specific) - a catch event whose message may legitimately repeat
-    // every minute, which is what a per-message override is for
+    // message level (most specific). A catch event whose message may rightly repeat every
+    // minute. A per-message override is meant for that
     Assertions.assertEquals(
         Duration.ofMinutes(1),
         overlay.messageTimeToLiveFor("test-app", "TaskProcess", "OfferRequested", "c8"));
@@ -109,9 +109,9 @@ public class Camunda8JobTimeoutOverlayTest {
 
     final var overlay = overlay();
 
-    // the most specific level of the two resolutions is a different map on purpose: an
-    // override meant for a message must not apply to a task of the same name, and the
-    // task section of 'happyTask' must not answer a message question
+    // the most specific level of the two resolutions is a different map, on purpose. An
+    // override meant for a message must not apply to a task of the same name. And the task
+    // section of 'happyTask' must not answer a question about a message
     Assertions.assertEquals(
         Duration.ofSeconds(2),
         overlay.jobTimeoutFor("test-app", "TaskProcess", "happyTask", "c8"));
@@ -152,8 +152,8 @@ public class Camunda8JobTimeoutOverlayTest {
 
     final var overlay = overlay();
 
-    // what a 'retryBackoff' task header of the model is weighed against: only the task
-    // level meets it as an equal, everything above it loses to the model
+    // what a 'retryBackoff' task header of the model is weighed against. Only the task level
+    // counts as much as the header. Every level above it loses to the model
     Assertions.assertTrue(
         overlay.configuredRetryBackoffFor("test-app", "TaskProcess", "happyTask", "c8").perTask(),
         "'happyTask' configures a backoff of its own");
@@ -171,8 +171,8 @@ public class Camunda8JobTimeoutOverlayTest {
 
     final var overlay = overlay();
 
-    // the workflow says yes where its module said no, which is the case version 1
-    // could not express: its primitive booleans could only turn the flag on
+    // the workflow says yes where its module said no. Version 1 could not express this case,
+    // because its primitive booleans could only turn the flag on
     final var perWorkflow = overlay.allowConnectorsFor("test-app", "TaskProcess", "c8");
     Assertions.assertTrue(perWorkflow.allowed());
     Assertions.assertEquals(
@@ -221,9 +221,9 @@ public class Camunda8JobTimeoutOverlayTest {
 
     final var overlay = overlay();
 
-    // the workflow serves its listeners where its module does not, which is the same
-    // most-specific-wins rule allow-connectors follows - deliberately, because two keys about
-    // what a model may contain must not reach different levels
+    // the workflow serves its listeners where its module does not. That is the same
+    // most-specific-wins rule which allow-connectors follows. This is on purpose: two keys
+    // about what a model may contain must not reach different levels
     final var perWorkflow = overlay.allowListenersFor("test-app", "TaskProcess", "c8");
     Assertions.assertTrue(perWorkflow.allowed());
     Assertions.assertEquals(
@@ -269,8 +269,8 @@ public class Camunda8JobTimeoutOverlayTest {
 
     final var overlay = overlay();
 
-    // the workflow module's own name wins over the adapter's, which is how an application
-    // gives one module a scope of its own without moving every other module with it
+    // the workflow module's own name wins over the adapter's. So an application can give one
+    // module a scope of its own, without moving every other module with it
     final var perModule = overlay.configuredTenantFor("c8", "test-app");
     Assertions.assertEquals("test-app-tenant", perModule.tenantId());
     Assertions

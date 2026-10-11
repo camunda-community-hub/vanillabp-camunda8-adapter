@@ -11,13 +11,13 @@ import io.quarkus.test.QuarkusExtensionTest;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The counterpart of {@link Camunda8DeploymentPipelineTest}: with a
- * <code>startup-wait</code> configured, a start which cannot reach its cluster ends with
- * the WAIT's message rather than with the deployment's, which is what proves the wait sits
- * in the boot before the first round the adapter makes to the cluster.
+ * The counterpart of {@link Camunda8DeploymentPipelineTest}. With a <code>startup-wait</code>
+ * configured, a start which cannot reach its cluster ends with the message of the WAIT, not
+ * with the message of the deployment. This proves that the wait runs in the boot, before the
+ * first request the adapter sends to the cluster.
  * <p>
- * The wait of this application is two seconds, because the cluster is a closed port and
- * stays one.
+ * The wait of this application is two seconds, because the cluster is a closed port and stays
+ * closed.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8StartupWaitTest {
@@ -56,7 +56,7 @@ public class Camunda8StartupWaitTest {
 
   @Test
   public void theStartWaitsForTheClusterBeforeItDeploys() {
-    // the assertion happens on the startup exception (assertException above)
+    // the assertion is on the startup exception (assertException above)
   }
 
 }
