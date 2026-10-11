@@ -15,8 +15,8 @@ import io.vanillabp.integration.deployment.pipeline.VanillaBpAdapterDeploymentSe
 import io.vanillabp.integration.deployment.processservice.VanillaBpMigratableProcessServiceBuildItem;
 
 /**
- * Quarkus extension of the VanillaBP Camunda 8 adapter. Announces the adapter type and
- * its process-service bean to the VanillaBP Quarkus integration and registers the
+ * The Quarkus extension of the VanillaBP Camunda 8 adapter. It tells the VanillaBP Quarkus
+ * integration the adapter type and the process-service bean. It also registers the
  * runtime producer.
  */
 class Camunda8IntegrationProcessor {
@@ -24,9 +24,8 @@ class Camunda8IntegrationProcessor {
   private static final String FEATURE = "vanillabp-camunda8";
 
   /**
-   * Builds the {@link VanillaBpMigratableProcessServiceBuildItem} used by the VanillaBP
-   * Quarkus integration to determine the process-service class of the Camunda 8
-   * adapter.
+   * Builds the {@link VanillaBpMigratableProcessServiceBuildItem}. The VanillaBP Quarkus
+   * integration reads the process-service class of the Camunda 8 adapter from it.
    *
    * @param properties Camunda 8 build-time properties
    * @param featureProducer Feature build-item producer used to register the extension
@@ -42,19 +41,19 @@ class Camunda8IntegrationProcessor {
     return VanillaBpMigratableProcessServiceBuildItem
         .builder()
         .adapterType(Camunda8DeploymentService.ADAPTER_TYPE)
-        // the announced bean class is registered by the VanillaBP extension - it
-        // has to be the producer, not the core process-service class
+        // the VanillaBP extension registers the announced bean class. So it has to be the
+        // producer, not the process-service class of the core
         .migratableProcessServiceBeanClass(Camunda8ProcessServiceProducer.class.getName())
         .build();
 
   }
 
   /**
-   * Builds the {@link VanillaBpAdapterDeploymentServiceBuildItem} used by the
-   * VanillaBP Quarkus integration to determine and register the deployment-service
-   * bean of the Camunda 8 adapter - consumed by the platform's runtime deployment
-   * pipeline (readBpmn &rarr; prepareBpmn &rarr; wireBpmn &rarr; deployResources
-   * &rarr; startWorkflowProcessing).
+   * Builds the {@link VanillaBpAdapterDeploymentServiceBuildItem}. The VanillaBP Quarkus
+   * integration reads the deployment-service bean of the Camunda 8 adapter from it and
+   * registers that bean. The platform's deployment pipeline uses it at runtime (readBpmn
+   * &rarr; prepareBpmn &rarr; wireBpmn &rarr; deployResources &rarr;
+   * startWorkflowProcessing).
    *
    * @return The {@link VanillaBpAdapterDeploymentServiceBuildItem}
    */
@@ -78,9 +77,9 @@ class Camunda8IntegrationProcessor {
   @BuildStep
   AdditionalBeanBuildItem registerProcessServiceProducer() {
 
-    // the process-service and deployment-service producers are registered by the
-    // VanillaBP extension via the build items above - only the other producers are
-    // registered here
+    // the VanillaBP extension registers the process-service and deployment-service
+    // producers through the build items above. Only the other producers are registered
+    // here
     return AdditionalBeanBuildItem
         .builder()
         .addBeanClass(Camunda8ClientProducer.class)
@@ -93,15 +92,15 @@ class Camunda8IntegrationProcessor {
   private static final String MICROMETER_EXTENSION_PROCESSOR = "io.quarkus.micrometer.deployment.MicrometerProcessor";
 
   /**
-   * Registers the producer of this adapter's own meters - but only for an application
-   * which uses Micrometer. The adapter does not bring it: metrics are the application's
+   * Registers the producer of this adapter's own meters, but only for an application which
+   * uses Micrometer. The adapter does not bring Micrometer. Metrics are the application's
    * decision, and an application without them has to boot unchanged.
    * <p>
-   * The signal is the Micrometer extension's build-step class on the DEPLOYMENT
-   * classpath, which is how the VanillaBP platform integration detects it as well. The
-   * presence of Micrometer's own classes would not do - the Camunda client drags them in
-   * as an optional dependency of its own, and nothing produces the {@code MeterRegistry}
-   * the producer needs then.
+   * The signal is the build-step class of the Micrometer extension on the DEPLOYMENT
+   * classpath. The VanillaBP platform integration detects it the same way. Micrometer's own
+   * classes are not a good signal. The Camunda client pulls them in as an optional
+   * dependency of its own, and then nothing produces the {@code MeterRegistry} the producer
+   * needs.
    *
    * @param additionalBeans Producer used to register the metrics' producer
    */
