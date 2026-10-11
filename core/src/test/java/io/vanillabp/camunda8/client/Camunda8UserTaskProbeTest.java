@@ -20,14 +20,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * The mark a probe of this adapter leaves on the listener job it fires.
  * <p>
- * The empty update fires a modelled <code>updating</code> listener although it changes
- * nothing, so the job has to be recognisable. Both halves of the mark are asserted, because
- * either half on its own belongs to somebody else too: the action is a string anybody may
- * send, and an empty change list is not this adapter's doing either.
+ * The empty update fires a modelled <code>updating</code> listener, although it changes
+ * nothing. So the job has to be recognisable. The test asserts both halves of the mark,
+ * because either half on its own can come from somebody else too. The action is a string
+ * anybody may send. And an empty change list does not only come from this adapter.
  * <p>
- * What the cluster answers such a probe with is read by
- * {@code Camunda8Errors#refusedAboutAUserTaskItHolds} and asserted where its siblings are,
- * in {@code Camunda8ErrorsTest}.
+ * {@code Camunda8Errors#refusedAboutAUserTaskItHolds} reads what the cluster answers to such
+ * a probe. {@code Camunda8ErrorsTest} asserts that, next to its siblings.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UserTaskProbeTest {

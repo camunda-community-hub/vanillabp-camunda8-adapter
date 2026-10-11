@@ -17,8 +17,8 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Two <code>camunda8</code> adapter ids only make sense if they address DIFFERENT
- * clusters - or one cluster with different credentials/tenants.
+ * Two <code>camunda8</code> adapter ids only make sense if they address DIFFERENT clusters.
+ * Or one cluster with different credentials or tenants.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8InstanceIdentityTest {
@@ -121,8 +121,8 @@ public class Camunda8InstanceIdentityTest {
         "c8-tenants", NameClashAvoidance.BY_ADAPTER,
         "c8-prefixed", NameClashAvoidance.USE_PREFIX);
 
-    // the tenants-to-prefix migration: ONE cluster, two adapter ids differing only in
-    // the mode - the identifiers they use are disjoint, so this has to be accepted
+    // the migration from tenants to prefixes: ONE cluster, and two adapter ids which differ
+    // only in the mode. The identifiers they use do not overlap, so this has to be accepted
     assertDoesNotThrow(
         () -> Camunda8InstanceIdentity.validateDistinct(
             List.copyOf(configurations.keySet()),
@@ -154,9 +154,9 @@ public class Camunda8InstanceIdentityTest {
   }
 
   /**
-   * A {@link NameClashAvoidanceSupport} answering only {@code modeFor} - the identity
-   * check needs nothing else, and the core's implementation is not available in the
-   * Camunda 8 core (it depends on the adapter SPI only).
+   * A {@link NameClashAvoidanceSupport} which answers only {@code modeFor}. The identity
+   * check needs nothing else. The core's implementation is not available here, because
+   * the Camunda 8 core depends on the adapter SPI only.
    */
   private static NameClashAvoidanceSupport modeResolver(
       final Map<String, NameClashAvoidance> modesByAdapterId) {

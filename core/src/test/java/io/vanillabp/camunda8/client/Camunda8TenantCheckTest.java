@@ -16,9 +16,9 @@ import io.camunda.client.api.search.response.Tenant;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Asking the cluster about the tenant before deploying (GAPS G2): which of its answers
- * becomes a guiding boot failure, and which failure is deliberately left to the
- * deployment itself.
+ * The adapter asks the cluster about the tenant before it deploys (GAPS G2). This test holds
+ * which answers become a guiding boot failure, and which failure is left to the deployment
+ * itself on purpose.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8TenantCheckTest {
@@ -26,8 +26,8 @@ public class Camunda8TenantCheckTest {
   private static final String MODULE = "loan-approval";
 
   /**
-   * A client whose tenant lookup fails with the given exception, respectively succeeds
-   * if it is <code>null</code>.
+   * A client whose tenant lookup fails with the given exception. If the exception is
+   * <code>null</code>, the lookup succeeds.
    */
   private static CamundaClient clientFailingWith(
       final RuntimeException failure) {
@@ -77,12 +77,12 @@ public class Camunda8TenantCheckTest {
     assertTrue(
         message.contains("vanillabp.adapters.myengine.name-clash-avoidance: use-prefix"),
         () -> message);
-    // both ways out are named, not only prefixing: an application whose identifiers are
+    // both ways out are named, not only prefixing. An application whose identifiers are
     // unique across its modules says so with 'none'
     assertTrue(
         message.contains("vanillabp.adapters.myengine.name-clash-avoidance: none"),
         () -> message);
-    // and why a tenant is used at all, which matters for an application configuring nothing
+    // and why a tenant is used at all. That matters for an application which configures nothing
     assertTrue(message.contains("by-adapter"), () -> message);
     assertTrue(message.contains("'"
         + MODULE
@@ -103,7 +103,7 @@ public class Camunda8TenantCheckTest {
     assertTrue(message.contains("does not know that tenant"), () -> message);
     assertTrue(message.contains("vanillabp.adapters.myengine.tenant-id"), () -> message);
     assertTrue(message.contains("'banking'"), () -> message);
-    // deploying without a tenant is the third way out and was missing here
+    // deploying without a tenant is the third way out
     assertTrue(
         message.contains("vanillabp.adapters.myengine.name-clash-avoidance: none"),
         () -> message);
@@ -118,8 +118,8 @@ public class Camunda8TenantCheckTest {
     assertDoesNotThrow(
         () -> Camunda8TenantCheck.requireUsableTenant("myengine", MODULE, "banking", clientFailingWith(null)));
 
-    // an unreachable cluster: no problem detail, so nothing is known about tenants -
-    // the deploy command right after reports the connection failure as what it is
+    // an unreachable cluster: no problem detail, so nothing is known about tenants. The
+    // deploy command right after it reports the connection failure as what it is
     assertDoesNotThrow(
         () -> Camunda8TenantCheck.requireUsableTenant(
             "myengine",
@@ -127,7 +127,7 @@ public class Camunda8TenantCheckTest {
             "banking",
             clientFailingWith(new IllegalStateException("Connection refused"))));
 
-    // an answer about something else, e.g. no permission for the tenant API
+    // an answer about something else, for example no permission for the tenant API
     assertDoesNotThrow(
         () -> Camunda8TenantCheck.requireUsableTenant(
             "myengine",

@@ -12,10 +12,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * Both roles reach the client of the 8.8 line, where there is only one place to put them.
  * <p>
- * This is what the line-specific installer is for, so it is asserted per line: the 8.8
- * client takes a single {@code ScheduledExecutorService} and uses it for the polls as well
- * as for the handlers, and the adapter's executor is the object which keeps the two apart
- * behind that one reference.
+ * This is what the line-specific installer is for, so it is asserted per line. The 8.8
+ * client takes a single {@code ScheduledExecutorService} and uses it for the polls and for
+ * the handlers. The adapter's executor keeps the two apart behind that one reference.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8JobExecutorsTest {

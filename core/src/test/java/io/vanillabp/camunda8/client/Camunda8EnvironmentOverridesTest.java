@@ -17,8 +17,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * What the environment changed about a client this adapter had just configured. The
- * client applies <code>CAMUNDA_*</code> variables over everything the builder set and
- * says nothing about it; this is what makes it visible.
+ * client applies <code>CAMUNDA_*</code> variables over everything the builder set, and it
+ * says nothing about it. This is what makes it visible.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8EnvironmentOverridesTest {
@@ -32,7 +32,7 @@ public class Camunda8EnvironmentOverridesTest {
   }
 
   /**
-   * A client whose values are what the environment would have made of them - built
+   * A client whose values are what the environment would have made of them. It is built
    * without the environment, so the test does not have to set variables on the JVM.
    */
   private static CamundaClient clientReporting(

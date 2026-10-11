@@ -17,22 +17,22 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The protobuf runtime this build puts on the classpath is at least the gencode version the
  * Camunda client of this release line was generated against.
  * <p>
- * The client ships generated protocol classes, and protobuf refuses a runtime older than the
- * gencode linked against it. That refusal arrives as an
- * <code>ExceptionInInitializerError</code> out of a static initializer, on the first command
- * which touches the protocol, in whatever test happens to send it first. So the number is
- * pinned in the parent POM, and this test is what compares the pin against what the client
- * really asks for, in one sentence naming both numbers and the line to change.
+ * The client ships generated protocol classes. Protobuf refuses a runtime which is older than
+ * the gencode linked against it. That refusal arrives as an
+ * <code>ExceptionInInitializerError</code> out of a static initializer. It comes on the first
+ * command which touches the protocol, in whatever test happens to send it first. So the
+ * number is pinned in the parent POM. This test compares the pin against what the client
+ * really asks for. Its message is one sentence which names both numbers and the line to
+ * change.
  * <p>
- * What the client asks for is READ rather than remembered: the Camunda client's own POM is
- * copied next to this test by the build, and the version it declares for
- * <code>protobuf-java</code> is the gencode version. What ends up on the classpath is read
- * from the runtime itself, by reflection, because the compiler would otherwise inline the
- * constants of the jar this test was compiled against and the check would compare a number
- * with itself.
+ * What the client asks for is READ, not remembered. The build copies the Camunda client's
+ * own POM next to this test. The version it declares for <code>protobuf-java</code>
+ * is the gencode version. What ends up on the classpath is read from the runtime itself, by
+ * reflection. Otherwise the compiler would inline the constants of the jar this test was
+ * compiled against, and the check would compare a number with itself.
  * <p>
- * Only the ACTIVE line is checked, which is the line whose client is on the classpath. A pull
- * request moving any client pin builds every line, so each line's client meets this test.
+ * Only the ACTIVE line is checked, the line whose client is on the classpath. A pull request
+ * which moves any client pin builds every line. So the client of each line meets this test.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ProtobufPinTest {
@@ -114,9 +114,9 @@ public class Camunda8ProtobufPinTest {
   }
 
   /**
-   * The protobuf runtime which really ends up on the classpath, read by reflection: the
-   * compiler inlines a {@code static final int} it can see, so a direct reference would
-   * report the version this test was compiled against rather than the one it runs with.
+   * The protobuf runtime which really ends up on the classpath, read by reflection. The
+   * compiler inlines a {@code static final int} it can see. So a direct reference would
+   * report the version this test was compiled against, not the one it runs with.
    */
   private Version protobufOnTheClasspath() throws Exception {
 

@@ -24,9 +24,8 @@ import io.grpc.Status;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which phase-two failures of Camunda 8 are worth repeating. The classification
- * is a pure function of the failure, so the boundary cases belong here and not into a test
- * against a cluster.
+ * Which phase-two failures of Camunda 8 are worth repeating. The classification is a pure
+ * function of the failure. So the edge cases are tested here, not against a cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ErrorsTest {
@@ -38,8 +37,9 @@ public class Camunda8ErrorsTest {
   }
 
   /**
-   * A cluster's REST answer, as the client hands it on: the status twice (the HTTP code
-   * and the problem detail's own field) and the rejection's name as the title.
+   * A REST answer of a cluster, as the client hands it on. It carries the status twice: as
+   * the HTTP code, and in the problem detail's own field. The title is the name of the
+   * rejection.
    */
   private static ProblemException problem(
       final int status,
@@ -59,7 +59,7 @@ public class Camunda8ErrorsTest {
     assertTrue(Camunda8Errors.permanentFailure(problem(403)));
     assertTrue(Camunda8Errors.permanentFailure(problem(405)));
     assertTrue(Camunda8Errors.permanentFailure(problem(501)));
-    // ProblemException needs no rule of its own - a plain HTTP failure counts as well
+    // ProblemException needs no rule of its own, a plain HTTP failure counts as well
     assertTrue(Camunda8Errors.permanentFailure(new ClientHttpException(400, "Bad Request")));
 
   }
@@ -99,15 +99,15 @@ public class Camunda8ErrorsTest {
     assertTrue(
         Camunda8Errors.startRefusedForGood(
             new ClientStatusException(Status.NOT_FOUND, null)));
-    // the model has no plain start event, which the REST transport answers with a
-    // conflict. Camunda8RefusedStartIT is where both of them come from a cluster
+    // the model has no plain start event. The REST transport answers that with a
+    // conflict. In Camunda8RefusedStartIT both of them come from a cluster
     assertTrue(Camunda8Errors.startRefusedForGood(problem(409, "INVALID_STATE")));
     // whatever wrapped the refusal on the way out of the command must not hide it
     assertTrue(
         Camunda8Errors.startRefusedForGood(
             new IllegalStateException("starting failed", problem(404, "NOT_FOUND"))));
 
-    // everything else a start can fail with keeps the answer the outbox gives anyway
+    // for everything else a start can fail with, the outbox gives its usual answer
     assertFalse(Camunda8Errors.startRefusedForGood(problem(503)));
     assertFalse(Camunda8Errors.startRefusedForGood(new IOException("connection reset")));
 
@@ -117,8 +117,8 @@ public class Camunda8ErrorsTest {
   @DisplayName("A start refused for good is permanent, and the same codes elsewhere are not")
   public void onlyAStartTurnsThoseCodesIntoAPermanentFailure() {
 
-    // what the start throws when the cluster refused it: the refusal stays the cause and
-    // the wrapping is what says which operation met it
+    // what the start throws when the cluster refused it. The refusal stays the cause, and
+    // the wrapping says which operation met it
     assertTrue(
         Camunda8Errors.permanentFailure(
             new Camunda8RefusedStart("the cluster does not hold that process", problem(404, "NOT_FOUND"))));
@@ -128,8 +128,9 @@ public class Camunda8ErrorsTest {
                 "dispatching failed", new Camunda8RefusedStart(
                     "the model has no plain start event", problem(409, "INVALID_STATE")))));
 
-    // and the same answers without a start behind them stay what they were: a read of
-    // something the exporter has not caught up with, and a conflict the outbox exists for
+    // and the same answers without a start behind them stay what they were. One is a read
+    // of something the exporter has not caught up with. The other is a conflict, which is
+    // what the outbox exists for
     assertFalse(Camunda8Errors.permanentFailure(problem(404, "NOT_FOUND")));
     assertFalse(Camunda8Errors.permanentFailure(problem(409, "INVALID_STATE")));
 
@@ -139,8 +140,8 @@ public class Camunda8ErrorsTest {
   @DisplayName("Eventual consistency, an expired token, conflicts and cluster trouble are repeated")
   public void everythingElseIsRepeatable() {
 
-    // 404: the signature of eventual consistency (for job commands jobAlreadyGone
-    // consumes it before the classification is asked at all)
+    // 404: the sign of eventual consistency. For job commands, jobAlreadyGone takes it
+    // before the classification is asked at all
     assertFalse(Camunda8Errors.permanentFailure(problem(404)));
     // 401: usually an expired token the client refreshes
     assertFalse(Camunda8Errors.permanentFailure(problem(401)));
@@ -160,10 +161,10 @@ public class Camunda8ErrorsTest {
   @DisplayName("A timeout is repeated, in every shape the client hands one over in")
   public void aTimeoutIsRepeatedInEveryShape() {
 
-    // The transport decides how a request which ran out of time reaches the adapter, and
-    // none of these shapes is a statement about what the cluster did - the answer may
-    // have been given and only failed to arrive. So every one of them is repeated, and
-    // none of them is mistaken for a job which is gone.
+    // The transport decides how a request which ran out of time reaches the adapter. None
+    // of these shapes says what the cluster did. The answer may have been given and only
+    // failed to arrive. So every one of them is repeated, and none of them is mistaken for
+    // a job which is gone.
     for (final var timeout : timeoutsAsTheClientHandsThemOver()) {
       assertFalse(Camunda8Errors.permanentFailure(timeout), timeout.toString());
       assertFalse(Camunda8Errors.jobAlreadyGone(timeout), timeout.toString());
@@ -175,12 +176,11 @@ public class Camunda8ErrorsTest {
   }
 
   /**
-   * Every shape a request which ran out of time arrives in - read off the client: a REST
-   * request times out in the socket below Apache HttpClient, a bounded wait on the future
-   * ends in a {@link TimeoutException}, and gRPC answers a deadline of
-   * its own with the status of that name. The client wraps whichever of them into a
-   * {@link ClientException} respectively a
-   * {@link CompletionException} on its way out.
+   * Every shape in which a request which ran out of time arrives, as read off the client. A
+   * REST request times out in the socket below Apache HttpClient. A bounded wait on the
+   * future ends in a {@link TimeoutException}. gRPC answers its own deadline with the status
+   * of that name. On its way out, the client wraps each of them into a
+   * {@link ClientException} or a {@link CompletionException}.
    */
   private static List<Throwable> timeoutsAsTheClientHandsThemOver() {
 
@@ -223,9 +223,9 @@ public class Camunda8ErrorsTest {
   @DisplayName("A job command has one more permanent case: the job itself is gone")
   public void aGoneJobIsPermanentForJobCommands() {
 
-    // repeatable for an outbox entry (404 is the signature of eventual consistency) and
-    // permanent for a command against THIS job - repeating it would turn the tolerated
-    // at-least-once residual into a retry storm
+    // repeatable for an outbox entry, because 404 is the sign of eventual consistency. But
+    // permanent for a command against THIS job. Repeating it would turn the accepted
+    // leftover of at-least-once delivery into a retry storm
     assertFalse(Camunda8Errors.permanentFailure(problem(404)));
     assertFalse(Camunda8Errors.repeatableJobCommandFailure(problem(404)));
 
@@ -246,8 +246,8 @@ public class Camunda8ErrorsTest {
         Camunda8Errors.repeatableJobCommandFailure(
             new ClientStatusException(Status.FAILED_PRECONDITION, null)));
 
-    // the other wrong states of a job command answer 404 there, and a job which is gone
-    // is a case of its own
+    // the other wrong states of a job command answer 404 there. A job which is gone is a
+    // case of its own
     assertFalse(Camunda8Errors.jobHeldByAnotherActivation(problem(404, "NOT_FOUND")));
     assertFalse(
         Camunda8Errors.jobHeldByAnotherActivation(
@@ -278,13 +278,13 @@ public class Camunda8ErrorsTest {
   @DisplayName("A job which is gone is recognised on both transports, by their codes")
   public void aGoneJobIsRecognisedOnBothTransports() {
 
-    // what the cluster answers a command addressing a job key it does not hold:
-    // REST 404 with the title of the rejection, gRPC the status of the same name
+    // what the cluster answers to a command for a job key it does not hold: REST 404 with
+    // the title of the rejection, gRPC the status of the same name
     assertTrue(Camunda8Errors.jobAlreadyGone(problem(404, "NOT_FOUND")));
     assertTrue(
         Camunda8Errors.jobAlreadyGone(
             new ClientStatusException(Status.NOT_FOUND, null)));
-    // the words around the code are the cluster's to reword, so they decide nothing
+    // the cluster may reword the words around the code, so they decide nothing
     assertFalse(Camunda8Errors.jobAlreadyGone(new IllegalStateException("no such job was NOT_FOUND")));
     assertFalse(Camunda8Errors.jobAlreadyGone(problem(409, "ALREADY_EXISTS")));
 
@@ -297,7 +297,7 @@ public class Camunda8ErrorsTest {
     // the answer as the REST client hands it on, with and without a problem detail
     assertTrue(Camunda8Errors.notFound(problem(404, "NOT FOUND")));
     assertTrue(Camunda8Errors.notFound(new ClientHttpException(404, "Not Found")));
-    // and it is read from the code alone: another rejection is not this one, and neither
+    // and it is read from the code alone. Another rejection is not this one, and neither
     // is a failure which only carries the words
     assertFalse(Camunda8Errors.notFound(problem(403, "FORBIDDEN")));
     assertFalse(Camunda8Errors.notFound(new IllegalStateException("404 not found")));
@@ -320,9 +320,9 @@ public class Camunda8ErrorsTest {
   @DisplayName("A cause chain which closes into a ring is walked once, not forever")
   public void aRingOfCausesEndsTheWalk() {
 
-    // two failures naming each other as their cause - a shape a client produces by
-    // wrapping a failure it wrapped before, and one which a walk guarding only the
-    // self-reference never leaves. Every classification reads such a chain, so all of
+    // two failures which name each other as their cause. A client produces this shape when
+    // it wraps a failure it wrapped before. A walk which guards only against the
+    // self-reference never leaves it. Every classification reads such a chain, so all of
     // them are asked here
     final var outer = new IllegalStateException("the outer failure");
     final var inner = new IllegalStateException("the inner failure", outer);
@@ -357,8 +357,8 @@ public class Camunda8ErrorsTest {
   @DisplayName("Either transport's answer is found however deep the client wrapped it")
   public void aWrappedNotFoundIsRecognised() {
 
-    // the client hands an asynchronous command's failure over wrapped, so the answer of
-    // an inner cause is the answer of the whole
+    // the client hands over the failure of an asynchronous command wrapped. So the answer
+    // of an inner cause is the answer of the whole
     assertTrue(
         Camunda8Errors
             .notFound(new CompletionException(new ClientException("failed", problem(404, "NOT FOUND")))));
@@ -374,16 +374,16 @@ public class Camunda8ErrorsTest {
   @DisplayName("A message published twice is recognised on both transports, by their codes")
   public void aRepeatedPublicationIsRecognisedOnBothTransports() {
 
-    // a publication carrying a message id the cluster still remembers is rejected as
-    // ALREADY_EXISTS - which reaches the REST client as HTTP 409 and the gRPC client as
-    // the status of that name. Both transports are in use: which one carries a command
-    // is what 'prefer-rest-over-grpc' decides
+    // a publication with a message id the cluster still remembers is rejected as
+    // ALREADY_EXISTS. That reaches the REST client as HTTP 409 and the gRPC client as the
+    // status of that name. Both transports are in use. 'prefer-rest-over-grpc' decides
+    // which one carries a command
     assertTrue(Camunda8Errors.messageAlreadyPublished(problem(409, "ALREADY_EXISTS")));
     assertTrue(
         Camunda8Errors.messageAlreadyPublished(
             new ClientStatusException(Status.ALREADY_EXISTS, null)));
-    // and the words are not what says so: a reworded rejection keeps its code, while a
-    // failure carrying the word and no code is not a rejection of the cluster at all
+    // and the words do not decide it. A reworded rejection keeps its code. A failure which
+    // carries the words and no code is not a rejection of the cluster at all
     assertFalse(
         Camunda8Errors.messageAlreadyPublished(
             new IllegalStateException("a message with that id has already been published")));
@@ -396,9 +396,9 @@ public class Camunda8ErrorsTest {
   @DisplayName("A refused query-API request is recognised by its status, not by its wording")
   public void aRefusedSearchIsRecognisedByItsStatus() {
 
-    // every query endpoint of a cluster which cannot be searched answers 403, and the
-    // problem detail says in prose only whether secondary storage is missing or the
-    // credentials fall short - which is why the probe treats both the same
+    // every query endpoint of a cluster which cannot be searched answers 403. Only the
+    // prose of the problem detail says whether secondary storage is missing or the
+    // credentials fall short. That is why the probe treats both the same
     assertTrue(Camunda8Errors.queryApiRefused(problem(403, "FORBIDDEN")));
     assertTrue(
         Camunda8Errors.queryApiRefused(
@@ -437,8 +437,8 @@ public class Camunda8ErrorsTest {
         "gRPC NOT_FOUND, no such job",
         Camunda8Errors
             .rejection(new ClientStatusException(Status.NOT_FOUND.withDescription("no such job"), null)));
-    // a problem detail arrives with line breaks in it, and a log line which brings its own
-    // is a log line nothing greps
+    // a problem detail arrives with line breaks in it. A log line with line breaks of its
+    // own is a log line nothing can grep
     assertEquals(
         "HTTP 409, the message was published before",
         Camunda8Errors
@@ -456,7 +456,7 @@ public class Camunda8ErrorsTest {
   public void aDormantJobIsNotAJobWhichIsGone() {
 
     // measured on 8.8.37, 8.9.19 and 8.10.0-alpha5: a job in the queue, a job whose lock
-    // ran out and a job with no retry left all answer this way
+    // ran out and a job without retries left all answer this way
     assertTrue(Camunda8Errors.jobIsThereButNotActive(problem(400, "INVALID_ARGUMENT")));
     assertTrue(
         Camunda8Errors
@@ -486,8 +486,8 @@ public class Camunda8ErrorsTest {
         Camunda8Errors
             .jobIsThereButNotActive(
                 new CompletionException(new ClientException("update failed", problem(400)))));
-    // notFound wins wherever it stands in the chain: a command which addressed a key the
-    // cluster does not hold is gone, whatever the client wrapped around it on the way up
+    // notFound wins wherever it stands in the chain. If a command addressed a key the
+    // cluster does not hold, the job is gone, whatever the client wrapped around it
     assertFalse(
         Camunda8Errors
             .jobIsThereButNotActive(
@@ -501,8 +501,8 @@ public class Camunda8ErrorsTest {
   @DisplayName("A user task refused about is told from one the cluster no longer has")
   public void aRefusalAboutAUserTaskIsToldFromAGoneOne() {
 
-    // measured for a task standing in UPDATING and for a task whose 'updating' listener
-    // denied the update, and in both cases the task was there to be refused about
+    // measured for a task in the state UPDATING and for a task whose 'updating' listener
+    // denied the update. In both cases the task was there to be refused about
     assertTrue(Camunda8Errors.refusedAboutAUserTaskItHolds(problem(409, "CONFLICT")));
     assertTrue(
         Camunda8Errors
@@ -511,8 +511,8 @@ public class Camunda8ErrorsTest {
     assertFalse(Camunda8Errors.refusedAboutAUserTaskItHolds(problem(404)));
     assertFalse(
         Camunda8Errors.refusedAboutAUserTaskItHolds(new ClientStatusException(Status.NOT_FOUND, null)));
-    // 400 is in the endpoint's list and no run has ever produced one for a user task, so
-    // what it would mean is a guess - and a guess here cancels an open task
+    // 400 is in the endpoint's list, but no run has ever produced one for a user task.
+    // So what it would mean is a guess, and a guess here cancels an open task
     assertFalse(Camunda8Errors.refusedAboutAUserTaskItHolds(problem(400, "INVALID_ARGUMENT")));
 
   }
@@ -536,7 +536,7 @@ public class Camunda8ErrorsTest {
     assertFalse(
         Camunda8Errors.refusedAboutAnInstanceItHolds(new ClientStatusException(Status.NOT_FOUND, null)));
     // an expired token and a missing permission are refusals which say nothing about the
-    // instance, which is why the codes are spelled out rather than read as "not a 404"
+    // instance. That is why the codes are spelled out instead of read as "not a 404"
     assertFalse(Camunda8Errors.refusedAboutAnInstanceItHolds(problem(401)));
     assertFalse(Camunda8Errors.refusedAboutAnInstanceItHolds(problem(403)));
     assertFalse(Camunda8Errors.refusedAboutAnInstanceItHolds(problem(503)));

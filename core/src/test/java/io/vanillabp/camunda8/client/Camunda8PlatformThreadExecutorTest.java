@@ -17,19 +17,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The executor of the platform-thread mode, which is what an adapter uses unless
- * <code>worker-threads: virtual</code> says otherwise: handlers on a pool as wide as the
- * configured number, and the timing on threads of its own. What both models promise is
- * {@link Camunda8ExecutorTest}.
+ * The executor of the platform-thread mode. An adapter uses it unless
+ * <code>worker-threads: virtual</code> says otherwise. It runs the handlers on a pool as
+ * wide as the configured number, and the timing on threads of its own.
+ * {@link Camunda8ExecutorTest} holds what both models promise.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8PlatformThreadExecutorTest {
 
   /**
    * How long a wait for the executor goes on before the test gives up. It guards against
-   * something which never got its turn and it measures nothing: what these tests claim is
-   * read from which thread ran the work and from what was still inside its slot, so a
-   * loaded machine makes a test slower rather than red.
+   * something which never got its turn, and it measures nothing. These tests read their
+   * claims from which thread ran the work and from what was still inside its slot. So a
+   * loaded machine makes a test slower, not red.
    */
   private static final long UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK = 30000;
 
@@ -66,8 +66,8 @@ public class Camunda8PlatformThreadExecutorTest {
   @DisplayName("a scheduled poll runs on a thread of its own while handlers are busy")
   public void schedulingIsNotStarvedByBusyHandlers() throws Exception {
 
-    // one slot is left free on purpose: what a scheduled task does when there is none is
-    // the gate of Camunda8ExecutorTest, while this test is about which thread runs it
+    // one slot is left free on purpose. Camunda8ExecutorTest holds what a scheduled task does
+    // when no slot is free. This test is about which thread runs it
     final var bound = 3;
     final var executor = new Camunda8PlatformThreadExecutor("c8", bound);
     try {
@@ -102,10 +102,10 @@ public class Camunda8PlatformThreadExecutorTest {
         polled.countDown();
       }, 10, TimeUnit.MILLISECONDS);
 
-      // the wait is a generous guard against a poll which never ran; what says that the
-      // poll was not starved is the number of handlers which were still inside when it
-      // did run. A short wait would carry that claim itself, and on a machine carrying
-      // several builds it would report a stopped JVM as a starved poll
+      // the wait is a generous guard against a poll which never ran. The number of
+      // handlers still inside when the poll ran says that the poll was not starved. A short
+      // wait would carry that claim itself. On a machine which runs several builds it would
+      // report a stopped JVM as a starved poll
       assertTrue(
           polled.await(UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK, TimeUnit.MILLISECONDS),
           "a scheduled poll runs although handlers are inside their slots");

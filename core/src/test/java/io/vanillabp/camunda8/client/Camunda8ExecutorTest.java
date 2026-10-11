@@ -22,9 +22,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What both execution models promise, asserted against each of them: a bound which holds,
  * and a scheduled task which asks the cluster for work only while a slot is free.
  * <p>
- * The second one is the designed back pressure. Without it a worker whose slots are all
- * busy keeps activating jobs which then wait in front of the slots, spending the lock they
- * were handed out with; with it the poll waits instead, and the job stays at the cluster,
+ * The second one is the back pressure by design. Without it, a worker whose slots are all
+ * busy keeps activating jobs. Those jobs then wait in front of the slots and use up the lock
+ * they were handed out with. With it, the poll waits instead. The job stays at the cluster,
  * where another node can take it.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -32,9 +32,9 @@ public class Camunda8ExecutorTest {
 
   /**
    * How long a wait for the executor goes on before the test gives up. It guards against
-   * something which never got its turn and it measures nothing: what these tests claim is
-   * read from the slots and from the handlers waiting for one, so a loaded machine makes a
-   * test slower rather than red.
+   * something which never got its turn, and it measures nothing. These tests read their
+   * claims from the slots and from the handlers which wait for one. So a loaded machine
+   * makes a test slower, not red.
    */
   private static final long UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK = 30000;
 
@@ -76,8 +76,8 @@ public class Camunda8ExecutorTest {
           peak.accumulateAndGet(running.incrementAndGet(), Math::max);
           everySlotTaken.countDown();
           try {
-            // the handlers stay inside until this test lets them out, so what is read
-            // about the slots below is read while they really are taken
+            // the handlers stay inside until this test lets them out. So the slots below
+            // are read while they really are taken
             release.await(UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK, TimeUnit.MILLISECONDS);
           } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -150,11 +150,11 @@ public class Camunda8ExecutorTest {
       final var polled = new CountDownLatch(1);
       final var poll = executor.schedule(polled::countDown, 1, TimeUnit.MILLISECONDS);
 
-      // the poll is waiting for a slot now, which is the state a caller cancelling its
-      // own scheduled task has to reach: the 8.10 client cancels the tasks around a job
-      // stream that way, and it holds the attempt which happens to be pending. The state
-      // is read rather than waited out - a pause of two look-again windows only guessed
-      // at it, and on a machine carrying several builds a guess is what it stays
+      // the poll is waiting for a slot now. A caller which cancels its own scheduled task
+      // has to reach this state. The 8.10 client cancels the tasks around a job stream that
+      // way, and it holds the attempt which happens to be pending. The test reads the state
+      // instead of waiting it out. A pause of two look-again windows only guessed at it, and
+      // on a machine which runs several builds it stays a guess
       awaitThePollLookingForASlotAgain(poll);
       assertTrue(poll.cancel(false), "the waiting poll is cancelled");
       assertTrue(poll.isCancelled());
@@ -188,8 +188,8 @@ public class Camunda8ExecutorTest {
       executor.execute(() -> {
         everySlotTaken.countDown();
         try {
-          // the handlers stay inside until the caller lets them out, so every slot is
-          // really taken for as long as the test reads something about them
+          // the handlers stay inside until the caller lets them out. So every slot is
+          // really taken as long as the test reads something about them
           release.await(UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK, TimeUnit.MILLISECONDS);
         } catch (final InterruptedException e) {
           Thread.currentThread().interrupt();
@@ -205,10 +205,10 @@ public class Camunda8ExecutorTest {
   /**
    * Waits until the poll found no slot and armed the next attempt itself.
    * <p>
-   * The test arms the first attempt a millisecond out, and every attempt the poll arms
-   * carries {@link Camunda8Executor#LOOK_FOR_A_SLOT_AGAIN_MILLIS}. So a pending attempt
-   * which is further out than that first millisecond is one the poll armed, and that is
-   * the state a cancel has to reach.
+   * The test arms the first attempt one millisecond ahead. Every attempt the poll arms
+   * carries {@link Camunda8Executor#LOOK_FOR_A_SLOT_AGAIN_MILLIS}. So a pending attempt which
+   * is further ahead than that first millisecond is one the poll armed. A cancel has to reach
+   * that state.
    *
    * @param poll The scheduled poll which found every slot busy
    */
@@ -226,7 +226,7 @@ public class Camunda8ExecutorTest {
   }
 
   /**
-   * Waits until as many handlers as expected wait for a slot - they are counted where they
+   * Waits until as many handlers as expected wait for a slot. They are counted where they
    * wait, and a job submitted a moment ago may not have got there yet.
    *
    * @param executor The executor under test

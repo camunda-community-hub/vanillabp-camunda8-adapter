@@ -14,9 +14,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * How the authentication of one adapter instance resolves, and what it says while it
- * cannot be built. Every message is asserted by the property keys it has to
- * carry: a message which names the defect without naming the key sends the reader to the
- * documentation, which is what these messages exist to avoid.
+ * cannot be built. Each message is checked for the property keys it has to carry. A message
+ * which names the defect but not the key sends the reader to the documentation. These
+ * messages exist to avoid exactly that.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8AuthConfigurationTest {

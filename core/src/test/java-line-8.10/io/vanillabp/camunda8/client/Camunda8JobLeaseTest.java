@@ -25,8 +25,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * The line-specific half is small on purpose: whether the client can lease at all, how a
  * worker asks for it, and how the token of an activation reaches the three commands which
- * need it. What the adapter does with the answers is the same everywhere and is tested
- * where it is decided.
+ * need it. What the adapter does with the answers is the same everywhere. It is tested where
+ * it is decided.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8JobLeaseTest {

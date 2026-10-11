@@ -209,8 +209,8 @@ public class Camunda8AuthenticationTest {
   @DisplayName("the status in the message says which transport answered")
   public void theStatusNamesTheTransport() {
 
-    // gRPC counts its own codes from zero and HTTP starts at 100, so the number itself
-    // tells an operator where to look - a wrong label sends them to the wrong log
+    // gRPC counts its own codes from zero and HTTP starts at 100. So the number itself
+    // tells an operator where to look, and a wrong label sends them to the wrong log
     assertTrue(
         Camunda8Authentication.message("c8", Camunda8AuthConfiguration.Method.NONE, 16)
             .contains("gRPC UNAUTHENTICATED"));
@@ -228,8 +228,8 @@ public class Camunda8AuthenticationTest {
   public void theOptionalOidcSettingsAreApplied(
       @TempDir final Path directory) throws Exception {
 
-    // each of these is a documented property; one silently ignored is a token request
-    // which fails at the cluster, hours after a boot which looked fine
+    // each of these is a documented property. If one is silently ignored, a token request
+    // fails at the cluster, hours after a boot which looked fine
     final var keystore = Files.createFile(directory.resolve("keystore.p12"));
     final var truststore = Files.createFile(directory.resolve("truststore.p12"));
 

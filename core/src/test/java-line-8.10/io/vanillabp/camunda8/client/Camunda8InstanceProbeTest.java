@@ -20,11 +20,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * Which of the two commands the instance probe sends on this line.
  * <p>
- * This line has both, and the business id decides. It is asserted here rather than left to
- * the caller, because until the key of decision 37 existed the assignment was unreachable:
- * the answer which picks it was hard-coded to <code>false</code>, so nothing ever went down
- * that branch. Now it can, and which command leaves the adapter is the difference between a
- * question the cluster refuses and one it carries out.
+ * This line has both, and the business id decides. It is asserted here and not left to the
+ * caller, because until the key of decision 37 existed the assignment was unreachable. The
+ * answer which picks it was hard-coded to <code>false</code>, so nothing ever went down that
+ * branch. Now something can. The command which leaves the adapter makes the difference
+ * between a question the cluster refuses and one it carries out.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8InstanceProbeTest {
@@ -53,12 +53,12 @@ public class Camunda8InstanceProbeTest {
 
   /**
    * Both commands, ready to be sent and answered with nothing. What the cluster answers is
-   * the caller's business; what is asked here is which command was built at all.
+   * the caller's business. This test asks which command was built at all.
    */
   private void bothCommandsAreThere() {
 
-    // the futures are built BEFORE they are handed to a stub: mocking inside the argument
-    // of when(...) leaves Mockito in the middle of a stubbing and it says so
+    // the futures are built BEFORE they are handed to a stub. Mocking inside the argument
+    // of when(...) leaves Mockito in the middle of a stubbing, and it says so
     final var assignmentWasSent = aFutureAnsweringNothing();
     final var modificationWasSent = aFutureAnsweringNothing();
     Mockito.lenient().when(assignment.businessId(Mockito.anyString())).thenReturn(assigned);

@@ -20,10 +20,10 @@ import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * This line has no lease, and the adapter says so rather than pretending.
+ * This line has no lease, and the adapter says so instead of pretending.
  * <p>
- * The point of asserting it per line is the configuration key: an application which moves
- * between lines carries one configuration, so the key is accepted here, changes nothing, and
+ * It is asserted per line because of the configuration key. An application which moves
+ * between lines carries one configuration. So the key is accepted here, changes nothing, and
  * the boot writes one line about it.
  */
 @ExtendWith(SuppressOutputExtension.class)

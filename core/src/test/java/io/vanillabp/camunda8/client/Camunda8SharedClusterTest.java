@@ -15,14 +15,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which adapter ids address the same Camunda 8 cluster, and why that is a
- * coarser question than whether they are the same INSTANCE.
+ * Which adapter ids address the same Camunda 8 cluster, and why that is a coarser question
+ * than whether they are the same INSTANCE.
  * <p>
- * A job key, a user-task key and a process-instance key are unique per cluster and not
- * per tenant, so two ids sharing a cluster are handed each other's keys. Their awareness
- * probes therefore have to ask which scope a key belongs to before they claim it, and
- * that question costs a search per claimed task, which is why it is asked only where two
- * ids really do share a cluster.
+ * A job key, a user-task key and a process-instance key are unique per cluster, not per
+ * tenant. So two ids which share a cluster are handed each other's keys. Their awareness
+ * probes have to ask which scope a key belongs to before they claim it. That question costs
+ * a search per claimed task. So it is asked only where two ids really share a cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8SharedClusterTest {

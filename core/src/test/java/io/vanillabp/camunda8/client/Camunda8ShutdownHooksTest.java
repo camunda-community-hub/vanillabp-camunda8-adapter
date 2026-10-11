@@ -31,8 +31,8 @@ public class Camunda8ShutdownHooksTest {
 
   private static Camunda8ClientFactory unconfiguredFactory() {
 
-    // no connection properties: no client is built and nothing is contacted, which is all
-    // this test needs - it is about what the factory remembers, not about a cluster
+    // no connection properties, so no client is built and nothing is contacted. This test
+    // needs no more. It is about what the factory remembers, not about a cluster
     return new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration());
 
   }
