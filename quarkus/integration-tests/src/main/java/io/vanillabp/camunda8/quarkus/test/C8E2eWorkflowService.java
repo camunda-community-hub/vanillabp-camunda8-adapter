@@ -540,10 +540,13 @@ public class C8E2eWorkflowService {
    * version it deploys if a task of it has no method for that version. This application boots
    * once on a cluster of its own today, but a later boot on the same cluster would deploy the
    * untagged model as a version after the tagged one, and exactly 'release-2' would fail it.
+   * The tag is named on its own and the later versions by number, as in the Spring Boot test.
    *
    * @param aggregate The workflow aggregate
    */
-  @WorkflowTask(taskDefinition = "versionedTask", version = ">=release-2")
+  @WorkflowTask(taskDefinition = "versionedTask", version = {
+      "release-2", ">2"
+  })
   public void taggedVersion(
       final C8E2eAggregate aggregate) {
 
