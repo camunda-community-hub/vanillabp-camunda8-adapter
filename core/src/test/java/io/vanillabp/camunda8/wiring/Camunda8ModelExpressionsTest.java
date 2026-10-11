@@ -18,17 +18,17 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * What the core is told about the expressions of a Camunda 8 model: the element, the place
- * inside it and the text FEEL evaluates. The core judges what each of them costs, so what
- * is asserted here is the reading - every place a modeller puts a data read into, and
- * nothing which only names a target.
+ * inside it and the text FEEL evaluates. The core judges what each of them costs. So this
+ * test asserts the reading: every place a modeller puts a data read into, and nothing which
+ * only names a target.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ModelExpressionsTest {
 
   /**
-   * One model holding the given process body, plus a second process reading expressions
-   * of its own: a file may hold several, and one process must never be told about the
-   * other's.
+   * One model with the given process body, plus a second process which reads expressions of
+   * its own. A file may hold several processes, and one process must never be told about the
+   * expressions of the other.
    *
    * @param processContent The elements of the process under test
    * @param messages What the file declares next to its processes
@@ -156,9 +156,9 @@ public class Camunda8ModelExpressionsTest {
                 </bpmn:subProcess>
             """);
 
-    // the collection sits in an extension element two levels below the activity, the
-    // completion condition in a BPMN element one level below it, and both are reported
-    // with the activity a modeller searches their model for
+    // the collection sits in an extension element two levels below the activity. The
+    // completion condition sits in a BPMN element one level below it. Both are reported with
+    // the activity a modeller searches their model for
     assertTrue(
         expressions.contains("Items | MULTI_INSTANCE_COLLECTION | =order.items | order.items"),
         expressions.toString());

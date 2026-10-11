@@ -22,10 +22,10 @@ import io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker;
 /**
  * One execution-listener job of a process, handed to the handler which answers it.
  * <p>
- * Shared by the test in this tree and by the per-line test of the 8.10 directory, which is the
- * only line whose cluster produces a <code>cancel</code> job at all. Two harnesses for one
- * handler would let the two drift apart, and the whole point of the per-line pair is that they
- * ask the same question of different lines.
+ * The test in this tree and the per-line test of the 8.10 directory share it. 8.10 is the only
+ * line whose cluster produces a <code>cancel</code> job at all. Two harnesses for one handler
+ * would drift apart. But the whole point of the per-line pair is that they ask the same
+ * question of different lines.
  */
 public final class Camunda8WorkflowEndedFixture {
 
@@ -46,8 +46,8 @@ public final class Camunda8WorkflowEndedFixture {
    * What the handler did with one job.
    *
    * @param reported What it told the application, empty where it told it nothing
-   * @param jobWasCompleted Whether it answered the cluster, which it always has to: the
-   *          listener job gates a transition the cluster is inside
+   * @param jobWasCompleted Whether it answered the cluster. It always has to, because the
+   *          listener job holds up a transition the cluster is inside
    */
   public record WhatHappened(
                              List<WorkflowEndedContext> reported,

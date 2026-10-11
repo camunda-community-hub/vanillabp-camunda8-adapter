@@ -24,12 +24,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What the prefixing mode does to the process a call activity names and to the decision a
  * business rule task names, per form that name can take.
  * <p>
- * A static name is an identifier of this workflow module and is prefixed like the process
- * respectively the decision it points at. A name given as a FEEL expression is not an
- * identifier at all: the expression takes up the whole value, so the prefix goes INSIDE it and
- * the application has nothing to write. What the cluster does with that frame is held by
- * {@code Camunda8PrefixInsideAnExpressionCanaryIT}; what this adapter writes into the model is
- * held here.
+ * A static name is an identifier of this workflow module. It is prefixed like the process or
+ * the decision it points at. A name given as a FEEL expression is not an identifier at all.
+ * The expression takes up the whole value, so the prefix goes INSIDE it, and the application
+ * has nothing to write. {@code Camunda8PrefixInsideAnExpressionCanaryIT} holds what the
+ * cluster does with that frame. This test holds what this adapter writes into the model.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CalledProcessScopingTest {
@@ -111,8 +110,8 @@ public class Camunda8CalledProcessScopingTest {
   }
 
   /**
-   * The called process of a model scoped under {@code use-prefix}, which is what most of the
-   * cases below read.
+   * The called process of a model scoped under {@code use-prefix}. Most of the cases below
+   * read it.
    */
   private static String deployedCallOf(
       final String calledProcess) {
@@ -162,8 +161,8 @@ public class Camunda8CalledProcessScopingTest {
         "=\"loan-approval__\" + string(\"Payment\" + theRest)",
         deployedCallOf("=\"Payment\" + theRest"),
         "an expression which composes a text itself");
-    // a line break in an ATTRIBUTE is written as a character reference, which is what the
-    // modeler writes too: XML turns a literal one into a space while it parses
+    // a line break in an ATTRIBUTE is written as a character reference, as the modeler
+    // writes it too. XML turns a literal one into a space while it parses
     assertEquals(
         "=\"loan-approval__\" + string(if useTheOther\n  then \"TheOtherOne\"\n  else \"PaymentHandling\")",
         deployedCallOf("=if useTheOther&#10;  then \"TheOtherOne\"&#10;  else \"PaymentHandling\""),
@@ -183,9 +182,9 @@ public class Camunda8CalledProcessScopingTest {
     final var readBack = Bpmn
         .readModelFromStream(new ByteArrayInputStream(asSent.getBytes(StandardCharsets.UTF_8)));
 
-    // a line break inside an attribute may come back as a space: XML normalises an attribute
-    // value, and the cluster's parser does the same with what this command sends. FEEL reads
-    // either, so what has to hold is the expression and not the whitespace in it
+    // a line break inside an attribute may come back as a space. XML normalises an
+    // attribute value, and the cluster's parser does the same with what this command
+    // sends. FEEL reads either, so the expression has to hold, not the whitespace in it
     assertEquals(
         "=\"loan-approval__\" + string(if useTheOther then \"TheOtherOne\" else \"PaymentHandling\")",
         calledProcessIdsOf(readBack).getFirst().replaceAll("\\s+", " "),

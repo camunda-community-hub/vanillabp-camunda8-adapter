@@ -35,15 +35,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.service.TaskEvent;
 
 /**
- * What the job of a listener somebody modelled tells the application's method, and what it
- * sends back to the cluster.
+ * What the job of a listener somebody modelled tells the application's method, and what
+ * it sends back to the cluster.
  * <p>
- * What it sends back has three cases and they are pinned one test each, because each of them
- * rests on a different reason: an execution listener on <code>end</code> writes into the
- * process instance like a task, an execution listener on <code>start</code> writes nothing
- * because its values would be local to the element, and a task listener writes nothing because
- * the cluster refuses the payload. The event a method is told is pinned too: a method without a
- * <code>@TaskEvent</code> parameter subscribes to CREATED alone, so CREATED is the only value
+ * What it sends back has three cases. Each has a test of its own, because each rests on a
+ * different reason. An execution listener on <code>end</code> writes into the process
+ * instance like a task. An execution listener on <code>start</code> writes nothing, because
+ * its values would be local to the element. A task listener writes nothing, because the
+ * cluster refuses the payload. The event a method is told is pinned too. A method without a
+ * <code>@TaskEvent</code> parameter subscribes to CREATED alone. So CREATED is the only value
  * which reaches such a method at all.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -135,7 +135,7 @@ public class Camunda8ModelledListenerHandlerTest {
   public void aJobWithoutRetriesRaisesTheIncidentRightAway() {
 
     final var job = listenerJob("archiveTheOrder");
-    // a listener the modeller wrote with retries="0": there is no attempt to spend and no
+    // a listener the modeller wrote with retries="0". There is no attempt to spend and no
     // backoff to wait for, so the first failure has to raise the incident
     when(job.getRetries()).thenReturn(0);
     final var invoker = mock(WorkflowTaskInvoker.class);
@@ -199,9 +199,9 @@ public class Camunda8ModelledListenerHandlerTest {
   @DisplayName("An execution listener on 'start' completes with nothing at all")
   public void aStartExecutionListenerCompletesWithNothing() {
 
-    // measured against cluster and client 8.9.19 on 2026-09-13: the cluster makes the
-    // variables of such a completion local to the element, and the copy then swallows every
-    // later write of the same name from inside the element, the element's own job included.
+    // measured against cluster and client 8.9.19 on 2026-09-13. The cluster makes the
+    // variables of such a completion local to the element. The copy then swallows every
+    // later write of the same name from inside the element, including its own job.
     // A reproducer is kept outside this repository, in the VanillaBP workspace under
     // prompts/report-c8-start-listener-variable-scope
     deliver(
@@ -310,8 +310,8 @@ public class Camunda8ModelledListenerHandlerTest {
   @DisplayName("Half the mark is not the mark, and the method runs")
   public void halfTheMarkIsNotTheMark() {
 
-    // the action alone is a string anybody may send, and an empty change list alone is not
-    // this adapter's doing either - so neither half on its own keeps a method from running
+    // the action alone is a string anybody may send. And an empty change list alone does
+    // not only come from this adapter. So neither half on its own keeps a method from running
     deliver(
         aProbesOwnListenerJob("watchTheUpdate", "somebody-elses-action", List.of()),
         NameClashAvoidance.NONE,

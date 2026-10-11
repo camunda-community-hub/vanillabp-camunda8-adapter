@@ -17,14 +17,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.service.BpmsStartTrigger;
 
 /**
- * What the start listener costs the deployed model, measured rather than guessed.
+ * What the start listener costs the deployed model, measured, not guessed.
  * <p>
  * Since story 653 the listener sits on EVERY start event of a process, the plain and the
- * message one included, because what a start means is read from the state of the workflow
- * and not from the kind of its start event. On Camunda 8 that listener is written INTO the
- * model at deployment, so every start event of every model this application deploys grows
- * by it. These tests hold the number, so a change shows up here instead of in somebody's
- * deployment.
+ * message one included. What a start means is read from the state of the workflow, not from
+ * the kind of its start event. On Camunda 8 that listener is written INTO the model at
+ * deployment. So every start event of every model this application deploys grows by it.
+ * These tests hold the number, so a change shows up here and not in somebody's deployment.
  * <p>
  * The reasoning is decision 49 in the repository's DECISIONS.md.
  */
@@ -130,9 +129,9 @@ public class Camunda8StartListenerCostTest {
 
     final var perStartEvent = (afterWiring - plain) / 4;
     // measured: 294 characters per start event with this process id and these element
-    // ids. Most of it is the extensionElements wrapper Camunda's model API writes around
-    // one listener; the job type carries the process id and the element id, so longer
-    // ids cost a little more. The bound is what this test holds, and it is four orders of
+    // ids. Most of it is the extensionElements wrapper which the model API of Camunda writes
+    // around one listener. The job type carries the process id and the element id, so
+    // longer ids cost a little more. This test holds the bound. It is four orders of
     // magnitude below the 4 MB a Camunda 8 deployment may carry
     assertTrue(
         perStartEvent < 400,
@@ -145,8 +144,8 @@ public class Camunda8StartListenerCostTest {
             + perStartEvent
             + " characters");
 
-    // re-wiring a model which already carries the listener adds nothing, which is what
-    // keeps a redeployment of the same resources from growing it every time
+    // wiring a model again which already carries the listener adds nothing. That keeps a
+    // redeployment of the same resources from growing it every time
     Camunda8TaskWiring.bpmsInitiatedStartsOf(wired, PROCESS_ID, signalName -> signalName);
     assertEquals(
         afterWiring,

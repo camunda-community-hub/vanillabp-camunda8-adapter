@@ -31,13 +31,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What a BPMN model gets to say about the backoff of its own task, through the task header
  * {@value Camunda8RetryBackoffHeader#HEADER_NAME} version 1 read.
  * <p>
- * Every test here drives a job whose handler throws, because the fail command is where the
- * backoff travels to the cluster - the header is read at delivery and nothing about it is
- * visible before a job actually fails.
+ * Every test here drives a job whose handler throws. The backoff travels to the cluster with
+ * the fail command. The header is read at delivery, and nothing about it is visible before a
+ * job actually fails.
  * <p>
- * Each test brings its own element id and its own header value, because the captured
- * output belongs to the whole class: what an assertion counts has to be a string only its
- * own test can have produced.
+ * Each test brings its own element id and its own header value, because the captured output
+ * belongs to the whole class. What an assertion counts has to be a string which only its own
+ * test can have produced.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8RetryBackoffHeaderTest {
@@ -181,8 +181,8 @@ public class Camunda8RetryBackoffHeaderTest {
 
     jobHandlerConfiguring(Duration.ofSeconds(22), false).handle(jobClient, job("BrokenHeader", "10 seconds"));
 
-    // version 1 answered a typo with Duration.ZERO, which reads like 'no backoff wanted'
-    // and hands the job out again at once
+    // version 1 answered a typo with Duration.ZERO. That reads like 'no backoff wanted',
+    // and it hands the job out again at once
     verify(jobClient.newFailCommand(4711L).retries(2), times(1)).retryBackoff(Duration.ofSeconds(22));
     final var logged = output.getOut() + output.getErr();
     assertTrue(

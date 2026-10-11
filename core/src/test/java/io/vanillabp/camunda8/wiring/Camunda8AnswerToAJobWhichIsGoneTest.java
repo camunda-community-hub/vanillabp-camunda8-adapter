@@ -47,15 +47,15 @@ import io.vanillabp.spi.service.BpmsStartTrigger;
  * <p>
  * A handler works while the cluster moves on. A redelivery of the same job may answer it
  * first, or a boundary event or a cancelation may end its element or its workflow. The answer
- * of this handler then meets a job which is gone, and the cluster says so with HTTP 404, on
- * gRPC with <code>NOT_FOUND</code>. That is a late answer and not a failure. Before, four
- * places read it as one: the listener completions answered it with a fail command, which met
- * the same 404 and escaped, and the fail commands and the BPMN error of the task handler let
- * it escape directly.
+ * of this handler then meets a job which is gone. The cluster says so with HTTP 404, on gRPC
+ * with <code>NOT_FOUND</code>. That is a late answer and not a failure. Before, four places
+ * read it as one. The listener completions answered it with a fail command, which met the
+ * same 404 and escaped. The fail commands and the BPMN error of the task handler let it
+ * escape directly.
  * <p>
- * Each place gets its test here. The cluster's answers come from mocks, so the race is forced
- * rather than waited for. The counter-test matters as much: a 400 to a completion is a refusal
- * of the request itself and still ends in a fail command.
+ * Each place gets its test here. The cluster's answers come from mocks, so the race is
+ * forced instead of waited for. The counter-test matters as much: a 400 to a completion is a
+ * refusal of the request itself, and it still ends in a fail command.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8AnswerToAJobWhichIsGoneTest {

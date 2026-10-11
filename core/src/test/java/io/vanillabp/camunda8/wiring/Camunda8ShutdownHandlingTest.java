@@ -33,14 +33,14 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.service.BpmsStartTrigger;
 
 /**
- * The rule all four worker kinds of this adapter share: a delivery which fails
- * while the workflow module is shutting down is not reported to the cluster as a job
- * failure. The job keeps its lock and its retries, so an ordinary restart does not walk a
- * job towards an incident it never earned.
+ * The rule all four worker kinds of this adapter share. A delivery which fails while the
+ * workflow module is shutting down is not reported to the cluster as a job failure. The job
+ * keeps its lock and its retries. So an ordinary restart does not walk a job towards an
+ * incident it never earned.
  * <p>
- * The counter-test is in every case the same delivery OUTSIDE a shutdown, which still has
- * to be failed - what distinguishes the two is the adapter's state and never the kind of
- * exception, because a handler interrupted by the closing client throws like any other.
+ * In every case the counter-test is the same delivery OUTSIDE a shutdown, which still has
+ * to be failed. The adapter's state tells the two apart, never the kind of exception.
+ * A handler interrupted by the closing client throws like any other.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ShutdownHandlingTest {
@@ -60,8 +60,8 @@ public class Camunda8ShutdownHandlingTest {
     when(job.getBpmnProcessId()).thenReturn("TestProcess");
     when(job.getType()).thenReturn(type);
     when(job.getVariablesAsMap()).thenReturn(Map.of("id", "42"));
-    // the worker of a process' execution listeners answers two of them now, and the event
-    // the job reports is what tells the end of an instance from its cancelation
+    // the worker of the execution listeners of a process answers two of them now. The event
+    // the job reports tells the end of an instance from its cancelation
     Mockito.lenient().when(job.getListenerEventType()).thenReturn(ListenerEventType.END);
     return job;
 
@@ -189,7 +189,7 @@ public class Camunda8ShutdownHandlingTest {
     final var job = job(Camunda8TaskWiring.TASKDEFINITION_USERTASK_ZEEBE
         + "someUserTask");
     // a listener job always carries its event, and the handler serves the two the
-    // deployment added - see Camunda8UnknownClientEnumsTest for what it does with a third
+    // deployment added. Camunda8UnknownClientEnumsTest shows what it does with a third
     when(job.getListenerEventType()).thenReturn(ListenerEventType.CREATING);
     return job;
 

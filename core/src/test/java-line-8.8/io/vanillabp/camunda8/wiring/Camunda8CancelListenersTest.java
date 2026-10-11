@@ -18,8 +18,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What release line <code>8.8</code> can say about an instance which was canceled: nothing. The
  * {@code cancel} execution listener of the process element arrived with 8.10.
  * <p>
- * The sibling of this test in the directory of that line asserts the opposite, which is the
- * whole reason the three live per line.
+ * The sibling of this test in the directory of that line asserts the opposite. That is the
+ * whole reason why the three live per line.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CancelListenersTest {
