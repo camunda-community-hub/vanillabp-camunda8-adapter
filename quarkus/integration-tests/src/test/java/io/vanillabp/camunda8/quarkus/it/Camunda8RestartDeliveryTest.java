@@ -29,54 +29,52 @@ import io.vanillabp.integration.test.utils.OneFreePortPerJvm;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The Quarkus half: the workers of a workflow module are closed before the
- * client on this platform too, and a workflow started right after a restart gets its
- * first job in milliseconds rather than in a job timeout.
+ * The Quarkus half. On this platform too, the workers of a workflow module are closed before
+ * the client. And a workflow started right after a restart gets its first job in
+ * milliseconds, not after a job timeout.
  * <p>
  * Spring Boot's {@code Camunda8RestartDeliveryIT} measures the same thing, and the
- * duplication is the point. The order the two lifecycles produce is a property of the
- * platform's glue and not of the adapter's neutral core: Spring stops its
- * {@code SmartLifecycle} beans before it destroys them, Quarkus fires its
- * {@code ShutdownEvent} before it disposes the client's producer, and only running it
- * shows that either of them reaches the adapter.
+ * duplication is the point. The order which the two lifecycles produce comes from the
+ * platform's glue code, not from the adapter's neutral core. Spring stops its
+ * {@code SmartLifecycle} beans before it destroys them. Quarkus fires its
+ * {@code ShutdownEvent} before it disposes the client's producer. Only a real run shows that
+ * either of them reaches the adapter.
  * <p>
- * The application is stopped and started again INSIDE the test method rather than by the
- * extension, which is what makes a restart observable in a prod-mode test at all. Between
- * the two runs the log of the forked application says which came first, the drain or the
- * closing client.
+ * The test method itself stops and starts the application, not the extension. Only that makes
+ * a restart visible in a prod-mode test at all. Between the two runs, the log of the forked
+ * application says which came first: the drain or the closing client.
  * <p>
- * It brings a cluster of its own, which the lifecycle test deliberately avoids for every
- * other feature: this scenario owns the application's lifecycle, so it cannot share the
- * application every other Quarkus test uses. Testcontainers removes the containers when
+ * This test brings a cluster of its own. The lifecycle test avoids that on purpose for every
+ * other feature. But this scenario owns the application's lifecycle. So it cannot share the
+ * application which every other Quarkus test uses. Testcontainers removes the containers when
  * the JVM of the test run exits.
  * <p>
- * <b>Which ending of the drain counts, and why this half has the easier one.</b> Both
- * halves wait for the cluster to answer the activation requests their closed workers
- * parked, and that wait is what the Spring Boot class ran out of twice on 2026-10-01. It
- * opens 119 workers, because the module it belongs to deploys thirty-five processes into
- * one application, and its shutdown ends only once the cluster has answered the request of
- * every one of them. This application deploys one process into a cluster nobody else uses,
- * so its shutdown has a handful of requests to sit out, and nobody has seen it end any way
- * but quiet. Both halves take either ending all the same, for the reason
- * {@link #THE_CLUSTER_STILL_OWED_AN_ANSWER} gives: how fast the cluster answers is not
- * something this adapter promises. Everything the adapter does promise is still asserted
- * here, and a failure names the ending it read.
+ * <b>Which ending of the drain counts, and why this half has the easier one.</b> Both halves
+ * wait for the cluster to answer the activation requests which their closed workers parked.
+ * The Spring Boot class ran out of time on that wait twice on 2026-10-01. It opens 119
+ * workers, because its module deploys thirty-five processes into one application. Its
+ * shutdown ends only once the cluster has answered the request of every one of them. This
+ * application deploys one process into a cluster nobody else uses. So its shutdown waits for
+ * only a few requests, and nobody has seen it end in any other way than quiet. Both halves
+ * still accept either ending, for the reason given at {@link #THE_CLUSTER_STILL_OWED_AN_ANSWER}:
+ * this adapter does not promise how fast the cluster answers. Everything the adapter does
+ * promise is still asserted here, and a failure names the ending it read.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda8RestartDeliveryTest {
 
   /**
-   * The lock of the job under test, as {@code c8-restart/application.yaml} configures it.
-   * A job swallowed by an activation request which outlived its client comes back exactly
-   * this late.
+   * The lock of the job under test, as {@code c8-restart/application.yaml} configures it. A job
+   * can get lost in an activation request which outlived its client. Such a job comes back
+   * exactly this late.
    */
   private static final Duration JOB_TIMEOUT = Duration.ofSeconds(20);
 
   /**
-   * How long the application stays down. Below the client's {@code request-timeout} of
-   * ten seconds, because that is how long an activation request of the stopped
-   * application can outlive it.
+   * How long the application stays down. It is below the client's {@code request-timeout} of
+   * ten seconds. That is how long an activation request of the stopped application can
+   * outlive it.
    */
   private static final Duration GAP = Duration.ofSeconds(5);
 
@@ -84,11 +82,11 @@ public class Camunda8RestartDeliveryTest {
    * What the first job may take before the test calls it a delivery which waited for the
    * lock.
    * <p>
-   * Fifteen seconds against a lock of twenty: a delivery which waited for the lock cannot
-   * be faster than the lock, and one which did not takes milliseconds, so nothing a loaded
-   * machine does to this JVM falls between the two. Eight seconds did fall between them -
-   * a machine carrying several builds can leave a JVM without a turn for that long, and
-   * the number then said what the machine did rather than what the shutdown did.
+   * Fifteen seconds against a lock of twenty. A delivery which waited for the lock cannot be
+   * faster than the lock. One which did not wait takes milliseconds. So nothing a busy machine
+   * does to this JVM falls between the two. Eight seconds did fall between them. A machine
+   * which runs several builds can leave a JVM without CPU time for that long. The number then
+   * said what the machine did, not what the shutdown did.
    */
   private static final Duration DELIVERED_WITHOUT_WAITING_FOR_THE_LOCK = Duration.ofSeconds(15);
 
@@ -97,16 +95,16 @@ public class Camunda8RestartDeliveryTest {
       .toAbsolutePath();
 
   /**
-   * The cluster of this test. It brings secondary storage because the adapter serves no
-   * cluster it cannot search: the application under test would refuse to deploy into a
+   * The cluster of this test. It brings secondary storage, because the adapter serves no
+   * cluster which it cannot search. The application under test would refuse to deploy into a
    * broker alone, whatever the test is actually about.
    */
   static final GenericContainer<?> CAMUNDA = ClusterUnderTest.cluster("restart-cluster");
 
   /*
-   * Started here rather than by the Testcontainers extension: the application's runtime
-   * properties need the mapped ports, and they are read while the field below is
-   * initialized. The cluster outlives BOTH runs of the application this test makes.
+   * Started here and not by the Testcontainers extension. The application's runtime
+   * properties need the mapped ports, and they are read while the field below is initialized.
+   * The cluster outlives BOTH runs of the application which this test makes.
    */
   static {
     CAMUNDA.start();
@@ -131,8 +129,8 @@ public class Camunda8RestartDeliveryTest {
               "http://%s:%d".formatted(CAMUNDA.getHost(), CAMUNDA.getMappedPort(8080)),
               "vanillabp.adapters.c8.grpc-address",
               "http://%s:%d".formatted(CAMUNDA.getHost(), CAMUNDA.getMappedPort(26500)),
-              // the application runs in a forked JVM, and its log is where the order of
-              // its shutdown can be read
+              // the application runs in a forked JVM. The order of its shutdown can be read
+              // in its log
               "quarkus.log.file.enable",
               "true",
               "quarkus.log.file.path",
@@ -196,9 +194,9 @@ public class Camunda8RestartDeliveryTest {
   }
 
   /**
-   * Puts the measurement where it can be read after a build: into the test report of the
-   * runner respectively an IDE, and into a file of its own, because the console output of
-   * a test which passes is suppressed.
+   * Puts the measurement where it can be read after a build. It goes into the test report of
+   * the runner or the IDE, and into a file of its own. The console output of a test which
+   * passes is suppressed.
    *
    * @param reporter The JUnit reporter
    * @param measurement What was measured
@@ -223,8 +221,8 @@ public class Camunda8RestartDeliveryTest {
   public void aWorkflowStartedAfterARestartIsServedRightAway(
       final TestReporter reporter) throws Exception {
 
-    // the first run, which works one workflow so its workers have an activation request
-    // parked at the cluster by the time the application stops
+    // the first run works one workflow. So its workers have an activation request parked at
+    // the cluster by the time the application stops
     startWorkflow();
     assertTrue(
         awaitDelivery(Duration.ofMinutes(1)) >= 0,
@@ -233,8 +231,8 @@ public class Camunda8RestartDeliveryTest {
     prodModeTest.stop();
 
     final var shutdownLog = applicationLog();
-    // named here and reported further down, because the test takes both endings and the
-    // report is the only place a passing run says which one it took
+    // named here and reported further down. The test accepts both endings, and only the
+    // report says which one a passing run took
     final var theDrainOfTheFirstRun = whichEndingTheDrainTook(shutdownLog);
     final var drainedAt = whereTheDrainReported(shutdownLog);
     final var clientClosedAt = shutdownLog.indexOf("Closing Camunda 8 client");
@@ -261,13 +259,13 @@ public class Camunda8RestartDeliveryTest {
 
     TimeUnit.MILLISECONDS.sleep(GAP.toMillis());
 
-    // and the second run, whose worker is open before the workflow exists
+    // and the second run. Its worker is open before the workflow exists
     prodModeTest.start();
     startWorkflow();
     final var deliveredAfterMillis = awaitDelivery(JOB_TIMEOUT.multipliedBy(2));
 
-    // written down rather than printed: the output of a test which passes is suppressed,
-    // and this number is the whole point of the test
+    // written down, not printed. The output of a test which passes is suppressed, and this
+    // number is the whole point of the test
     report(
         reporter,
         "the first job of a workflow started %s after a restart was delivered after %d ms (job timeout %s, and the drain of the first run %s)"
@@ -287,8 +285,8 @@ public class Camunda8RestartDeliveryTest {
   /**
    * The sentences of the application's log which this test is about.
    * <p>
-   * The log of a whole run is a few thousand lines, and a failing assertion which dumps all
-   * of it buries the one line it is about.
+   * The log of a whole run has a few thousand lines. A failing assertion which dumps all of it
+   * hides the one line it is about.
    *
    * @param logged What the application wrote
    * @return The lines about the shutdown, or a note that there were none
@@ -310,32 +308,32 @@ public class Camunda8RestartDeliveryTest {
   }
 
   /**
-   * What the drain writes when the module went quiet inside the grace: no handler left in
-   * the application and no activation request of its closed workers left at the cluster.
-   * This is the normal ending, and the only one this half has ever written.
+   * What the drain writes when the module went quiet within the grace period. No handler is
+   * left in the application, and no activation request of its closed workers is left at the
+   * cluster. This is the normal ending, and the only one this half has ever written.
    */
   private static final String THE_MODULE_WENT_QUIET = "no activation request of theirs left at the cluster";
 
   /**
-   * What the drain warns with when the grace ran out while the cluster still owed it an
-   * answer for a request one of the closed workers had parked.
+   * The warning of the drain when the grace period ran out while the cluster still owed it an
+   * answer. The answer is for a request which one of the closed workers had parked.
    * <p>
-   * This test takes that ending too, which keeps it the twin of the Spring Boot half. The
-   * javadoc of {@code Camunda8RestartDeliveryIT#SHUTDOWN_GRACE} carries the measurement:
-   * the wait ends when the cluster answers the parked requests, so demanding the quiet
-   * ending would be a claim about the speed of the machine the test runs on. Nothing about
-   * the adapter is given up with it. The drain still runs before the client is closed and
-   * still says what it did, and the delivery this test is named after is asserted either
-   * way. What the two endings are not is equally good: this one is the drain's own warning,
-   * so the assertions above name which one they saw.
+   * This test accepts that ending too. So it stays the twin of the Spring Boot half. The
+   * javadoc of {@code Camunda8RestartDeliveryIT#SHUTDOWN_GRACE} has the measurement. The wait
+   * ends when the cluster answers the parked requests. So demanding the quiet ending would be a
+   * claim about the speed of the machine the test runs on. This gives up nothing about the
+   * adapter. The drain still runs before the client is closed, and it still says what it did.
+   * The delivery in the name of this test is asserted either way. But the two endings are not
+   * equally good. This one is the drain's own warning. So the assertions above name which one
+   * they saw.
    */
   private static final String THE_CLUSTER_STILL_OWED_AN_ANSWER = "still holding an activation request at the cluster";
 
   /**
-   * What the drain warns with, once per job, about a handler which was still running when
-   * the grace passed. No run of this test may contain it: the one workflow of this test is
-   * served long before the application stops, so a cut handler is a defect of the adapter
-   * and not a slow cluster.
+   * The warning of the drain, once per job, about a handler which was still running when the
+   * grace period passed. No run of this test may contain it. The one workflow of this test is
+   * served long before the application stops. So a handler which is cut off is a defect of the
+   * adapter, not a slow cluster.
    */
   private static final String A_HANDLER_WAS_CUT_OFF = "is being cut off";
 
@@ -355,8 +353,8 @@ public class Camunda8RestartDeliveryTest {
   }
 
   /**
-   * Names the ending the drain took, so that a failing assertion says which of the two it
-   * read and a later reader does not take the one for the other.
+   * Names the ending the drain took. So a failing assertion says which of the two it read,
+   * and a later reader does not mix them up.
    *
    * @param logged What the application wrote
    * @return The ending, as a half sentence about the drain
@@ -376,8 +374,8 @@ public class Camunda8RestartDeliveryTest {
   }
 
   /**
-   * How a line about the shutdown is recognized: the words the drain reports with, and the
-   * one the client factory writes when the client goes down.
+   * How a line about the shutdown is recognized: by the words the drain reports with, and by
+   * the line the client factory writes when the client goes down.
    */
   private static final List<String> WHAT_A_SHUTDOWN_WRITES = List
       .of(
