@@ -66,10 +66,10 @@ public class Camunda8ClientFactory implements AutoCloseable {
   private final Camunda8DeployedProcesses deployedProcesses = new Camunda8DeployedProcesses();
 
   /**
-   * Whether the cluster of this adapter can be searched. It is asked once and then
-   * remembered. It lives here for the same reason as the record above. The deployment
-   * service, the process service, the version catalog and the viewer all ask it. All of
-   * them already receive the factory per adapter id.
+   * Whether this adapter's cluster can be searched, asked once and remembered - here for
+   * the same reason as the record above: deployment service, process service, version
+   * catalog and viewer all ask it, and all of them already receive the factory per
+   * adapter id.
    */
   @Getter
   private final Camunda8QueryApi queryApi;
