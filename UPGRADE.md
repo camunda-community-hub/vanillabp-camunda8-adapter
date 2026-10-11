@@ -1,7 +1,7 @@
 # Upgrade notes
 
-Contributor-facing list of what a VanillaBP 1 application on Camunda 8 has to do, organised per
-version line. It describes the step to the release, not how the release was built - the development
+A list for contributors: what a VanillaBP 1 application on Camunda 8 has to do, organised per
+version line. It describes the step to the release, not how the release was built. The development
 history is in git. These entries feed the user-facing
 [migration guide](https://github.com/vanillabp/adapter-platform-integration/wiki/Migrating-from-version-1);
 the same file exists for
@@ -14,26 +14,25 @@ and for the [Camunda 7 adapter](https://github.com/camunda-community-hub/vanilla
 
 Visible to every consumer, because the coordinates change.
 
-The adapter is published once per Camunda 8 minor, and the minor is part of the version:
-`2.0.0-8.8`, `2.0.0-8.9` and `2.0.0-8.10`. Which one you take is decided by your cluster, and the
-table in the
-[wiki](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki) says which client
-and which tested cluster each line stands for.
+The adapter is published once per Camunda 8 minor version, and the minor is part of the version:
+`2.0.0-8.8`, `2.0.0-8.9` and `2.0.0-8.10`. Your cluster decides which one you take. The table in
+the [wiki](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki) says which
+client and which tested cluster each line stands for.
 
-The reason is that Camunda promises a client against clusters of its own version and newer, and
-nothing about the other direction. The client a build was compiled against is therefore the lowest
-cluster version that build accepts. Without lines, the day the adapter used anything only an 8.10
-cluster offers, every later bugfix would have been deliverable only together with a cluster upgrade,
-and a Camunda 8 cluster upgrade costs more organizationally than technically.
+The reason: Camunda promises that a client works with clusters of its own version and newer. It
+promises nothing for the other direction. So the client a build was compiled against is the lowest
+cluster version that build accepts. Without lines, there would be a problem from the day the adapter
+used anything which only an 8.10 cluster offers. From then on, every bugfix could only be delivered
+together with a cluster upgrade. And a Camunda 8 cluster upgrade costs more in organization than in
+technology.
 
-What you have to do is add the suffix of your cluster's line to the adapter version in your POM, and
-nothing else. The groupId, the artifactIds and the API stay as they are: the methods are identical on
-every line, checked in the adapter's CI, so you never have to read a suffix to find out what exists.
-Where your cluster cannot do something, the same method is there and fails with a message naming
-your line.
+All you have to do is add the suffix of your cluster's line to the adapter version in your POM. The
+groupId, the artifactIds and the API stay as they are. The methods are identical on every line, and
+the adapter's CI checks that. So you never have to read a suffix to find out what exists. If your
+cluster cannot do something, the method is still there and fails with a message naming your line.
 
-Extend the preset the adapter ships and Renovate reads the suffix as a compatibility value it never
-changes on its own, so no automatic update moves you to another cluster minor:
+Extend the preset the adapter ships. Renovate then reads the suffix as a compatibility value which
+it never changes on its own, so no automatic update moves you to another cluster minor:
 
 ```json
 {
@@ -41,202 +40,208 @@ changes on its own, so no automatic update moves you to another cluster minor:
 }
 ```
 
-Without it, plain maven versioning would eventually offer you a boundary crossing, because Maven
-sorts `2.2.0-8.8` above `2.1.0-8.9`.
+Without the preset, plain Maven versioning would sooner or later offer you an update to another
+line, because Maven sorts `2.2.0-8.8` above `2.1.0-8.9`.
 
 At startup each configured `camunda8` adapter id logs its release line and the client it was built
-against, which is the lowest cluster version it accepts.
+against. That client is the lowest cluster version it accepts.
 
-All three lines take bugfixes. 8.10 is the line new features land on, and 8.8 and 8.9 take fixes
-for as long as they are carried. The project does not end a line on the day the next minor goes
-GA: Camunda supports 8.8 until April 2027, and ending the line would mean telling a cluster which
-is still in support to upgrade before it can have the next fix.
+All three lines get bugfixes. New features land on 8.10. 8.8 and 8.9 get fixes for as long as
+they are carried. The project does not end a line on the day the next minor goes GA (general
+availability). Camunda supports 8.8 until April 2027. Ending the line would mean telling a cluster
+which is still supported to upgrade before it can get the next fix.
 
 ### The cluster has to be one the adapter can search
 
-The Camunda 8 adapter of 2.0 requires a cluster which answers searches, and it says so while it
-deploys instead of running on and answering questions it cannot answer. Two things make a cluster
-answer them: it brings secondary storage (`camunda.data.secondary-storage.type`, an Elasticsearch or
-OpenSearch it exports to), and the credentials the adapter is configured with may read process
-instances, process definitions, jobs, user tasks and element instances. Where either is missing the
-cluster refuses every search with HTTP 403 and says which of the two it was in prose only, so the
-message names both.
+The Camunda 8 adapter of 2.0 requires a cluster which answers searches. It says so while it
+deploys. It does not run on and then fail at questions it cannot answer. A cluster answers searches
+if two things are true:
 
-What the adapter uses a search for is the list a reader can check themselves against: locating a
-workflow by its aggregate's id, which is what elects the BPMS of an operation and what a pushed
-workflow aggregate is written by; resolving a version specification which names a
-`zeebe:versionTag`; the viewer's element history and the definitions of earlier application
-versions; and the startup report about the versions the cluster still holds. There is no second
-behaviour for a cluster which refuses: no optimistic yes with a warning, no empty version list, no
-viewer serving what this application version deployed.
+- it has secondary storage (`camunda.data.secondary-storage.type`, an Elasticsearch or OpenSearch
+  it exports to);
+- the credentials the adapter is configured with may read process instances, process definitions,
+  jobs, user tasks and element instances.
+
+If either is missing, the cluster refuses every search with HTTP 403. Only the prose of its answer
+says which of the two it was, so the message names both.
+
+Here is what the adapter uses a search for, so you can check your case against it:
+
+- finding a workflow by the id of its aggregate. The BPMS election of an operation uses this, and
+  so does the write of a pushed workflow aggregate;
+- resolving a version specification which names a `zeebe:versionTag`;
+- the viewer's element history and the definitions of earlier application versions;
+- the startup report about the versions the cluster still holds.
+
+For a cluster which refuses, there is no second behaviour: no optimistic yes with a warning, no
+empty version list, no viewer which serves only what this application version deployed.
 
 Where you are coming from decides whether this is news.
 
-From 1.7.0 or later your application already needed such a cluster and nobody wrote it down. It read
-every active process definition of its tenant through the search API while it started, to parse the
-BPMN of earlier deployments for the SPI wiring, with no property switching it off and no fallback
-around it. A cluster refusing that search kept the application from starting, so what changes for you
-is the message: a named requirement with both reasons and both ways out, instead of whatever the
-first failing read said.
+From 1.7.0 or later, your application already needed such a cluster. Nobody wrote it down. While
+it started, it read every active process definition of its tenant through the search API. It parsed
+the BPMN of earlier deployments for the SPI wiring. No property switched that off, and there was no
+fallback. A cluster which refused that search kept the application from starting. So only the
+message changes for you. It now names the requirement, both reasons and both ways out. Before, you
+got whatever the first failing read said.
 
-From 1.6.3 or earlier this is a real change. Those versions ran against the 8.6 client and kept the
-metadata of earlier deployments in tables of the application's own database, which is what their
-README said out loud, and they searched nothing. If your cluster is still one without secondary
-storage, 2.0 does not serve it: give the cluster its secondary storage before you upgrade. The
-tables are gone either way, 1.7.0 dropped them, so what answers the questions those tables used to
-answer is the cluster, and it has to be askable.
+From 1.6.3 or earlier, this is a real change. Those versions ran against the 8.6 client. They kept
+the metadata of earlier deployments in tables of the application's own database, as their README
+said, and they searched nothing. If your cluster still has no secondary storage, 2.0 does not serve
+it. Give the cluster its secondary storage before you upgrade. The tables are gone either way,
+because 1.7.0 dropped them. So the cluster now answers the questions those tables used to answer,
+and it has to be able to answer them.
 
-An adapter which is not the first-priority adapter of a workflow module and carries
-`vanillabp.adapters.<id>.deployment-failure: warn` boots degraded against such a cluster with a
-guiding warning rather than ending the start. That is the way out for the old BPMS of a migration
-AWAY from a cluster like this, and it takes one more property: an adapter which deployed nothing
-cannot answer the BPMS election either, so a workflow module serving two adapters also needs
-`vanillabp.workflow-modules.<id>.election.guessing-adapters: ACCEPTED`. The application says both,
-one message per step, and comes up once both are set.
+Some adapters boot degraded against such a cluster, with a warning which says what to do, and do
+not end the start. That is an adapter which is not the first-priority adapter of a workflow module
+and has `vanillabp.adapters.<id>.deployment-failure: warn`. It is the way out for the old BPMS of a
+migration AWAY from a cluster like this. It needs one more property. An adapter which deployed
+nothing cannot answer the BPMS election either. So a workflow module served by two adapters also
+needs `vanillabp.workflow-modules.<id>.election.guessing-adapters: ACCEPTED`. The application asks
+for both, one message per step, and comes up once both are set.
 
 ### Two tables of version 1 can be dropped by hand
 
 Up to release 1.6.3 the Camunda 8 adapter kept its own record of what it had deployed, in the
 tables `CAMUNDA8_DEPLOYMENTS` and `CAMUNDA8_RESOURCES`, on MongoDB in two collections of the same
-names. It read them to get at the models of older process versions. Release 1.7.0 dropped that
-record and 2.0 asks the cluster instead, so after the upgrade nothing reads them and nothing
-writes them.
+names. It read them to get the models of older process versions. Release 1.7.0 dropped that
+record, and 2.0 asks the cluster instead. So after the upgrade nothing reads or writes them.
 
-They hold every BPMN file your application ever deployed, so they are the one thing worth dropping
-by hand. Do that once you no longer want what is in them. An application coming from 1.7.0 or later
-never had them.
+They hold every BPMN file your application ever deployed. That makes them the one thing worth
+dropping by hand. Do that once you no longer want what is in them. An application coming from 1.7.0
+or later never had them.
 
 ### Check your user task models, and finish what is open
 
-Up to release 1.6.3 a user task was a plain BPMN user task served by a job worker, and its
+Up to release 1.6.3, a user task was a plain BPMN user task served by a job worker. Its
 `zeebe:formDefinition` named a `formKey`. Release 1.7.0 replaced that with a Camunda-managed user
-task (`zeebe:userTask`) whose external form reference carries the task definition. **2.0 does not
-accept the older shape at all.** It is not a matter of what gets served: a user task without
-`zeebe:userTask` is a user task a job worker serves, and this adapter takes a user task only where
-the cluster manages it.
+task (`zeebe:userTask`). Its external form reference carries the task definition. **2.0 does not
+accept the older shape at all.** This is not about what gets served. A user task without
+`zeebe:userTask` is served by a job worker, and this adapter takes a user task only if the
+cluster manages it.
 
 So grep your models for `formKey` before you upgrade. Where one sits on a user task, change the
 model: make the task a Camunda-managed one and set "External form reference"
 (`zeebe:formDefinition externalReference`) to what the `formKey` said. VanillaBP then wires the
 lifecycle listeners itself.
 
-That grep finds what version 1 served, and not every element this applies to. A user task without
-a `formKey` at all is a plain BPMN user task too, and the cluster does exactly the same with it: it
-hands out a job of `io.camunda.zeebe:userTask` which VanillaBP 2 does not fetch, so the workflow
-stands at the element until the job's retries are used up. Measured on 2026-09-28 against
+That grep finds what version 1 served, but not every element this applies to. A user task without
+any `formKey` is a plain BPMN user task too, and the cluster treats it exactly the same way. It
+hands out a job of `io.camunda.zeebe:userTask`, which VanillaBP 2 does not fetch. So the workflow
+waits at the element until the job's retries are used up. Measured on 2026-09-28 against
 `camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`: the model is accepted, the job appears,
 and the cluster keeps no user-task record for such a task at all. The way out is the one above. If
 you want a search which finds both, look for `bpmn:userTask` elements whose extension elements have
 no `zeebe:userTask` in them.
 
-Finish or cancel the tasks which are still open on such an element before you upgrade, because
-afterwards nothing can complete them. The id such a task hands out is a job key while the cluster
-expects a user-task key, so `ProcessService#completeUserTask` cannot answer it, and no
-notification arrives when the task is created or canceled.
+Before you upgrade, finish or cancel the tasks which are still open on such an element. Afterwards
+nothing can complete them. Such a task hands out a job key as its id, but the cluster expects a
+user-task key. So `ProcessService#completeUserTask` cannot answer it, and no notification arrives
+when the task is created or canceled.
 
 **Your application does not boot until those models are changed, and that is on purpose.** A
-`@WorkflowService` class claiming a BPMN process says that your application stands in for that
-process, so the deployment refuses a process which carries a shape this adapter does not take. The
-message names the process, the elements, which of the two shapes each of them is, and the ways out.
-Where a worker of your own serves the element, give it a `zeebe:taskDefinition` naming that
-worker's job type: the element is then yours to serve rather than a user task of VanillaBP's, and
-the check passes over it.
+`@WorkflowService` class which claims a BPMN process says that your application stands in for that
+process. So the deployment refuses a process with a shape this adapter does not take. The message
+names the process, the elements, which of the two shapes each element has, and the ways out. If a
+worker of your own serves the element, give the element a `zeebe:taskDefinition` naming that
+worker's job type. The element is then yours to serve, not a user task of VanillaBP, and the check
+skips it.
 
-A BPMN process no `@WorkflowService` class of yours claims is not looked at, once you marked it as
-somebody else's, see [A process none of your classes claims](#a-process-none-of-your-classes-claims).
+A BPMN process which no `@WorkflowService` class of yours claims is not checked, once you marked it
+as somebody else's. See [A process none of your classes
+claims](#a-process-none-of-your-classes-claims).
 
-The message says how many tasks are open on the elements right now, and only the count of elements
-is certain. The elements come from the model this boot deploys. The open tasks are a search of the
-cluster's index: it is asked how many jobs of that element's job type the process has, and how many
-of those it has already seen end, and the message names the difference. That is the number which
-falls to zero as you work the tasks off, which the plain total of the search never did. It is near
-rather than exact, because an exporter feeds that index and the index runs behind the engine: a task
-which finished a moment ago can still be counted, and one which opened a moment ago can still be
-missing. The boot does not wait for the cluster before it counts, because the model is the cause
-and a wait would only put a message about the cluster in front of it. A cluster
-which is not up yet costs that message the number, and it says so instead of writing a zero.
+The message says how many tasks are open on the elements right now. Only the count of elements is
+certain. The elements come from the model this boot deploys. The open tasks come from a search of
+the cluster's index. The search asks how many jobs of the element's job type the process has, and
+how many of those the index has already seen end. The message names the difference. This number
+falls to zero as you work off the tasks. The plain total of the search never did. The number is
+close, not exact. An exporter feeds the index, and the index runs behind the engine. A task which
+finished a moment ago can still be counted, and one which opened a moment ago can still be missing.
+The boot does not wait for the cluster before it counts. The model is the cause, and a wait would
+only put a message about the cluster in front of it. If the cluster is not up yet, the message has
+no number, and it says so instead of writing a zero.
 
 ### A task your cockpit showed while a check answered 404
 
-If you have seen this under version 1 - the Business Cockpit shows a user task as active while a
-check about that task answers `404` - then it was one of two things, and 2.0 has neither.
+Maybe you have seen this under version 1: the Business Cockpit shows a user task as active, while
+a check about that task answers `404`. Then it was one of two things, and 2.0 has neither.
 
-The first one is the index. Version 1 asked whether a user task still exists with a `UserTaskGet`,
-which reads the cluster's searchable storage, and that storage is written by an exporter running
-behind the engine. Measured on 2026-09-28 against `camunda/camunda:8.8.39`,
-`camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`, counting from the moment the
-`creating` listener job of the task arrived, which is the moment your application and the cockpit
-learn of it: the storage answered `404` for 1667 ms, 649 ms respectively 219 ms. Under load that
-window is as wide as your exporter's backlog. 2.0 asks the partition instead, with an
-`UpdateUserTask` carrying nothing but an audit action, and in the same runs that answered `204`
-after 12 ms, 21 ms respectively 13 ms.
+The first one is the index. Version 1 asked with a `UserTaskGet` whether a user task still exists.
+That reads the cluster's searchable storage, and an exporter writes that storage behind the engine.
+We measured this on 2026-09-28 against `camunda/camunda:8.8.39`, `camunda/camunda:8.9.21` and
+`camunda/camunda:8.10.0-rc1`. We counted from the moment the `creating` listener job of the task
+arrived. That is the moment your application and the cockpit learn of the task. The storage
+answered `404` for 1667 ms, 649 ms and 219 ms, in that order. Under load the window is as wide as
+your exporter's backlog. 2.0 asks the partition instead, with an `UpdateUserTask` which carries
+nothing but an audit action. In the same runs that answered `204` after 12 ms, 21 ms and 13 ms.
 
-The second one is the shape of the task, and there the `404` never goes away. A user task served
-by a job worker, which is what version 1 modelled up to its release 1.6.3, has no user-task
-record in the cluster at all: in the same runs `UserTaskGet`, the empty `UpdateUserTask` and the
-user-task search answered nothing but "not found" for a full minute, while the job command on the
-same key was accepted and the engine said it still holds the instance. The id such a task hands
-out is a job key, so every question asked as if it were a user task misses. 2.0 does not serve
-that shape and says so while it deploys - see the section above, and finish what is open before
-you upgrade.
+The second one is the shape of the task, and there the `404` never goes away. Up to release 1.6.3,
+version 1 modelled user tasks served by a job worker. Such a task has no user-task record in the
+cluster at all. In the same runs, `UserTaskGet`, the empty `UpdateUserTask` and the user-task
+search answered nothing but "not found" for a full minute. At the same time the job command on the
+same key was accepted, and the engine said it still holds the instance. Such a task hands out a job
+key as its id, so every question which treats it as a user task misses. 2.0 does not serve that
+shape and says so while it deploys. See the section above, and finish what is open before you
+upgrade.
 
 ### Your user-task models get one new process version
 
 VanillaBP writes the lifecycle listeners of a Camunda-managed user task into the model it deploys.
-Version 1 gave them `retries="0"`, 2.0 gives them `retries="1"`, so the file your first boot after
-the upgrade deploys differs from the one the cluster holds and the cluster gives that process a new
-version. Nothing of yours has to change for it, and your `@WorkflowTask` methods keep serving the same
-tasks.
+Version 1 gave them `retries="0"`, 2.0 gives them `retries="1"`. So the file your first boot after
+the upgrade deploys differs from the one the cluster holds, and the cluster gives that process a new
+version. Nothing of yours has to change for it, and your `@WorkflowTask` methods keep serving the
+same tasks.
 
 The retry is not a second attempt for a notification which failed. A failed notification is still
-reported with no retries left, so the first failure raises the incident as before. It is what the
-gateway hands back when it could not deliver the job to the worker it activated it for, and a job
-without a retry dies of such a lost delivery: the cluster writes an incident and the user task
-stands in `CREATING`, where no command reaches it any more.
+reported with no retries left, so the first failure raises the incident as before. The retry is
+what the gateway hands back when it could not deliver the job to the worker it activated it for.
+A job without a retry dies of such a lost delivery: the cluster writes an incident, and the user
+task stays in `CREATING`, where no command reaches it any more.
 
-Workflows you brought with you stay on the version they were started on, and their user tasks keep
-the listeners version 1 deployed. A lost delivery of one of those still ends that way until the
-workflow is over, and there is nothing to do about it other than letting them finish.
+Workflows you brought with you stay on the version they were started on. Their user tasks keep the
+listeners which version 1 deployed. A lost delivery on one of those still ends that way until the
+workflow is over. You cannot do anything about it except let those workflows finish.
 
 ### A task id is decimal, and version 1's hexadecimal ids are data to migrate
 
-Version 1 could hand out a task id in hexadecimal, through `task-id-as-hex-string`, which was off
-by default. 2.0 reads task ids decimally everywhere and has no such setting, so there is no
-property to move here. The ids an application stored while the setting was on outlive the upgrade,
-and they sit in that application's own tables, so converting them is work on your data.
+Version 1 could hand out a task id in hexadecimal, with `task-id-as-hex-string`. It was off by
+default. 2.0 reads task ids as decimal numbers everywhere and has no such setting, so there is no
+property to move. The ids an application stored while the setting was on survive the upgrade. They
+sit in the application's own tables, so converting them is work on your data.
 
-Where such an id reaches the adapter, the failure names the old setting. It is answered as a
-permanent one, so the outbox entry is blocked after a single attempt instead of being retried ten
-times against a key which will never become a number.
+If such an id reaches the adapter, the failure names the old setting. It counts as a permanent
+failure. So the outbox entry is blocked after a single attempt. It is not retried ten times
+against a key which will never become a number.
 
 ### `cancelUserTask` has no command on the cluster yet
 
 No cluster up to 8.9 can cancel a Camunda-managed user task by BPMN error. The engine offers no
-command for it. Throwing a BPMN error is job-based, and a Camunda-managed user task is no job;
-version 1's workaround with a marker variable was broken by version 1's own admission. The call is
-answered with a guiding error naming your release line.
+command for it. Throwing a BPMN error is job-based, and a Camunda-managed user task is not a job.
+Version 1 had a workaround with a marker variable, and version 1 itself said it was broken. The
+call is answered with an error which names your release line and says what to do.
 
-What makes it possible are the listeners Camunda 8.10 brings, so the operation can only ever
-arrive on a line built against 8.10 or later. Until then the way to take such a task away is the
-model: give the user task an interrupting boundary event and let your application trigger it, for
-example by correlating a message.
+The listeners which Camunda 8.10 brings make it possible. So the operation can only ever arrive on
+a line built against 8.10 or later. Until then, use the model to take such a task away: give the
+user task an interrupting boundary event and let your application trigger it, for example by
+correlating a message.
 
 ### Workflows you brought with you end in silence, so keep the old service task for now
 
-Version 1 could not tell an application that a workflow had ended, so applications modelled a
-service task in front of every end event. `@WorkflowEnded` replaces that and the old service task
-keeps working, which makes the change one to make at leisure.
+Version 1 could not tell an application that a workflow had ended. So applications modelled a
+service task in front of every end event. `@WorkflowEnded` replaces that, and the old service task
+keeps working. So you can make the change whenever it suits you.
 
-On Camunda 8 the moment matters all the same. The notification hangs off an execution listener
-this adapter writes into the model it deploys, and a workflow which is already running stays on
-the process version it was started on. A workflow you brought with you therefore triggers nothing.
-Delete the old service task right after the upgrade and those workflows end without telling
-anybody, so wait until they have ended.
+On Camunda 8 the timing still matters. The notification comes from an execution listener which
+this adapter writes into the model it deploys. A workflow which is already running stays on the
+process version it was started on. So a workflow you brought with you triggers nothing. If you
+delete the old service task right after the upgrade, those workflows end without telling anybody.
+So wait until they have ended.
 
-The startup report about the versions the cluster still holds names it per old version, together
-with the user-task notifications and the message correlation those models miss as well. Camunda 7
-needs no such wait, because it attaches its listener while the engine parses a process definition,
-which reaches every version that engine holds.
+The startup report about the versions the cluster still holds names this for each old version. It
+also names the user-task notifications and the message correlation which those models miss.
+Camunda 7 needs no such wait. It attaches its listener while the engine parses a process
+definition, and that reaches every version the engine holds.
 
 ### `allow-connectors` moved under the adapter
 
@@ -249,107 +254,109 @@ vanillabp.workflow-modules.<m>.adapters.<id>.allow-connectors
 vanillabp.workflow-modules.<m>.workflows.<w>.adapters.<id>.allow-connectors
 ```
 
-Connectors are a Camunda 8 concept and no other BPMS has anything to do with the marker, so the key
-belongs to this adapter. The three levels are the ones version 1 had, and the default is `false` as
-before. Four things an upgrading application has to act on.
+Connectors are a Camunda 8 concept, and no other BPMS has anything to do with the marker. So the
+key belongs to this adapter. The three levels are the ones version 1 had, and the default is
+`false` as before. An upgrading application has to act on four things.
 
 The resolution changed direction. Version 1 held the flag in primitive booleans, so a more specific
-level could only turn it ON: a global `true` plus a module `false` still yielded `true`. Now the
-most specific configured value wins in both directions, like every other key of this adapter. If you
-relied on the old OR, read your configuration once: a module or workflow which says `false` under an
-adapter which says `true` now switches the rule off for itself.
+level could only turn it ON: a global `true` plus a module `false` still gave `true`. Now the most
+specific configured value wins in both directions, like every other key of this adapter. If you
+relied on the old OR, read your configuration once. A module or workflow which says `false` under
+an adapter which says `true` now switches the rule off for itself.
 
-A user task built from an element template stays wired. Version 1 passed a user task carrying
-`zeebe:modelerTemplate` over together with the service tasks. This version does not. There is no
-user-task connector: a `zeebe:userTask` is served by the cluster's task list, and a template on it
-presets an assignee or a form. Passing it over would take away its lifecycle listeners, its CREATED
-and CANCELED notifications and the ability of `ProcessService#completeUserTask` to complete it, for
-a marker which says nothing about who serves the task. If a user task of yours was passed over in
-version 1, it is wired here and needs a `@WorkflowTask` method or the model has to stop claiming it.
+A user task built from an element template stays wired. Version 1 handed a user task with
+`zeebe:modelerTemplate` over to connectors, together with the service tasks. This version does
+not. There is no user-task connector. The cluster's task list serves a `zeebe:userTask`, and a
+template on it presets an assignee or a form. Handing it over would take away its lifecycle
+listeners, its CREATED and CANCELED notifications, and the ability of
+`ProcessService#completeUserTask` to complete it. All that for a marker which says nothing about
+who serves the task. If version 1 handed over a user task of yours, it is wired here. It needs a
+`@WorkflowTask` method, or the model has to stop claiming it.
 
-Every boot with the switch on writes a warning. Version 1 logged nothing at all near the property,
-so switching it on was silent and a typo in a task definition was indistinguishable from an
-intentional connector. This version writes one framed WARN per workflow module which allows
-connectors, naming the key, the module, every element it handed over with its element template, and
-what that costs. No key silences it, and that is deliberate: what it says stays true for as long as
-the connector is in the model.
+Every boot with the switch on writes a warning. Version 1 logged nothing at all about the
+property. So switching it on was silent, and you could not tell a typo in a task definition from
+an intentional connector. This version writes one framed WARN per workflow module which allows
+connectors. It names the key, the module, every element it handed over with its element template,
+and what that costs. No key silences it, and that is deliberate: what it says stays true for as
+long as the connector is in the model.
 
-Under `use-prefix` a connector's job type stays unprefixed. Version 1 had no prefixing mode, so the
-question could not arise there. Here the job type of such an element is left as the modeller wrote
-it, because it names a runtime somebody else deployed cluster-wide. Under `by-adapter` the module is
-kept apart by a tenant instead, and a connector runtime then has to be able to see that tenant,
-which is a condition on your cluster rather than something the adapter arranges.
+Under `use-prefix` the job type of a connector gets no prefix. Version 1 had no prefixing mode, so
+the question did not come up there. Here the job type of such an element stays as the modeller
+wrote it, because it names a runtime which somebody else deployed for the whole cluster. Under
+`by-adapter` a tenant keeps the module apart instead. A connector runtime then has to be able to
+see that tenant. That is a condition on your cluster, not something the adapter arranges.
 
 ### A start waits for its cluster instead of failing at once
 
-Version 1 ended a start which could not reach its Camunda 8 cluster at the first round it tried to
-make, usually the deployment. This version waits: before that round the adapter asks the cluster for
-its topology and gives it `vanillabp.adapters.<id>.startup-wait`, ten minutes by default, to answer.
-The case this is for is a cluster booting together with the application, which lets every round of a
-start fail rather than only the deployment.
+If version 1 could not reach its Camunda 8 cluster, the start ended at the first round trip it
+tried, usually the deployment. This version waits. Before that round trip, the adapter asks the
+cluster for its topology. It gives the cluster `vanillabp.adapters.<id>.startup-wait` to answer,
+ten minutes by default. This is meant for a cluster which boots together with the application.
+Such a cluster lets every round trip of a start fail, not only the deployment.
 
-What an application has to look at is the ten minutes. A deployment pipeline which expects a start
-to fail fast against a cluster which is deliberately not there now waits them out; set
-`startup-wait: PT0S` for such a setup and the behaviour is the one you had. Nothing waits silently in
-the meantime: a line before the first attempt names the address and the deadline, and one every few
-seconds carries the time gone and the cluster's last answer.
+An application has to look at the ten minutes. Maybe a deployment pipeline expects a start to fail
+fast against a cluster which is deliberately not there. It now waits the ten minutes. Set
+`startup-wait: PT0S` for such a setup, and you get the old behaviour. Nothing waits silently in the
+meantime. A log line before the first attempt names the address and the deadline. Every few
+seconds another line shows the time passed and the cluster's last answer.
 
-An answer the cluster will repeat ends the start at once rather than after the deadline. Which
-answers those are is `Camunda8Errors`, the classification the whole adapter reads, so a rejected
-request and a refused tenant fail as fast as before. A `401` is not among them, on purpose, because
-the client refreshes an expired token, so wrong credentials are waited out with the `401` in every
-line the wait writes.
+An answer which the cluster will repeat ends the start at once, not after the deadline.
+`Camunda8Errors` decides which answers those are. The whole adapter uses this classification, so a
+rejected request and a refused tenant fail as fast as before. A `401` is deliberately not among
+them, because the client refreshes an expired token. So with wrong credentials the start waits
+until the deadline, with the `401` in every line the wait writes.
 
-Two more things are checked while the application boots, both about `request-timeout`. A value which
-is not positive ends the boot, because there is no request without time. A value below one second is
-a warning: it is the deadline of every request this adapter sends, the deployment of a workflow
-module and every search included, so a healthy cluster answers too late and it reads like a network
-problem.
+Two more things are checked while the application boots, both about `request-timeout`. A value
+which is not positive ends the boot, because there is no request without time. A value below one
+second causes a warning. It is the deadline of every request this adapter sends, including the
+deployment of a workflow module and every search. So a healthy cluster answers too late, and that
+looks like a network problem.
 
 ### The `retryBackoff` task header of a model is read again
 
-Version 1 let a Camunda 8 model name the backoff of a single element in the task header
-`retryBackoff`, which is how it filled the gap Camunda 8 leaves next to Camunda 7's
-`camunda:failedJobRetryTimeCycle`. The header is read, and no model has to be touched for that.
+Version 1 let a Camunda 8 model set the backoff of a single element in the task header
+`retryBackoff`. That filled a gap: Camunda 8 has nothing like Camunda 7's
+`camunda:failedJobRetryTimeCycle`. The header is read again, and no model has to change for that.
 
-Two things are different from version 1. The header is read from the JOB rather than from the model
-while deploying, so it also holds for process versions this application never deployed and no
-redeployment is needed. And version 1 only looked at the header where the element's
-`zeebe:taskDefinition` carried a `retries` attribute as well; that condition is gone, because whoever
+Two things are different from version 1. The header is read from the JOB, not from the model while
+deploying. So it also holds for process versions this application never deployed, and no
+redeployment is needed. And version 1 only looked at the header if the element's
+`zeebe:taskDefinition` had a `retries` attribute as well. That condition is gone, because whoever
 models a backoff means it either way.
 
-An application which already moved the value into the configuration has one thing to check. Where it
-landed at the TASK level
+An application which already moved the value into the configuration has one thing to check. If the
+value landed at the TASK level
 (`vanillabp.workflow-modules.<m>.workflows.<w>.tasks.<t>.adapters.<id>.retry-backoff`), nothing
-changes: that level still applies, and one line per element says so where the model disagrees with
-it. Where it landed at the workflow, the workflow-module or the adapter level while the header stayed
-in the model, the header applies. Both say something about one single task, so the more specific one
-wins, and between two of the same reach the one you can change without deploying a new process
-version does. So look at the models you migrated: a header you meant to retire has to leave the
-model, not just the configuration.
+changes. That level still applies, and where the model disagrees, one log line per element says
+so. If the value landed at the workflow, workflow-module or adapter level, and the header stayed in
+the model, the header applies. Both say something about one single task, so the more specific one
+wins. Between two which are equally specific, the one you can change without deploying a new
+process version wins. So look at the models you migrated. A header you meant to retire has to leave
+the model, not just the configuration.
 
-A header which is no ISO-8601 duration costs a warning naming the workflow module, the BPMN process,
-the element and the value, and then the configured value applies. Version 1 answered such a typo with
-`Duration.ZERO`, which reads like "no backoff wanted" and hands the job out again at once. The
-warning falls when a job of that element fails, once per element and not once per job, and
-deliberately not while the application boots: a model deployed long ago cannot be corrected by the
-boot which would complain about it.
+A header which is not an ISO-8601 duration causes a warning. It names the workflow module, the BPMN
+process, the element and the value. Then the configured value applies. Version 1 answered such a
+typo with `Duration.ZERO`. That looks like "no backoff wanted" and hands the job out again at once.
+The warning comes when a job of that element fails, once per element and not once per job. It
+deliberately does not come while the application boots, because that boot cannot correct a model
+deployed long ago.
 
-The default changed: without a header and without configuration a failed job is handed out again
-after ten seconds, where version 1 sent no backoff at all.
+The default changed. Without a header and without configuration, a failed job is handed out again
+after ten seconds. Version 1 sent no backoff at all.
 
 ### A listener in your model has to be allowed now
 
-Version 1 served a listener with a `@WorkflowTask` method and documented it nowhere. From its release
-1.7.0 to its last one, 1.10.0, it did so in one place only: a `zeebe:taskListener` of a
-`zeebe:userTask`, which needs a cluster of 8.8 or newer. The listener's `type` attribute was the task
-definition verbatim, so a method named after it served the listener. A `zeebe:executionListener` was
-never served on Camunda 8 at all.
+Version 1 served a listener with a `@WorkflowTask` method and documented this nowhere. From its
+release 1.7.0 to its last one, 1.10.0, it did so in one place only: a `zeebe:taskListener` of a
+`zeebe:userTask`, which needs a cluster of 8.8 or newer. The listener's `type` attribute was used as
+the task definition, unchanged. So a method named after it served the listener. A
+`zeebe:executionListener` was never served on Camunda 8 at all.
 
-If your models carry such a listener and a `@WorkflowTask` method of yours names its job type, this is
-the entry to act on. This version does not serve it unless you say so, and a model carrying one ends
-the boot with a message naming the elements, the key and what it costs. Say so per adapter, per
-workflow module or per workflow, and the most specific configured value wins in both directions:
+Act on this entry if your models have such a listener and a `@WorkflowTask` method of yours names
+its job type. This version does not serve the listener unless you allow it. A model with such a
+listener ends the boot, with a message naming the elements, the key and what it costs. You can
+allow it per adapter, per workflow module or per workflow. The most specific configured value wins
+in both directions:
 
 ```yaml
 vanillabp:
@@ -363,83 +370,87 @@ vanillabp:
           allow-listeners: false   # this module does not, whatever the adapter says
 ```
 
-There is no task level for the key, because a task level is keyed by the task DEFINITION and whether a
-listener becomes a task at all is what this key decides. A value written there earns one guiding
-warning and the boot goes on.
+There is no task level for the key. A task level is keyed by the task DEFINITION, and this key
+decides whether a listener becomes a task at all. A value written there causes one warning which
+says what to do, and the boot goes on.
 
-The boot failure is the good case. Without the key there is no worker for the listener's job type,
-the cluster creates the job all the same, and the workflow stops right there: no incident, no message,
-nothing in any log. That is what an upgrade without the key would have bought you, found by whoever
-noticed that workflows stopped arriving. The Camunda 7 adapter has the same key, where instead the
-engine evaluates the listener's expression itself and the workflow fails at the element or runs a
-method nobody meant for it.
+The boot failure is the good case. Without the key, there is no worker for the listener's job type.
+The cluster creates the job anyway, and the workflow stops right there: no incident, no message,
+nothing in any log. That is what an upgrade without the key would have given you, and somebody
+would have found it only when workflows stopped arriving. The Camunda 7 adapter has the same key.
+There the engine evaluates the listener's expression itself, and the workflow fails at the element
+or runs a method nobody meant for it.
 
-Read what the key costs before you set it. A listener is where a BPMS lets an application in at a
-moment the BPMS owns, and every BPMS draws that moment differently, so the model stops being portable:
-another BPMS has no listener at this element and a migration of the model stops at the method serving
-it. Every boot of a workflow module whose listeners are served writes a framed WARN saying it, naming
-each listener and the way back, and no key silences it. Where you can, move what the listener does
-into a task of the model with a `@WorkflowTask` method behind it, which is the way back the report
-names.
+Read what the key costs before you set it. A listener lets an application in at a moment which the
+BPMS owns. Every BPMS defines that moment differently, so the model is no longer portable. Another
+BPMS has no listener at this element, and a migration of the model stops at the method which serves
+it. Every boot of a workflow module whose listeners are served writes a framed WARN about it. It
+names each listener and the way back, and no key silences it. Where you can, move what the listener
+does into a task of the model, with a `@WorkflowTask` method behind it. That is the way back the
+report names.
 
-**A listener whose job type NO method of yours names ends the boot as well, where one of your
-`@WorkflowService` classes claims the process.** Version 1 said nothing about such a listener at
-all. The cluster creates the job the moment it reaches the listener,
-so a workflow stands inside the element until something takes that job, with no incident and nothing
-in any log. A class claiming the process says your application stands in for it, which is why that
-silence ends the boot now.
+**A listener whose job type NO method of yours names ends the boot as well, if one of your
+`@WorkflowService` classes claims the process.** Version 1 said nothing at all about such a
+listener. The cluster creates the job the moment it reaches the listener. So a workflow waits
+inside the element until something takes that job, with no incident and nothing in any log. A
+class which claims the process says your application stands in for it. That is why this silence
+now ends the boot.
 
-If a worker of yours answers that job beside VanillaBP, say so in your configuration, by the job
+If a worker of yours answers that job next to VanillaBP, say so in your configuration, by the job
 type or by the element id:
 
 ```properties
 vanillabp.workflow-modules.<module>.workflows.<process>.tasks.<job-type>.implemented-externally=true
 ```
 
-A job type with a dot or a colon needs protection in a property key, and the message which ends the
-boot prints the line for Spring Boot and for Quarkus. A `zeebe:modelerTemplate` on the element still
-does it for a job element such as a connector, but not on a user task, where the Camunda Modeler sets
-a template for a form or an assignee. A process none of your `@WorkflowService` classes claims keeps
-its WARN, because that model reaches the cluster because of the file it sits in and there is nothing
-in it for you to change.
+A job type with a dot or a colon needs escaping in a property key. The message which ends the boot
+prints the line for Spring Boot and for Quarkus. A `zeebe:modelerTemplate` on the element still
+marks it as external for a job element such as a connector. It does not on a user task, because
+there the Camunda Modeler sets a template for a form or an assignee. A process which none of your
+`@WorkflowService` classes claims keeps its WARN. That model reaches the cluster only because of
+the file it sits in, and there is nothing in it for you to change.
 
-**A Camunda-managed user task needs a method, or the same line.** Version 1 ended the boot over a
-user task no method serves, and version 2 does too. Where a task list works the task off on purpose,
+**A Camunda-managed user task needs a method, or the same line.** Version 1 ended the boot if no
+method served a user task, and version 2 does too. If a task list works off the task on purpose,
 mark it with `implemented-externally=true`, by its element id or by its form reference.
 
-A `zeebe:executionListener` is served as well now. Any element may carry one, so the door is wider
-than version 1's, and the key is what keeps it shut by default. One placement is refused whatever the
-key says: a `start` execution listener on a start event, because the cluster refuses the whole file
-over it. Use `end` there, which is what VanillaBP attaches to a start event itself. Under the mode
-`use-prefix` a served listener's job type is prefixed like every other task definition of the workflow
-module, because that is what it has become.
+A `zeebe:executionListener` is served now as well. Any element may have one, so the door is wider
+than in version 1, and the key keeps it shut by default. One placement is refused whatever the key
+says: a `start` execution listener on a start event, because the cluster refuses the whole file
+for it. Use `end` there. VanillaBP attaches `end` to a start event itself. Under the mode
+`use-prefix` the job type of a served listener gets a prefix like every other task definition of
+the workflow module, because that is what it has become.
 
-`@TaskEvent` tells the method nothing any more. On version 1 a task-listener method could tell the
-`canceling` event from the rest through that parameter. Now the event is part of the wiring: one method
-serves one event of one element, the parameter receives `CREATED` for every listener because a method
-without it subscribes to `CREATED` alone, and `TaskEvent.Event` has no value for a listener's event at
-all. Drop the parameter where it only carried noise, and model one listener per event where a method
-needs to know.
+`@TaskEvent` tells the method nothing any more. In version 1 a task-listener method could tell the
+`canceling` event from the others through that parameter. Now the event is part of the wiring. One
+method serves one event of one element. The parameter receives `CREATED` for every listener,
+because a method without it subscribes only to `CREATED`. And `TaskEvent.Event` has no value for a
+listener's event at all. Drop the parameter where it only carried noise. Where a method needs to
+know the event, model one listener per event.
 
 A `@TaskId` parameter is refused while the process is wired. The cluster completes a listener job
-the moment the method returns, so such a task can never stay open and the id would complete nothing.
-Version 1 accepted the method and the workflow went on without it.
+the moment the method returns. So such a task can never stay open, and the id would complete
+nothing. Version 1 accepted the method, and the workflow went on without it.
 
-What a listener method may write into the process instance depends on the listener. An execution
-listener on `end` completes the way a task completes, so a method serving it may change the workflow
-aggregate and a gateway behind the element decides on what it wrote. An execution listener on `start`
-writes nothing into the instance: the cluster would keep those values local to the element, where
-they shadow the process variables of the same name and swallow the element's own writes of that name,
-so model a task of the process where something has to be written. A task listener writes nothing
-either, because the cluster refuses a completion carrying variables and names its issue 23702. In the
-latter two the change is kept by your application and reaches the cluster at the next real sync point
-of that workflow. No method signature shows whether a method writes the aggregate, so the startup
-report says this for every served listener. On Camunda 7 every listener writes the shared values onto
-the execution inside the engine's own transaction.
+What a listener method may write into the process instance depends on the listener:
 
-Two listeners of one element under ONE job type end the boot naming both. Version 1 ran one of them
-and which one was undefined, so the model said something it could not deliver. Give every listener of an
-element a job type of its own and write a method per job type.
+- An execution listener on `end` completes the way a task completes. So a method serving it may
+  change the workflow aggregate, and a gateway behind the element decides on what it wrote.
+- An execution listener on `start` writes nothing into the instance. The cluster would keep those
+  values local to the element. There they hide the process variables of the same name and swallow
+  the element's own writes of that name. Where something has to be written, model a task of the
+  process.
+- A task listener writes nothing either, because the cluster refuses a completion with variables
+  (its issue 23702).
+
+In the last two cases your application keeps the change, and it reaches the cluster at the next
+real sync point of that workflow. No method signature shows whether a method writes the aggregate.
+So the startup report says this for every served listener. On Camunda 7 every listener writes the
+shared values onto the execution inside the engine's own transaction.
+
+Two listeners of one element with ONE job type end the boot, and the message names both. Version 1
+ran one of them, and which one was undefined. So the model promised something it could not
+deliver. Give every listener of an element its own job type, and write one method per job type.
 
 The [README section](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/blob/main/README.md#listeners-somebody-modelled)
 and the [BPMN model](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#the-bpmn-model-for-camunda-8)
@@ -447,13 +458,14 @@ section of the wiki carry the details.
 
 ### A handler asking for an item the model hands none over for ends the boot
 
-`@MultiInstanceElement` reads the entry of the collection the current round is on. Camunda 8 gives
-that entry a name only where the model writes it into the `inputElement` of the element's
-`zeebe:loopCharacteristics`, which is the "Input element" field of the modeller. Version 1 left the
-parameter at `null` once a job arrived, and nothing said why.
+`@MultiInstanceElement` reads the entry of the collection which the current round is on. Camunda 8
+gives that entry a name only if the model writes it into the `inputElement` of the element's
+`zeebe:loopCharacteristics`. That is the "Input element" field of the modeller. Version 1 left the
+parameter at `null` when a job arrived, and nothing said why.
 
-The deployment says it now. It reads the iterations around each wired task, asks the core which of
-them a `@WorkflowTask` method wants the item of, and ends the boot where the two meet. The message
+The deployment says it now. It reads the iterations around each wired task. It asks the core for
+which of them a `@WorkflowTask` method wants the item. Where an iteration without a named item
+meets such a method, the boot ends. The message
 names the task, the element, the attribute the model would have to carry and the two ways out.
 
 Either write the attribute:
@@ -465,92 +477,92 @@ Either write the attribute:
 Or drop the parameter. `@MultiInstanceIndex` and `@MultiInstanceTotal` are answered by every
 multi-instance element, so a handler which only counts needs no change to its model.
 
-Nothing else is refused. An element without an `inputElement` still deploys where no handler asks
-for its item.
+Nothing else is refused. An element without an `inputElement` still deploys if no handler asks for
+its item.
 
-One more case ends the boot. Two processes which call the same process may carry multi-instance
-elements whose ids differ only in characters a Camunda 8 variable name cannot hold, such as
-`my-task` and `my.task`. Both write one variable, so a handler in the called process could be told a
-round which never ran. The message names both elements. Rename one of them.
+One more case ends the boot. Two processes which call the same process may have multi-instance
+elements whose ids differ only in characters which a Camunda 8 variable name cannot hold, such as
+`my-task` and `my.task`. Both write the same variable. So a handler in the called process could be
+told about a round which never ran. The message names both elements. Rename one of them.
 
 ### A standard loop in your model ends the boot
 
-Camunda 8 does not run a standard loop. An activity carrying `standardLoopCharacteristics`, drawn to
-repeat it while a condition holds, deploys without a word, runs once, and the workflow moves on.
-Version 1 deployed such a model the same way, so a model which counts on the loop has done its work
-once all along.
+Camunda 8 does not run a standard loop. An activity with `standardLoopCharacteristics` is meant to
+repeat while a condition holds. On Camunda 8 it deploys without a word, runs once, and the workflow
+moves on. Version 1 deployed such a model the same way. So a model which counts on the loop has
+always done its work only once.
 
-Version 2 refuses the model while it deploys it, where one of your `@WorkflowService` classes
-claims the process, and the boot ends there. The message names the activity, the BPMN process and
-the workflow module. A model which deployed in version 1 does not deploy any more, and this is on
+If one of your `@WorkflowService` classes claims the process, version 2 refuses the model while it
+deploys it, and the boot ends there. The message names the activity, the BPMN process and the
+workflow module. A model which deployed in version 1 does not deploy any more, and this is on
 purpose: the upgrade is where you learn that the loop never ran. A process nobody claims is not
-looked at, because the model is somebody else's.
+checked, because the model is somebody else's.
 
-Change the model to one of the two forms which do repeat an activity. Either draw a loop in the
+Change the model to one of the two forms which really repeat an activity. Either draw a loop in the
 sequence flow, with a gateway after the activity which leads back to it while the condition holds.
-Or make the activity a multi-instance element; a handler then reads its round with
+Or make the activity a multi-instance element. A handler then reads its round with
 `@MultiInstanceElement`, `@MultiInstanceIndex` and `@MultiInstanceTotal`.
 
-A version the cluster already holds is not refused, because nobody can change it any more. Where
-workflows still run on it, the start logs a WARN naming the version, the activity and how many
+A version the cluster already holds is not refused, because nobody can change it any more. If
+workflows still run on it, the start logs a WARN. It names the version, the activity and how many
 workflows are on it.
 
 ### An ad-hoc subprocess in your model ends the boot
 
-Version 1 said nothing about the element and neither executed nor reported it. This version serves
-the flavour whose activities the model names through `zeebe:adHoc activeElementsCollection`, and it
-says two things about a model carrying an ad-hoc subprocess which version 1 kept quiet about.
+Version 1 said nothing about the element. It neither executed it nor reported it. This version
+serves the flavour whose activities the model names through `zeebe:adHoc activeElementsCollection`.
+It also says two things about a model with an ad-hoc subprocess which version 1 kept quiet about.
 
-The element is named as a source of a second token, so a workflow aggregate without a version
-attribute earns the warning about two writers on one aggregate, whichever flavour the model uses.
+The element is named as a source of a second token. So a workflow aggregate without a version
+attribute gets the warning about two writers on one aggregate, whichever flavour the model uses.
 
-The flavour carrying a `zeebe:taskDefinition` of its own is served by nothing here: a worker would
-have to complete its job with a result naming the activities to activate, and a `@WorkflowTask`
-method has no way to say that. **Where one of your `@WorkflowService` classes claims the process,
-your application does not boot.** A workflow would reach the element and stop there, and the job
-ends in an incident once its retries are used up. The message names the element and the two ways
-out: let the model say which activities to run and fill the aggregate attribute that expression
-reads, or leave the element to a runtime which does serve it. A process none of your classes claims
-is not looked at. Nothing is said at all about an element
-which also carries a `zeebe:modelerTemplate`, because a connector runtime owns that one.
+Nothing here serves the flavour with a `zeebe:taskDefinition` of its own. A worker would have to
+complete its job with a result which names the activities to activate, and a `@WorkflowTask`
+method cannot say that. **If one of your `@WorkflowService` classes claims the process, your
+application does not boot.** A workflow would reach the element and stop there, and the job ends in
+an incident once its retries are used up. The message names the element and the two ways out.
+Either let the model say which activities to run, and fill the aggregate attribute which that
+expression reads. Or leave the element to a runtime which does serve it. A process which none of
+your classes claims is not checked. Nothing at all is said about an element which also has a
+`zeebe:modelerTemplate`, because a connector runtime owns that one.
 
 ### A process none of your classes claims
 
-Version 1 ended the start over a BPMN process no `@WorkflowService` class declared, a process which
-only sits in the same file as yours included. Version 2 does the same, and offers a way out for a
-process somebody else serves:
+Version 1 ended the start if no `@WorkflowService` class declared a BPMN process. That included a
+process which only sits in the same file as yours. Version 2 does the same. But it offers a way out
+for a process which somebody else serves:
 
 ```properties
 vanillabp.workflow-modules.<module>.workflows.<process>.implemented-externally=true
 ```
 
-Such a process goes to the cluster with its file, and this adapter leaves it as you modelled it: no
-listener, no correlation key and no multi-instance mapping is written into it, no worker serves its
-jobs, and no check ends the boot or warns because of it. What it still has to get right is what the
-cluster demands of every executable process. A message the process waits for needs a correlation
-key you model yourself, or the cluster rejects the whole file.
+Such a process goes to the cluster with its file, and this adapter leaves it as you modelled it. No
+listener, no correlation key and no multi-instance mapping is written into it. No worker serves its
+jobs. No check ends the boot or warns because of it. It still has to meet what the cluster demands
+of every executable process. A message the process waits for needs a correlation key which you
+model yourself, or the cluster rejects the whole file.
 
 ### Two workflow modules with the same BPMN process id end the boot
 
-Two of your workflow modules may bring a BPMN process of the same id as long as the cluster keeps
-the two modules apart. Where it does not, the second definition takes the identifier from the
-first, and one of the two modules then runs on a model nobody deployed. Which of them it is, is
-the cluster's decision. Nothing said so before, because a check per workflow module can only ever
-see one of the two sides.
+Two of your workflow modules may bring a BPMN process with the same id, as long as the cluster
+keeps the two modules apart. If it does not, the second definition takes the identifier from the
+first. Then one of the two modules runs on a model which it did not deploy. The cluster decides
+which one. Nothing reported this before, because a check per workflow module only ever sees one of
+the two sides.
 
-It is a boot failure now, raised while the SECOND of the two modules deploys, with the first one
-already in the cluster. The message names both workflow modules, both process ids, the identifier
-they share and the property which brought them together. Two configurations of a version-1
-application do not boot after the upgrade:
+Now it is a boot failure. It is raised while the SECOND of the two modules deploys, when the first
+one is already in the cluster. The message names both workflow modules, both process ids, the
+identifier they share and the property which brought them together. Two configurations of a
+version-1 application do not boot after the upgrade:
 
 - `vanillabp.adapters.<id>.tenant-id` is set, so every workflow module is deployed into that one
   tenant instead of into one named after it.
 - `name-clash-avoidance` is `none` for both modules, where nothing is scoped at all. This is what
   a cluster without multi-tenancy leaves you with.
 
-Nothing is wrong with your models, so renaming one of the two processes is only one of the ways
-out. The way which keeps every other workflow module where it is: give one of the two a tenant of
-its own. The name is settable per workflow module, which it was not in version 1.
+Nothing is wrong with your models, so renaming one of the two processes is only one way out. This
+way keeps every other workflow module where it is: give one of the two its own tenant. You can set
+the name per workflow module, which you could not in version 1.
 
 ```yaml
 vanillabp:
@@ -564,185 +576,187 @@ vanillabp:
           tenant-id: loan-approval   # a scope of its own, for this workflow module
 ```
 
-Where the shared tenant was not deliberate at all, dropping the adapter's name gives every module
-a tenant named after it, which is the default. The remaining way out is
-`name-clash-avoidance: use-prefix`, which drops the tenant and prefixes the identifiers with the
-workflow module id instead. On a cluster without multi-tenancy that is the mode which keeps the
-modules apart without asking anything of the cluster.
+If the shared tenant was not deliberate at all, remove the adapter's tenant name. Then every
+module gets a tenant named after it, which is the default. The last way out is
+`name-clash-avoidance: use-prefix`. It drops the tenant and puts the workflow module id in front of
+the identifiers instead. On a cluster without multi-tenancy, this mode keeps the modules apart
+without asking anything of the cluster.
 
-If you neither set a `tenant-id` nor use `none`, nothing changes for you: the default deploys each
-workflow module into a tenant named after it, and under `use-prefix` the module id is part of
-every identifier, so the two processes never meet.
+If you neither set a `tenant-id` nor use `none`, nothing changes for you. The default deploys each
+workflow module into a tenant named after it. Under `use-prefix` the module id is part of every
+identifier. Either way the two processes never meet.
 
 ### Under `use-prefix` a value your model writes as FEEL is rewritten for you
 
-Only under that mode, and only where your model writes a FEEL expression instead of a plain name at
-a place this version prefixes: the `processId` of a `zeebe:calledElement`, the `decisionId` of a
-`zeebe:calledDecision`, a message or signal name, an error or escalation code, a job type and the
-external form reference of a user task. Version 1 had no prefixing mode, so such an expression
-reached the cluster as you wrote it.
+This applies only under that mode. And only where your model writes a FEEL expression instead of a
+plain name, at a place which this version prefixes. These places are the `processId` of a
+`zeebe:calledElement`, the `decisionId` of a `zeebe:calledDecision`, a message or signal name, an
+error or escalation code, a job type, and the external form reference of a user task. Version 1
+had no prefixing mode, so such an expression reached the cluster as you wrote it.
 
-This version prefixes every identifier of the workflow module, and an expression cannot be prefixed
-from the outside: it takes up the whole attribute value, so anything written in front of it becomes
-part of its text. The prefix therefore goes INSIDE the expression. Your `=whichProcess` is deployed
-as `="loan-approval__" + string(whichProcess)`, and your expression keeps yielding the plain id your
-own model declares. A job type carries the prefix of its BPMN process as well, so its frame reads
-`="loan-approval__LoanApproval__" + string(...)`. There is nothing to change in your model and
+This version prefixes every identifier of the workflow module. An expression cannot be prefixed from
+the outside. It takes up the whole attribute value, so anything written in front of it becomes part
+of its text. So the prefix goes INSIDE the expression. Your `=whichProcess` is deployed as
+`="loan-approval__" + string(whichProcess)`, and your expression still returns the plain id which
+your own model declares. A job type carries the prefix of its BPMN process as well, so its frame
+reads `="loan-approval__LoanApproval__" + string(...)`. There is nothing to change in your model and
 nothing to change in your code.
 
-One model does not boot: an expression which composes the prefix itself, at any of those places.
-It would be given a second one, the cluster would be asked for
-`loan-approval__loan-approval__PaymentHandling`, and whatever reads that name would fail once a
-workflow reached the element. The boot ends instead, naming the file, the element, the attribute
-and the expression to take the prefix out of.
+One kind of model does not boot: an expression which builds the prefix itself, at any of those
+places. It would get a second prefix, and the cluster would be asked for
+`loan-approval__loan-approval__PaymentHandling`. Whatever reads that name would fail once a
+workflow reached the element. So the boot ends instead. The message names the file, the element,
+the attribute, and the expression to take the prefix out of.
 
-What the rewrite costs you is worth knowing before you read a message about it. Camunda 8 parses the
-FEEL of a model while it deploys it, so a syntax error in your own part refuses the deployment and
-the cluster's answer quotes the whole framed expression, counting its column from the opening quote
-rather than from your text. A refused deployment of a prefixed module therefore says what such a
-quote includes and names the elements it can be about. The same frame shows up in an incident where
-your expression yields `null`, together with the name of the variable it could not read.
+Know what the rewrite costs you before you read a message about it. Camunda 8 parses the FEEL of a
+model while it deploys it. So a syntax error in your own part makes the deployment fail. The
+cluster's answer quotes the whole wrapped expression, and it counts the column from the opening
+quote, not from your text. So a refused deployment of a prefixed module says what such a quote
+includes and names the elements it can be about. The same wrapping shows up in an incident if your
+expression returns `null`, together with the name of the variable it could not read.
 
 ### A job type your model writes as an expression ends the boot
 
-This is about one attribute value in two places: the `type` of a `zeebe:taskDefinition` and the
-`type` of a listener you modelled. Where that value starts with `=`, it is a FEEL expression rather
-than a name, and your application does not start where one of your `@WorkflowService` classes claims
-the process.
+This is about one attribute value in two places: the `type` of a `zeebe:taskDefinition`, and the
+`type` of a listener you modelled. If that value starts with `=`, it is a FEEL expression and not a
+name. Then your application does not start, if one of your `@WorkflowService` classes claims the
+process.
 
-A job type is the name a worker subscribes to. VanillaBP opens one worker per job type it reads out
-of your model and subscribes exactly the string the model says, so an expression there leaves the
-element to nobody. Measured against clusters of the 8.9 and 8.10 lines: the job the cluster creates
-carries what the expression yields, while the worker waits for the expression. So no element you
-could serve stops being served by this. What changes is that you hear about it before a workflow
-reaches the element, and that you read what is really wrong: the boot used to end over the missing
-`@WorkflowTask` method instead, asking you for a method whose name nobody can write.
+A job type is the name a worker subscribes to. VanillaBP opens one worker per job type it reads
+from your model. It subscribes to exactly the string the model says. So with an expression there,
+nobody serves the element. We measured this against clusters of the 8.9 and 8.10 lines. The job
+the cluster creates carries the result of the expression, while the worker waits for the
+expression itself. So this check does not take away any element you could have served. What
+changes: you hear about it before a workflow reaches the element, and you read what is really
+wrong. Before, the boot ended because of the missing `@WorkflowTask` method. It asked you for a
+method whose name nobody can write.
 
-The message now names the attribute, the element and the expression you typed, and it names the two
-ways out. Write a job type which is a fixed name and a `@WorkflowTask` method of that name, and let
-the method branch on the workflow aggregate it is handed where the work differs from workflow to
-workflow. Or leave the element to the runtime which serves it: give the element a
-`zeebe:modelerTemplate` and allow such elements with `allow-connectors`, after which nothing here
-asks about its job type. A BPMN process none of your classes claims is not looked at.
+The message now names the attribute, the element and the expression you typed, and the two ways
+out. Either write a fixed name as the job type, and a `@WorkflowTask` method of that name. If the
+work differs from workflow to workflow, let the method branch on the workflow aggregate it gets.
+Or leave the element to the runtime which serves it. Give the element a `zeebe:modelerTemplate`
+and allow such elements with `allow-connectors`. After that, nothing here asks about its job type.
+A BPMN process which none of your classes claims is not checked.
 
 ### A form reference your model writes as an expression ends the boot
 
-This is about the external form reference of a user task. Where it starts with `=`, it is a FEEL
-expression rather than a name, and your application does not start where one of your
+This is about the external form reference of a user task. If it starts with `=`, it is a FEEL
+expression and not a name. Then your application does not start, if one of your
 `@WorkflowService` classes claims the process.
 
-The reference is the task definition of the user task: your `@WorkflowTask` method is found by it,
-and the job type of the listeners which tell your application about the task is built from it.
-That job type is built the way version 1 built it, so such a user task was served only where the
-method repeated the expression as its task definition, `taskDefinition = "=whichForm"`. Measured
-against `camunda/camunda:8.10.0` before the refusal: that is still what happened without prefixes,
-and under `use-prefix` the boot ended with a message about that method. Now the message names the
-user task and the expression you typed.
+The reference is the task definition of the user task. Your `@WorkflowTask` method is found by it.
+The job type of the listeners which tell your application about the task is built from it too.
+That job type is built the way version 1 built it. So such a user task was only served if the
+method repeated the expression as its task definition, `taskDefinition = "=whichForm"`. We measured
+this against `camunda/camunda:8.10.0` before the refusal was added. Without prefixes, that was
+still what happened. Under `use-prefix` the boot ended with a message about that method. Now the
+message names the user task and the expression you typed.
 
-Write a fixed name as the reference and a `@WorkflowTask` method of that name. Where the form to
-show differs from workflow to workflow, model one user task per form behind a gateway, or keep one
-name and let your task list choose the form from the data of the workflow. A BPMN process none of
-your classes claims is not looked at.
+Write a fixed name as the reference, and a `@WorkflowTask` method of that name. If the form to show
+differs from workflow to workflow, model one user task per form behind a gateway. Or keep one name
+and let your task list choose the form from the data of the workflow. A BPMN process which none of
+your classes claims is not checked.
 
 ### A start says which of your names the cluster already held
 
-Version 1 compared the identifiers of a deployment against each other and said nothing about the
-ones the cluster already held. This version asks the cluster about them, once per workflow module
-while it deploys, and writes one WARN per module listing what it found. Nothing fails for it and no
-property turns it off.
+Version 1 compared the identifiers of a deployment with each other. It said nothing about the ones
+the cluster already held. This version asks the cluster about them, once per workflow module while
+it deploys. It writes one WARN per module which lists what it found. Nothing fails because of it,
+and no property turns it off.
 
-What is asked about is the BPMN process ids of the module, in one search, and its DMN decision ids,
-one search each. Nothing is asked about message names, signal names, error codes, escalation codes
+It asks about the BPMN process ids of the module, in one search, and about its DMN (Decision Model
+and Notation) decision ids, one search each. Nothing is asked about message names, signal names, error codes, escalation codes
 or job types, because the cluster keeps no index of those.
 
-The line you are most likely to read is about a process you RENAMED. A cluster records no owner of
-a definition, so the only marker the adapter has is the resource a definition was deployed from: a
+The line you will most likely read is about a process you RENAMED. A cluster records no owner of a
+definition. So the only marker the adapter has is the resource a definition was deployed from. A
 definition of yours which came from a file you have since renamed looks like somebody else's. The
-message says that it cannot tell the two apart, and the version and the definition key it names are
-what you look the definition up by. Where the finding is your own old file, deleting that definition
-from the cluster ends the line, which is the same remedy the report about an old process version
-asks for.
+message says that it cannot tell the two apart. Use the version and the definition key it names to
+look up the definition. If the finding is your own old file, delete that definition from the
+cluster, and the line goes away. The report about an old process version asks for the same
+remedy.
 
-A finding under the mode `none` is worth reading twice. Nothing is prefixed and no tenant separates
-anybody there, so a second application on the same cluster really does share the name, and which of
-the two a start reaches is the cluster's decision and not yours. The ways out are a tenant
+Read a finding under the mode `none` twice. There nothing is prefixed and no tenant separates
+anybody. So a second application on the same cluster really does share the name, and the cluster,
+not you, decides which of the two a start reaches. The ways out are a tenant
 (`name-clash-avoidance: by-adapter`), a prefix (`use-prefix`) or a name nobody else uses.
 
-Two more lines can appear, and both are about your own application. Two workflow modules which
-declare the same message name, signal name, error code, escalation code, job type or decision id are
-named with both sides, because under `none` and under one adapter-wide `tenant-id` the cluster sees
-one name where you mean two. The same is said where a version the cluster still holds carries such a name,
-which is the clash a workflow module deployed years ago leaves behind.
+Two more lines can appear, and both are about your own application. The first: two workflow modules
+declare the same message name, signal name, error code, escalation code, job type or decision id.
+The line names both sides, because under `none`, and under one adapter-wide `tenant-id`, the
+cluster sees one name where you mean two. The second: a version the cluster still holds has such a
+name. That is the clash which a workflow module deployed years ago leaves behind.
 
 ### What the outbox costs where version 1 sent from your thread
 
 Version 1 sent its commands to the cluster from the thread which had just committed your
-transaction, through a transaction aspect, and retried them in memory with `spring-retry`. Nothing
-was written down, so an operation whose process died between your commit and the cluster's answer
-was gone. Version 2 writes an outbox entry in your transaction and sends it afterwards. What that
-costs is written once for every adapter, in the platform's
+transaction, through a transaction aspect. It retried them in memory with `spring-retry`. Nothing
+was written down. So if the process died between your commit and the cluster's answer, the
+operation was lost. Version 2 writes an outbox entry in your transaction and sends it afterwards.
+What that costs is written once for all adapters, in the platform's
 [upgrade notes](https://github.com/vanillabp/adapter-platform-integration/blob/main/UPGRADE.md#what-the-upgrade-costs-under-load).
-What is special here is that it is one transaction more than version 1 needed, for the start and for
-every other operation, and that the thread which talks to the cluster is no longer yours.
+Two things are special here. It is one transaction more than version 1 needed, for the start and
+for every other operation. And the thread which talks to the cluster is no longer yours.
 
-The threads are the sizing difference. Version 1 was as wide as the threads of your application
-which committed, so a burst of requests became a burst of commands. Version 2 dispatches on four
+The threads are what changes for sizing. In version 1, the number of threads which talked to the
+cluster was the number of your application's threads which committed. So a burst of requests
+became a burst of commands. Version 2 dispatches on four
 threads, `vanillabp.outbox.dispatch-threads`. Count them into the connection pool of the database
 your workflow aggregates live in. What the cluster side costs is on the wiki page
 [Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing).
 
 There is no factor for how much slower or faster this is, and there cannot be one yet. A run which
-puts version 1 beside version 2 needs one cluster version both accept, and the lowest cluster each
-side takes is the client it was built against. Version 1's last release, 1.10.0, was built against
-the Camunda client 8.8.33, so only the 8.8 line of version 2 shares a cluster generation with it.
-Against the 8.9 and the 8.10 line there is no such cluster, and a number from a run which gave each
-side a cluster of its own would say something about Camunda rather than about VanillaBP.
+compares version 1 with version 2 needs one cluster version which both accept. The lowest cluster
+each side accepts is the client it was built against. The last release of version 1, 1.10.0, was
+built against the Camunda client 8.8.33. So only the 8.8 line of version 2 shares a cluster
+generation with it. For the 8.9 and 8.10 lines there is no such cluster. A run which gave each side
+a cluster of its own would measure Camunda, not VanillaBP.
 
 ### A restart waits a few seconds longer, and the application after it does not
 
-No new property, and nothing to configure. What changes is how long a shutdown takes and how quickly
-the next start gets its first job.
+There is no new property, and nothing to configure. What changes is how long a shutdown takes, and
+how quickly the next start gets its first job.
 
-A worker asks the cluster for work with a long poll which waits at the cluster for up to
+A worker asks the cluster for work with a long poll. The request waits at the cluster for up to
 `request-timeout`, ten seconds by default. Closing the worker does not cancel that request, and
-neither does closing the client. Measured against `camunda/camunda:8.9.16` with the plain Camunda
-client: a job created while such a request is still parked is handed to it, counts as activated and
-is answered by nobody, so the worker of the application which is running by then sees it only once
-`job-timeout` expired. With seven seconds between the two applications that was the full lock in all
-twenty runs; with twelve seconds, beyond the request window, twenty milliseconds. It is the REST
-transport, which is the default: the same scenario over gRPC, and over REST with `stream-enabled`,
-delivers in milliseconds.
+closing the client does not either. We measured this against `camunda/camunda:8.9.16` with the
+plain Camunda client. A job created while such a request is still parked is handed to that
+request. It counts as activated, and nobody answers it. So the worker of the application which is
+running by then sees the job only after `job-timeout` expired. With seven seconds between the two
+applications, that was the full lock in all twenty runs. With twelve seconds, beyond the request
+window, it was twenty milliseconds. This happens on the REST transport, which is the default. The
+same scenario over gRPC, and over REST with `stream-enabled`, delivers in milliseconds.
 
-The shutdown therefore waits for the workers to be released before the client is closed, within the
-`shutdown-grace` it already had. In those runs the wait cost 8,2 to 8,5 seconds and turned a first
-job of 20 seconds into one of 30 milliseconds. It is one wait for every workflow module of an
-adapter instance: each module closes its own workers as it is stopped and the module stopped last
-waits for all of them, so the grace bounds the whole shutdown however many modules an application
-has. Two things follow for an application:
+So the shutdown waits for the workers to be released before the client is closed. It waits within
+the `shutdown-grace` it already had. In those runs the wait cost 8.2 to 8.5 seconds. It turned a
+first job of 20 seconds into one of 30 milliseconds. There is one wait for all workflow modules of
+an adapter instance. Each module closes its own workers when it is stopped, and the module stopped
+last waits for all of them. So the grace limits the whole shutdown, however many modules an
+application has. Two things follow for an application:
 
-- an ordinary restart takes those seconds longer. `shutdown-grace` (default `PT20S`) bounds it, and
-  it still sits below the shutdown budgets of Spring Boot and Kubernetes. `PT0S` waives the wait
+- an ordinary restart takes those seconds longer. `shutdown-grace` (default `PT20S`) limits it, and
+  it still stays below the shutdown budgets of Spring Boot and Kubernetes. `PT0S` skips the wait
   together with the handler drain,
-- a process which is killed rather than asked to stop cannot pay it, so a workflow started within ten
-  seconds of a `SIGKILL` may still wait for its lock. A shorter `job-timeout` bounds what that costs
-  where restarts are frequent, and `stream-enabled: true` or `prefer-rest-over-grpc: false` avoids
-  the case altogether,
-- an application with more workers than its client has HTTP connections pays the request window more
-  than once. The requests of the surplus workers are queued in the client and go out as connections
-  free, so the workers are rounds of the pool and every round costs a `request-timeout`. `PT20S`
-  carries one round and not two. The start says so, naming the rounds, the grace the drain needs and
-  the pool which would make them one round again; how many workers an application opens and how to
-  size the pool is on the wiki page
-  [Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing).
+- a process which is killed, and not asked to stop, cannot pay it. So a workflow started within ten
+  seconds of a `SIGKILL` may still wait for its lock. Where restarts are frequent, a shorter
+  `job-timeout` limits what that costs. `stream-enabled: true` or `prefer-rest-over-grpc: false`
+  avoids the case altogether,
+- an application with more workers than its client has HTTP connections pays the request window
+  more than once. The requests of the extra workers are queued in the client and go out when
+  connections become free. So the workers use the pool in rounds, and every round costs a
+  `request-timeout`. `PT20S` covers one round, not two. The start says so. It names the rounds,
+  the grace the drain needs, and the pool size which would make it one round again. The wiki page
+  [Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing) says how
+  many workers an application opens and how to size the pool.
 
-The line the shutdown writes says how many workers were closed and whether the cluster released them,
-and it warns where one of them still holds its request when the grace passes.
+The log line the shutdown writes says how many workers were closed and whether the cluster released
+them. It warns if one of them still holds its request when the grace time is over.
 
 ### Without a cluster address the adapter connects to `localhost`, on the port of the line
 
-Version 1 left a missing address to Camunda's client, which takes `http://0.0.0.0:8080` for REST and
-`http://0.0.0.0:26500` for gRPC. This version takes the address where Camunda's own docker compose
-of the line publishes the cluster:
+If the address was missing, version 1 left it to Camunda's client. The client takes
+`http://0.0.0.0:8080` for REST and `http://0.0.0.0:26500` for gRPC. This version takes the address
+where Camunda's own docker compose file of the line publishes the cluster:
 
 | Line |          REST           |           gRPC           |
 |------|-------------------------|--------------------------|
