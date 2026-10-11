@@ -21,40 +21,40 @@ import org.testcontainers.utility.DockerImageName;
  * The Camunda 8 cluster an integration test runs against, in the flavours the tests of this
  * adapter and of its extensions need.
  * <p>
- * The image is not written into a test. It is filtered into
- * {@code camunda8-cluster.properties} at build time from the Camunda client the active
- * release line pins ({@code camunda8.version}), so activating another line moves the client
- * and the cluster together. That is what makes the supported cluster versions of the README
- * provable instead of claimed: a line's tests meet the oldest cluster its artifacts accept.
- * Override for a single run with {@code mvn verify -Dcamunda8.cluster.image=...}.
+ * The image is not written into a test. At build time it is filtered into
+ * {@code camunda8-cluster.properties}, taken from the Camunda client the active release line
+ * pins ({@code camunda8.version}). So activating another line moves the client and the
+ * cluster together. This makes the supported cluster versions of the README provable, not
+ * just claimed: the tests of a line meet the oldest cluster its artifacts accept. To
+ * override it for a single run, use {@code mvn verify -Dcamunda8.cluster.image=...}.
  * <p>
- * The image is {@code camunda/camunda}, the orchestration cluster of Camunda 8, and not the
- * older {@code camunda/zeebe}: the latter received no tags beyond 8.9.11 and none at all for
- * 8.10, so a per-line matrix cannot be built on it.
+ * The image is {@code camunda/camunda}, the orchestration cluster of Camunda 8. It is not
+ * the older {@code camunda/zeebe}. That image got no tags after 8.9.11 and none at all for
+ * 8.10, so a matrix per line cannot be built on it.
  * <p>
- * Every cluster here brings secondary storage, because the adapter serves no other kind -
- * except {@link #clusterWhichRefusesSearches()}, which exists to prove that. WHERE that
- * storage lives is the second value the same properties file carries, see
- * {@code camunda8.cluster.secondary-storage} of the parent POM, and it belongs to the
- * release line as much as the image does: a line whose cluster can keep the storage in a
- * database of its own process starts one container, an older line starts an Elasticsearch
- * beside it. A test class sees neither, it asks for a cluster and gets one - see decision 22
- * in the repository's DECISIONS.md.
+ * Every cluster here brings secondary storage, because the adapter serves no other kind.
+ * The exception is {@link #clusterWhichRefusesSearches()}, which exists to prove that.
+ * WHERE that storage lives is the second value in the same properties file, see
+ * {@code camunda8.cluster.secondary-storage} of the parent POM. It belongs to the release
+ * line as much as the image does. A line whose cluster can keep the storage in a database
+ * inside its own process starts one container. An older line starts an Elasticsearch next
+ * to it. A test class sees neither: it asks for a cluster and gets one. See decision 22 in
+ * the repository's DECISIONS.md.
  * <p>
- * How many clusters a run starts is the second thing a test does not decide alone.
- * {@link #cluster()} hands out a container of its own, which a class declares as a
- * {@code @Container} field and Testcontainers stops again when the class is done;
- * {@link #sharedCluster()} hands every class of a module the same one. The second is what a
- * module takes unless a test needs a cluster nobody else may touch.
+ * A test also does not decide alone how many clusters a run starts. {@link #cluster()}
+ * hands out a container of its own. A class declares it as a {@code @Container} field, and
+ * Testcontainers stops it again when the class is done. {@link #sharedCluster()} hands
+ * every class of a module the same one. A module takes the shared one, unless a test needs
+ * a cluster nobody else may touch.
  * <p>
- * <b>Why this is a published artifact.</b> Four modules carried a copy of this class and of
- * {@link ClusterLog}, and a fifth one grew in the Business Cockpit's Camunda 8 extension.
- * They had drifted: different startup timeouts, different messages, one of them without a
- * log writer at all. A test classpath cannot read another module's test classes, so the only
- * way to have one copy is a module of its own - which is why the classes sit in
- * {@code src/main/java} although nothing but a test ever calls them. An extension of this
- * adapter takes it as a test dependency and meets the same cluster the adapter is tested
- * against, on the same release line.
+ * <b>Why this is a published artifact.</b> Four modules had a copy of this class and of
+ * {@link ClusterLog}, and a fifth copy grew in the Camunda 8 extension of the Business
+ * Cockpit. The copies had drifted apart: different startup timeouts, different messages,
+ * one of them without a log writer at all. A test classpath cannot read the test classes of
+ * another module. So the only way to have one copy is a module of its own. This is why the
+ * classes sit in {@code src/main/java}, although only tests call them. An extension of this
+ * adapter takes it as a test dependency. It then meets the same cluster the adapter is
+ * tested against, on the same release line.
  */
 public final class ClusterUnderTest {
 
@@ -66,18 +66,18 @@ public final class ClusterUnderTest {
 
   /**
    * What {@code camunda.data.secondary-storage.type} of the cluster is set to. Only the two
-   * values the tests know are expected here: {@code rdbms}, which the cluster serves from an
-   * embedded H2 inside its own container, and {@code elasticsearch}, which needs a container
-   * of its own.
+   * values the tests know are expected here. {@code rdbms}: the cluster serves it from an
+   * embedded H2 inside its own container. {@code elasticsearch}: it needs a container of its
+   * own.
    */
   private static final String SECONDARY_STORAGE = property("cluster.secondary-storage");
 
   private static final String ELASTICSEARCH = "elasticsearch";
 
   /**
-   * How long a container may take to report itself ready. Five minutes is what the slowest
-   * of the modules sharing this needed; it is the point at which a run gives up, not a delay
-   * anybody pays on a cluster which starts.
+   * How long a container may take to report itself ready. The slowest of the modules which
+   * share this needed five minutes. It is the point at which a run gives up. A cluster which
+   * starts normally does not pay this delay.
    */
   private static final Duration STARTUP_TIMEOUT = Duration.ofMinutes(5);
 
@@ -86,8 +86,8 @@ public final class ClusterUnderTest {
   }
 
   /**
-   * The image every cluster of this build starts from. The build filters it in, so it follows the
-   * client the line was compiled against.
+   * The image every cluster of this build starts from. The build filters it in, so it follows
+   * the client the line was compiled against.
    *
    * @return The image of the cluster under test, e.g. {@code camunda/camunda:8.9.19}
    */
@@ -110,24 +110,23 @@ public final class ClusterUnderTest {
   }
 
   /**
-   * The one cluster a whole test module shares: started when the first class asks for it
-   * and kept running until the JVM of the module's tests ends.
+   * The one cluster a whole test module shares. It is started when the first class asks for
+   * it, and it keeps running until the JVM of the module's tests ends.
    * <p>
-   * It is deliberately NOT a {@code @Container} field of any class. Testcontainers stops
-   * what a class declared once that class is done, which is what a cluster per class is
-   * made of, and a module of thirty classes then pays thirty startups. Here the container
-   * is started once, outside that lifecycle, and Ryuk
-   * removes it when the JVM which started it is gone - the same reaper which removes a
-   * container left behind by a test that crashed. A build adds a step which force-removes
-   * what is left, because a container living for a whole module lives long enough to be
-   * worth a belt.
+   * On purpose, it is NOT a {@code @Container} field of any class. Testcontainers stops what
+   * a class declared once that class is done. That gives a cluster per class, and a module
+   * of thirty classes then pays thirty startups. Here the container is started once, outside
+   * that lifecycle. Ryuk removes it when the JVM which started it is gone. It is the same
+   * reaper which removes a container left behind by a crashed test. A build adds a step
+   * which force-removes what is left. A container which lives for a whole module lives long
+   * enough to need this extra safety.
    * <p>
-   * What a test pays for the sharing is that the cluster REMEMBERS: the definitions of
-   * every class which booted before it are still deployed, and instances of theirs may
-   * still be running. Two things make that bearable in this repository. All classes of one
-   * module deploy the same files, so the cluster holds one set of definitions rather than
-   * one per class, and a class starts by cancelling whatever is still running. A test which
-   * needs a cluster nobody has deployed anything into keeps one of its own instead.
+   * The price of sharing: the cluster REMEMBERS. The definitions of every class which booted
+   * before are still deployed, and their instances may still run. Two things make that
+   * acceptable in this repository. All classes of one module deploy the same files, so the
+   * cluster holds one set of definitions, not one per class. And a class starts by
+   * cancelling whatever still runs. A test which needs a cluster nobody deployed anything
+   * into keeps one of its own instead.
    *
    * @return The module's cluster, already started
    */
@@ -177,8 +176,8 @@ public final class ClusterUnderTest {
   /**
    * The cluster of a test, ready to be searched.
    * <p>
-   * The readiness probe turns UP only once the partition leader accepts deployments, which
-   * avoids a transient 503 on the first deploy at startup.
+   * The readiness probe only turns UP once the partition leader accepts deployments. This
+   * avoids a short-lived 503 on the first deployment at startup.
    *
    * @param logName What this container is called in {@link ClusterLog} - worth choosing
    *          where a module starts several clusters, because the log of all of them is one
@@ -190,11 +189,11 @@ public final class ClusterUnderTest {
 
     return newCluster(logName)
         // an unprotected API keeps an authentication provider out of a test which is about
-        // something else. It unprotects REST and nothing else: gRPC is left WITHOUT an
-        // identity here, so an activation over that transport answers with an empty list
-        // and a command over it is refused with PERMISSION_DENIED. A test about gRPC takes
-        // withAuthentication() instead, which is what Camunda8GrpcTransportIT does - that
-        // gap cost somebody an evening on an empty job queue once
+        // something else. It only unprotects REST. gRPC is left WITHOUT an identity here.
+        // So an activation over that transport answers with an empty list, and a command
+        // over it is refused with PERMISSION_DENIED. A test about gRPC takes
+        // withAuthentication() instead, as Camunda8GrpcTransportIT does. This gap once cost
+        // somebody an evening in front of an empty job queue
         .withEnv("CAMUNDA_SECURITY_AUTHENTICATION_UNPROTECTEDAPI", "true")
         .waitingFor(
             Wait
@@ -206,8 +205,8 @@ public final class ClusterUnderTest {
   }
 
   /**
-   * A cluster WITHOUT secondary storage: it refuses every search with HTTP 403, which is
-   * what the adapter's requirement is refused by.
+   * A cluster WITHOUT secondary storage. It refuses every search with HTTP 403. The tests
+   * use it to show how the adapter refuses such a cluster.
    *
    * @return A container to be used as a Testcontainers {@code @Container} field
    */
@@ -229,9 +228,9 @@ public final class ClusterUnderTest {
   }
 
   /**
-   * The user the authenticated clusters are initialized with, and its password. Both are
-   * test values and deliberately visible: what matters here is that they REACH the cluster,
-   * not that they are secret.
+   * The user the authenticated clusters are initialized with. It is a test value and
+   * visible on purpose. What matters here is that it REACHES the cluster, not that it is
+   * secret.
    */
   public static final String USERNAME = "demo";
 
@@ -243,8 +242,8 @@ public final class ClusterUnderTest {
   public static final String PASSWORD = "demo";
 
   /**
-   * A cluster with its authentication SWITCHED ON - what a self-managed installation
-   * normally looks like, and what every other cluster here deliberately is not.
+   * A cluster with its authentication SWITCHED ON. A self-managed installation normally
+   * looks like this. Every other cluster here is not like this, on purpose.
    *
    * @return A container to be used as a Testcontainers {@code @Container} field
    */
@@ -256,14 +255,14 @@ public final class ClusterUnderTest {
   }
 
   /**
-   * A cluster which separates its TENANTS, which is what the name-clash avoidance mode
-   * {@code by-adapter} puts a workflow module into.
+   * A cluster which separates its TENANTS. The name-clash avoidance mode
+   * {@code by-adapter} puts a workflow module into a tenant.
    * <p>
-   * Multi-tenancy checks only work on an authenticated cluster - a tenant is something a
-   * user is assigned to - so this is the authenticated cluster with the checks switched on.
-   * The tenants themselves are not configured here: a test writes them with
-   * {@link #createTenant(String, String)} once the cluster answers, because a tenant is
-   * per test scenario while the container is per class.
+   * Multi-tenancy checks only work on an authenticated cluster, because a user is assigned
+   * to a tenant. So this is the authenticated cluster with the checks switched on. The
+   * tenants themselves are not configured here. A test writes them with
+   * {@link #createTenant(String, String)} once the cluster answers. A tenant belongs to one
+   * test scenario, but the container belongs to a class.
    *
    * @return A container to be used as a Testcontainers {@code @Container} field
    */
@@ -278,9 +277,9 @@ public final class ClusterUnderTest {
    * Switches a cluster's authentication on and makes it wait until it really answers to the
    * credentials the tests use.
    * <p>
-   * A ready cluster is not yet a cluster which knows this user: the readiness probe answers
-   * before the initialization created it, and the first request of the application then gets
-   * a 401 it cannot do anything with. So the second condition asks an API which demands
+   * A ready cluster does not know this user yet. The readiness probe answers before the
+   * initialization created the user. The first request of the application would then get a
+   * 401 it cannot do anything with. So the second condition calls an API which needs
    * authentication, with those credentials.
    */
   private static GenericContainer<?> authenticated(
@@ -315,7 +314,7 @@ public final class ClusterUnderTest {
 
   /**
    * Creates a tenant on a cluster of {@link #clusterWithTenants()} and assigns the test user
-   * to it, and returns only once the cluster answers questions about that tenant.
+   * to it. It only returns once the cluster answers questions about that tenant.
    *
    * @param restAddress The cluster's REST address, e.g.
    *          {@code http://localhost:32770}
@@ -350,10 +349,10 @@ public final class ClusterUnderTest {
   /**
    * Waits until the cluster answers a question about a tenant.
    * <p>
-   * Writing a tenant and reading it back are two different stores on a Camunda 8 cluster:
-   * the write is accepted by the engine, the read is served by the exporter's read model. A
-   * deployment sent in between is rejected for a tenant which exists, which is a failure
-   * nothing about the test explains.
+   * On a Camunda 8 cluster, writing a tenant and reading it back use two different stores.
+   * The engine accepts the write. The exporter's read model serves the read. A deployment
+   * sent in between is rejected for a tenant which exists. Nothing in the test would explain
+   * that failure.
    *
    * @param restAddress The cluster's REST address
    * @param tenantId The tenant
@@ -449,11 +448,11 @@ public final class ClusterUnderTest {
   }
 
   /**
-   * The database the cluster keeps its secondary storage in where the release line has one:
-   * an H2 in the memory of the cluster's own JVM, whose driver the image ships. It outlives
-   * every connection ({@code DB_CLOSE_DELAY=-1}) and dies with the container, so a cluster
-   * which is started for one class leaves nothing behind for the next one, and a cluster
-   * shared by a module lives exactly as long as what it remembers.
+   * The database the cluster keeps its secondary storage in, where the release line has
+   * one. It is an H2 in the memory of the cluster's own JVM, and the image ships its driver.
+   * It outlives every connection ({@code DB_CLOSE_DELAY=-1}) and dies with the container.
+   * So a cluster started for one class leaves nothing behind for the next one. And the data
+   * of a cluster shared by a module lives exactly as long as that cluster.
    */
   private static final String H2_URL = "jdbc:h2:mem:camunda;DB_CLOSE_DELAY=-1";
 
@@ -470,11 +469,11 @@ public final class ClusterUnderTest {
   /**
    * A cluster which takes its Elasticsearch along where it needs one.
    * <p>
-   * Testcontainers starts what a container depends on, but it stops only what a test class
-   * declared, and an Elasticsearch nobody declared would then outlive its cluster: a module
-   * of twenty classes would hold twenty of them by the end of its run, each with its own
-   * heap. So the cluster stops the storage it brought, and the test class keeps the one
-   * field it asked for.
+   * Testcontainers starts what a container depends on, but it only stops what a test class
+   * declared. An Elasticsearch nobody declared would outlive its cluster. A module of twenty
+   * classes would hold twenty of them at the end of its run, each with its own heap. So the
+   * cluster stops the storage it brought, and the test class keeps the one field it asked
+   * for.
    */
   private static final class ClusterContainer extends GenericContainer<ClusterContainer> {
 
