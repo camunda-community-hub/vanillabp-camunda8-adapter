@@ -3034,6 +3034,9 @@ away and prints whether every workflow ended exactly once.
 *Replaced in part by decision 66: the engine is asked only about a task the row of the
 delivery log says rests. Without such a row the push waits for the read model.*
 
+*Replaced in part by the decision of story 962 (DECISIONS.pending/962.md): phase two searches for the scope once.
+It no longer waits up to the window before it asks the engine or gives the entry back.*
+
 `aggregateChanged(aggregate, taskId)` writes into the scope the task runs in. Camunda 8 has no command which names
 that scope, so the adapter reads it from the query API: first the job behind the task id, then the scopes from the
 process instance down to the job. The query API is fed by an exporter. While that exporter stands still, it knows

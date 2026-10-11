@@ -2188,14 +2188,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       }
       log.warn(
           "Camunda8[{}]: task '{}' of aggregate '{}' is completed - skipping the push of the "
-              + "changed aggregate. The query API did not report the scope of the task within {}, "
+              + "changed aggregate. The query API does not report the scope of the task, "
               + "and the cluster answered that it holds no such task any more. The "
               + "workflow's own scope is deliberately NOT written instead - it is read by every "
               + "branch, and the task asked for its own scope",
           adapterId,
           request.taskId(),
-          request.workflowAggregateId(),
-          workflowVisibilityDelay().window());
+          request.workflowAggregateId());
       return;
     }
     try {
@@ -2537,65 +2536,24 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * values written there would be read by nothing. The scope AROUND the task is what
    * the rest of that scope evaluates.
    * <p>
-   * Camunda 8 reports no parent for an element instance, so the scope is found by
-   * walking DOWN from the process instance (the query API filters element instances
-   * by their scope) until the task's element instance shows up. A multi-instance BODY
-   * on the way is skipped: it is the technical wrapper around the instances, not a
-   * scope of the model.
-   * <p>
-   * The query API is fed by an exporter, so the task this push belongs to may not be
-   * reported yet - which is why the search is repeated for as long as
-   * {@link #workflowVisibilityDelay()} allows. Repeating is allowed HERE because this
-   * runs in phase two, on the outbox dispatcher's thread: no application transaction is
-   * open, so the waiting costs the entry an attempt rather than a database connection
-   * (decision 27 of the platform's DECISIONS.md, which draws that line for the core's
-   * election as well). A scope which stays unknown yields
-   * <code>null</code>, and the caller then decides whether the engine may be asked.
-   * The process instance is NOT used as a substitute, because writing there is exactly the
-   * lost update between the iterations of a multi-instance subprocess this scoping exists to
-   * prevent.
-   *
-   * @param taskId The task ID reported to the application
-   * @param taskRow The row of the task, or <code>null</code> where there is none
-   * @param place What the row and the deployed model say about where the task runs
-   * @return The element instance key to write at, or <code>null</code> if the scope
-   *         did not become known within the window
-   */
-  private Long flowScopeKeyOf(
-      final String taskId,
-      final TaskDelivery taskRow,
-      final WhereTheTaskRuns place) {
-
-    final var delay = workflowVisibilityDelay();
-    final var deadline = System.currentTimeMillis() + (delay.isWaiting()
-        ? delay.window().toMillis()
-        : 0);
-    while (true) {
-      final var scopeKey = searchFlowScopeKeyOf(taskId, taskRow, place);
-      if (scopeKey != null) {
-        return scopeKey;
-      }
-      if (System.currentTimeMillis() >= deadline) {
-        return null;
-      }
-      try {
-        Thread.sleep(delay.interval().toMillis());
-      } catch (final InterruptedException e) {
-        Thread.currentThread().interrupt();
-        return null;
-      }
-    }
-
-  }
-
-  /**
-   * One attempt of {@link #flowScopeKeyOf(String, TaskDelivery, WhereTheTaskRuns)}.
-   * <p>
    * A user task which runs directly in one iteration of a multi-instance subprocess is answered
    * by one search: the variable holding the index of that iteration is a local variable of the
    * iteration, and the variables a user task sees are reported together with their scope. Every
-   * other task is found as an element instance and its scope by walking down from its process
-   * instance.
+   * other task is found as an element instance. Camunda 8 reports no parent for an element
+   * instance, so its scope is found by walking DOWN from the process instance (the query API
+   * filters element instances by their scope) until the task's element instance shows up. A
+   * multi-instance BODY on the way is skipped: it is the technical wrapper around the
+   * instances, not a scope of the model.
+   * <p>
+   * The query API is fed by an exporter, so the task this push belongs to may not be
+   * reported yet. The search is NOT repeated here. This runs in phase two, and phase two
+   * does not wait: where the scope is unknown, the caller asks the engine or gives the
+   * entry back to the outbox with a due time, and the outbox brings it back then. Waiting
+   * here would hold a dispatching thread and a database connection for the whole window.
+   * A scope which is unknown yields <code>null</code>, and the caller then decides whether
+   * the engine may be asked. The process instance is NOT used as a substitute, because
+   * writing there is exactly the lost update between the iterations of a multi-instance
+   * subprocess this scoping exists to prevent.
    *
    * @param taskId The task ID reported to the application
    * @param taskRow The row of the task, or <code>null</code> where there is none
@@ -2603,7 +2561,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * @return The element instance key to write at, or <code>null</code> if the query
    *         API knows neither the task nor its scope (yet)
    */
-  private Long searchFlowScopeKeyOf(
+  private Long flowScopeKeyOf(
       final String taskId,
       final TaskDelivery taskRow,
       final WhereTheTaskRuns place) {
