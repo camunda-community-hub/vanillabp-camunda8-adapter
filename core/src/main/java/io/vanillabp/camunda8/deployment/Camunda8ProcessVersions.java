@@ -27,18 +27,18 @@ import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * The versions of the process definitions of ONE Camunda 8 cluster (= one adapter id):
- * what the core matches <code>&#64;WorkflowTask(version = ...)</code> and its siblings
- * against.
+ * The versions of the process definitions of ONE Camunda 8 cluster (= one adapter id).
+ * The core matches <code>&#64;WorkflowTask(version = ...)</code> and its siblings
+ * against them.
  * <p>
- * The version itself travels with every job ({@code ActivatedJob#getProcessDefinitionVersion}),
- * so nothing here is needed for version specifications made of numbers. Version TAGS
- * are a different matter: a job does not carry one, and which version carries which tag
- * can only be read by searching the cluster - one of the reasons this adapter requires a
- * cluster it can search, see decision 20 in the repository's DECISIONS.md.
+ * The version itself travels with every job ({@code ActivatedJob#getProcessDefinitionVersion}).
+ * So a version specification made of numbers needs nothing from here. Version TAGS are
+ * different. A job does not carry one. Which version carries which tag can only be read
+ * by searching the cluster. This is one of the reasons why this adapter needs a cluster
+ * it can search, see decision 20 in the repository's DECISIONS.md.
  * <p>
  * What the deployment reported is recorded without any query
- * ({@link #recordDeployed(String, String, int, String)}): the deploy command
+ * ({@link #recordDeployed(String, String, int, String)}). The deploy command
  * names the version the cluster assigned, and the model carries its
  * {@code zeebe:versionTag}.
  */
@@ -53,7 +53,7 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
 
   /**
    * The BPMN process id as the CLUSTER knows it for a (workflow module, plain BPMN
-   * process id) - the identifiers may be prefixed.
+   * process id). The identifiers may be prefixed.
    */
   private final BiFunction<String, String, String> scopedProcessIds;
 
@@ -66,23 +66,23 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
    * The cluster's process definition key per (workflow module, BPMN process, version).
    * <p>
    * The startup check for old versions asks two things about every version older than the
-   * one this boot deployed, its model and how many workflows still run on it, and both are
-   * addressed by this key. Searching for it per question meant three searches per version
-   * where one already held the answer: {@link #fetchDeployedVersions} reads the definitions
-   * and used to keep nothing but their version numbers. So it keeps the keys as well, and
-   * the search below runs only for a version deployed after that list was read - see
-   * decision 13 in the repository's DECISIONS.md.
+   * one this boot deployed: its model, and how many workflows still run on it. Both are
+   * addressed by this key. Searching for the key per question meant three searches per
+   * version, while one search already held the answer. {@link #fetchDeployedVersions}
+   * reads the definitions and used to keep only their version numbers. Now it keeps the
+   * keys as well. The search below runs only for a version deployed after that list was
+   * read - see decision 13 in the repository's DECISIONS.md.
    * <p>
-   * A key stays here for the life of the application, so a version deleted while it runs
-   * is still answered from here. Nothing is invalidated for that: the questions these
-   * keys serve are asked while an application boots, and the boot after the deletion
-   * reads the list again.
+   * A key stays here for the life of the application. So a version deleted while the
+   * application runs is still answered from here. Nothing is removed for that case. These
+   * keys serve questions which are asked while an application boots, and the boot after
+   * the deletion reads the list again.
    */
   private final Map<String, Long> definitionKeysByVersion = new ConcurrentHashMap<>();
 
   /**
-   * Reads the tasks of a model the cluster holds - the deployment service' own
-   * extraction.
+   * Reads the tasks of a model the cluster holds. The deployment service reads them in
+   * its own way.
    */
   @FunctionalInterface
   public interface TasksOfModel {
@@ -120,8 +120,9 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * Reads one kind of finding out of a model the cluster holds - the walk the deployment
-   * service already runs over the model it deploys, run over a model it never brought.
+   * Reads one kind of finding out of a model the cluster holds. It is the walk which the
+   * deployment service already runs over the model it deploys. Here it runs over a model
+   * which this deployment never brought.
    *
    * @param <T> What the walk finds
    */
@@ -144,8 +145,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * The model of ONE version the cluster holds, out of the picture every check judging a
-   * model asks - see decision 21 in the repository's DECISIONS.md.
+   * The model of ONE version the cluster holds. It comes from the picture which every
+   * check of a model asks - see decision 21 in the repository's DECISIONS.md.
    */
   @FunctionalInterface
   public interface HeldModelOfVersion {
@@ -171,8 +172,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   private WhatAModelDeclares<BpmsInitiatedStartSpec> startEventsOfModel;
 
   /**
-   * Hands over how a model the cluster holds is fetched, for the same reason
-   * {@link #setTasksOfModel(TasksOfModel)} is handed over rather than passed in.
+   * Hands over how a model the cluster holds is fetched. It is handed over, not passed in,
+   * for the same reason as {@link #setTasksOfModel(TasksOfModel)}.
    *
    * @param heldModelOfVersion How the deployment service gets at a model the cluster
    *          holds
@@ -185,8 +186,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * Hands over how the start events of a model are read, for the same reason
-   * {@link #setTasksOfModel(TasksOfModel)} is handed over rather than passed in.
+   * Hands over how the start events of a model are read. It is handed over, not passed in,
+   * for the same reason as {@link #setTasksOfModel(TasksOfModel)}.
    *
    * @param startEventsOfModel How the deployment service reads the start events a model
    *          declares
@@ -211,8 +212,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   private WhatAModelDeclares<String> concurrentTokenElementsOfModel;
 
   /**
-   * Hands over how the elements which can put a second token into a workflow are read, for the
-   * same reason {@link #setTasksOfModel(TasksOfModel)} is handed over rather than passed in.
+   * Hands over how the elements which can put a second token into a workflow are read. It is
+   * handed over, not passed in, for the same reason as {@link #setTasksOfModel(TasksOfModel)}.
    *
    * @param concurrentTokenElementsOfModel How the deployment service reads the elements
    *          which can put a second token into a workflow of a model
@@ -241,12 +242,12 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   /**
    * What one version's model declares, or that this adapter cannot say.
    * <p>
-   * The model comes from the picture of what the cluster holds rather than from a read of
-   * its own, so the answers this adapter gives about a held version and the checks it makes
-   * against one see the same models, read once (decision 21 in the repository's
-   * DECISIONS.md). Where the picture cannot tell, and where the cluster does not hold that
-   * version any more, the answer is <code>null</code>: both are a model nobody read, and
-   * an empty answer would claim that the model has no such element.
+   * The model comes from the picture of what the cluster holds, not from a read of its
+   * own. So the answers this adapter gives about a held version, and the checks it makes
+   * against one, see the same models, read once (decision 21 in the repository's
+   * DECISIONS.md). If the picture cannot tell, or the cluster does not hold that version
+   * any more, the answer is <code>null</code>. In both cases nobody read the model. An
+   * empty answer would claim that the model has no such element.
    */
   private <T> Collection<T> whatTheHeldModelDeclares(
       final String workflowModuleId,
@@ -288,8 +289,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
     }
     final var definitionKey = definitionKeyOf(workflowModuleId, bpmnProcessId, version);
     if (definitionKey == null) {
-      // the cluster does not hold that version any more, which is the only way there is
-      // no key: a cluster answering no search at all never gets the adapter this far.
+      // the cluster does not hold that version any more. That is the only way to have no
+      // key, because a cluster which answers no search never gets the adapter this far.
       // The core says once that this BPMS cannot tell
       return null;
     }
@@ -314,10 +315,10 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * Reads the identifiers a model the cluster holds declares - the deployment service's own
-   * reading, so the names of a held version and the names of the model just deployed are
-   * read the same way. The pair of {@link TasksOfModel}: both are answered out of ONE model,
-   * which is what lets them share a fetch.
+   * Reads the identifiers which a model the cluster holds declares. The deployment service
+   * reads them in its own way. So the names of a held version and the names of the model
+   * just deployed are read the same way. It is the twin of {@link TasksOfModel}. Both are
+   * answered out of ONE model, so they can share a fetch.
    */
   @FunctionalInterface
   public interface IdentifiersOfModel {
@@ -405,8 +406,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
     if ((inTurn != null) && inTurn.key().equals(key)) {
       return inTurn.model();
     }
-    // a race here costs one fetch and nothing else, which is why this is a plain
-    // assignment: the questions it serves are put while the application boots
+    // a race here costs one fetch and nothing else, so this is a plain assignment. The
+    // questions it serves are asked while the application boots
     final var model = readModel(definitionKey);
     modelInTurn = new ModelInTurn(key, model);
     return model;
@@ -414,14 +415,13 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * The model of ONE version, held for as long as that version's turn lasts.
+   * The model of ONE version, held for as long as that version is in turn.
    * <p>
    * The startup check over the versions the cluster still holds asks several questions
-   * about one version before it moves on to the next, and reading a model here means
-   * fetching its XML over the wire - so asking the model twice for one version would pay
-   * for it twice. What bounds the lifetime is the next version's question, which replaces
-   * the entry: one model per adapter id at most, never one per version, and nothing at
-   * runtime reads any of it.
+   * about one version before it moves on to the next. Reading a model here means fetching
+   * its XML over the network. So asking for the model twice would pay for it twice. The
+   * question about the next version replaces the entry, and that ends its life. So there is
+   * at most one model per adapter id, never one per version. Nothing at runtime reads it.
    *
    * @param key The version this model belongs to
    * @param model The model, <code>null</code> where the cluster answered nothing
@@ -443,10 +443,10 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
     if (definitionKey == null) {
       return null;
     }
-    // the TOTAL, not the page: a search answers one page of items, so counting what
-    // came back would cap every answer at the page size and quietly turn "5000 still
-    // run on this version" into the page size. One item is fetched because the count
-    // is what is wanted, not the instances
+    // the TOTAL, not the page. A search answers one page of items. Counting what came
+    // back would cap every answer at the page size, and "5000 still run on this version"
+    // would quietly become the page size. Only one item is fetched, because we want the
+    // count, not the instances
     final var found = client
         .get()
         .newProcessInstanceSearchRequest()
@@ -480,9 +480,9 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * The versions the cluster still holds under one BPMN process id, oldest first -
-   * read fresh rather than from the resolution cache, because the caller keeps the
-   * answer itself and a swallowed failure would make an empty cluster look like an
+   * The versions the cluster still holds under one BPMN process id, oldest first.
+   * They are read fresh, not from the resolution cache. The caller keeps the answer
+   * itself, and a swallowed failure would make an empty cluster look like an
    * unreachable one.
    *
    * @param workflowModuleId The workflow module ID
@@ -525,9 +525,9 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * The cluster's process definition key of ONE version of a process - the handle both
-   * the model and the instance count are read by. From what the version list already
-   * brought back, and only otherwise from a search of its own.
+   * The process definition key of ONE version of a process in the cluster. Both the model
+   * and the instance count are read by this key. It comes from what the version list
+   * already brought back. Only if it is not there, a search of its own runs.
    */
   private Long definitionKeyOf(
       final String workflowModuleId,
@@ -581,16 +581,15 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
    * Which process definitions this adapter counts as existing, applied to every search
    * it runs for them.
    * <p>
-   * Read by every definition search of this package, the one which asks what the cluster
-   * already holds of a workflow module's identifiers included, so the answer to "which
-   * definitions count" cannot differ between them.
+   * Every definition search of this package reads it. That includes the search which
+   * asks what the cluster already holds of the identifiers of a workflow module. So the
+   * answer to "which definitions count" cannot differ between them.
    * <p>
-   * A definition an operator deleted stays in the query API and is answered with the
-   * state <code>DELETED</code>, so a search leaving this out reports versions the
-   * cluster runs nothing on any more - and the startup check would keep demanding
-   * methods for them, restart after restart, with deleting the definition being the one
-   * remedy an operator has already tried. See decision 15 in the repository's
-   * DECISIONS.md.
+   * A definition which an operator deleted stays in the query API, with the state
+   * <code>DELETED</code>. A search without this filter would report versions the cluster
+   * runs nothing on any more. Then the startup check would demand methods for them, restart
+   * after restart. And deleting the definition is the one fix the operator has already
+   * tried. See decision 15 in the repository's DECISIONS.md.
    *
    * @param filter The filter of a process definition search
    */
@@ -616,7 +615,7 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
           Camunda8Searches.scopedTo(filter, scopedProcessId, tenantId);
           filter.version(Integer.valueOf(version));
         })
-        // one process, one tenant, one version: the cluster holds a single definition
+        // one process, one tenant, one version. The cluster holds a single definition
         // under those three, so one entry is the whole answer
         .page(page -> page.limit(Integer.valueOf(1)))
         .send()
@@ -630,7 +629,7 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * Builds the version reader of one adapter id. The client arrives as a supplier because the
+   * Builds the version reader of one adapter id. The client comes as a supplier, because the
    * deployment service builds this before the client exists.
    *
    * @param adapterId The adapter id whose cluster is asked
@@ -673,9 +672,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   }
 
   /**
-   * The version this boot deployed, per process id as the CLUSTER knows it - which is
-   * the id an activated job carries, so a job worker can compare without translating
-   * anything.
+   * The version this boot deployed, per process id as the CLUSTER knows it. An activated
+   * job carries this id. So a job worker can compare without translating anything.
    */
   private final Map<String, Integer> deployedVersionByScopedProcessId = new ConcurrentHashMap<>();
 
@@ -698,10 +696,10 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
    * Whether a workflow running on the given version of the given process was started
    * before the version this boot deployed.
    * <p>
-   * Answers <code>false</code> where this boot deployed nothing for that process, which
-   * is the honest answer of a node that only opened workers: it cannot know where the
-   * boundary is, and a lower bound claimed without knowing would be worse than the exact
-   * number it replaces.
+   * Answers <code>false</code> if this boot deployed nothing for that process. That is the
+   * honest answer of a node which only opened workers. It cannot know where the boundary
+   * is. A lower bound claimed without knowing would be worse than the exact number it
+   * replaces.
    *
    * @param scopedBpmnProcessId The process id as the cluster knows it
    * @param version The version a job reported
@@ -723,11 +721,11 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
 
     final var scopedProcessId = scopedProcessIds.apply(workflowModuleId, bpmnProcessId);
     final var tenantId = tenants.apply(workflowModuleId);
-    // every version the cluster holds is the answer here, not the first page of them: a
-    // process redeployed with every release of an application passes 100 versions, and the
-    // page a search hands out without being asked holds 100. Newest first, so the bound of
-    // the paging can only cut versions nobody asks about any more - the questions put to
-    // this list are about the versions around the one just deployed
+    // every version the cluster holds is the answer here, not only the first page. A
+    // process which is redeployed with every release of an application gets past 100
+    // versions, and the default page holds 100. Newest first, so the limit of the paging
+    // can only cut versions nobody asks about any more. The questions put to this list
+    // are about the versions around the one just deployed
     final var read = Camunda8SearchPages
         .everyPage(
             cursor -> client
@@ -759,8 +757,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
               bpmnProcessId,
               workflowModuleId);
     }
-    // this one search holds what every later question about an older version needs, and
-    // keeping the keys is what spares those questions a search each
+    // this one search holds what every later question about an older version needs.
+    // Keeping the keys spares each of those questions a search
     definitions.forEach(definition -> remember(workflowModuleId, bpmnProcessId, definition));
     // the catalog is answered oldest first, and the search ran the other way round
     return definitions
@@ -777,11 +775,11 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
       final String workflowModuleId,
       final String bpmnProcessId) {
 
-    // this adapter brings VanillaBP's behaviour by writing into the model it deploys,
-    // and a running workflow stays on the version it was started on - so everything
-    // listed here reaches the version deployed now and no earlier one. Camunda 7
-    // answers nothing to the same question, because it attaches while the engine parses
-    // a definition, which reaches every version the engine holds
+    // this adapter adds the behaviour of VanillaBP by writing into the model it deploys.
+    // A running workflow stays on the version it was started on. So everything listed
+    // here reaches the version deployed now and no earlier one. Camunda 7 answers nothing
+    // to the same question. It attaches while the engine parses a definition, and that
+    // reaches every version the engine holds
     return "the end of a workflow is not reported to a @WorkflowEnded method, user-task lifecycle "
         + "notifications do not arrive where the listeners were added by this deployment, and a "
         + "message catch event correlates only by a correlation key its own model already carried";

@@ -18,15 +18,15 @@ import io.camunda.zeebe.model.bpmn.instance.Process;
  * about them.
  * <p>
  * A modeller draws <code>standardLoopCharacteristics</code> to repeat one activity while a
- * condition holds. Camunda 8 does not implement it: the cluster deploys the model, runs the
- * activity once and moves on, with no error, no incident and no log line. Measured on 8.8.39,
- * 8.9.21 and 8.10.0-rc1. So a model this boot deploys is refused where the application claims
- * its process. A process nobody claims is somebody else's model and is not looked at (see
+ * condition holds. Camunda 8 does not implement it. The cluster deploys the model, runs the
+ * activity once and moves on. There is no error, no incident and no log line. Measured on 8.8.39,
+ * 8.9.21 and 8.10.0-rc1. So this adapter refuses a model this boot deploys, if the application
+ * claims its process. A process nobody claims is somebody else's model, and nobody looks at it (see
  * decision 73 of {@code DECISIONS.md}). A version the cluster already holds is
- * reported where workflows still run on it, because nobody can change that model any more.
+ * reported if workflows still run on it, because nobody can change that model any more.
  * <p>
- * The model API has no type for the marker. It keeps the element in the XML all the same,
- * which is where it is looked for.
+ * The model API has no type for the marker. But it keeps the element in the XML, so this class
+ * looks for it there.
  */
 public final class Camunda8StandardLoops {
 
@@ -121,9 +121,9 @@ public final class Camunda8StandardLoops {
 
   /**
    * The versions among the given held models which carry a standard loop while workflows
-   * still run on them. A model is read first and counted only where it carries the marker,
-   * because counting is a search on the cluster. A version no workflow runs on any more is
-   * left out: it can do no harm.
+   * still run on them. A model is read first. Its workflows are counted only if it carries the
+   * marker, because counting is a search on the cluster. A version no workflow runs on any more
+   * is left out, because it can do no harm.
    *
    * @param heldModels The models the cluster holds under one BPMN process id
    * @param scopedBpmnProcessId The BPMN process ID as the cluster knows it

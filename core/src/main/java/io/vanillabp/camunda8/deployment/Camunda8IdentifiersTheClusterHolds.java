@@ -19,45 +19,45 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Asks the cluster which identifiers of a workflow module it ALREADY held when this
- * deployment arrived - another application's BPMN process id, a decision id somebody
- * deployed years ago. The core words the warning out of what is found here; this class
- * only asks and describes what came back.
+ * deployment arrived. Examples are the BPMN process id of another application, or a
+ * decision id somebody deployed years ago. The core writes the warning from what is found
+ * here. This class only asks and describes what came back.
  * <p>
  * Two kinds can be asked about, because the cluster keeps a searchable record of them: a
  * BPMN process id and a DMN decision id. The process ids of a whole workflow module go
- * into ONE search, since the filter takes a list of them; a decision id has to be asked
- * for on its own, since its filter takes one exact string and nothing else.
+ * into ONE search, because the filter takes a list of them. Each decision id needs a
+ * search of its own, because its filter takes one exact string and nothing else.
  *
  * <h2>Why a finding is a guess and is still reported</h2>
  *
- * A cluster records no owner. What a definition carries is the resource it was deployed
- * from, its version and its key, so the only thing this adapter can compare against is
- * what THIS deployment brought: the resource names the cluster reported back for it, and
- * for a decision the decision requirements the DMN file declares. A definition under one
- * of those markers is this application's own, older deployments included, and stays
- * silent. Everything else is reported, and reported as unproven: a second application is
- * free to deploy a file of the same name, and renaming a file of our own makes our own
- * earlier definition look like somebody else's. The core turns that into a sentence which
- * says the line may be harmless, which is the only honest way to report a guess - and
- * staying silent instead would leave the mode {@code none} unguarded on exactly the
- * cluster where {@code none} is the answer, a cluster without multi-tenancy.
+ * A cluster records no owner. A definition carries the resource it was deployed from,
+ * its version and its key. So this adapter can only compare against what THIS deployment
+ * brought. For a process, that is the resource names the cluster reported back for it.
+ * For a decision, it is the decision requirements the DMN file declares. A definition
+ * under one of those markers belongs to this application, older deployments included,
+ * and is not reported. Everything else is reported, and reported as unproven. A second
+ * application may deploy a file of the same name. And if we rename a file of our own,
+ * our own earlier definition looks like somebody else's. So the core writes a sentence
+ * which says the finding may be harmless. That is the only honest way to report a guess.
+ * Staying silent would leave the mode {@code none} unguarded on exactly the cluster
+ * where {@code none} is the answer: a cluster without multi-tenancy.
  *
  * <h2>What this must never do</h2>
  *
- * End a boot. Every search is wrapped, a failure is logged at debug and the rest of the
- * questions are still put, because a diagnostic which takes an application down is worse
- * than the clash it looks for. See decision 25 in the repository's DECISIONS.md.
+ * End a boot. Every search is wrapped. A failure is logged at debug, and the other
+ * questions are still asked. A diagnostic which takes an application down is worse than
+ * the clash it looks for. See decision 25 in the repository's DECISIONS.md.
  */
 @Slf4j
 public final class Camunda8IdentifiersTheClusterHolds {
 
   /**
-   * Where the paging stops regardless of what the cluster still offers, which is 2000
-   * definitions. Lower than what {@link Camunda8SearchPages} allows a caller by default: a
-   * diagnostic asks a bounded number of questions or it is not a diagnostic any more, and a
-   * cursor which never ends would hold up a boot. A search here is bounded by the processes
-   * of one workflow module times the versions the cluster holds of them, so one page
-   * normally answers it and the paging exists for the module which outgrows that.
+   * Where the paging stops, whatever the cluster still offers. That is 2000 definitions.
+   * It is lower than the default which {@link Camunda8SearchPages} allows a caller. A
+   * diagnostic must ask a limited number of questions, or it is not a diagnostic any more.
+   * And a cursor which never ends would hold up a boot. A search here returns at most the
+   * processes of one workflow module times the versions the cluster holds of them. So one
+   * page usually answers it. The paging is there for the module which outgrows that.
    */
   static final int MAX_PAGES = 20;
 
@@ -69,10 +69,10 @@ public final class Camunda8IdentifiersTheClusterHolds {
    * One BPMN process this deployment brought to the cluster.
    *
    * @param plainBpmnProcessId The process id as the application knows it
-   * @param scopedBpmnProcessId The process id as the cluster knows it - what the search
-   *          asks for
-   * @param resourceName The file the cluster reported for it, which is the marker telling
-   *          an older definition of ours from a foreign one
+   * @param scopedBpmnProcessId The process id as the cluster knows it. The search asks
+   *          for this one
+   * @param resourceName The file the cluster reported for it. This marker tells an older
+   *          definition of ours from a foreign one
    * @param version The version the cluster assigned to it
    */
   public record DeployedProcess(
@@ -86,11 +86,11 @@ public final class Camunda8IdentifiersTheClusterHolds {
    * One DMN decision this deployment brought to the cluster.
    *
    * @param plainDecisionId The decision id as the application knows it
-   * @param scopedDecisionId The decision id as the cluster knows it - what the search asks
-   *          for
-   * @param decisionRequirementsId The DRD the decision belongs to, which is the marker
-   *          telling an older deployment of ours from a foreign one: it names the DMN file
-   *          and survives every version of it
+   * @param scopedDecisionId The decision id as the cluster knows it. The search asks for
+   *          this one
+   * @param decisionRequirementsId The DRD (decision requirements diagram) the decision
+   *          belongs to. This marker tells an older deployment of ours from a foreign one.
+   *          It names the DMN file and stays the same in every version of it
    * @param version The version the cluster assigned to it
    */
   public record DeployedDecision(
@@ -102,7 +102,7 @@ public final class Camunda8IdentifiersTheClusterHolds {
 
   /**
    * Asks the cluster about the identifiers of one workflow module, after that module was
-   * deployed - the versions this boot got are part of the answer.
+   * deployed. So the versions this boot got are part of the answer.
    *
    * @param adapterId The adapter ID
    * @param workflowModuleId The workflow module which was deployed
@@ -131,9 +131,9 @@ public final class Camunda8IdentifiersTheClusterHolds {
 
   /**
    * The process definitions the cluster holds under the ids of this workflow module which
-   * this deployment did not bring. One search for the whole module: the filter takes the
-   * list of ids, and the state filter is the one every definition search of this adapter
-   * uses, so a definition an operator deleted stays out of the answer.
+   * this deployment did not bring. There is one search for the whole module, because the
+   * filter takes the list of ids. The state filter is the same as in every definition search
+   * of this adapter. So a definition an operator deleted stays out of the answer.
    */
   private static List<IdentifierHeldElsewhere> processIdsHeldElsewhere(
       final String adapterId,
@@ -171,7 +171,7 @@ public final class Camunda8IdentifiersTheClusterHolds {
         "process definitions",
         cursor -> client
             .newProcessDefinitionSearchRequest()
-            // one filter lambda per request: a second filter(...) call on this client
+            // one filter lambda per request. A second filter(...) call on this client
             // REPLACES the first, so everything the search asks for is set right here
             .filter(filter -> {
               Camunda8ProcessVersions.onlyDefinitionsWhichStillCount(filter);
@@ -193,8 +193,8 @@ public final class Camunda8IdentifiersTheClusterHolds {
   }
 
   /**
-   * The findings among the process definitions which came back: everything the resource name
-   * does not attribute to this deployment.
+   * The findings among the process definitions which came back. A finding is every
+   * definition whose resource name does not belong to this deployment.
    *
    * @param definitions What the cluster answered with
    * @param plainIdsByScopedId The plain id per id the cluster knows, for the report
@@ -213,8 +213,8 @@ public final class Camunda8IdentifiersTheClusterHolds {
       }
       final var plainBpmnProcessId = plainIdsByScopedId.get(definition.getProcessDefinitionId());
       if (plainBpmnProcessId == null) {
-        // the cluster answered about an id nobody asked for, which nothing should produce -
-        // reporting it would name an identifier this application does not even deploy
+        // the cluster answered about an id nobody asked for. That should never happen.
+        // Reporting it would name an identifier this application does not even deploy
         continue;
       }
       found
@@ -232,8 +232,8 @@ public final class Camunda8IdentifiersTheClusterHolds {
 
   /**
    * The decision definitions the cluster holds under the decision ids of this workflow
-   * module which this deployment did not bring. One search per decision id, because that
-   * filter takes an exact string: it offers neither a list nor a pattern.
+   * module which this deployment did not bring. There is one search per decision id,
+   * because that filter takes an exact string. It offers neither a list nor a pattern.
    */
   private static List<IdentifierHeldElsewhere> decisionIdsHeldElsewhere(
       final String adapterId,
@@ -292,9 +292,9 @@ public final class Camunda8IdentifiersTheClusterHolds {
   }
 
   /**
-   * Whether what the cluster holds came out of this application's own deployment, which is
-   * decided by the marker the definition carries. A definition without a marker is not
-   * claimed as ours: a name the cluster cannot attribute is exactly what this check is
+   * Whether what the cluster holds came from a deployment of this application. The
+   * marker the definition carries decides it. A definition without a marker is not
+   * claimed as ours. A name the cluster cannot attribute is exactly what this check is
    * about.
    */
   private static boolean isOurs(
@@ -306,8 +306,8 @@ public final class Camunda8IdentifiersTheClusterHolds {
   }
 
   /**
-   * How a marker the cluster did not report is named in the message, so a reader is not
-   * left with a gap where a file name belongs.
+   * How the message names a marker the cluster did not report. So the reader does not see
+   * a gap where a file name belongs.
    */
   private static String asNamedInTheMessage(
       final String marker) {
@@ -319,9 +319,8 @@ public final class Camunda8IdentifiersTheClusterHolds {
   }
 
   /**
-   * Every item of a search, page by page, and nothing at all where the cluster did not
-   * answer: this is a diagnostic, so a failed search costs a debug line and the boot goes
-   * on.
+   * Every item of a search, page by page. If the cluster did not answer, nothing at all.
+   * This is a diagnostic, so a failed search costs a debug line and the boot goes on.
    *
    * @param <T> What the search answers with
    * @param what What was asked about, for the debug line

@@ -13,22 +13,23 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Which models the cluster holds for the BPMN process ids one workflow module
- * DECLARES: every version the cluster still keeps of a deployed id, and everything it
- * keeps under an id the application declares without deploying anything - the old id
- * of a renamed process.
+ * DECLARES. These are every version the cluster still keeps of a deployed id. They are
+ * also everything it keeps under an id which the application declares without deploying
+ * anything, like the old id of a renamed process.
  * <p>
- * Every check judging a model asks this picture instead of reading a set of its own,
- * so no check's verdict depends on which application version deployed the model it
- * judges - see decision 21 in the repository's DECISIONS.md. The models of the CURRENT
- * deployment cost nothing (they are read at every boot anyway, see
- * {@link Camunda8DeployedProcesses}); everything else is read from the cluster on
- * first use and kept, because a definition's model never changes.
+ * Every check which judges a model asks this picture. No check reads a set of its own.
+ * So no verdict depends on which application version deployed the model, see
+ * decision 21 in the repository's DECISIONS.md. The models of the CURRENT deployment
+ * cost nothing, because they are read at every boot anyway (see
+ * {@link Camunda8DeployedProcesses}).
+ * Everything else is read from the cluster on first use and then kept, because the model
+ * of a definition never changes.
  * <p>
- * The answer carries "cannot tell" as a value rather than as an absence: a check
- * which cannot see every model that could carry its answer must stay silent, never
- * refuse, and it must not have to invent that case for itself. "Cannot tell" is not
- * kept - a cluster unreachable now says nothing about the next call - while the
- * settled "cannot be searched" of {@code Camunda8QueryApi} answers without a request.
+ * The answer carries "cannot tell" as a value, not as an absence. A check which cannot
+ * see every model that could hold its answer must stay silent and never refuse. It
+ * should not have to invent that case for itself. "Cannot tell" is not kept, because a
+ * cluster which is unreachable now says nothing about the next call. The settled
+ * "cannot be searched" of {@code Camunda8QueryApi} answers without a request.
  */
 @Slf4j
 public class Camunda8ModelsTheClusterHolds {
@@ -55,16 +56,16 @@ public class Camunda8ModelsTheClusterHolds {
      * The cluster was asked and answered.
      *
      * @param models The models the cluster holds
-     * @param freshlyRead Whether every model was read by THIS call - a caller about
-     *          to refuse something re-reads first where this is <code>false</code>,
-     *          so a refusal never rests on a picture another node's deployment has
-     *          outdated
+     * @param freshlyRead Whether every model was read by THIS call. If it is
+     *          <code>false</code>, a caller about to refuse something reads again first.
+     *          So a refusal never rests on a picture which the deployment of another
+     *          node has made outdated
      */
     record Known(List<HeldModel> models, boolean freshlyRead) implements Answer {
     }
 
     /**
-     * The cluster could not be asked - it cannot be searched, or it did not answer.
+     * The cluster could not be asked. It cannot be searched, or it did not answer.
      */
     record CannotTell() implements Answer {
     }
@@ -72,8 +73,8 @@ public class Camunda8ModelsTheClusterHolds {
   }
 
   /**
-   * Reads the models of every version the cluster holds under one BPMN process id -
-   * the deployment service's own machinery ({@code Camunda8ProcessVersions}).
+   * Reads the models of every version the cluster holds under one BPMN process id. The
+   * deployment service does it with its own tools ({@code Camunda8ProcessVersions}).
    */
   @FunctionalInterface
   public interface ModelsOfProcess {
@@ -100,14 +101,14 @@ public class Camunda8ModelsTheClusterHolds {
 
   /**
    * The settled answers, by {@code <workflow module>|<bpmn process id>}. Only a
-   * successful read is kept: a definition's model never changes, while a failed read
+   * successful read is kept. The model of a definition never changes, but a failed read
    * says nothing about the next one.
    */
   private final Map<String, List<HeldModel>> held = new ConcurrentHashMap<>();
 
   /**
-   * Which reads were already reported as failed, so a cluster outage costs one
-   * warning per process id rather than one per call.
+   * Which reads were already reported as failed. So a cluster outage costs one
+   * warning per process id, not one per call.
    */
   private final Set<String> reportedUnreadable = ConcurrentHashMap.newKeySet();
 
@@ -133,8 +134,8 @@ public class Camunda8ModelsTheClusterHolds {
 
   /**
    * The models the cluster holds for every BPMN process id the workflow module
-   * declares. One id which cannot be read makes the whole answer "cannot tell":
-   * a finer answer would claim a completeness it does not have.
+   * declares. One id which cannot be read makes the whole answer "cannot tell".
+   * A finer answer would claim to be complete, and it is not.
    *
    * @param workflowModuleId The workflow module ID
    * @return The models or "cannot tell"
@@ -147,8 +148,8 @@ public class Camunda8ModelsTheClusterHolds {
   }
 
   /**
-   * The same answer, read from the cluster again: for a caller about to refuse
-   * something on a picture which might be outdated by another node's deployment.
+   * The same answer, read from the cluster again. It is for a caller about to refuse
+   * something, whose picture the deployment of another node might have made outdated.
    *
    * @param workflowModuleId The workflow module ID
    * @return The models or "cannot tell"
@@ -227,8 +228,8 @@ public class Camunda8ModelsTheClusterHolds {
   }
 
   /**
-   * Every id the module declares: the deployed ones and the ones nothing was
-   * deployed under.
+   * Every id the module declares. These are the deployed ones and the ones nothing
+   * was deployed under.
    */
   private Collection<String> declaredIdsOf(
       final String workflowModuleId) {
