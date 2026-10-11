@@ -28,26 +28,24 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The shutdown against a real Camunda 8 cluster: a restart must not
- * burn a job's retries.
+ * The shutdown against a real Camunda 8 cluster: a restart must not use up a job's retries.
  * <p>
- * Both halves are measured here with the application shut down while a handler is
- * inside it:
+ * Both halves are measured here. The application is shut down while a handler is inside
+ * it:
  * <ul>
- * <li>a handler which outlives the grace period is cut off by the closing client. Its job
- * is NOT failed, so the cluster hands it out again once its lock expires - with the three
- * retries it started with. An adapter answering the interrupt with
+ * <li>the closing client cuts off a handler which outlives the grace period. Its job is NOT
+ * failed. So the cluster hands it out again once its lock expires, with the three retries it
+ * started with. An adapter which answered the interrupt with
  * {@code newFailCommand(retries - 1)} would return the job with two instead;</li>
- * <li>a handler shorter than the grace period finishes, and its job is completed before
- * the client goes down, so the cluster has nothing left to hand out.</li>
+ * <li>a handler shorter than the grace period finishes. Its job is completed before the
+ * client goes down, so the cluster has nothing left to hand out.</li>
  * </ul>
- * The assertions are made with a client of the test's own, after the application is gone:
- * what the cluster hands out is the only evidence that counts here.
+ * The assertions use a client of the test's own, after the application is gone. What the
+ * cluster hands out is the only evidence that counts here.
  * <p>
- * The application is booted by the test rather than by {@code @SpringBootTest}, because
- * SHUTTING IT DOWN is what is under test. Spring's test context is a cache which expects
- * to own that lifecycle, and a context closed inside a test method is a context it tries
- * to restart afterwards.
+ * The test boots the application itself and does not use {@code @SpringBootTest}, because
+ * SHUTTING IT DOWN is what is under test. Spring's test context is a cache which expects to
+ * own that lifecycle. It tries to restart a context which was closed inside a test method.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -73,10 +71,10 @@ public class Camunda8ShutdownDrainIT extends TestOnTheSharedCluster {
             "--vanillabp.adapters.c8.grpc-address="
                 + grpcAddress(),
             // two seconds is enough for the graceful handler and far too little for the
-            // blocking one, which is what makes both halves observable in one setup
+            // blocking one. So both halves can be observed in one setup
             "--vanillabp.adapters.c8.shutdown-grace=PT2S",
-            // and a short lock, so a job left behind comes back within the test instead
-            // of in five minutes
+            // and a short lock, so a job left behind comes back within the test and not
+            // after five minutes
             "--vanillabp.workflow-modules.test-app.workflows.ShutdownProcess.adapters.c8.job-timeout=PT8S",
             "--vanillabp.workflow-modules.test-app.workflows.ShutdownGraceProcess.adapters.c8.job-timeout=PT8S");
 
@@ -100,10 +98,10 @@ public class Camunda8ShutdownDrainIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * The job type the cluster knows a task definition of this application by. The test
-   * application isolates its workflow modules by PREFIXING identifiers, so what the
-   * cluster hands out is not what the {@code @WorkflowTask} annotation says - and asking
-   * the running application beats writing the prefix into the test.
+   * The job type by which the cluster knows a task definition of this application. The test
+   * application isolates its workflow modules by PREFIXING identifiers. So what the cluster
+   * hands out is not what the {@code @WorkflowTask} annotation says. Asking the running
+   * application is better than writing the prefix into the test.
    *
    * @param bpmnProcessId The plain BPMN process id
    * @param taskDefinition The plain task definition
@@ -147,8 +145,8 @@ public class Camunda8ShutdownDrainIT extends TestOnTheSharedCluster {
         "the operator was told what was cut off: "
             + logged);
 
-    // the job is not failed, so nothing shortens its lock: it comes back when the lock
-    // expires, which is what the workflow's job-timeout was set to
+    // the job is not failed, so nothing shortens its lock. It comes back when the lock
+    // expires, after the job-timeout of the workflow
     try (final var client = testClient()) {
       final var redelivered = awaitJob(client, jobType, Duration.ofSeconds(60));
       assertEquals(
@@ -192,8 +190,8 @@ public class Camunda8ShutdownDrainIT extends TestOnTheSharedCluster {
           0,
           ShutdownDockerWorkflowService.GRACEFUL_RETURNED.getCount(),
           "the shutdown waited for the handler instead of interrupting it");
-      // the job was completed before the client went down, so the cluster has nothing to
-      // hand out any more - not even after the lock would have expired
+      // the job was completed before the client went down. So the cluster has nothing to
+      // hand out any more, not even after the lock would have expired
       assertFalse(
           jobAvailable(client, jobType, Duration.ofSeconds(15)),
           "a completed job is never redelivered");
@@ -203,8 +201,8 @@ public class Camunda8ShutdownDrainIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * A client of the test's own - the application's one is gone by the time the assertions
-   * are made.
+   * A client of the test's own. The application's client is gone by the time the assertions
+   * run.
    */
   private CamundaClient testClient() {
 
@@ -221,8 +219,8 @@ public class Camunda8ShutdownDrainIT extends TestOnTheSharedCluster {
       final CamundaClient client,
       final String jobType) {
 
-    // this suite configures 'job-lease: use', and a job which was leased is never handed
-    // to an activation which does not ask for one. So a test reaching for a job of this
+    // this suite configures 'job-lease: use'. A job which was leased is never handed to an
+    // activation which does not ask for a lease. So a test which reaches for a job of this
     // application asks the way its workers ask
     return Camunda8JobLease
         .leaseTheActivation(

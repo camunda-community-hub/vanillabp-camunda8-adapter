@@ -17,24 +17,24 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What <code>&#64;WorkflowTask(version = ...)</code> means on Camunda 8, with
- * TWO deployed versions of one process: the workflow started while only version 1 exists
- * is served by the method specifying that version, and a workflow started after a second,
- * TAGGED version was deployed is served by the method naming that tag.
+ * What <code>&#64;WorkflowTask(version = ...)</code> means on Camunda 8, with TWO deployed
+ * versions of one process. The method which specifies version 1 serves the workflow which
+ * was started while only version 1 exists. A second, TAGGED version is deployed. The method
+ * which names that tag serves a workflow started after that.
  * <p>
- * The version TAG is read by searching the cluster, because a job carries the NUMBER and
- * never the version tag: which version carries which tag is a question only the cluster
- * can answer. The numeric half of the feature needs no search at all.
+ * The version TAG is read by searching the cluster. A job carries the NUMBER and never the
+ * version tag. Only the cluster can answer which version carries which tag. The numeric
+ * half of the feature needs no search at all.
  * <p>
  * The second version is deployed while the application runs, the way another node of a
- * rolling deployment deploys it - so this also exercises the on-demand lookup of a version
- * this application never deployed itself. Its identifiers carry the workflow module's
- * prefix by hand: the test deploys the model directly through the client, bypassing
+ * rolling deployment deploys it. So this also tests the on-demand lookup of a version which
+ * this application never deployed itself. Its identifiers carry the workflow module's prefix
+ * by hand. The test deploys the model directly through the client and so bypasses
  * VanillaBP's pipeline (the adapter runs with name-clash-avoidance 'use-prefix' here).
  * <p>
- * An own in-memory database keeps this test apart from the other Camunda 8 ITs: an outbox
- * they SHARE would let another class's application start this test's workflow, and on the
- * cluster all of them use it would be served like any other.
+ * An in-memory database of its own keeps this test apart from the other Camunda 8 ITs. With
+ * an outbox they SHARE, another class's application could start this test's workflow. On
+ * the cluster which all of them use, that workflow would be served like any other.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -69,8 +69,8 @@ public class Camunda8ProcessVersionIT extends SpringBootTestOnTheSharedCluster {
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
 
-    // generous: the cluster exports to Elasticsearch before the query API can answer,
-    // and that pipeline is the slowest part of the test
+    // long on purpose. The cluster exports to Elasticsearch before the query API can
+    // answer, and that pipeline is the slowest part of the test
     final var deadline = System.currentTimeMillis() + 240_000;
     while (!Boolean.TRUE.equals(condition.get())) {
       if (System.currentTimeMillis() > deadline) {
@@ -101,7 +101,7 @@ public class Camunda8ProcessVersionIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("the version of the deployed process definition decides which method serves the task")
   public void theVersionDecidesWhichMethodRuns() throws Exception {
 
-    // the application deployed version 1 while booting - a version made of numbers is
+    // the application deployed version 1 while booting. A version made of numbers is
     // compared to what the job carries, so nothing is asked of the cluster
     final var firstId = transactionTemplate.execute(status -> workflowService.startWorkflow().getId());
     assertNotNull(firstId);
@@ -113,8 +113,8 @@ public class Camunda8ProcessVersionIT extends SpringBootTestOnTheSharedCluster {
         .send()
         .join();
 
-    // the query API is fed by an exporter, so the tagged version arrives there a moment
-    // later - and a job of a version no method serves would burn its retries
+    // an exporter feeds the query API, so the tagged version arrives there a moment later.
+    // And a job of a version which no method serves would use up its retries
     awaitUntil(
         () -> client()
             .newProcessDefinitionSearchRequest()
