@@ -30,9 +30,8 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The shutdown at the level where it happens: what
- * {@code stopWorkflowProcessing} does with the handlers the closed workers still have
- * inside the application.
+ * The shutdown at the level where it happens: what {@code stopWorkflowProcessing} does with
+ * the handlers which the closed workers still have inside the application.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ShutdownDrainTest {
@@ -71,7 +70,7 @@ public class Camunda8ShutdownDrainTest {
   }
 
   /**
-   * The same, with a connection complete enough for a client to be built - building one
+   * The same, with a connection complete enough for a client to be built. Building one
    * contacts no cluster, and {@code startWorkflowProcessing} asks for it.
    */
   private Camunda8DeploymentService deploymentServiceWithClient() {
@@ -106,8 +105,8 @@ public class Camunda8ShutdownDrainTest {
   }
 
   /**
-   * A worker which reports itself closed once it was closed, which is what a worker
-   * without an activation request in flight does.
+   * A worker which reports itself closed once it was closed. A worker without an activation
+   * request in flight does that.
    */
   private JobWorker openWorker() {
 
@@ -126,9 +125,8 @@ public class Camunda8ShutdownDrainTest {
   }
 
   /**
-   * A worker whose activation request is parked at the cluster: closing it does not
-   * cancel that request, so it keeps reporting itself open for as long as the request
-   * takes.
+   * A worker whose activation request is parked at the cluster. Closing it does not cancel
+   * that request. So it keeps reporting itself open for as long as the request takes.
    */
   private JobWorker workerWithAnActivationRequestInFlight() {
 
@@ -167,9 +165,9 @@ public class Camunda8ShutdownDrainTest {
     final var drain = service.drainOf("test-module");
     drain.jobStarted(4711L, "task", "someTask", "TestProcess");
 
-    // what happened in which order, which is what says whether the shutdown waited. A
-    // clock would say it worse: a machine carrying several builds stops this JVM for
-    // seconds at a time, and a stopped JVM looks exactly like a shutdown which waited
+    // what happened in which order. That says whether the shutdown waited. A clock would
+    // say it worse. A machine which runs several builds stops this JVM for seconds at a
+    // time, and a stopped JVM looks exactly like a shutdown which waited
     final var whatHappened = new CopyOnWriteArrayList<String>();
     final var handler = new Thread(() -> {
       try {
@@ -192,9 +190,9 @@ public class Camunda8ShutdownDrainTest {
         List.of("the handler came back", "the shutdown returned"),
         whatHappened,
         "the shutdown returned after its handler, not next to it");
-    // a minute of grace against a handler which stays inside for a second: a shutdown
-    // which sat the grace out is a minute away from one which did not, and nothing a
-    // loaded machine does to this JVM falls between the two
+    // a minute of grace against a handler which stays inside for a second. A shutdown
+    // which sat the grace out is a minute away from one which did not. Nothing a loaded
+    // machine does to this JVM falls between the two
     assertTrue(waited < A_GRACE_NOBODY_REACHES.dividedBy(2).toMillis(),
         "but not the whole grace period (was "
             + waited
@@ -235,8 +233,9 @@ public class Camunda8ShutdownDrainTest {
     service.stopWorkflowProcessing("test-module", context);
     assertTrue(service.drainOf("test-module").isShuttingDown());
 
-    // a checkpoint and restore, or a platform restarting its lifecycle beans: the module
-    // processes again, and a handler failing now is the application's failure once more
+    // a checkpoint and restore, or a platform which restarts its lifecycle beans. The
+    // module processes again, and a handler failing now is a failure of the application
+    // once more
     service.startWorkflowProcessing("test-module", context);
 
     assertFalse(
@@ -257,10 +256,9 @@ public class Camunda8ShutdownDrainTest {
     service.stopWorkflowProcessing("test-module", context);
     final var waited = (System.nanoTime() - startedAt) / 1_000_000;
 
-    // half a minute against a grace of one: a module with nothing in flight either
-    // returns at once or sits the grace out, and nothing a loaded machine does to this
-    // JVM falls between the two. A second did not say that, it only said that this JVM
-    // had its turn
+    // half a minute against a grace of one. A module with nothing in flight either returns
+    // at once or sits the grace out. Nothing a loaded machine does to this JVM falls between
+    // the two. A second did not say that, it only said that this JVM had its turn
     assertTrue(waited < A_GRACE_NOBODY_REACHES.dividedBy(2).toMillis(),
         "nothing was waited for (was "
             + waited
@@ -296,9 +294,9 @@ public class Camunda8ShutdownDrainTest {
   }
 
   /**
-   * A worker which reports itself closed only once something else happened: its activation
-   * request comes back when the workers of the OTHER workflow module are closed, which is
-   * what a cluster does to a client whose connections free up.
+   * A worker which reports itself closed only once something else happened. Its activation
+   * request comes back when the workers of the OTHER workflow module are closed. A cluster
+   * does that to a client whose connections free up.
    *
    * @param released What has to be true before this worker reports itself closed
    * @return The worker
@@ -313,7 +311,7 @@ public class Camunda8ShutdownDrainTest {
   }
 
   /**
-   * A worker whose close releases the worker above, the way the last module of an
+   * A worker whose close releases the worker above. In the same way the last module of an
    * application releases what the modules before it were waiting for.
    *
    * @param released What its close sets
@@ -349,7 +347,7 @@ public class Camunda8ShutdownDrainTest {
     service.startWorkflowProcessing("module-b", stoppedFirst);
 
     // the activation request of the module stopped first comes back when the workers of the
-    // other module are closed, which is the whole reason a wait per module adds up: while
+    // other module are closed. That is the whole reason why a wait per module adds up. While
     // one module is drained, the workers of the modules which are still open keep their
     // request alive
     final var theOtherModuleIsClosedToo = new AtomicBoolean(false);
@@ -362,8 +360,8 @@ public class Camunda8ShutdownDrainTest {
     final var waited = (System.nanoTime() - startedAt) / 1_000_000;
 
     // a minute of grace against a shutdown which has to wait for nothing once both modules
-    // are closed: a shutdown which spent the grace on the module stopped first is a minute
-    // away from this one, and nothing a loaded machine does to this JVM falls between the two
+    // are closed. A shutdown which spent the grace on the module stopped first is a minute
+    // away from this one. Nothing a loaded machine does to this JVM falls between the two
     assertTrue(
         waited < A_GRACE_NOBODY_REACHES.dividedBy(2).toMillis(),
         "the module stopped first did not sit out a grace of its own (was "
@@ -402,7 +400,7 @@ public class Camunda8ShutdownDrainTest {
         adapterId -> configuration);
     final var context = new Camunda8ProcessingContext("c8", "test-module", new Camunda8MultiInstance.Registry());
     service.startWorkflowProcessing("test-module", context);
-    // a platform whose shutdown never reaches the adapter: the module is open, and the
+    // a platform whose shutdown never reaches the adapter. The module is open, and the
     // next thing which happens is the client going down
     final var worker = openWorker();
     context.getOpenWorkers().add(worker);
@@ -414,7 +412,7 @@ public class Camunda8ShutdownDrainTest {
         service.drainOf("test-module").isShuttingDown(),
         "the module went through its ordinary shutdown");
     assertTrue(clientFactory.getOpenWorkflowModules().isEmpty(), "and is not open any more");
-    // the view of this test, not of the class: the test below says the same sentence is
+    // the view of this test, not of the class. The test below says the same sentence is
     // absent, and both are only about the shutdown this test just ran
     final var logged = output.getAllOfThisTest();
     assertTrue(
@@ -449,8 +447,8 @@ public class Camunda8ShutdownDrainTest {
 
     clientFactory.close();
 
-    // the view of this test, not of the class: the test above prints the sentence this
-    // one says is absent, so read over the whole class the assertion would hold only as
+    // the view of this test, not of the class. The test above prints the sentence which
+    // this one says is absent. Read over the whole class, the assertion would hold only as
     // long as that test happens to run later
     final var logged = output.getAllOfThisTest();
     assertFalse(

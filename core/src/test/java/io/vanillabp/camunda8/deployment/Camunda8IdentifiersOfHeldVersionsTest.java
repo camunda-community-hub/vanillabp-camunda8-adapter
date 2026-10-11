@@ -17,18 +17,18 @@ import io.vanillabp.integration.adapter.spi.version.ProcessVersionCatalog;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which identifiers a version the cluster still HOLDS declares - the names a workflow
- * module deployed years ago, which no index of the cluster knows and which only that
- * version's model still carries.
+ * Which identifiers a version the cluster still HOLDS declares. These are the names a
+ * workflow module deployed years ago. No index of the cluster knows them, and only the model
+ * of that version still carries them.
  * <p>
- * The model comes back carrying the names the deployment of the day wrote into it, so the
- * prefix is stripped off again before the core sees them: the core composes the scoped forms
- * itself. A job type of such a version is the one of these names which is live rather than
- * dormant, because the workflows still running on that version produce jobs under it.
+ * The model comes back with the names the deployment of that day wrote into it. So the
+ * prefix is stripped off again before the core sees them, because the core composes the
+ * scoped forms itself. A job type of such a version is the one of these names which is
+ * live, not dormant. The workflows still running on that version produce jobs under it.
  * <p>
- * The cluster is played by a definition search and an XML request, and the number of XML
- * requests is part of what is measured: the model of the version in turn is read once,
- * however many questions are put about it.
+ * A definition search and an XML request play the cluster. The number of XML requests is part
+ * of what is measured: the model of a version is read once, however many questions are put
+ * about it.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8IdentifiersOfHeldVersionsTest {
@@ -38,13 +38,13 @@ public class Camunda8IdentifiersOfHeldVersionsTest {
   private static final String PROCESS = "LoanApproval";
 
   /**
-   * The cluster the last question was put to - it counts how often a model was fetched.
+   * The cluster the last question was put to. It counts how often a model was fetched.
    */
   private AClusterHolding cluster;
 
   /**
-   * A model as the cluster runs it: every name carries the prefix the deployment wrote into
-   * it, the job type carries the process id as well.
+   * A model as the cluster runs it. Every name carries the prefix the deployment wrote into
+   * it, and the job type carries the process id as well.
    */
   private static String heldModel(
       final String prefixedNames) {
@@ -140,8 +140,8 @@ public class Camunda8IdentifiersOfHeldVersionsTest {
   }
 
   /**
-   * The catalog of a cluster holding the given versions - the boundary to the migration SPI,
-   * with the fetches of the models counted by {@link AClusterHolding}.
+   * The catalog of a cluster which holds the given versions. It is the boundary to the
+   * migration SPI. {@link AClusterHolding} counts the fetches of the models.
    */
   private ProcessVersionCatalog aClusterHolding(
       final Map<Integer, String> modelsPerVersion) {

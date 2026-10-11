@@ -25,20 +25,20 @@ import io.vanillabp.camunda8.processservice.Camunda8SearchPages;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What this adapter answers about a process the cluster holds MORE than one page of
- * versions of - a process redeployed with every release of an application.
+ * What this adapter answers about a process of which the cluster holds MORE versions than one
+ * page holds. For example a process redeployed with every release of an application.
  * <p>
- * The versions are what the core matches a version tag and the startup check about older
- * versions against, so the answer has to be every version the cluster holds. A search
- * which says nothing about its page is answered with 100 entries, oldest first, which left
- * the application reading the 100 versions nobody runs any more and never seeing the one
- * it had just deployed.
+ * The core matches a version tag against the versions, and so does the startup check about
+ * older versions. So the answer has to be every version the cluster holds. A search which
+ * says nothing about its page is answered with 100 entries, oldest first. That left the
+ * application reading the 100 versions nobody runs any more, and it never saw the one it had
+ * just deployed.
  * <p>
- * The cluster is played by the definition search, handing out one page per call. Which
- * page the adapter asked for cannot be read off the call: the type the client passes the
- * page lambda differs between the release lines this adapter is built from, so naming it
- * here would make the test compile on one line only. What is measured instead is how many
- * pages the adapter asked for and what it made of them.
+ * The definition search plays the cluster and hands out one page per call. The test cannot
+ * read off the call which page the adapter asked for. The type the client passes to the page
+ * lambda differs between the release lines this adapter is built from. Naming it here would
+ * make the test compile on one line only. So the test measures how many pages the adapter
+ * asked for and what it made of them.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8VersionsBeyondOnePageTest {
@@ -48,8 +48,8 @@ public class Camunda8VersionsBeyondOnePageTest {
   private static final String PROCESS = "OrderApproval";
 
   /**
-   * How many versions the cluster holds. The number a run of this adapter's own test suite
-   * reached on 2026-10-01, which is where the ceiling of a page was found.
+   * How many versions the cluster holds. A run of this adapter's own test suite reached this
+   * number on 2026-10-01. That is where the ceiling of a page was found.
    */
   private static final int VERSIONS_HELD = 254;
 
@@ -119,8 +119,8 @@ public class Camunda8VersionsBeyondOnePageTest {
   }
 
   /**
-   * A cluster holding the given number of versions of one process, answering a search with
-   * one page of {@link Camunda8SearchPages#PAGE_SIZE} versions at a time, newest first -
+   * A cluster which holds the given number of versions of one process. It answers a search
+   * with one page of {@link Camunda8SearchPages#PAGE_SIZE} versions at a time, newest first,
    * which is the order the adapter asks for.
    */
   private Camunda8ProcessVersions aClusterHolding(

@@ -33,7 +33,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * and a warning where nobody does. A version the cluster already holds is a warning where
  * workflows still run on it.
  * <p>
- * Every refusal stands next to the model which must NOT be refused: a multi-instance element
+ * Every refusal stands next to the model which must NOT be refused. A multi-instance element
  * is the form which does repeat an activity, and the message points to it.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -89,8 +89,8 @@ public class Camunda8StandardLoopRefusalTest {
       """;
 
   /**
-   * One file with the process under test and a second process carrying a standard loop, which
-   * is the finding of that other process only.
+   * One file with the process under test and a second process with a standard loop. That loop
+   * is a finding of the other process only.
    */
   private static BpmnModelInstance model(
       final String processContent) {
@@ -121,7 +121,7 @@ public class Camunda8StandardLoopRefusalTest {
   }
 
   /**
-   * A core in which no <code>&#64;WorkflowService</code> class claims the process: it knows no
+   * A core in which no <code>&#64;WorkflowService</code> class claims the process. It knows no
    * workflow aggregate for it.
    */
   private static class ACoreClaimingNothing extends Camunda8DeploymentServiceTest.NoOpInvoker {

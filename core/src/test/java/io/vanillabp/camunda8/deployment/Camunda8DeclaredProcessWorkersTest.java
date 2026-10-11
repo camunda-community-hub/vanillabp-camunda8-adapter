@@ -25,21 +25,20 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which workers a workflow module opens for a BPMN process id it DECLARES without
- * deploying a model under it - the old id of a renamed process.
+ * Which workers a workflow module opens for a BPMN process id it DECLARES without deploying a
+ * model under it. That is the old id of a renamed process.
  * <p>
- * The whole point of those workers is the name a job carries. Under
- * <code>use-prefix</code> a task definition is deployed as
- * <code>&lt;module&gt;__&lt;process&gt;__&lt;task&gt;</code>, so the jobs of the workflows
- * under the old id are named after the OLD id and no worker of the deployed processes asks
- * for them; under every other mode the same job is named like any other and there is
- * nothing to open. Both cases are here, and so is the one an application cannot be helped
- * with: a method wired to a BPMN element id names no task definition, and a job type
- * cannot be composed from a model this application no longer has.
+ * The whole point of those workers is the name a job carries. Under <code>use-prefix</code>
+ * a task definition is deployed as <code>&lt;module&gt;__&lt;process&gt;__&lt;task&gt;</code>.
+ * So the jobs of the workflows under the old id are named after the OLD id, and no worker of
+ * the deployed processes asks for them. Under every other mode the same job is named like any
+ * other, and there is nothing to open. Both cases are here. So is the case an application
+ * cannot be helped with: a method wired to a BPMN element id names no task definition, and a
+ * job type cannot be composed from a model this application no longer has.
  * <p>
- * The cluster is an address nothing listens on, which is enough: opening a worker
- * contacts nobody, and what is asked here is which job types were subscribed to.
- * {@code Camunda8RenamedProcessIT} is the same question against a real cluster.
+ * The cluster is an address nothing listens on. That is enough, because opening a worker
+ * contacts nobody, and this test asks which job types were subscribed to.
+ * {@code Camunda8RenamedProcessIT} asks the same question against a real cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -149,8 +148,8 @@ public class Camunda8DeclaredProcessWorkersTest {
     final var adapter = adapter(Map.of(OLD_ID, List.of(TASK_DEFINITION)), NameClashAvoidance.USE_PREFIX);
     final var service = adapter.service();
     final var context = new Camunda8ProcessingContext("c8", MODULE, new Camunda8MultiInstance.Registry());
-    // the cluster still holds the old id's model, and its task sits inside a
-    // multi-instance element - the iteration context of its jobs comes from here
+    // the cluster still holds the model of the old id, and its task sits inside a
+    // multi-instance element. The iteration context of its jobs comes from here
     final var scopedOldId = "test-module__order_approval";
     adapter
         .clientFactory()
@@ -177,8 +176,8 @@ public class Camunda8DeclaredProcessWorkersTest {
   }
 
   /**
-   * A model as the cluster holds it: the process id is the SCOPED one, and one task
-   * carries multi-instance loop characteristics.
+   * A model as the cluster holds it. The process id is the SCOPED one, and one task carries
+   * multi-instance loop characteristics.
    */
   private static io.camunda.zeebe.model.bpmn.BpmnModelInstance heldModelWithAMultiInstanceTask(
       final String scopedBpmnProcessId) {
@@ -208,8 +207,8 @@ public class Camunda8DeclaredProcessWorkersTest {
   }
 
   /**
-   * The adapter under test together with its client factory, which is where the picture
-   * of the cluster-held models lives.
+   * The adapter under test together with its client factory. The picture of the models the
+   * cluster holds lives in the client factory.
    */
   private record Adapter(
                          Camunda8DeploymentService service,
@@ -234,7 +233,7 @@ public class Camunda8DeclaredProcessWorkersTest {
 
     final var configuration = new Camunda8AdapterConfiguration();
     configuration.setShutdownGrace(Duration.ofMillis(200));
-    // an address nothing listens on: a worker is opened without contacting anybody
+    // nothing listens on this address, a worker is opened without contacting anybody
     configuration.setRestAddress("http://localhost:65535");
     final var core = new Camunda8DeploymentServiceTest.NoOpInvoker() {
 

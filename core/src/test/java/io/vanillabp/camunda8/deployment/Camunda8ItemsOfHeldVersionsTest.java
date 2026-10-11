@@ -14,13 +14,13 @@ import io.vanillabp.integration.adapter.spi.workflowtask.BpmnTaskSpec;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which rounds a task of a version the CLUSTER STILL HOLDS iterates in without being handed
+ * In which rounds a task of a version the CLUSTER STILL HOLDS iterates without being handed
  * their value. A handler reads the item of an iteration out of the variable the model names
- * in <code>inputElement</code>, and an element naming none hands nothing over, so a method
- * serving that version receives <code>null</code> and nothing says why.
+ * in <code>inputElement</code>. An element which names none hands nothing over. So a method
+ * which serves that version receives <code>null</code>, and nothing says why.
  * <p>
- * Reading the model is this adapter's job and judging the methods is the core's, so what is
- * measured here is the shape the adapter hands over at the boundary to the migration SPI:
+ * This adapter reads the model, and the core judges the methods. So this test measures the
+ * shape the adapter hands over at the boundary to the migration SPI:
  * {@link BpmnTaskSpec#multiInstanceElementsWithoutAnItem()} of a task of a held version.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -136,7 +136,7 @@ public class Camunda8ItemsOfHeldVersionsTest {
   @DisplayName("Only the elements of the task's own chain are named, outermost first")
   public void onlyTheChainOfTheTask() {
 
-    // the subprocess hands no item over and the task inside it does, so the one round
+    // the subprocess hands no item over, and the task inside it does. So the one round
     // without a value is the outer one
     assertEquals(List.of("SubProcess_Applications"), itemsNeverNamedBy(A_SUBPROCESS_NAMING_NO_ITEM));
 
@@ -146,8 +146,8 @@ public class Camunda8ItemsOfHeldVersionsTest {
   @DisplayName("A modelled listener of a held version names the rounds around it too")
   public void aListenerOfAHeldVersion() {
 
-    // a listener method reads its item out of the same iteration a task's method does, so
-    // leaving the chain off a listener would hide the finding for that half of the model
+    // a listener method reads its item out of the same iteration as the method of a task.
+    // So leaving the chain off a listener would hide the finding for that half of the model
     final var cluster = AClusterHolding
         .theseModels(Map.of(1, heldModel(A_LISTENER_IN_A_SUBPROCESS_NAMING_NO_ITEM)))
         .servingModelledListeners();

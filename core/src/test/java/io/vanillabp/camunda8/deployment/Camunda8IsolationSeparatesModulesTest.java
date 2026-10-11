@@ -24,14 +24,14 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What this adapter answers when the core asks whether its own isolation keeps two workflow
  * modules apart. The core puts that question while it looks for two BPMN processes which
- * reach the BPMS under one identifier: under {@code by-adapter} nothing is prefixed, so the
- * core holds two equal strings and only the adapter knows whether the cluster separates the
+ * reach the BPMS under one identifier. Under {@code by-adapter} nothing is prefixed. So the
+ * core holds two equal strings, and only the adapter knows whether the cluster separates the
  * two sides anyway.
  * <p>
  * The scope a Camunda 8 cluster offers is the tenant, so every case below is a pair of
  * tenants. Which tenant a module lands in depends on its mode and on the configured
- * <code>tenant-id</code>, and neither of the two is readable from one property: both are
- * resolved per workflow module, and an unset tenant name under {@code by-adapter} means the
+ * <code>tenant-id</code>. Neither of the two can be read from one property, because both are
+ * resolved per workflow module. And an unset tenant name under {@code by-adapter} means the
  * workflow module id.
  * <p>
  * No cluster is involved in any of it. The adapter instances built here have no connection
@@ -58,7 +58,7 @@ public class Camunda8IsolationSeparatesModulesTest {
   }
 
   /**
-   * An adapter instance built the way the platform builds it: the tenant of a workflow module
+   * An adapter instance built the way the platform builds it. The tenant of a workflow module
    * is resolved over the levels the name may stand at, the module's own section first.
    *
    * @param modes The mode per workflow module
@@ -103,8 +103,8 @@ public class Camunda8IsolationSeparatesModulesTest {
   }
 
   /**
-   * Whether the adapter separates the two modules, asked in both orders: which module
-   * deploys first is not the application's choice, so an answer which depended on the order
+   * Whether the adapter separates the two modules, asked in both orders. The application
+   * does not choose which module deploys first. So an answer which depended on the order
    * would make the core's refusal depend on it too.
    */
   private boolean separates(
@@ -124,9 +124,9 @@ public class Camunda8IsolationSeparatesModulesTest {
   @DisplayName("The default mode without a tenant name puts the two modules into two tenants")
   public void byAdapterWithoutATenantNameSeparatesTheModules() {
 
-    // 'by-adapter' with nothing configured is what an upgraded version-1 application runs:
-    // the tenant is named after the workflow module, so the cluster keeps the two apart and
-    // one shared BPMN process id is no clash at all
+    // an upgraded version-1 application runs 'by-adapter' with nothing configured. The
+    // tenant is named after the workflow module. So the cluster keeps the two apart, and one
+    // shared BPMN process id is no clash at all
     assertTrue(separates(adapter(NameClashAvoidance.BY_ADAPTER, null)));
 
   }
@@ -135,8 +135,8 @@ public class Camunda8IsolationSeparatesModulesTest {
   @DisplayName("One tenant-id for the whole adapter puts every module into that one tenant")
   public void oneTenantForTheWholeAdapterSeparatesNothing() {
 
-    // the configuration this question exists for: the name overrides what the module id
-    // would have been, both modules reach the same tenant, and nothing tells their
+    // the configuration this question exists for. The name overrides what the module id
+    // would have been. Both modules reach the same tenant, and nothing tells their
     // processes apart any more
     assertFalse(separates(adapter(NameClashAvoidance.BY_ADAPTER, "one-tenant-for-all")));
 
@@ -146,14 +146,14 @@ public class Camunda8IsolationSeparatesModulesTest {
   @DisplayName("Two modules which reach the cluster without a tenant share the unnamed scope")
   public void modulesWithoutATenantAreNotSeparated() {
 
-    // no tenant is the <default> one, which is a scope like any other: two modules in it
-    // are in the SAME scope. Under 'use-prefix' the core composed the identifiers itself
-    // and does not ask; the honest answer is still that the cluster separates nothing
+    // no tenant is the <default> one, which is a scope like any other. Two modules in it
+    // are in the SAME scope. Under 'use-prefix' the core composed the identifiers itself and
+    // does not ask. The honest answer is still that the cluster separates nothing
     assertFalse(separates(adapter(NameClashAvoidance.USE_PREFIX, null)));
     assertFalse(separates(adapter(NameClashAvoidance.NONE, null)));
 
-    // a tenant name is configured and no module uses one, which the boot rejects
-    // elsewhere: the answer stays the one the cluster would give
+    // a tenant name is configured and no module uses one. The boot rejects that elsewhere.
+    // The answer stays the one the cluster would give
     assertFalse(separates(adapter(NameClashAvoidance.NONE, "a-tenant-nobody-uses")));
 
   }
@@ -162,8 +162,8 @@ public class Camunda8IsolationSeparatesModulesTest {
   @DisplayName("A tenant named for one workflow module only separates it from the rest")
   public void aTenantOfOneModuleSeparatesIt() {
 
-    // the way out the core's refusal recommends: one of the two modules gets a scope of its
-    // own, and every other module of the application stays where it was
+    // the way out the core's refusal recommends. One of the two modules gets a scope of
+    // its own, and every other module of the application stays where it was
     assertTrue(
         separates(
             adapter(
@@ -194,8 +194,8 @@ public class Camunda8IsolationSeparatesModulesTest {
   @DisplayName("A module in a tenant is separated from one which reaches the cluster without one")
   public void aTenantedModuleIsSeparatedFromAnUntenantedOne() {
 
-    // the mode is resolvable per workflow module, so this is a configuration an
-    // application can really have: one module keeps the default, the other one prefixes
+    // the mode is resolved per workflow module, so an application can really have this
+    // configuration. One module keeps the default, the other one prefixes
     final var mixed = adapter(
         workflowModuleId -> ONE_MODULE.equals(workflowModuleId)
             ? NameClashAvoidance.BY_ADAPTER

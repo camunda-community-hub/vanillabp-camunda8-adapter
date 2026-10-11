@@ -25,10 +25,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Which workers of a workflow module lease their activations, on the line which can.
  * <p>
  * Two rules and one switch. A worker which holds its job from the activation to the answer
- * leases, and a worker which serves tasks leases only where none of the task definitions of
- * its job type can stay open - a task completed in phase two is completed hours later by a
- * dispatcher holding no token, so a leased job of such a task could never be completed at
- * all. The switch is the application's, because a lease cannot be taken back per job.
+ * leases. A worker which serves tasks leases only where none of the task definitions of its
+ * job type can stay open. A task completed in phase two is completed hours later by a
+ * dispatcher which holds no token. So a leased job of such a task could never be completed
+ * at all. The switch belongs to the application, because a lease cannot be taken back per
+ * job.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8JobLeaseDeploymentTest {
@@ -127,7 +128,7 @@ public class Camunda8JobLeaseDeploymentTest {
 
   /**
    * An adapter whose core says that {@link #ASYNCHRONOUS_TASK} is the one task which can
-   * stay open, and whose application decided the given way about the lease.
+   * stay open, and whose application decided about the lease in the given way.
    */
   private static Camunda8DeploymentService adapterWhich(
       final Camunda8AdapterConfiguration.JobLease jobLease) {

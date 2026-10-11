@@ -30,16 +30,16 @@ import io.vanillabp.integration.adapter.spi.version.DeployedProcessVersion;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What this adapter answers about a BPMN process the application declares without deploying a
- * model under it - the old id of a renamed process, which the cluster keeps with every version
- * ever deployed under it and with the workflows still running on them.
+ * What this adapter answers about a BPMN process which the application declares without
+ * deploying a model under it. That is the old id of a renamed process. The cluster keeps it
+ * with every version ever deployed under it, and with the workflows still running on them.
  * <p>
- * The core asks once per such id after the workflow module was deployed, because only it knows
- * which ids an application declared. The adapter's whole part in it is to answer with the
- * catalog it would have registered while wiring, and to ask the cluster for the OLD id the way
- * it would have asked for any other: by the id the cluster knows, which carries the workflow
- * module as a prefix under <code>use-prefix</code>, and within the tenant the module is
- * deployed to.
+ * The core asks once per such id after the workflow module was deployed, because only the
+ * core knows which ids an application declared. The adapter does two things here. It answers
+ * with the catalog it would have registered while wiring. And it asks the cluster for the OLD
+ * id the way it would ask for any other: by the id the cluster knows, which carries the
+ * workflow module as a prefix under <code>use-prefix</code>, and within the tenant the module
+ * is deployed to.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8RenamedProcessTest {
@@ -126,7 +126,7 @@ public class Camunda8RenamedProcessTest {
             .stream(heldVersions)
             .boxed()
             // the adapter asks for the newest version first, so this cluster answers that
-            // way round - what the catalog hands on is turned back into oldest first
+            // way round. What the catalog hands on is turned back into oldest first
             .sorted(java.util.Comparator.reverseOrder())
             .map(Camunda8RenamedProcessTest::definition)
             .toList())));

@@ -35,12 +35,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What this adapter makes of an ad-hoc subprocess: an element which holds activities
  * without sequence flows between them and runs the ones somebody picked.
  * <p>
- * The element itself is none the wiring collects, so nothing here asks for a
+ * The wiring does not collect the element itself, so nothing here asks for a
  * <code>&#64;WorkflowTask</code> method for it. The activities inside it are collected like
- * any other task, which is what lets an application serve the element without a line of
- * framework code. What the model does not say out loud is reported instead: the subprocess
- * can put more than one token into the workflow, and the flavour expecting a job worker of
- * its own is served by nothing here.
+ * any other task. That lets an application serve the element without a line of framework
+ * code. What the model does not say out loud is reported instead. The subprocess can put
+ * more than one token into the workflow. And nothing here serves the flavour which expects a
+ * job worker of its own.
  * <p>
  * Who claims the process decides what happens about that flavour. A process a
  * {@code @WorkflowService} class of the application claims does not deploy, because the
@@ -61,7 +61,7 @@ public class Camunda8AdHocSubProcessTest {
   private static final String FILE = "loan-approval.bpmn";
 
   /**
-   * The flavour VanillaBP serves: the model names the activities to run, through a FEEL
+   * The flavour VanillaBP serves. The model names the activities to run, through a FEEL
    * expression over a variable the workflow aggregate shares.
    */
   private static BpmnModelInstance modelActivatedByTheModel() {
@@ -87,8 +87,8 @@ public class Camunda8AdHocSubProcessTest {
   }
 
   /**
-   * The flavour expecting a job worker on the element itself, which this adapter does not
-   * serve.
+   * The flavour which expects a job worker on the element itself. This adapter does not serve
+   * it.
    */
   private static BpmnModelInstance modelActivatedByAWorker() {
 
@@ -108,8 +108,8 @@ public class Camunda8AdHocSubProcessTest {
   }
 
   /**
-   * The same element built from an element template, which is what the Camunda AI agent
-   * is: a runtime other than this application fetches that job.
+   * The same element built from an element template. The Camunda AI agent is such an element:
+   * a runtime other than this application fetches that job.
    */
   private static BpmnModelInstance modelServedByAnotherRuntime() {
 
@@ -178,8 +178,8 @@ public class Camunda8AdHocSubProcessTest {
   }
 
   /**
-   * The same core answering that no {@code @WorkflowService} class of the application claims
-   * the process - the answer the core gives by not knowing a workflow aggregate for it.
+   * The same core, answering that no {@code @WorkflowService} class of the application claims
+   * the process. The core gives that answer by not knowing a workflow aggregate for it.
    */
   private static class ReportedForAProcessNobodyClaims extends Reported {
 
@@ -202,7 +202,7 @@ public class Camunda8AdHocSubProcessTest {
       final boolean connectorsAreAllowed,
       final BpmnModelInstance model) {
 
-    // what THIS case logged: the capture spans the whole class
+    // what THIS case logged, because the capture spans the whole class
     final var before = output.getAll().length();
     wiringOf(core, connectorsAreAllowed, model).run();
     return output.getAll().substring(before);
@@ -210,7 +210,7 @@ public class Camunda8AdHocSubProcessTest {
   }
 
   /**
-   * Preparing and wiring one model, unrun, so a test can catch what it refused.
+   * Preparing and wiring one model, not yet run, so a test can catch what it refused.
    */
   private static Runnable wiringOf(
       final Reported core,
@@ -317,8 +317,8 @@ public class Camunda8AdHocSubProcessTest {
             </bpmn:adHocSubProcess>
         """));
 
-    // a null task definition is what the core turns into its guiding message about a task
-    // no method serves - the element must not become a place where such a task hides
+    // the core turns a null task definition into its guiding message about a task no
+    // method serves. The element must not become a place where such a task hides
     assertTrue(
         core.taskDefinitions.containsKey("Activity_CheckFraud"),
         () -> "the activity is validated: "
@@ -427,8 +427,8 @@ public class Camunda8AdHocSubProcessTest {
       final CapturedOutput output) {
 
     // the AI agent is an element template on exactly this element, and a connector runtime
-    // fetches its job. What a boot says about connectors is that feature's business; what
-    // must not appear is the message about an element nothing serves
+    // fetches its job. What a boot says about connectors is the business of that feature.
+    // The message about an element nothing serves must not appear
     final var whileConnectorsAreAllowed = wire(
         output, new Reported(), true, modelServedByAnotherRuntime());
     assertFalse(

@@ -47,8 +47,8 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Unit tests of {@link Camunda8DeploymentService} not requiring a cluster: BPMN parsing
- * (executable-process extraction, parse errors) and that deployment of an empty module
+ * Unit tests of {@link Camunda8DeploymentService} which need no cluster: BPMN parsing (which
+ * executable processes are taken, parse errors), and that the deployment of an empty module
  * does not touch the client.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -176,8 +176,8 @@ public class Camunda8DeploymentServiceTest {
         .done();
 
     final Camunda8ProcessingContext context = service.prepareBpmn("module", null, "a.bpmn", "P1", model);
-    // a second executable process of the same file reuses the context and deduplicates
-    // the resource by filename
+    // a second executable process of the same file reuses the context, and the resource is
+    // kept once per filename
     service.prepareBpmn("module", context, "a.bpmn", "P2", model);
 
     assertEquals(1, context.getResources().size());
@@ -197,13 +197,13 @@ public class Camunda8DeploymentServiceTest {
 
     final var context = service.prepareBpmn("module", null, "a.bpmn", "P1", model);
 
-    // an extension of the pipeline sees this context and nothing else of the run, so
-    // without these two it cannot tell one adapter's call from another's - and every
+    // an extension of the pipeline sees this context and nothing else of the run. Without
+    // these two it cannot tell the call of one adapter from the call of another. And every
     // configured Camunda 8 adapter makes the same call with the same file
     assertEquals("c8", context.getAdapterId());
     assertEquals("module", context.getWorkflowModuleId());
-    // and it carries the registry the adapter wires its models into, so an extension which
-    // wants to name the iteration a task belongs to asks rather than reading the models again
+    // and it carries the registry the adapter wires its models into. So an extension which
+    // wants to name the iteration a task belongs to asks, and does not read the models again
     assertSame(
         service.multiInstanceRegistry(),
         context.getMultiInstanceRegistry(),
@@ -300,14 +300,14 @@ public class Camunda8DeploymentServiceTest {
   @DisplayName("one task definition with conflicting job timeouts fails naming both")
   public void conflictingTaskLocksFailGuiding() {
 
-    // the lock of a worker is the lock of the task definition it subscribes to, so two
-    // tasks of one definition resolving differently leave the worker without an answer.
-    // What makes them differ is configuration, which the resolver stands in for: it
-    // answers the first task thirty seconds and the second one ten minutes
+    // the lock of a worker is the lock of the task definition it subscribes to. So if two
+    // tasks of one definition resolve differently, the worker has no answer. Configuration
+    // makes them differ, and the resolver stands in for it. It answers thirty seconds for the
+    // first task and ten minutes for the second one
     final var locks = List.of(Duration.ofSeconds(30), Duration.ofMinutes(10)).iterator();
     final var configuration = new Camunda8AdapterConfiguration();
-    // a client is built and the query API is asked once before the workers are opened;
-    // an address nothing listens on answers both of those without a cluster
+    // a client is built, and the query API is asked once before the workers are opened.
+    // An address nothing listens on answers both of those without a cluster
     configuration.setRestAddress("http://localhost:1");
     try (final var clientFactory = new Camunda8ClientFactory("c8", configuration)) {
 
@@ -394,8 +394,8 @@ public class Camunda8DeploymentServiceTest {
 
     assertNotNull(deploymentService.applyWorkerOptions(builder, "approve"));
 
-    // The metrics hook is the ONE thing every worker gets, and without a
-    // metrics backend it is the client's own no-op
+    // The metrics hook is the ONE thing every worker gets. Without a metrics backend it is
+    // the client's own no-op
     Mockito
         .verify(builder)
         .metrics(ArgumentMatchers.any());
@@ -404,9 +404,9 @@ public class Camunda8DeploymentServiceTest {
   }
 
   /**
-   * Plays both halves of the split task SPI: the deployment service wires through
-   * {@code WorkflowTaskWiring} and opens its job workers with
-   * {@code WorkflowTaskInvoker}, so a double standing in for the core answers both.
+   * Plays both halves of the split task SPI. The deployment service wires through
+   * {@code WorkflowTaskWiring} and opens its job workers with {@code WorkflowTaskInvoker}. So
+   * a double which stands in for the core answers both.
    */
   static class NoOpInvoker implements WorkflowTaskWiring, WorkflowTaskInvoker {
 
@@ -439,9 +439,9 @@ public class Camunda8DeploymentServiceTest {
       return Map.of();
     }
 
-    // the migration fallback, deprecated for removal and none of Camunda
-    // 8's business: a test double implements it as long as the interface declares it,
-    // and the mandatory 'removal' lint needs the suppression
+    // the migration fallback, deprecated for removal, and not the business of Camunda 8.
+    // A test double implements it as long as the interface declares it, and the mandatory
+    // 'removal' lint needs the suppression
     @SuppressWarnings("removal")
     @Override
     public boolean workflowAggregateHasProperty(
@@ -480,9 +480,9 @@ public class Camunda8DeploymentServiceTest {
 
 
   /**
-   * The tenant a workflow module is deployed to, and the prefixed
-   * identifiers replacing it. Asserted on the model and the resolved tenant - the
-   * cluster round-trip is covered by the Docker ITs.
+   * The tenant a workflow module is deployed to, and the prefixed identifiers which replace
+   * it. Asserted on the model and the resolved tenant. The Docker ITs cover the round trip to
+   * the cluster.
    */
   @Nested
   @DisplayName("Name-clash avoidance")
@@ -491,9 +491,9 @@ public class Camunda8DeploymentServiceTest {
     private static final String MODULE = "loan-approval";
 
     /**
-     * A minimal {@link NameClashAvoidanceSupport}
-     * of the given mode - the adapter is tested against the SPI, not against the
-     * core's implementation (this module deliberately depends on the SPI only).
+     * A minimal {@link NameClashAvoidanceSupport} of the given mode. The adapter is tested
+     * against the SPI, not against the core's implementation. This module depends on
+     * the SPI only, on purpose.
      */
     private NameClashAvoidanceSupport scopingWith(
         final NameClashAvoidance mode) {
@@ -588,8 +588,8 @@ public class Camunda8DeploymentServiceTest {
             final String bpmsDescription) {
         }
 
-        // the three reports of a name a BPMS already holds: this double measures the model
-        // and the tenant, and the tests which read those reports use TestScoping instead
+        // the three reports of a name a BPMS already holds. This double measures the model
+        // and the tenant. The tests which read those reports use TestScoping instead
         @Override
         public void reportIdentifiersTheBpmsAlreadyHolds(
             final String adapterId,
@@ -648,8 +648,8 @@ public class Camunda8DeploymentServiceTest {
       service
           .readDmn(MODULE, context, "rating.dmn", new ByteArrayInputStream(CREDIT_RATING_DMN.getBytes(UTF_8)));
 
-      // what the model points at has to be what the cluster deploys the decision under,
-      // so both sides go through the same function of the core
+      // what the model points at has to be what the cluster deploys the decision under. So
+      // both sides go through the same function of the core
       final var calledDecision = model
           .getModelElementsByType(io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeCalledDecision.class)
           .iterator()
@@ -766,8 +766,8 @@ public class Camunda8DeploymentServiceTest {
       final var model = modelOf(NameClashAvoidance.BY_ADAPTER);
 
       assertNotNull(model.getModelElementById("RiskAssessment"), "the process id stays plain");
-      // the tenant a module is deployed to: the workflow module id (version 1's
-      // behavior, overridable by the adapter's tenant-id)
+      // the tenant a module is deployed to: the workflow module id. That is the behaviour of
+      // version 1, and the adapter's tenant-id overrides it
       assertEquals(
           MODULE,
           Camunda8Scoping.tenantIdFor(
@@ -821,8 +821,8 @@ public class Camunda8DeploymentServiceTest {
       final var model = Bpmn
           .readModelFromStream(new ByteArrayInputStream(TWO_EXECUTABLE_PROCESSES.getBytes(UTF_8)));
 
-      // this is what the core does for a file holding two executable processes: one
-      // prepareBpmn call per PROCESS, both sharing the very same model instance
+      // the core does this for a file with two executable processes: one prepareBpmn call
+      // per PROCESS, both sharing the very same model instance
       var context = service.prepareBpmn(MODULE, null, "two.bpmn", "First", model);
       context = service.prepareBpmn(MODULE, context, "two.bpmn", "Second", model);
 
@@ -878,8 +878,8 @@ public class Camunda8DeploymentServiceTest {
     }
 
     /**
-     * The WARNs the adapter logged (the module's logback-test.xml has no appender on
-     * purpose).
+     * The WARNs the adapter logged. The logback-test.xml of the module has no appender, on
+     * purpose.
      */
     private List<String> warningsOf(
         final Runnable action) {

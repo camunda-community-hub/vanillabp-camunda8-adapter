@@ -30,18 +30,19 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.adapter.spi.version.ProcessVersionCatalog;
 
 /**
- * A cluster holding the given versions of a process, each with the model it runs, played by
- * a definition search and an XML request. Every question about a held version goes through
- * the version catalog this hands out, which is the boundary to the migration SPI.
+ * A cluster which holds the given versions of a process, each with the model it runs. A
+ * definition search and an XML request play it. Every question about a held version goes
+ * through the version catalog this class hands out. That catalog is the boundary to the
+ * migration SPI.
  * <p>
- * The adapter prefixes its identifiers, which is the mode a held model's names have to be
- * stripped under. How often the XML was fetched is part of what the tests measure, so the
- * requests are counted.
+ * The adapter prefixes its identifiers. In that mode the names of a held model have to be
+ * stripped. How often the XML was fetched is part of what the tests measure, so the requests
+ * are counted.
  */
 final class AClusterHolding {
 
   /**
-   * Which definition keys the XML was asked for, which is one request per fetch.
+   * Which definition keys the XML was asked for, one request per fetch.
    */
   private final List<Long> xmlRequests = new ArrayList<>();
 
@@ -79,8 +80,8 @@ final class AClusterHolding {
       final Map<Integer, String> modelsPerVersion) {
 
     final var search = mock(ProcessDefinitionSearchRequest.class, RETURNS_SELF);
-    // which version the filter named, 0 for a search asking for every version this cluster
-    // holds - a search for a version it does not hold answers nothing, which is what makes
+    // which version the filter named, 0 for a search which asks for every version this
+    // cluster holds. A search for a version it does not hold answers nothing. Only that makes
     // the question about a version nobody holds any more answerable at all
     final var askedFor = new int[]{
         0
@@ -105,8 +106,8 @@ final class AClusterHolding {
         .thenAnswer(invocation -> future(response(modelsPerVersion
             .keySet()
             .stream()
-            // the version list is asked for newest first, which is the order the catalog
-            // reverses on its way out
+            // the version list is asked for newest first. The catalog reverses that order on
+            // its way out
             .sorted(Comparator.reverseOrder())
             .filter(version -> (askedFor[0] == 0) || (askedFor[0] == version.intValue()))
             .map(AClusterHolding::definition)
@@ -189,8 +190,8 @@ final class AClusterHolding {
   private Camunda8DeploymentService deploymentService;
 
   /**
-   * Serves the listeners the held models carry, which is the key an application switched on
-   * before it deployed those versions. Without it a listener of a held model is nothing this
+   * Serves the listeners the held models carry. An application switched that key on before it
+   * deployed those versions. Without it, a listener of a held model is nothing this
    * application ever had a method for, and the catalog leaves it out.
    *
    * @return This cluster

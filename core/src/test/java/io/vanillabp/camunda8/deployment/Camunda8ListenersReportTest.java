@@ -38,8 +38,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * listener on a job element built from an element template: that template is how a developer
  * says the element belongs to somebody else. On a user task a template does not count.
  * <p>
- * The cluster is an address nothing listens on. What is under test is the text a reader gets
- * and the task specs the core is handed, and neither needs a cluster.
+ * The cluster is an address nothing listens on. The test is about the text a reader gets and
+ * the task specs the core is handed. Neither needs a cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -122,8 +122,8 @@ public class Camunda8ListenersReportTest {
       final Camunda8DeploymentService service,
       final BpmnModelInstance model) {
 
-    // what THIS test logged: the capture spans the whole class, and every case here
-    // asserts the absence of something an earlier case wrote
+    // what THIS test logged. The capture spans the whole class, and every case here asserts
+    // the absence of something an earlier case wrote
     final var before = output.getAll().length();
     final var context = service.prepareBpmn(MODULE, null, FILE, PROCESS, model);
     service.wireBpmn(MODULE, FILE, PROCESS, model, context);

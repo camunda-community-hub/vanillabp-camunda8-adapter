@@ -30,8 +30,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What a boot says about the elements a workflow module handed to another runtime, and what
  * it says about the ones it did not hand over although the model looks as if it wanted to.
  * <p>
- * The cluster is an address nothing listens on: none of the three messages asks it
- * anything, and what is under test is the text a reader gets.
+ * The cluster is an address nothing listens on. None of the three messages asks it
+ * anything. The test is about the text a reader gets.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -96,8 +96,8 @@ public class Camunda8ConnectorsReportTest {
       final Camunda8DeploymentService service,
       final BpmnModelInstance model) {
 
-    // what THIS test logged: the capture spans the whole class, and every case here
-    // asserts the absence of something an earlier case wrote
+    // what THIS test logged. The capture spans the whole class, and every case here asserts
+    // the absence of something an earlier case wrote
     final var before = output.getAll().length();
     final var context = service.prepareBpmn(MODULE, null, FILE, PROCESS, model);
     service.wireBpmn(MODULE, FILE, PROCESS, model, context);

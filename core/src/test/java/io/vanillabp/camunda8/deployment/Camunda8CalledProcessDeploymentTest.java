@@ -34,8 +34,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A called process is no workflow of its own, so its model gets neither the start listener
  * nor the end listener, and no worker waits for either. The process which calls it gets
- * both. Which process is a called one is the core's answer, so the doubles here answer the
- * way the core does for a process declared only in <code>secondaryBpmnProcesses</code>.
+ * both. The core answers which process is a called one. So the doubles here answer the way
+ * the core does for a process declared only in <code>secondaryBpmnProcesses</code>.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CalledProcessDeploymentTest {
@@ -154,7 +154,7 @@ public class Camunda8CalledProcessDeploymentTest {
 
     };
     // what the core answers for 'Shipping', which the application declares only in
-    // secondaryBpmnProcesses: its start and its end are steps of the workflow of 'Ordering'
+    // secondaryBpmnProcesses. Its start and its end are steps of the workflow of 'Ordering'
     final var workflowEnded = mock(WorkflowEndedInvoker.class);
     when(workflowEnded.workflowEndedHandlerExists(anyString(), anyString())).thenReturn(true);
     when(workflowEnded.workflowEndedHandlerExists(anyString(), eq("Shipping"))).thenReturn(false);

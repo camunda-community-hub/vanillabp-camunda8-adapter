@@ -28,15 +28,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A process definition an operator deleted is not a version this adapter reports.
  * <p>
- * Camunda 8 keeps a deleted definition in its query API and marks it <code>DELETED</code>
- * instead of dropping it, so a search which names no state answers with it like with any
- * other. What the startup check made of that was a report about tasks nobody serves any
- * more, at every start, and deleting the definition - the remedy the report itself
- * suggests - did not end it.
+ * Camunda 8 keeps a deleted definition in its query API and marks it <code>DELETED</code>,
+ * instead of dropping it. So a search which names no state answers with it like with any
+ * other. The startup check made a report out of that, about tasks nobody serves any more, at
+ * every start. And deleting the definition, the remedy the report itself suggests, did not
+ * end it.
  * <p>
- * The cluster is played by a search which honours the state and the version its filter
- * was given, which is what the adapter's side of this can be held against without a
- * cluster: whether it asks for the right thing.
+ * A search plays the cluster. It honours the state and the version its filter was given.
+ * Against it the adapter's side can be held without a cluster: whether it asks for the
+ * right thing.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8DeletedProcessVersionsTest {
@@ -59,8 +59,8 @@ public class Camunda8DeletedProcessVersionsTest {
   }
 
   /**
-   * What the filter of a definition search was told to look for - the cluster's side of
-   * the two restrictions this test is about.
+   * What the filter of a definition search was told to look for. It is the side of the
+   * cluster of the two restrictions this test is about.
    */
   private static final class WhatWasAskedFor {
 
@@ -79,7 +79,7 @@ public class Camunda8DeletedProcessVersionsTest {
   }
 
   /**
-   * A cluster holding the given versions, answering a definition search with those of
+   * A cluster which holds the given versions. It answers a definition search with those of
    * them the filter asked for.
    *
    * @param held What the cluster holds for the process
@@ -116,8 +116,8 @@ public class Camunda8DeletedProcessVersionsTest {
         "c8", () -> client, (
             workflowModuleId,
             bpmnProcessId) -> bpmnProcessId, workflowModuleId -> null);
-    // a model this adapter could read would answer with tasks, so an empty answer below
-    // is the missing definition and not a catalog which reads no models at all
+    // a model this adapter could read would answer with tasks. So an empty answer below is
+    // the missing definition, not a catalog which reads no models at all
     versions.setTasksOfModel((
         workflowModuleId,
         bpmnProcessId,
@@ -226,7 +226,7 @@ public class Camunda8DeletedProcessVersionsTest {
   public void aDeletedVersionIsNotFoundBySearchingForIt() {
 
     // the version was deployed after the list of versions was read, so the cluster is
-    // asked for this one - which is the search a deleted definition used to answer
+    // asked for this one. A deleted definition used to answer that search
     final var versions = aClusterHolding(new HeldVersion(3, ProcessDefinitionState.DELETED));
 
     assertNull(

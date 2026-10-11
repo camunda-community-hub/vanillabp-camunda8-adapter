@@ -33,17 +33,17 @@ import io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * A BPMN file carrying a process no <code>@WorkflowService</code> class of this
- * application claims. Such a process is deployed, because a file travels to the cluster as
- * a whole, and the application marked it as somebody else's - otherwise the core would have
- * ended the start over it before this adapter saw it.
+ * A BPMN file with a process which no <code>@WorkflowService</code> class of this application
+ * claims. Such a process is deployed, because a file travels to the cluster as a whole. And
+ * the application marked it as somebody else's. Otherwise the core would have ended the
+ * start over it before this adapter saw it.
  * <p>
- * This adapter leaves such a process as it was modelled: no listener, no correlation key, no
- * multi-instance mapping is written into it, no worker serves its jobs, and no check ends the
- * boot because of it. A message catch element without a correlation key is one the cluster
- * rejects the file over, and that rejection is what the developer then reads: writing a
- * substitute would change a process this application does not serve. Only what belongs to the
- * FILE reaches the process, a message element shared with a claimed process being one.
+ * This adapter leaves such a process as it was modelled. No listener, no correlation key and
+ * no multi-instance mapping is written into it. No worker serves its jobs, and no check ends
+ * the boot because of it. The cluster rejects a file with a message catch element which has
+ * no correlation key. The developer then reads that rejection. Writing a substitute would
+ * change a process this application does not serve. Only what belongs to the FILE reaches
+ * the process. A message element shared with a claimed process is one example.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UnclaimedProcessTest {
@@ -52,7 +52,7 @@ public class Camunda8UnclaimedProcessTest {
 
   /**
    * Two executable processes, one of them claimed by a workflow service and one not. Both
-   * wait for a message of their own, neither of them models a correlation key.
+   * wait for a message of their own. Neither of them models a correlation key.
    */
   private static final String CLAIMED_AND_UNCLAIMED = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -83,9 +83,9 @@ public class Camunda8UnclaimedProcessTest {
       """;
 
   /**
-   * An unclaimed process which carries no task at all, only the message it waits for -
-   * the only shape which could reach the correlation key before the core started
-   * collecting unclaimed processes instead of refusing them.
+   * An unclaimed process which carries no task at all, only the message it waits for. Before
+   * the core started to collect unclaimed processes instead of refusing them, this was the
+   * only shape which could reach the correlation key.
    */
   private static final String UNCLAIMED_WITHOUT_ANY_TASK = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -103,9 +103,9 @@ public class Camunda8UnclaimedProcessTest {
 
   /**
    * ONE message element shared by two processes, the CLAIMED one written first. A message
-   * belongs to the file rather than to a process, so the injection for the claimed process
-   * would give the unclaimed one a subscription it never modelled - which is why the file
-   * is read before any of it is wired.
+   * belongs to the file, not to a process. So the injection for the claimed process would give
+   * the unclaimed one a subscription it never modelled. That is why the file is read before
+   * any of it is wired.
    */
   private static final String A_SHARED_MESSAGE = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -152,8 +152,8 @@ public class Camunda8UnclaimedProcessTest {
       """;
 
   /**
-   * An unclaimed process the cluster is perfectly happy with: it waits for nothing and
-   * therefore owes no correlation key. The shape the workflow-end listener is asked about.
+   * An unclaimed process the cluster is perfectly happy with. It waits for nothing, so it
+   * owes no correlation key. The test about the workflow-end listener uses this shape.
    */
   private static final String UNCLAIMED_WITHOUT_A_MESSAGE = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -166,8 +166,8 @@ public class Camunda8UnclaimedProcessTest {
       """;
 
   /**
-   * An unclaimed process with a Camunda-managed user task and a multi-instance service task:
-   * the two elements this adapter writes into for a claimed process.
+   * An unclaimed process with a Camunda-managed user task and a multi-instance service task.
+   * For a claimed process this adapter writes into these two elements.
    */
   private static final String UNCLAIMED_WITH_A_USER_TASK_AND_AN_ITERATION = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -195,8 +195,8 @@ public class Camunda8UnclaimedProcessTest {
 
   /**
    * A deployment service whose core answers the given aggregate-ID variable per BPMN
-   * process and throws for every process the function answers <code>null</code> for -
-   * which is what the core does for a process no workflow service claims.
+   * process. It throws for every process the function answers <code>null</code> for. The
+   * core does that for a process no workflow service claims.
    */
   private Camunda8DeploymentService deploymentService(
       final Function<String, String> aggregateIdNames) {
@@ -206,8 +206,8 @@ public class Camunda8UnclaimedProcessTest {
   }
 
   /**
-   * The same, with the core's answer about whether the end of a workflow of a process has
-   * to be reported at all.
+   * The same, with the core's answer about whether the end of a workflow of a process
+   * has to be reported at all.
    */
   private Camunda8DeploymentService deploymentService(
       final Function<String, String> aggregateIdNames,
@@ -272,9 +272,9 @@ public class Camunda8UnclaimedProcessTest {
   }
 
   /**
-   * Runs the deployment pipeline the way the core runs it: every process of the file is
-   * prepared and wired before the next one is prepared, which is the order a file-wide
-   * verdict has to be independent of.
+   * Runs the deployment pipeline the way the core runs it. Every process of the file is
+   * prepared and wired before the next one is prepared. A verdict about the whole file must
+   * not depend on that order.
    */
   private Camunda8ProcessingContext runPipeline(
       final Camunda8DeploymentService deploymentService,
@@ -328,8 +328,7 @@ public class Camunda8UnclaimedProcessTest {
   }
 
   /**
-   * The message element of the given name, which is one per FILE rather than one per
-   * process.
+   * The message element of the given name. There is one per FILE, not one per process.
    */
   private Message messageNamed(
       final BpmnModelInstance model,
@@ -426,9 +425,9 @@ public class Camunda8UnclaimedProcessTest {
   @DisplayName("An unclaimed process gets no workflow-end listener even where the end is wanted")
   public void anUnclaimedProcessGetsNoWorkflowEndListener() {
 
-    // a workflow module releasing the records of its processed task deliveries when a
+    // a workflow module which releases the records of its processed task deliveries when a
     // workflow ends wants the notification for EVERY process of the module, without any
-    // application method saying so - which is how an unclaimed process gets here
+    // method of the application saying so. That is how an unclaimed process gets here
     final var workflowEndedInvoker = mock(WorkflowEndedInvoker.class);
     when(workflowEndedInvoker.workflowEndedHandlerExists(ArgumentMatchers.anyString(), ArgumentMatchers.anyString()))
         .thenReturn(true);

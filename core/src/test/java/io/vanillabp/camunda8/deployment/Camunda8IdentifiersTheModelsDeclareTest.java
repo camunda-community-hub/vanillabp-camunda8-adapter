@@ -30,17 +30,17 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport.ScopedIden
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which identifiers of its own models a workflow module reports while it deploys - the
- * question which tells a developer that two workflow modules of one application end up
- * under one name.
+ * Which identifiers of its own models a workflow module reports while it deploys. This
+ * question tells a developer that two workflow modules of one application end up under one
+ * name.
  * <p>
- * It costs no request: the adapter rewrites every one of those names while it scopes a
- * model, so it holds all of them at that moment, and what is under test here is that the
- * core is handed the names the APPLICATION knows rather than the ones the cluster will see.
- * A job type is among them and is the severe one on this BPMS - a worker subscribes to it
- * cluster-wide - while the job type of an element another runtime serves is none of this
- * module's names at all. A decision id belongs to the same report, read off the DMN file the
- * module brings, and the core scopes it by the workflow module alone like a message name.
+ * It costs no request. The adapter rewrites every one of those names while it scopes a
+ * model, so it holds all of them at that moment. This test makes sure that the core is
+ * handed the names the APPLICATION knows, not the ones the cluster will see. A job type is
+ * among them, and it is the severe one on this BPMS, because a worker subscribes to it
+ * cluster-wide. But the job type of an element another runtime serves is not a name of this
+ * module at all. A decision id belongs to the same report. It is read off the DMN file the
+ * module brings, and the core scopes it by the workflow module alone, like a message name.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8IdentifiersTheModelsDeclareTest {
@@ -120,7 +120,7 @@ public class Camunda8IdentifiersTheModelsDeclareTest {
       final TestScoping.ScopingDouble scoping) {
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing listens on: not one question of this test reaches a cluster
+    // nothing listens on this address, and not one question of this test reaches a cluster
     configuration.setRestAddress("http://localhost:65535");
     final var service = DeploymentServiceUnderTest.of(
         "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators
@@ -141,8 +141,8 @@ public class Camunda8IdentifiersTheModelsDeclareTest {
   }
 
   /**
-   * Runs the pipeline stages which read the names of one workflow module and the report which
-   * hands them over - the deploy command itself asks nothing about a name.
+   * Runs the pipeline stages which read the names of one workflow module, and the report
+   * which hands them over. The deploy command itself asks nothing about a name.
    */
   private static void readOneProcessAndReport(
       final Camunda8DeploymentService service,

@@ -16,10 +16,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What the deployment writes onto the process element of release line <code>8.10</code>,
  * which is the first line whose cluster takes a <code>cancel</code> execution listener.
  * <p>
- * The two things which decide it are tied together on purpose: the listener holds the
- * instance until its job is answered, so it is written only where this adapter also opens the
- * worker which answers it. A model carrying a listener nobody serves turns a cancelation into
- * a workflow which never goes away and which raises no incident either.
+ * The two things which decide it are tied together on purpose. The listener holds the
+ * instance until its job is answered. So it is written only where this adapter also opens the
+ * worker which answers it. If a model carries a listener nobody serves, a cancelation turns
+ * into a workflow which never goes away and raises no incident either.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CancelListenerDeploymentTest {
@@ -50,9 +50,9 @@ public class Camunda8CancelListenerDeploymentTest {
   @DisplayName("A process nobody wants the end of still gets the cancel listener")
   public void aProcessWithTasksGetsTheCancelListenerAlone() {
 
-    // the widening this story is about: the core reads the tasks it still believes are
-    // open in a canceled instance and reports each of them as canceled, and it needs the
-    // notification to do that even where no @WorkflowEnded method exists
+    // the wider rule: the core reads the tasks it still believes are open in a canceled
+    // instance and reports each of them as canceled. It needs the notification for that,
+    // even where no @WorkflowEnded method exists
     final var wired = Camunda8CancelDeploymentFixture
         .wire(Camunda8CancelDeploymentFixture.A_SERVED_PROCESS, false, true);
 
