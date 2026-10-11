@@ -26,25 +26,25 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What a {@code @TaskParam} of a Camunda 8 job receives, and what happens when the value
- * the cluster holds does not fit the type the handler declared, against a real cluster.
+ * What a {@code @TaskParam} of a Camunda 8 job receives, against a real cluster. And what
+ * happens if the value the cluster holds does not fit the type the handler declared.
  * <p>
- * The conversion itself belongs to the platform: this adapter hands over what
- * {@code job.getVariablesAsMap()} holds and converts nothing. What is Camunda 8's own is
- * WHICH value arrives, because the cluster keeps its variables as JSON: a decimal comes
- * back as a Double and a whole number as a Long, whatever an aggregate shared. So the
- * pairs which are interesting here are not the pairs of another BPMS, and they are worth
- * a test of their own.
+ * The conversion itself belongs to the platform. This adapter hands over what
+ * {@code job.getVariablesAsMap()} holds and converts nothing. What is special to Camunda 8 is
+ * WHICH value arrives. The cluster keeps its variables as JSON. So a decimal comes back as a
+ * Double and a whole number as a Long, whatever an aggregate shared. The interesting pairs
+ * here are therefore not the pairs of another BPMS, and they are worth a test of their own.
  * <p>
- * Nine branches of one parallel gateway, five of which reach their handler and four of
- * which fail before it. The branches fork because a job which can never succeed leaves an
- * incident behind and stays where it is, and that must not stop the branch beside it. The
- * refusal is read from the incident the cluster raises once the job's retries are gone.
+ * The model has nine branches of one parallel gateway. Five of them reach their handler, and
+ * four fail before it. The branches fork because a job which can never succeed leaves an
+ * incident behind and stays where it is. That must not stop the branch next to it. The test
+ * reads the refusal from the incident which the cluster raises once the job's retries are
+ * gone.
  * <p>
- * A refused job costs its retries first, the job not knowing that this failure can never
- * succeed, which is why this scenario configures {@code retry-backoff: PT1S} for its
- * process. Nothing about the conversion depends on it, and without it the four incidents
- * would arrive half a minute later.
+ * A refused job uses up its retries first, because the job does not know that this failure
+ * can never succeed. That is why this scenario configures {@code retry-backoff: PT1S} for its
+ * process. The conversion does not depend on it. Without it, the four incidents would arrive
+ * half a minute later.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -54,8 +54,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
 
   /**
-   * The branches whose handler is entered. The element id of a branch, its task
-   * definition and the name of its handler are all the same word here.
+   * The branches whose handler is entered. Here the element id of a branch, its task
+   * definition and the name of its handler are all the same word.
    */
   private static final List<String> BRANCHES_WHICH_RUN = List
       .of(
@@ -98,9 +98,8 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * @return Whether every branch of the model has said what it has to say: the five which
-   *         run have entered their handler, and the four which do not have left an
-   *         incident behind
+   * @return Whether every branch of the model has finished: the five which run have entered
+   *         their handler, and the four which do not have left an incident behind
    */
   private boolean everyBranchSettled() {
 
@@ -120,16 +119,16 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
 
     final var received = workflowService.received();
 
-    // the aggregate shared 120.50 and the handler reads 120.5: the scale is gone before
-    // this adapter ever sees the value, because the broker's variables are MessagePack
-    // and MessagePack has no decimal type
+    // the aggregate shared 120.50, and the handler reads 120.5. The scale is gone before
+    // this adapter ever sees the value. The broker keeps its variables as MessagePack, and
+    // MessagePack has no decimal type
     assertEquals(
         Double.valueOf(120.5d),
         received.get("totalToDouble"),
         "a decimal comes back as a Double, without its scale");
 
-    // the cluster never answers with a BigDecimal, so this one IS converted, and it is
-    // converted from the value the cluster holds, which no longer carries the scale
+    // the cluster never answers with a BigDecimal, so this one IS converted. It is converted
+    // from the value the cluster holds, which no longer has the scale
     assertEquals(
         new BigDecimal("120.5"),
         received.get("totalToBigDecimal"),
@@ -142,7 +141,7 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
         received.get("rateToDouble"),
         "a float attribute comes back as the Double of the number which was written");
 
-    // the pair version 1 accepted by plain widening, which has to keep working
+    // version 1 accepted this pair by plain widening, and it has to keep working
     assertEquals(
         Long.valueOf(3000000000L),
         received.get("countToLong"),
@@ -156,14 +155,14 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The four pairs which are refused, and the message each of them is refused with. Every
-   * one of them used to arrive as a number nobody wrote.
+   * The four pairs which are refused, and the message of each refusal. Each of them used to
+   * arrive as a number which nobody wrote.
    */
   private void theValuesWhichAreRefused() {
 
     final var incidents = incidentsByElement();
 
-    // 120 instead of 120.5 is what the handler used to be given, with nothing said
+    // the handler used to get 120 instead of 120.5, without any warning
     assertRefusal(
         incidents,
         "totalToInt",
@@ -177,8 +176,7 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
         "The value '3000000000'",
         "which would hold '-1294967296'");
 
-    // a double cannot hold 9007199254740993, and the number it holds instead is the one
-    // below it
+    // a double cannot hold 9007199254740993. It holds the number below it instead
     assertRefusal(
         incidents,
         "hugeToDouble",
@@ -186,7 +184,7 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
         "which would hold '9.007199254740992E15'");
 
     // the text of a number is a number as well. This pair used to end in a bare
-    // NumberFormatException naming neither the parameter nor the method
+    // NumberFormatException, which named neither the parameter nor the method
     assertRefusal(
         incidents,
         "totalTextToInt",
@@ -254,8 +252,8 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
           .forEach(incident -> byElement.put(incident.getElementId(), incident));
       return byElement;
     } catch (final Exception e) {
-      // the query API is served from secondary storage, which is not there from the
-      // first moment of a cluster's life
+      // the query API is served from secondary storage. A cluster which just started may
+      // not have it yet
       return Map.of();
     }
 
@@ -272,9 +270,9 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
   private void awaitUntil(
       final Supplier<Boolean> condition) throws InterruptedException {
 
-    // generous on purpose: a refused job is handed out until its retries are gone, and
-    // the incident which follows is read from secondary storage, which the exporter
-    // feeds a moment later
+    // generous on purpose. A refused job is handed out until its retries are gone. The
+    // incident which follows is read from secondary storage, and the exporter fills that
+    // storage a moment later
     final var deadline = System.currentTimeMillis() + 180_000;
     while (!Boolean.TRUE.equals(condition.get())) {
       if (System.currentTimeMillis() > deadline) {
@@ -286,11 +284,11 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * What the branches of the model have not said yet, named one by one. A timeout saying
-   * only that something is missing costs a second run to find out which half it was, and
-   * the two halves fail for opposite reasons: a handler nobody entered points at the
-   * cluster or at the wiring, while a refusal which never became an incident points at a
-   * conversion which let the value through.
+   * Which branches of the model have not finished yet, named one by one. A timeout which only
+   * says that something is missing costs a second run to find out which half it was. And the
+   * two halves fail for opposite reasons. A handler nobody entered points at the cluster or at
+   * the wiring. A refusal which never became an incident points at a conversion which let the
+   * value through.
    *
    * @return The message of the timeout
    */
