@@ -32,28 +32,32 @@ import io.vanillabp.integration.test.utils.outbox.PhaseTwoOutboxReader;
 import io.vanillabp.integration.test.utils.outbox.PhaseTwoOutboxReader.Entry;
 
 /**
- * What a Camunda 8 cluster does with a start it will not carry out, measured against a
- * real cluster.
+ * What a Camunda 8 cluster does with a start it will not carry out, measured against a real
+ * cluster.
  * <p>
- * The phase-two outbox repeats a start until the entry is blocked, and a refusal which
- * reads the same on every attempt turns that repetition into a workflow lost slowly: the
- * application's transaction is committed, the aggregate is there, and the workflow never
- * comes into being. The adapter's answer is the classification in
- * {@code Camunda8Errors}, which names the codes a repetition cannot change. This class
+ * The phase-two outbox repeats a start until the entry is blocked. A refusal which reads the
+ * same on every attempt turns that repetition into a workflow which is lost slowly. The
+ * application's transaction is committed and the aggregate is there, but the workflow never
+ * comes into being. The adapter answers this with the classification in
+ * {@code Camunda8Errors}. It names the codes which a repetition cannot change. This class
  * asks the cluster which of its refusals carry such a code.
  * <p>
- * Three refusals and one non-refusal are pinned here. A request the cluster will not take
- * comes back as HTTP 400. A process the cluster does not hold answers 404 and a model
- * without a plain start event answers 409, and those two are the ones an application
- * really meets: a workflow module whose deployment went somewhere else, and a model
- * somebody changed to start on a timer while the code still calls startWorkflow. All
- * three block the outbox entry after a single attempt. A model which cannot evaluate an
- * expression is not refused at all: the instance exists and carries an incident, which
- * the cluster reports and no outbox entry waits for.
+ * Three refusals and one case without a refusal are pinned here:
+ * <ul>
+ * <li>A request the cluster will not take comes back as HTTP 400.</li>
+ * <li>A process the cluster does not hold answers 404. An application really meets this: a
+ * workflow module whose deployment went somewhere else.</li>
+ * <li>A model without a plain start event answers 409. An application meets this too:
+ * somebody changed the model to start on a timer, while the code still calls
+ * startWorkflow.</li>
+ * </ul>
+ * All three block the outbox entry after a single attempt. A model which cannot evaluate an
+ * expression is not refused at all. The instance exists and has an incident. The cluster
+ * reports the incident, and no outbox entry waits for it.
  * <p>
- * One thing stays unpinned here. An expression which merely reads a variable nobody
- * passed evaluates to null on Camunda 8, the instance runs through it and nothing fails
- * at all, which is why the third case demands a value such an expression cannot produce.
+ * One thing stays unpinned here. On Camunda 8, an expression which only reads a variable
+ * nobody passed evaluates to null. The instance runs through it, and nothing fails at all.
+ * That is why the third case demands a value which such an expression cannot produce.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -63,9 +67,8 @@ import io.vanillabp.integration.test.utils.outbox.PhaseTwoOutboxReader.Entry;
 public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
 
   /**
-   * Above the four megabytes a cluster takes per request by default. What the adapter
-   * sends is the aggregate, so an aggregate of this size is a request no cluster of that
-   * configuration ever accepts.
+   * Above the four megabytes a cluster takes per request by default. The adapter sends the
+   * aggregate. So no cluster with that configuration ever accepts an aggregate of this size.
    */
   private static final int TOO_BIG_FOR_THE_CLUSTER = 5 * 1024 * 1024;
 
@@ -82,12 +85,12 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
   private DataSource dataSource;
 
   /**
-   * What this class asks about the phase-two outbox. It comes from the platform's test
-   * tools, so neither the name of the table nor the value it writes on a blocked entry
-   * is written down here.
+   * What this class asks about the phase-two outbox. It comes from the platform's test tools.
+   * So this class does not spell out the name of the table, or the value written on a blocked
+   * entry.
    * <p>
-   * This application runs the outbox table VanillaBP writes itself, so the reader is
-   * told which table to read instead of looking for the one which is there.
+   * This application runs the outbox table which VanillaBP writes itself. So the reader is told
+   * which table to read. It does not look for the one which is there.
    */
   private PhaseTwoOutboxReader outbox;
 
@@ -118,14 +121,14 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
 
     final var entryIdsBefore = entryIdsOfTheOutbox();
 
-    // an application keeps a document in its aggregate, and every attribute of an
-    // aggregate travels to the cluster as a process variable. This one is heavier than
-    // the request a cluster accepts, which no repetition changes
+    // an application keeps a document in its aggregate. Every attribute of an aggregate
+    // travels to the cluster as a process variable. This one is bigger than a request the
+    // cluster accepts, and no repetition changes that
     final var aggregate = transactionTemplate
         .execute(status -> workflowService.startWorkflow("x".repeat(TOO_BIG_FOR_THE_CLUSTER)));
 
-    // the application is finished at this point: its transaction is committed and the
-    // aggregate is there, while the workflow exists nowhere
+    // the application is finished at this point. Its transaction is committed and the
+    // aggregate is there, but the workflow exists nowhere
     assertNotNull(aggregate.getId(), "the start returned a persisted aggregate");
     assertTrue(repository.findById(aggregate.getId()).isPresent(), "which is committed");
 
@@ -159,20 +162,20 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
             </bpmn:definitions>
             """);
 
-    // the command phase two sends, sent without the outbox around it: what is asked here
-    // is the cluster's answer and the adapter's verdict on it, and an outbox would only
-    // repeat that answer for as long as the test is willing to wait
+    // the command phase two sends, sent without the outbox around it. This asks for the
+    // cluster's answer and the adapter's verdict on it. An outbox would only repeat that
+    // answer for as long as the test is willing to wait
     final var refusal = assertThrows(
         Camunda8RefusedStart.class,
         () -> camunda8ProcessService
             .createProcessInstance("TimerOnlyStartProcess", Map.of("id", "1"), "1"));
 
-    // what the cluster answers is a conflict, which is a repeatable answer everywhere
-    // else: it is how a publication of a message which still lives comes back. For a
-    // start it means the model, and a model is changed by a deployment rather than by a
-    // repetition. This is measured behaviour, not a wish - a cluster which starts
-    // answering such a request with 400 would break this assertion and would change
-    // nothing about what the adapter does with it
+    // the cluster answers with a conflict. Everywhere else a conflict can be repeated. It
+    // is how the publication of a message comes back while the message still lives. For a
+    // start the conflict is about the model, and only a deployment changes a model, not a
+    // repetition. This is measured behaviour, not a wish. If a cluster starts to answer
+    // such a request with 400, this assertion breaks. What the adapter does with the
+    // answer does not change
     assertTrue(
         Camunda8Errors.rejection(refusal).startsWith("HTTP 409"),
         "the cluster refuses a create of a model without a none start event with a conflict, "
@@ -188,13 +191,13 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("A model which cannot evaluate an expression becomes an incident, not a refused start")
   public void aModelWhichCannotEvaluateBecomesAnIncidentRatherThanARefusedStart() throws Exception {
 
-    // the Camunda 7 case which started all of this is an expression the engine evaluates
-    // WHILE it creates the instance: the create command ends, the outbox repeats it and
-    // the workflow never exists. Camunda 8 evaluates nothing of the kind at creation
-    // time, so the same broken expression has to be measured where a Camunda 8 model
-    // evaluates one. A gateway condition is that place, and it stands in for the start
-    // because the question is not which element fails but WHEN: after the instance
-    // exists, or instead of it
+    // the Camunda 7 case which started all of this is an expression which the engine
+    // evaluates WHILE it creates the instance. The create command ends, the outbox repeats
+    // it, and the workflow never exists. Camunda 8 evaluates nothing of the kind at creation
+    // time. So the same broken expression has to be measured where a Camunda 8 model
+    // evaluates one. A gateway condition is such a place. It stands in for the start,
+    // because the question is not which element fails, but WHEN: after the instance exists,
+    // or instead of it
     deploy(
         "cannot-evaluate.bpmn",
         """
@@ -222,15 +225,15 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
     final var instance = camunda8ProcessService
         .createProcessInstance("CannotEvaluateProcess", Map.of("id", "1"), "1");
 
-    // the create came back with a key, so the outbox entry of this start is done and
+    // the create came back with a key. So the outbox entry of this start is done, and
     // nothing about the broken model reaches the outbox at all
     assertTrue(
         instance.getProcessInstanceKey() > 0,
         "the cluster takes the create of a model it cannot run");
 
-    // the workflow EXISTS and carries an incident an operator can see and resolve. That
-    // is the difference worth writing down: the Camunda 7 case loses the workflow
-    // silently, this one keeps it and says what is wrong with it
+    // the workflow EXISTS and has an incident which an operator can see and resolve. That
+    // is the difference worth writing down. The Camunda 7 case loses the workflow without a
+    // word. This one keeps it and says what is wrong with it
     awaitUntil(
         () -> !client()
             .newIncidentSearchRequest()
@@ -247,11 +250,11 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("A start of a process the cluster does not hold blocks the outbox entry after one attempt")
   public void aStartOfAProcessTheClusterDoesNotHoldBlocksTheEntryAfterOneAttempt() throws Exception {
 
-    // an application whose deployment went to another cluster looks exactly like this
-    // one: the workflow service is wired, the outbox entry is written, and the cluster
-    // the start reaches holds no such process. Taking the deployment away again is how
-    // this test produces it, and the model is put back afterwards so that no other case
-    // of this class depends on the order they run in
+    // an application whose deployment went to another cluster looks exactly like this one.
+    // The workflow service is wired and the outbox entry is written. But the cluster which
+    // the start reaches holds no such process. This test produces that by taking the
+    // deployment away again. The model is put back afterwards. So no other case of this
+    // class depends on the order in which they run
     final var deployed = theDeployedProcess();
     final var model = client()
         .newProcessDefinitionGetXmlRequest(deployed.key())
@@ -263,7 +266,7 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
           .send()
           .join();
 
-      // the command the start sends, without the outbox around it: this is the cluster's
+      // the command the start sends, without the outbox around it. This is the cluster's
       // answer and the adapter's verdict on it
       final var refusal = assertThrows(
           Camunda8RefusedStart.class,
@@ -277,8 +280,8 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
           camunda8ProcessService.isPhaseTwoFailureRepeatable(refusal),
           "and a deployment which is not here arrives through a deployment, never through a repetition");
 
-      // and the same start the way an application makes it: the aggregate is committed,
-      // the entry is written, and the dispatch meets the answer above
+      // and the same start the way an application makes it. The aggregate is committed,
+      // the entry is written, and the dispatch gets the answer above
       final var entryIdsBefore = entryIdsOfTheOutbox();
       final var aggregate = transactionTemplate
           .execute(status -> workflowService.startWorkflow("a document any cluster would take"));
@@ -296,14 +299,14 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The process this application deployed, as the cluster knows it. Its id is scoped by
-   * the name-clash-avoidance mode, so it is read from the cluster rather than written
-   * into the test, and it is read by its plain name at the end.
+   * The process this application deployed, as the cluster knows it. The name-clash-avoidance
+   * mode scopes its id. So the test reads the id from the cluster and does not spell it out.
+   * It finds the id by the plain name at its end.
    */
   private DeployedProcess theDeployedProcess() throws InterruptedException {
 
-    // the search reads secondary storage, which is fed by the exporter: the deployment of
-    // the boot is there a moment after the application is up
+    // the search reads secondary storage, and the exporter fills it. So the deployment of
+    // the boot shows up a moment after the application is up
     awaitUntil(() -> !deployedProcesses().isEmpty(), "the deployment of the application under test");
     return deployedProcesses().getFirst();
 
@@ -311,8 +314,9 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
 
   private List<DeployedProcess> deployedProcesses() {
 
-    // filtered by the cluster: the shared cluster holds the processes of every class of this
-    // module, more than one page of an unfiltered search, and this one may be beyond it
+    // the cluster filters. The shared cluster holds the processes of every class of this
+    // module. That is more than one page of an unfiltered search, and this one may not be
+    // on that page
     return client()
         .newProcessDefinitionSearchRequest()
         .filter(filter -> filter.processDefinitionId(id -> id.like("*RefusedStartProcess")))
@@ -328,30 +332,30 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * One deployed process definition: the key a resource is addressed by and the process
-   * id a start names.
+   * One deployed process definition: the key which addresses the resource, and the process
+   * id which a start names.
    */
   private record DeployedProcess(long key, String processId) {
   }
 
   /**
-   * That the start which was made after the given entries is blocked, and blocked after
-   * its FIRST attempt rather than after the last one the store would have allowed it.
+   * Asserts that the start made after the given entries is blocked. And that it is blocked
+   * after its FIRST attempt, not after the last one the store would have allowed.
    * <p>
-   * The entry is found by what the outbox held before, because the class starts more
-   * than one workflow and a blocked entry stays in the table.
+   * The entry is found by what the outbox held before. The class starts more than one
+   * workflow, and a blocked entry stays in the table.
    * <p>
-   * The counter reads claims rather than finished dispatches. A poll raises it the moment
-   * it takes the entry, and that claim leases the entry for
-   * {@code vanillabp.outbox.attempt-frequency}. A dispatch which outlasts its lease is
-   * claimed by the next poll and counted a second time, although the first one is still
-   * on its way. The start of this class carries five megabytes on purpose: sending them
-   * took 150 to 300 ms against {@code camunda/camunda:8.8.39} on 2026-09-22, and more
-   * than half a second on the CI runner of that day, where this assertion read two
-   * attempts and one dispatch. So {@code camunda8-refused-start-it.yaml} leases for
-   * PT30S where the other integration tests lease for PT0.5S, and the lease is the whole
-   * reason that one value differs. Measured on the same day: at PT0.1S the count is two
-   * in three runs out of three, at PT0.5S it is one in five out of five.
+   * The counter counts claims, not finished dispatches. A poll raises it the moment it takes
+   * the entry. That claim leases the entry for {@code vanillabp.outbox.attempt-frequency}. If
+   * a dispatch outlasts its lease, the next poll claims it and counts it a second time,
+   * although the first dispatch is still on its way. The start of this class carries five
+   * megabytes on purpose. On 2026-09-22, sending them took 150 to 300 ms against
+   * {@code camunda/camunda:8.8.39}. On the CI runner of that day it took more than half a
+   * second, and this assertion read two attempts and one dispatch. So
+   * {@code camunda8-refused-start-it.yaml} leases for PT30S, while the other integration tests
+   * lease for PT0.5S. The lease is the only reason why that one value differs. Measured on the
+   * same day: at PT0.1S the count is two in three runs out of three, at PT0.5S it is one in
+   * five out of five.
    */
   private void assertTheStartIsBlockedAfterOneAttempt(
       final List<String> entryIdsBefore) throws InterruptedException {
@@ -362,8 +366,8 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
             .orElse(Boolean.FALSE),
         "the outbox entry of the refused start to be blocked");
 
-    // one attempt, not fifty: the adapter called the refusal permanent, so the store
-    // wrote the block instead of counting 'vanillabp.outbox.block-after-attempts' down
+    // one attempt, not fifty. The adapter called the refusal permanent. So the store wrote
+    // the block, and did not count 'vanillabp.outbox.block-after-attempts' down
     assertEquals(
         Integer.valueOf(1),
         theEntryAddedTo(entryIdsBefore).map(Entry::attempts).orElse(null),
@@ -372,9 +376,9 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The whole outbox rather than the entries of one process: this application runs a
-   * single process, so asking for that process would answer the same. The two cases
-   * which start it tell their own entry apart by what the outbox held before.
+   * The whole outbox, not the entries of one process. This application runs a single
+   * process, so asking for that process would give the same answer. The two cases which
+   * start it find their own entry by what the outbox held before.
    *
    * @return The id of every entry the outbox holds
    */
@@ -415,8 +419,8 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
 
-    // generous on purpose: the incident of the third case is read from secondary
-    // storage, and the export pipeline is the slowest part of this class
+    // generous on purpose. The incident of the third case is read from secondary storage,
+    // and the export pipeline is the slowest part of this class
     final var deadline = System.currentTimeMillis() + 120_000;
     while (!Boolean.TRUE.equals(condition.get())) {
       if (System.currentTimeMillis() > deadline) {

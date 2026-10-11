@@ -8,9 +8,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the refused-start integration test. Its task method is there
- * because the model has a task, not because anything is expected to run it: the workflow
- * of this scenario never comes into being.
+ * The workflow service of the refused-start integration test. Its task method exists because
+ * the model has a task. Nothing is expected to run it, because the workflow of this scenario
+ * never comes into being.
  */
 @Service
 @WorkflowService(

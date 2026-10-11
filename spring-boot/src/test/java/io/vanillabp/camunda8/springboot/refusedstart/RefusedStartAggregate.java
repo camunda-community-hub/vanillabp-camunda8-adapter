@@ -11,9 +11,9 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of the refused-start integration test. Every attribute of an
- * aggregate is shared with the cluster, so {@link #document} travels along as a process
- * variable when the workflow starts - which is how the test hands the cluster a request
- * it is too big to take.
+ * aggregate is shared with the cluster. So {@link #document} travels along as a process
+ * variable when the workflow starts. That is how the test hands the cluster a request which
+ * is too big for it.
  */
 @Entity
 @Table(name = "C8_REFUSED_START_AGGREGATE")
@@ -26,9 +26,9 @@ public class RefusedStartAggregate {
   private Long id;
 
   /**
-   * What an application would keep in an aggregate of its own: a text it wants the model
-   * to read. A megabyte of it is still an application's business, several are more than
-   * a request to the cluster may weigh.
+   * What an application would keep in an aggregate of its own: a text it wants the model to
+   * read. A megabyte of it is still the application's business. Several megabytes are more
+   * than a request to the cluster may carry.
    */
   @Lob
   private String document;
