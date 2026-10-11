@@ -6,7 +6,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 
 /**
- * JPA persistence of {@link C8RestartAggregate} - saves within the caller's JTA
+ * JPA persistence of {@link C8RestartAggregate}. It saves within the caller's JTA
  * transaction, which is the transaction a task handler runs in.
  */
 @ApplicationScoped
@@ -36,8 +36,9 @@ public class C8RestartPersistence implements AggregatePersistenceAware<C8Restart
   }
 
   /**
-   * Named explicitly: the adapter stores the aggregate's id in the cluster under the name
-   * of the id property, and a hand-written persistence has nothing to derive it from.
+   * Named explicitly. The adapter stores the aggregate's id in the cluster under the name
+   * of the id property, and a hand-written persistence has nothing to derive that name
+   * from.
    *
    * @return The name of the aggregate's id property
    */

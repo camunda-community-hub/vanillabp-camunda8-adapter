@@ -10,9 +10,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 /**
- * The workflow of the restart-delivery test: nothing but a task which says
- * when it was reached, so the test can measure how long the first job of a workflow
- * started right after a restart takes to arrive.
+ * The workflow of the restart-delivery test. It has nothing but a task which says when it
+ * was reached. So the test can measure how long the first job takes to arrive for a
+ * workflow started right after a restart.
  */
 @ApplicationScoped
 @WorkflowService(
@@ -22,8 +22,8 @@ public class C8RestartWorkflowService {
 
   /**
    * When the workflow was started, in milliseconds of the application's clock. The
-   * measurement is taken inside the application, because the test talks to it over HTTP
-   * and would otherwise measure the round trip too.
+   * application measures this itself. The test talks to it over HTTP and would otherwise
+   * measure the round trip too.
    */
   public static final AtomicLong STARTED_AT = new AtomicLong();
 
