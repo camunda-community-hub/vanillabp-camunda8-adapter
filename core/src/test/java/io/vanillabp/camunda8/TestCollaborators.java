@@ -15,8 +15,8 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskWiring;
 
 /**
  * What the platform hands the adapter, for tests which need the adapter and not the
- * registration. The core standing in for both halves of the task SPI is given per test;
- * the rest are mocks nobody calls unless the test says so.
+ * registration. Each test passes the double which plays the core for both halves of the
+ * task SPI. The rest are mocks which nobody calls unless the test says so.
  */
 public final class TestCollaborators {
 
@@ -54,7 +54,7 @@ public final class TestCollaborators {
    * @param <T> A double playing both halves of the task SPI
    * @param core The double
    * @param workflowEnded What the test wants the core to answer about the end of a
-   *          workflow - whether it has to be reported decides what the wiring puts into
+   *          workflow. Whether the end has to be reported decides what the wiring puts into
    *          the model
    * @return A complete set built around them
    */

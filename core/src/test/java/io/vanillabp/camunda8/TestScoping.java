@@ -9,10 +9,10 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidance;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 
 /**
- * The core's name-clash avoidance reduced to what an adapter test needs of it: a mode per
+ * The core's name-clash avoidance, cut down to what an adapter test needs: a mode per
  * workflow module, the prefixing the core would do in that mode, and what the adapter
- * reported about the names a BPMS holds. The adapter is tested against the SPI rather than
- * against the core's implementation, which this module deliberately does not depend on.
+ * reported about the names a BPMS holds. The adapter is tested against the SPI, not against
+ * the core's implementation. This module does not depend on the core, on purpose.
  */
 public final class TestScoping {
 
@@ -31,9 +31,9 @@ public final class TestScoping {
   }
 
   /**
-   * The same double with a mode PER workflow module, which the core resolves per module as
-   * well: a mixed configuration is what lets one module's prefixed identifier meet another
-   * module's plain one, and it is what decides whether two modules share a tenant.
+   * The same double with a mode PER workflow module. The core resolves the mode per module
+   * as well. Only a mixed configuration lets the prefixed identifier of one module meet the
+   * plain one of another module. It also decides whether two modules share a tenant.
    *
    * @param modePerWorkflowModule The mode of a workflow module, answered for every id a test
    *          lets the adapter ask about, the <code>null</code> id included
@@ -47,9 +47,9 @@ public final class TestScoping {
   }
 
   /**
-   * The double, which also KEEPS what the adapter reported to it: the three reports of the
-   * name-clash avoidance are what an adapter asking its cluster about a name is measured
-   * by, so a test reads them back here instead of against the core.
+   * The double. It also KEEPS what the adapter reported to it. An adapter which asks its
+   * cluster about a name is measured by the three reports of the name-clash avoidance. So a
+   * test reads them back here instead of from the core.
    */
   public static final class ScopingDouble implements NameClashAvoidanceSupport {
 
@@ -90,8 +90,8 @@ public final class TestScoping {
 
     /**
      * The same answers, each with the workflow module it was reported for. The core keys its
-     * collision check by the module, so a test about two modules sharing a name has to see
-     * which side a name came from.
+     * collision check by the module. So a test about two modules which share a name has to
+     * see which side a name came from.
      *
      * @return One entry per identifier and workflow module
      */
@@ -102,9 +102,9 @@ public final class TestScoping {
     }
 
     /**
-     * @return What the CORE was told about the versions a BPMS still holds - reported by
-     *         the core itself, so a test of an adapter reads this only where it plays the
-     *         core
+     * @return What the CORE was told about the versions a BPMS still holds. The core
+     *         reports this itself, so an adapter test reads it only where the test plays
+     *         the core
      */
     public List<ModelIdentifier> getIdentifiersOfHeldVersions() {
 
@@ -234,8 +234,8 @@ public final class TestScoping {
         final String adapterId) {
 
       if (scopedTaskDefinition == null) {
-        // like the core's implementation: a task carrying no task definition keeps its
-        // null all the way to the wiring validation, which is what reports it
+        // as in the core's implementation: a task without a task definition keeps
+        // its null all the way to the wiring validation, and that validation reports it
         return null;
       }
       final var prefix = String.join(SEPARATOR, workflowModuleId, bpmnProcessId, "");

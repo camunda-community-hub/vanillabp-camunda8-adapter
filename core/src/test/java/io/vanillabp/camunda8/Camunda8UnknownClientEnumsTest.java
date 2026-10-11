@@ -44,21 +44,20 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What this adapter does with a value of a Camunda 8 client enum it has never seen.
  * <p>
- * The client grows its enums inside a release line, and Camunda does not count that as a
- * breaking change: 8.9 added <code>DRAINING</code> to the process definition states, 8.10
- * adds <code>SUSPENDED</code> to the instance states and <code>CANCEL</code> to the
+ * The client adds values to its enums inside a release line, and Camunda does not count that
+ * as a breaking change. 8.9 added <code>DRAINING</code> to the process definition states.
+ * 8.10 adds <code>SUSPENDED</code> to the instance states and <code>CANCEL</code> to the
  * listener events. A patch does it too: 8.8.39 brought <code>DRAINING</code> to the 8.8
- * line. A client older than the cluster it talks to reports a value it does not
- * know as <code>UNKNOWN_ENUM_VALUE</code>, and this adapter is built per line, so an
- * application running the 8.8 line against an 8.10 cluster meets exactly that. Neither the
- * compiler nor a test that only uses the literals of today notices.
+ * line. A client which is older than its cluster reports an unknown value as
+ * <code>UNKNOWN_ENUM_VALUE</code>. This adapter is built per line, so an application which
+ * runs the 8.8 line against an 8.10 cluster meets exactly that. The compiler does not notice,
+ * and neither does a test which only uses the literals of today.
  * <p>
- * So the rule is: a comparison against one literal has to be written so that a value
- * nobody here knows lands on the harmless side. The two places where the harmless side is
- * not the obvious one are pinned here. The third form, a <code>switch</code> over a client
- * enum, lives in {@code Camunda8WorkflowViewer#elementTypeOf} and answers
- * <code>UNKNOWN</code> in its <code>default</code> branch, which
- * {@code Camunda8WorkflowViewerTest} holds.
+ * So the rule is: write a comparison against one literal so that an unknown value lands on
+ * the harmless side. This test pins the two places where the harmless side is not the
+ * obvious one. The third form is a <code>switch</code> over a client enum. It lives in
+ * {@code Camunda8WorkflowViewer#elementTypeOf} and answers <code>UNKNOWN</code> in its
+ * <code>default</code> branch. {@code Camunda8WorkflowViewerTest} holds that.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UnknownClientEnumsTest {
@@ -117,14 +116,14 @@ public class Camunda8UnknownClientEnumsTest {
   @DisplayName("An event this adapter never asked for notifies nobody")
   public void anEventNobodyAskedForNotifiesNobody() {
 
-    // UNKNOWN_ENUM_VALUE is what the client answers for an event its version has no
-    // literal for, which is a cluster newer than the client of this build. Reading it as
-    // a creation would tell the application about a user task it never got, so the job is
+    // The client answers UNKNOWN_ENUM_VALUE for an event its version has no literal for.
+    // That happens when the cluster is newer than the client of this build. Reading it as a
+    // creation would tell the application about a user task it never got. So the job is
     // completed and the application hears nothing
     final var invoker = deliver(ListenerEventType.UNKNOWN_ENUM_VALUE);
 
     verify(invoker, never()).invokeWorkflowTask(anyString(), anyString(), any());
-    // the job still gates the task's lifecycle, so leaving it alone would hang the task
+    // the job still holds up the lifecycle of the task, so leaving it alone would hang the task
     verify(jobClient.newCompleteCommand(4711L), times(1)).send();
 
   }
@@ -189,7 +188,7 @@ public class Camunda8UnknownClientEnumsTest {
     when(search.send()).thenReturn(answer);
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
@@ -224,9 +223,9 @@ public class Camunda8UnknownClientEnumsTest {
   @DisplayName("A state this build has no literal for is a workflow which still runs")
   public void aStateWithoutALiteralStillRuns() {
 
-    // COMPLETED means "the operation comes too late", so answering it for a state nobody
-    // here knows would drop an operation on a workflow which is very much alive. 8.10
-    // adds SUSPENDED, and an older client reports it as UNKNOWN_ENUM_VALUE
+    // COMPLETED means "the operation comes too late". Answering it for an unknown state
+    // would drop an operation on a workflow which is still alive. 8.10 adds SUSPENDED, and
+    // an older client reports it as UNKNOWN_ENUM_VALUE
     assertEquals(
         WorkflowAwareness.ACTIVE,
         serviceHolding(ProcessInstanceState.UNKNOWN_ENUM_VALUE).awarenessOfWorkflow(SCOPE, persistence(), "agg-1"));
