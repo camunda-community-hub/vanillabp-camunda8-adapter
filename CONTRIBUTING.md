@@ -148,8 +148,8 @@ instead of `consequently`, `has` instead of `possesses`. A technical term stays 
 but say what it means the first time it turns up, and write an abbreviation out once. If a sentence
 trips you up when you read it aloud, rewrite it.
 
-This holds for every English text here, the javadoc, the commit message and the pull request
-included, and for the [wiki](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki)
+This holds for every English text here, the javadoc and comments, in the main code and in the
+tests, the commit message and the pull request included, and for the [wiki](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki)
 as well. Nothing a program reads is renamed for the sake of language: type and method names,
 configuration keys and artifact coordinates stay as they are, because code in other repositories
 points at them. The section [How we write](./AGENTS.md#how-we-write) in `AGENTS.md` has the same
