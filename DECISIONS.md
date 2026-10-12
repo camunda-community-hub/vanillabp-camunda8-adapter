@@ -2072,7 +2072,7 @@ the model reaches the cluster with a listener on those and on nothing else.
 The id of a workflow is the id of its workflow aggregate. The application assigns it in the
 `@WorkflowStartedByBpms` method, and nobody else does. Camunda 8 keeps no business key, so this
 adapter keeps that id in a PROCESS VARIABLE. The rule itself and what the core does with it are
-decision 98 of `adapter-platform-integration`.
+decision 69 of `adapter-platform-integration`.
 
 *Note 2026-10-12: since 8.9 Camunda 8 has a business id field. Decision 37 may write the
 aggregate's id there, for the eye only. VanillaBP never reads it back, so the variable stays the

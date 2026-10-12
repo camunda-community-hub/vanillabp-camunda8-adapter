@@ -2968,7 +2968,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * <b>Idempotency limitation:</b> a crash between a successful create and the removal of
    * the phase-two outbox entry can create the instance twice (at-least-once, duplicates
    * possible). That rest is accepted, and no fix is pending. A workflow is located by
-   * asking, not by a persistent registry (decision 25 of the platform's DECISIONS.md). The
+   * asking, not by a persistent registry (decision 5 of the platform's DECISIONS.md). The
    * core makes the window smaller: it probes
    * {@link #awarenessOfWorkflowForRedispatch} before it dispatches a start again. What is
    * left is documented in the README of this repository under "Idempotency limitation".
