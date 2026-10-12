@@ -146,7 +146,7 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
 
   /**
    * The model of ONE version the cluster holds. It comes from the picture which every
-   * check of a model asks - see decision 21 in the repository's DECISIONS.md.
+   * check of a model asks - see decision 19 in the repository's DECISIONS.md.
    */
   @FunctionalInterface
   public interface HeldModelOfVersion {
@@ -244,7 +244,7 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
    * <p>
    * The model comes from the picture of what the cluster holds, not from a read of its
    * own. So the answers this adapter gives about a held version, and the checks it makes
-   * against one, see the same models, read once (decision 21 in the repository's
+   * against one, see the same models, read once (decision 19 in the repository's
    * DECISIONS.md). If the picture cannot tell, or the cluster does not hold that version
    * any more, the answer is <code>null</code>. In both cases nobody read the model. An
    * empty answer would claim that the model has no such element.

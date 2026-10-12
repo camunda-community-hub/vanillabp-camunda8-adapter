@@ -1172,7 +1172,7 @@ void: the cluster accepts the publication, the time-to-live passes, nothing corr
 nothing fails.
 
 Which models the check reads is the point, and it must not matter who deployed them (decision
-21). The check first reads the models of the current deployment, which costs nothing. If the
+19). The check first reads the models of the current deployment, which costs nothing. If the
 name is not among them, it asks `Camunda8ModelsTheClusterHolds`: the models the cluster holds
 for every BPMN process id the application declares, including versions under the old id of a
 renamed process. A refusal rests on a read made in that very call, so a version another node
@@ -1948,7 +1948,7 @@ for the task, named by the listener's job type or by the element id. The element
 listener on the element. A job type with a dot or a colon has to be protected in a property key,
 and the core's message writes such a line once per platform. Why this is a configuration key,
 and not a marker in the model or a naming rule for job types, is in
-[decision 72](./DECISIONS.md#72-a-listener-nobody-here-serves-is-marked-in-the-configuration-and-an-element-template-counts-on-a-job-element-only).
+[decision 27](./DECISIONS.md#27-a-listener-somebody-modelled-is-a-task-where-the-application-asked-for-it-and-the-process-element-reports-a-cancelation).
 
 One marker in the model still counts: a JOB element built from an element template, a connector
 for example, belongs to the runtime which owns it, see
@@ -2027,7 +2027,7 @@ route.
 Every boot of a workflow module whose listeners are served writes one framed WARN naming the key,
 the module, every served listener with its element, its event and its job type, what it costs and
 the way back. Nothing silences it, see
-[decision 27](./DECISIONS.md#27-a-listener-somebody-modelled-is-a-task-and-only-where-the-application-asked-for-it).
+[decision 27](./DECISIONS.md#27-a-listener-somebody-modelled-is-a-task-where-the-application-asked-for-it-and-the-process-element-reports-a-cancelation).
 Where the switch is on and no model of the module carries a listener, the boot writes one line
 instead of the frame.
 
@@ -2571,7 +2571,7 @@ task by its job key. When the search does not find the scope, the adapter asks t
 only about a task which the row says is resting. The reason: that question cuts short the lock
 of a job which a handler holds. `Camunda8AggregateChangedIT` pushes into both shapes of user
 task, and `Camunda8TaskScopedPushWaitsForItsScopeTest` holds the rules. The reasons are decision
-66 in the repository's DECISIONS.md.
+64 in the repository's DECISIONS.md.
 
 Independent of the annotations, the workflow aggregate's ID is written as a process variable
 named after the aggregate's ID attribute, and always as a string. VanillaBP reads a workflow
@@ -2734,7 +2734,7 @@ opened. That is the case in every mode but `use-prefix`, and in `use-prefix` wit
 per process notices none of it.
 
 Two things about those workers are worth knowing, and
-[decision 19](./DECISIONS.md#19-the-workers-of-a-declared-process-id-are-composed-from-what-the-application-serves)
+[decision 19](./DECISIONS.md#19-a-declared-process-id-is-served-from-what-the-application-serves-and-from-the-models-the-cluster-holds)
 carries the reasoning for both. A served task definition may belong to a service task or to a
 user task. Which of the two it is cannot be told without the model, and this application no
 longer brings that model. So both subscriptions are opened, and the one of the kind the task
@@ -3287,7 +3287,7 @@ an 8.9 patch would disprove it.
 Zeebe notifies no worker about a job it took away, so nothing the cluster sends says that an
 open asynchronous task's activity was canceled. That has not changed and will not: the
 `cancel` execution listener of the 8.10 line sits on the process element and reports a
-terminated INSTANCE, which is a different question, see decision 33 in the repository's
+terminated INSTANCE, which is a different question, see decision 27 in the repository's
 DECISIONS.md.
 
 What arrives instead is the same event one moment later. Whenever the cluster hands this
@@ -3441,7 +3441,7 @@ element fires when an instance is terminated through the API, so such an instanc
 `CANCELED`, and the core then reports every task VanillaBP still believes is open in it as
 `CANCELED`. Both listeners carry the same job type, the handler tells them apart by the event
 the job reports, and an event this build does not know completes the job and reports nothing.
-See decision 34 in the repository's DECISIONS.md.
+See decision 27 in the repository's DECISIONS.md.
 
 On the lines before that one the cluster runs end listeners of COMPLETED instances only, so a
 `@WorkflowEnded` method sees `COMPLETED` and never `CANCELED`. A cancelled instance is removed

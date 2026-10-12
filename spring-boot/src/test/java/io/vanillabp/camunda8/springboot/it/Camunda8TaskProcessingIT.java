@@ -153,7 +153,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     // and the adapter reports a visibility window of ten seconds. That window is for a
     // WORKFLOW which the query API has not caught up with. A job key is asked of the engine
     // itself (UpdateJobTimeout), and the engine answers exactly. So this must not wait for
-    // the window (decision 27 of the platform's DECISIONS.md)
+    // the window (decision 5 of the platform's DECISIONS.md)
     final var aggregateId = start("TaskProcess");
 
     final var startedAt = System.nanoTime();

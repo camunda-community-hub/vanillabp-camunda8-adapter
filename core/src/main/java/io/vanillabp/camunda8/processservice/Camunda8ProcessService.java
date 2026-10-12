@@ -1685,7 +1685,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * running on a definition of a previous version - see
    * {@code Camunda8DeployedProcesses}). A module which declares a BPMN process id nothing
    * was deployed under (the old id of a renamed process) is judged by the models the
-   * cluster holds for its ids, see decision 21 in the repository's DECISIONS.md. Only where
+   * cluster holds for its ids, see decision 19 in the repository's DECISIONS.md. Only where
    * that picture is missing or the cluster cannot be asked are the declared names unknown
    * rather than absent. A check which cannot see every model that could carry the answer
    * must stay silent, never refuse.
@@ -1702,7 +1702,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * Reports a message name which no model of the workflow module declares. It reads the
    * models the CLUSTER holds for the ids this application declares, not only what this
    * application version deployed. So the verdict does not depend on which application
-   * version deployed the model which carries the name (see decision 21 in the
+   * version deployed the model which carries the name (see decision 19 in the
    * repository's DECISIONS.md). If those models cannot be read, the check stays silent.
    *
    * @param workflowModuleId The workflow module of the correlation
@@ -2173,7 +2173,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       // stopped. The engine is asked only about a task which this adapter left open,
       // because the question shortens the lock of a job a handler may hold right now.
       // Without that row, the push waits for the read model, which knows a completed task
-      // as well (see decision 65 in the repository's DECISIONS.md)
+      // as well (see decision 64 in the repository's DECISIONS.md)
       if (!theAdapterLeftTheTaskOpen(taskRow)) {
         throw scopeNotVisibleYet(request, false);
       }
@@ -2376,7 +2376,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * has not closed it since. Such a task RESTS. No handler holds its job, so asking the engine
    * about it disturbs nobody. A user task always rests. A service task rests if its method
    * asked for the task id and left the completion to the application. Why the engine is
-   * asked only about such a task is decision 66 in the repository's DECISIONS.md.
+   * asked only about such a task is decision 64 in the repository's DECISIONS.md.
    *
    * @param taskRow The row of the task, or <code>null</code> where there is none
    * @return Whether the task rests
@@ -2609,7 +2609,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * and only the query API knows the key of that iteration. Everything else, and every
    * version this application did not deploy, is searched for as before, because an older
    * model may enclose the element differently. Why the row is used and not a search is
-   * decision 66 in the repository's DECISIONS.md.
+   * decision 64 in the repository's DECISIONS.md.
    *
    * @param workflowModuleId The workflow module of the push
    * @param taskRow The row of the task, or <code>null</code> where there is none
@@ -2968,7 +2968,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * <b>Idempotency limitation:</b> a crash between a successful create and the removal of
    * the phase-two outbox entry can create the instance twice (at-least-once, duplicates
    * possible). That rest is accepted, and no fix is pending. A workflow is located by
-   * asking, not by a persistent registry (decision 25 of the platform's DECISIONS.md). The
+   * asking, not by a persistent registry (decision 5 of the platform's DECISIONS.md). The
    * core makes the window smaller: it probes
    * {@link #awarenessOfWorkflowForRedispatch} before it dispatches a start again. What is
    * left is documented in the README of this repository under "Idempotency limitation".

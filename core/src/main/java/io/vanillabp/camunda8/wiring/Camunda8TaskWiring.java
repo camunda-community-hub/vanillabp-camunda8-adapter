@@ -1174,7 +1174,7 @@ public final class Camunda8TaskWiring {
    * {@link Camunda8UserTaskListenerHandler} and
    * {@code Camunda8ShutdownHandlingTest#aListenerFailingIsReported}.
    * <p>
-   * Why these are two numbers and not one: see decision 41 in the repository's DECISIONS.md.
+   * Why these are two numbers and not one: see decision 27 in the repository's DECISIONS.md.
    */
   private static final String ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST = "1";
 
