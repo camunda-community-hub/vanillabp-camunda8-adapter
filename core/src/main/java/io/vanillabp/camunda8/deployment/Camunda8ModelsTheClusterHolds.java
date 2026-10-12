@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
  * <p>
  * Every check which judges a model asks this picture. No check reads a set of its own.
  * So no verdict depends on which application version deployed the model, see
- * decision 21 in the repository's DECISIONS.md. The models of the CURRENT deployment
+ * decision 19 in the repository's DECISIONS.md. The models of the CURRENT deployment
  * cost nothing, because they are read at every boot anyway (see
  * {@link Camunda8DeployedProcesses}).
  * Everything else is read from the cluster on first use and then kept, because the model

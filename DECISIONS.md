@@ -428,9 +428,7 @@ percent of it: ten of thirty-two, two of eight. Meanwhile the workers of one ada
 execution slots. So fifteen workers may hold fifteen times `max-jobs-active` jobs waiting for four
 slots. The rule above exists for that gap.
 
-### 19. The workers of a declared process id are composed from what the application serves
-
-*Superseded in part by decision 70: the user-task listeners of a declared id are read from the models the cluster holds.*
+### 19. A declared process id is served from what the application serves and from the models the cluster holds
 
 A workflow module may declare a BPMN process id under which it deploys nothing. That is how a
 renamed process keeps being served. Under `use-prefix` a task definition is deployed as
@@ -439,21 +437,12 @@ worker of the deployed processes asks for. And nobody notices: a job nobody fetc
 failed, it is a workflow standing still. Each of those workflows needs one more subscription, and
 the question is where the names come from.
 
-They are COMPOSED from what the application serves. The core names what that is
+**Task workers are COMPOSED from what the application serves.** The core names what that is
 (`taskWiringOfProcessesNobodyDeployed`, decision 34 of the platform's own DECISIONS.md). Today it
 is the task definition of every `@WorkflowTask` method registered for the declared id. The adapter
 scopes each of them by that id, exactly as the deployment scoped the ones it deployed. An entry
 holds what to compose from, not a job type, so this is the one place which turns it into a job
-type. The alternative was to READ them. The cluster holds the models of every version under the
-old id, and the catalog already fetches their XML for the check of old process versions. So the
-job types could be taken from the models word for word, together with the element ids and the
-multi-instance elements around them.
-
-Reading was rejected because it needs the query API. A cluster without secondary storage cannot
-be searched at all. And an application using `use-prefix` may run on exactly such a cluster,
-because a module uses prefixes when a tenant is not available. A feature which works on one
-cluster and silently does nothing on another is worse than one whose limits are written down. So
-the composed form is the one which ships, and the start names its limits.
+type.
 
 Composing has a cost in three places, and each of them is paid on purpose:
 
@@ -468,23 +457,66 @@ Composing has a cost in three places, and each of them is paid on purpose:
   stands still after all. The start says so and names both ways out: wire the method by task
   definition, or keep deploying the old model under its old id until its workflows have ended.
 
-For the same reason the multi-instance context of such a task is not reported. The registry is
-filled from the models the module deploys, and this model is not one of them. So a rename whose
-old model has a multi-instance task stays a case for keeping both models deployed.
+Reading the job types from the models was the other way, and it was first turned down because it
+needs the query API. A cluster without secondary storage cannot be searched at all. Decision 20
+removed that reason: the adapter requires a cluster it can search. So reading is an open
+alternative for the task workers, and picking it up is a piece of work of its own. The composed
+form is what ships for them.
 
-**That paragraph is superseded by decision 21.** The registry now also gets the multi-instance
-chains of the models the cluster runs, so a job of such a workflow carries its iteration context,
-and a multi-instance task is no longer a reason to keep the old model deployed.
+**User-task listeners are composed AND read.** A user task may go without a method, and the
+cluster still waits for its `creating` listener. For a model the application deploys, the adapter
+opens a listener worker for every user task, served or not. Composing sees only the user tasks a
+method names. So a user task without a method, created in a workflow of the old id after the
+rename, would stand in `CREATING` for good. So the job types of these listeners are also READ from
+the models the cluster holds under the declared id, as written there: every task listener whose
+type starts with `io.vanillabp.userTask:`. A listener worker is opened for each of them which no
+other worker of the module serves. Where the cluster cannot be asked for its models, nothing is
+added, and the user tasks of those workflows are served only where a method names them.
 
-Since decision 20 the reason for rejecting the alternative is gone. The adapter requires a cluster
-it can search, so reading the models no longer works on one cluster and does nothing on another.
-What this entry decided stands as it is: the composed form is what ships, and everything above
-about the cost of composing still holds. Reading the models is now an open alternative, not a
-rejected one, and picking it up is a piece of work of its own.
+Measured on 2026-10-06 against `camunda/camunda:8.10.0`, with
+`Camunda8UnservedUserTaskOfARenamedProcessIT` (`use-prefix`). The first generation deploys
+`UnservedRenameOld` and starts a workflow which waits for a message in front of a user task without
+a method. The second generation deploys the model under `UnservedRenameNew`, declares the old id
+and sends the message. Without reading, the user task stood in `CREATING`, and its listener job of
+type `io.vanillabp.userTask:test-app__UnservedRenameOld__reviewByHand` stood in `CREATED` with no
+worker, for the whole 60 seconds of the wait. With reading, the task reached `CREATED`, and the
+class was green in 29 seconds.
+
+**One picture of the models the cluster holds, and every check asks it.** A check against a BPMN
+model must not care whether the model comes from the current deployment or was already in the
+cluster. The platform's decision 38 holds the rule. This is what it costs on Camunda 8. A rename
+is the case which forced it. `correlateMessage` validated the message name against the models
+which THIS application version deployed. After a rename, only the old id's model in the cluster
+declares the name which a waiting workflow needs. The check threw inside the caller's transaction,
+while the workflow sat right there, waiting for exactly that name.
+
+The adapter keeps one picture per adapter id (`Camunda8ModelsTheClusterHolds`) instead of giving
+every check a query of its own. The picture holds the models the cluster has for every BPMN
+process id the application declares. The models of the current deployment cost nothing.
+Everything else is read through `Camunda8ProcessVersions` on first use and then kept, because the
+model of a definition never changes. The answer can be "cannot tell", as a value. A check reading
+it does not have to invent that case, and it stays silent on it. "Cannot tell" itself is never
+kept. A cluster which cannot be reached says nothing about the next call. The settled "cannot be
+searched" of decision 20, on the other hand, answers without a request.
+
+A refusal may rest on the picture only after the cluster was read again in the same call. Another
+node's deployment may have made the kept picture outdated (a rolling upgrade). A message declared
+moments ago must not be refused because of yesterday's read. So the error path pays one search,
+and the everyday path pays none.
+
+The same picture gives the workers of a declared-only id the multi-instance chains of the models
+the cluster runs. So a job of those workflows carries its iteration context, and a multi-instance
+task is no reason to keep the old model deployed. And the rule turned the other way round ended a
+refusal of its own. A user task without an external form reference used to cost the old-version
+startup check its whole answer, if the task sat in a model which an earlier application deployed.
+Such a model is only read. So where the reference is missing it is read by version 1's formKey
+convention, and a task which follows no convention is skipped instead of fought over.
 
 `Camunda8DeclaredProcessWorkersTest` holds which workers are opened per mode and what the start
-says; `Camunda8RenamedProcessIT` proves the whole thing against a cluster with prefixed
-identifiers.
+says. `Camunda8RenamedProcessIT` proves the whole thing against a cluster with prefixed
+identifiers. It also correlates a message which only the old id's model declares, and proves that
+the refusal names what the cluster holds. `Camunda8MessageDeclarationTest` holds the check's
+answers.
 
 ### 20. A cluster which cannot be searched is not a cluster this adapter serves
 
@@ -535,38 +567,8 @@ search. The same class holds the warning which an adapter that may degrade gets 
 
 ### 21. One picture of the models the cluster holds, and every check asks it
 
-A check against a BPMN model must not care whether the model comes from the current deployment or
-was already in the cluster. The platform's decision 38 holds the rule. This entry holds what it
-costs on Camunda 8. This is the case which forced it. `correlateMessage` validated the message
-name against the models which THIS application version deployed. After a rename, only the old
-id's model in the cluster declares the name which a waiting workflow needs. The check threw inside
-the caller's transaction, while the workflow sat right there, waiting for exactly that name.
-
-The adapter keeps one picture per adapter id (`Camunda8ModelsTheClusterHolds`) instead of giving
-every check a query of its own. The picture holds the models the cluster has for every BPMN
-process id the application declares. The models of the current deployment cost nothing.
-Everything else is read through `Camunda8ProcessVersions` on first use and then kept, because the
-model of a definition never changes. The answer can be "cannot tell", as a value. A check reading
-it does not have to invent that case, and it stays silent on it. "Cannot tell" itself is never
-kept. A cluster which cannot be reached says nothing about the next call. The settled "cannot be
-searched" of decision 20, on the other hand, answers without a request.
-
-A refusal may rest on the picture only after the cluster was read again in the same call. Another
-node's deployment may have made the kept picture outdated (a rolling upgrade). A message declared
-moments ago must not be refused because of yesterday's read. So the error path pays one search,
-and the everyday path pays none.
-
-The same picture gives the workers of a declared-only id (decision 19) the multi-instance chains
-of the models the cluster runs. So a job of those workflows carries its iteration context. And
-the rule turned the other way round ended a refusal of its own. A user task without an external
-form reference used to cost the old-version startup check its whole answer, if the task sat in a
-model which an earlier application deployed. Such a model is only read. So where the reference is
-missing it is read by version 1's formKey convention, and a task which follows no convention is
-skipped instead of fought over.
-
-`Camunda8MessageDeclarationTest` holds the check's answers. `Camunda8RenamedProcessIT` correlates
-a message which only the old id's model declares against a real cluster, and proves that the
-refusal names what the cluster holds.
+*Merged into decision 19 on 2026-10-12, before the 2.0 release.* It said that the adapter keeps one
+picture of the models the cluster holds, and that every check asks it.
 
 ### 22. A test asks for a cluster, and the release line decides what that cluster costs
 
@@ -646,6 +648,9 @@ See [Elements another runtime serves](./README.md#elements-another-runtime-serve
 **Superseded for a BPMN process the application claims by decision 54.** What is written below
 holds for a process which no `@WorkflowService` class of the application claims. For a claimed
 process, the deployment refuses the file instead of warning about the element.
+
+*Superseded for a process nobody claims by decision 73: such a process is not looked at, so it gets
+no WARN either. Together with decision 54 this replaces the warning below completely.*
 
 Camunda 8 knows two kinds of this element. In the first kind the model names the activities to
 run. This adapter serves it without any extra code: the activities inside are ordinary tasks, and
@@ -733,7 +738,7 @@ turns on is a check which nobody runs.
 
 The same question may need the model of a version the cluster holds. That model is read the way
 `tasksOfVersion` reads it, by the definition key and the XML request, and not through the picture
-of decision 21. That picture answers the checks which JUDGE a model for the ids the application
+of decision 19. That picture answers the checks which JUDGE a model for the ids the application
 declares, and it keeps what it read for as long as the application runs. The old-versions check
 needs one model at a time. So the model of the version in question is kept for that version's
 turn, and the next version replaces it. There is at most one model per adapter id, so a second
@@ -789,7 +794,7 @@ core. `Camunda8CollidingProcessIdsTest` holds that the core reaches this adapter
 
 See [Keeping workflow modules apart](./README.md#keeping-workflow-modules-apart).
 
-### 27. A listener somebody modelled is a task, and only where the application asked for it
+### 27. A listener somebody modelled is a task where the application asked for it, and the process element reports a cancelation
 
 Version 1 let a `@WorkflowTask` method serve a listener and announced it nowhere. The reason: a
 model with application logic in a listener cannot be moved to another BPMS. Version 2 deleted the
@@ -806,11 +811,33 @@ to. So a model which carries one says nothing about who serves it, but a method 
 does. Only the route by task definition counts. `@WorkflowTask(id = ...)` names the ELEMENT, and
 one element may carry a task and a listener at once.
 
-So a listener which no method names is not refused, and it is not passed over in silence either.
-The boot names it and goes on, as it does for an ad-hoc subprocess waiting for a job worker. A
-worker which the application runs itself may be the answer, and only the application knows. But
-the cluster creates the job either way, and a workflow reaching the element stands there with no
-incident and nothing in any log.
+**A listener which no method names.** In a process the application claims, such a listener is
+handed to `validateTaskWiring` as a task of its own (`BpmnTaskSpec.listener`). The core asks for a
+method or for the property `implemented-externally=true`, and ends the boot if neither is there.
+The platform holds that rule for every adapter (decision 119 of `adapter-platform-integration`).
+The property names the job type or the element id, and the element id covers every listener on the
+element. A listener on a JOB element built from an element template, a connector for example,
+belongs to the runtime which owns the element, as decision 23 and decision 24 say. It is named in
+its WARN and does not reach the core. On a user task the template does not count: the Camunda
+Modeler sets a template there to preset a form or an assignee, so it does not say that somebody
+else serves the listener. A process nobody claims is not looked at at all (decision 73).
+
+Three markers for "somebody else serves this" were weighed. First, the template: it costs nothing,
+but on a user task it mixes two statements. Second, a naming rule for job types: it costs nothing
+in the model, but it forces a worker we do not own to take a name we chose. And a look at the SDK,
+the docs and about 230 published templates on 2026-10-07 found no format by which a connector could
+be recognised either. Third, a configuration key: it stands next to the model and can go out of
+date. The maintainer took the key. The core warns about a line which no deployed model needs, and
+that answers the objection.
+
+The same rule of the platform holds for the other elements of a claimed process. A user task
+managed by Camunda without a method ends the boot unless the property marks it, as in version 1:
+`Camunda8DeploymentAdapter` (1.9.1) wired every user task with `allowNoMethodFound=false`. Its
+listener worker is opened all the same, so a marked user task is created and completed without this
+application. An ad-hoc subprocess with a job of its own and without a template is refused in a
+claimed process (decision 54), and the property lets it pass for a worker the application runs
+itself. A marked one is handed to the core like a task, so a method next to the property is refused
+there.
 
 A job type starting with `io.vanillabp.` is not a matter for this rule. That prefix marks the
 listeners which VanillaBP and its extensions write themselves, and those are served whatever the
@@ -818,22 +845,23 @@ key says. The prefix is not the whole separation either. The listeners the frame
 not in the model yet while the file is read. That is why a modelled listener is collected while
 the file is prepared, and not while one of its processes is wired.
 
-The key is `vanillabp.adapters.<id>.allow-listeners`, a boolean, `false` unless somebody sets it.
-It resolves at adapter, workflow-module and workflow level, and the most specific configured value
-wins in both directions. So a module which serves its listeners can have one workflow which does
-not. There is no task level. That level is keyed by a task definition, and this key decides
-whether a listener becomes a task at all. So when the key is read, there is no task definition yet
-to key a level by. A value set there anyway gets one guiding warning, which names the three levels
-which work, and the boot goes on. The Camunda 7 adapter reads the very same key at the very same
-three levels. Two keys about what a model may contain, which reach different levels on different
-adapters, would be the worse answer.
+**The key.** It is `vanillabp.adapters.<id>.allow-listeners`, a boolean, `false` unless somebody
+sets it. It resolves at adapter, workflow-module and workflow level, and the most specific
+configured value wins in both directions. So a module which serves its listeners can have one
+workflow which does not. There is no task level. That level is keyed by a task definition, and this
+key decides whether a listener becomes a task at all. So when the key is read, there is no task
+definition yet to key a level by. A value set there anyway gets one guiding warning, which names
+the three levels which work, and the boot goes on. The Camunda 7 adapter reads the very same key at
+the very same three levels. Two keys about what a model may contain, which reach different levels
+on different adapters, would be the worse answer.
 
-Where the key is off and a model carries a listener, the boot ends here in the adapter. Decision
-23 handles a connector differently. A connector asks VanillaBP to LEAVE an element alone, so the
-core's wiring validation finds a task which nothing serves and ends the boot by itself. A listener
-asks VanillaBP to SERVE something. So without the key there is no task spec and nothing for the
-validation to miss, and the workflow would stop at the listener's job on the cluster. So the
-message comes from the adapter. It names the elements, the three levels and the cost.
+Where the key is off and a model carries a listener whose job type a method names, the boot ends
+here in the adapter. Decision 23 handles a connector differently. A connector asks VanillaBP to
+LEAVE an element alone, so the core's wiring validation finds a task which nothing serves and ends
+the boot by itself. A listener asks VanillaBP to SERVE something. So without the key there is no
+task spec and nothing for the validation to miss, and the workflow would stop at the listener's job
+on the cluster. So the message comes from the adapter. It names the elements, the three levels and
+the cost.
 
 Where the key is on, a listener is from then on a task like any other. `validateTaskWiring` asks
 for a `@WorkflowTask` method and ends the boot where none exists.
@@ -842,12 +870,13 @@ process. And under `use-prefix` the listener's job type is prefixed like every o
 definition of the workflow module, because that is what it is. Version 1 wired its listeners
 privately and had neither of these checks.
 
-The event is part of a listener's identity, because one method serves one event of one element.
-`@TaskEvent` tells such a method nothing. `TaskEvent.Event` has `CREATED`, `CANCELED` and `ALL`,
-and the event of a listener is none of those. So the parameter receives `CREATED` for every
-listener. That is the only value which works at all, because a method without the parameter
-subscribes to `CREATED` alone. Entry 32 replaced this paragraph for one release, and entry 33 put
-it back. Two listeners of one element under ONE job type end the boot, and the message names both.
+**What a method hears.** The event is part of a listener's identity, because one method serves one
+event of one element. `@TaskEvent` tells such a method nothing. `TaskEvent.Event` has `CREATED`,
+`CANCELED` and `ALL`, and the event of a listener is none of those. So the parameter receives
+`CREATED` whenever the modelled listener fires, whatever moment the modeller picked for it. That is
+the only value which works at all, because a method without the parameter subscribes to `CREATED`
+alone. A listener which the modeller put on the cancel moment is served as `CREATED` like any
+other. Two listeners of one element under ONE job type end the boot, and the message names both.
 One method would serve two events, and nothing it could ask would tell it which one it is in. Two
 listeners of one element under different job types are fine. A method then has to name the job
 type, because `@WorkflowTask(id = ...)` names the element and cannot tell them apart. A method
@@ -855,6 +884,18 @@ declaring `@TaskId` ends the boot as well. The cluster completes a listener job 
 method returns, so the task can never stay open. A method throwing `TaskException` is answered
 with the reason and not with an incident: the cluster is inside a transition of its own and has
 no token to route.
+
+When an interrupting boundary event or a terminating end event takes an element away, a served
+method hears nothing, and the startup report says that openly. A `cancel` execution listener
+beside every served listener was tried and taken out again. Camunda takes that event type only on
+the process element. The 8.10 documentation lists it under the limitations of execution listeners:
+"`cancel`: Supported only on the process element." A cluster of that line refuses the model with
+"The 'cancel' execution listener event type is not supported for the 'serviceTask' element". A
+`canceling` task listener beside a served listener of a user task would deploy on every line, but
+it is not written either. Half an answer costs more than a gap which somebody named. A method would
+hear `CANCELED` for a user task and nothing for the element next to it, and no rule a developer
+could read would tell the two apart. The `canceling` listener VanillaBP writes for a user task of
+its own is a different thing, and it delivers `CANCELED` for that task.
 
 What a method may write into the process instance depends on the listener, in the three cases
 which decision 1 lists. An execution listener on `end` completes like a task. So such a method may
@@ -873,11 +914,111 @@ listeners are served writes one framed WARN. It names each served listener, the 
 it on, what it costs and the way back. No key silences it. What it says stays true for as long as
 the listener is in the model, and a key turning it off would only hide what serving one means.
 
-`Camunda8ListenersTest` holds what is read out of a model and what a pair of listeners amounts to.
-`Camunda8ListenersReportTest` holds the report of a boot together with the refusals.
-`Camunda8ModelledListenerHandlerTest` holds the three cases of what a completion carries.
+**The process element reports the cancelation of an instance.** The 8.10 documentation says what
+a `cancel` execution listener on the process element does: "Cancel listeners run when a process
+instance is terminated. They execute sequentially after all child elements have terminated and
+before the process reaches its final terminated state." So an instance canceled through the API
+reports its end, with the kind `CANCELED`. The core then reports to the application, as `CANCELED`,
+every task it still believes is open in that instance. Measured on 8.10.0-alpha5: the job says
+`CANCEL`, `job.getKind()` is `EXECUTION_LISTENER`, the job carries the process variables including
+the aggregate id, and `getProcessInstanceKey()` names the instance which is being terminated. A
+called process whose parent is canceled gets a job of its own. That is why the notification
+reports that key and never `getRootProcessInstanceKey()`: a derivation limited to one instance must
+not reach for the root of the call tree.
 
-See [Listeners somebody modelled](./README.md#listeners-somebody-modelled).
+Two paths are not cancelations, however they look in a model. A terminate end event and an
+interrupting event subprocess both COMPLETE the instance. The end listener runs, no cancel job is
+created, and the application hears `COMPLETED`. That is the cluster's view, and not a gap which
+this adapter can close.
+
+The listener and the worker are one decision. The listener holds the instance until its job is
+answered. So a model with a listener which nobody serves turns a cancelation into a workflow which
+never goes away and raises no incident either. That is worse than an incident, because nothing
+says anything at all. So the listener is written only where this adapter also opens the worker.
+The end listener follows the same rule, and that is why the two conditions stand next to each
+other in `wireBpmn`.
+
+The cancel listener is written in more places than where the end is reported. A process whose end
+nobody asked about still gets it, as long as this application serves one of its tasks and the
+aggregate id can be resolved. The reason is the derivation, not the notification. Such a process
+can leave a task open, and a canceled instance is the only moment at which the core can tell the
+application that the task is gone. Both listeners carry the SAME job type, so one worker answers
+both, and `Camunda8WorkflowEndedHandler` tells them apart by `job.getListenerEventType()`. Anything
+which is neither `END` nor `CANCEL` completes the job and reports nothing. The client's enum grows
+within a line, and a newer cluster reports an event which this build does not know as
+`UNKNOWN_ENUM_VALUE`. Reading such a job as an end would tell the application something untrue.
+
+`Camunda8CancelListeners` is a class per release line. The writing half names
+`ZeebeExecutionListenerEventType.cancel`, the reading half names `ListenerEventType.CANCEL`, and
+neither exists in the client of 8.8 or 8.9. The class is public, with the retries as a parameter.
+The Business Cockpit writes the same listener with retries of its own, and it must not build its
+own copy (see decision 28). On the lines which do not have the construct, the boot names every BPMN
+process whose cancelation is not reported for that reason. So the gap is read at startup instead of
+being found in production.
+
+**A called process.** The platform decided that a called process is not a workflow of its own
+(decision 124 of `adapter-platform-integration`, story 949). Its start and its end do not reach the
+application. The core tells an adapter which processes these are:
+`BpmsInitiatedStartInvoker#startsAWorkflowOfItsOwn` and
+`WorkflowEndedInvoker#workflowEndedHandlerExists` answer `false` for a process the application
+declares only in `secondaryBpmnProcesses` and deploys a model for. So a called process gets no
+start listener on its start events (decisions 48 and 49) and no worker for one. A listener nobody
+needs still holds the instance until a worker answers its job, so leaving it in place would cost a
+job per called instance for nothing. The start events are still read and handed to the core, which
+refuses a called process with a start event the cluster fires by itself. It gets no end listener
+either, because that is written only where `workflowEndedHandlerExists` says so.
+
+The cancel listener stays where this application serves a task of the called process (release line
+8.10 on). It does not report the end of a workflow there. The core reads the tasks it still
+believes open in the canceled instance and reports them as canceled, and for a called process that
+is all it does: no `@WorkflowEnded` method runs. A boundary event on the call activity is the usual
+way such an instance is canceled, and its open tasks would otherwise never be reported.
+
+A called process deployed by an earlier snapshot of this adapter still carries the start listener
+and, where a method existed, the end listener. The core answers such a notification without effect
+on the workflow. A start listener of such a model has no worker any more, so an instance of it
+waits. Version 1 wrote no listener at all, so this concerns snapshots of 2.0 only.
+
+**Two retry numbers.** A listener job of this adapter carries two retry numbers, and they answer
+different questions. The number in the model is what the gateway hands back when it could not
+deliver an activated job. The gateway fails such a job with the retries it had, so that it is
+available again at once. With zero there is nothing to hand back. The job dies, the cluster raises
+an incident, and a user task managed by Camunda stays in `CREATING` forever. Measured on line 8.9
+in the nightly run 35958279261: the cluster log had `Failed to send 1 activated jobs ... to
+client`, and the user task never arrived. So `creating` and `canceling` listeners are written with
+one attempt left, `Camunda8TaskWiring#ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST`.
+
+The number at the failure is what this adapter passes when a notification really failed. For a
+task listener it stays at none, whatever the model says. `Camunda8UserTaskListenerHandler` fails
+such a job with `Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT`. So the first failure raises the
+incident which an operator acts on. Nothing waits behind a task listener except the task itself. A
+retry loop there would hold the element while a handler which just failed runs again. So a lost
+delivery comes back, and a failed notification does not.
+
+The cancel listener on the process keeps the retries the end listener has, which is the model's
+default. A failed notification is failed with one attempt less and a backoff. The cluster hands the
+job out again, and the last failure raises the incident. Measured: the cluster raises
+`EXECUTION_LISTENER_NO_RETRIES` on the process element with our message and the job key. The
+instance reads `ACTIVE` while the incident stands. Updating the retries and resolving the incident
+hands the same job out again, until the instance reaches `TERMINATED`. Nothing else is waiting
+behind this listener, and a notification which failed once on a busy database deserves a second
+attempt.
+
+`Camunda8ListenersTest` holds what is read out of a model and what a pair of listeners amounts to.
+`Camunda8ListenersReportTest` holds the report of a boot together with the refusals, the listener
+handed to the core, the template on a user task which does not count, and the WARN of a templated
+job element. `Camunda8ModelledListenerHandlerTest` holds the three cases of what a completion
+carries. `Camunda8CancelListenersTest` and `Camunda8CancelListenerDeploymentTest` hold what each
+line writes and recognises. `Camunda8WorkflowEndedKindTest` holds what the handler reports for
+which event. `Camunda8WorkflowCanceledIT` holds that a cluster of the 8.10 line really runs the
+listener when an instance is canceled. `Camunda8CalledProcessDeploymentTest` holds that the start
+events of a called process carry no listener and its process element no end listener, while the
+caller gets both. `Camunda8TaskProcessingIT#aLostListenerDeliveryComesBack` fails a listener job
+back as the gateway does, and reads it from the queue again.
+`Camunda8ShutdownHandlingTest#aListenerFailingIsReported` holds the other half.
+
+See [Listeners somebody modelled](./README.md#listeners-somebody-modelled) and
+[The end of a workflow](./README.md#the-end-of-a-workflow).
 
 ### 28. What an extension of this adapter may use is this adapter's own API
 
@@ -1003,7 +1144,7 @@ which creates the called instance, so there is no moment in which the variable i
 evaluates it per multi-instance instance, so each called instance gets its own round. A listener
 would cost a job per instance just for bookkeeping. A start listener at the process does not see
 the start variables. And no current line takes a `cancel` listener on a call activity (decision
-33). A second such call activity further down appends its own entry. That is how a chain over
+27). A second such call activity further down appends its own entry. That is how a chain over
 several processes comes about.
 
 *Corrected on 2026-10-10: the sentence above used to say that no current line takes an element
@@ -1114,7 +1255,7 @@ deep, is `Camunda8MultiInstanceIT#theIterationCrossesTheCallActivity`.
 
 See [Multi-instance](./README.md#multi-instance).
 
-### 31. A release waits for every current line, a pull request does not
+### 31. A release waits for every current line, and a red night opens an issue
 
 Decision 42 replaces the first rule below: a pull request runs the matrix too, so it also waits for
 every line. The two rules which this entry was written for still stand: the release gate and the
@@ -1186,182 +1327,19 @@ never has two issues.
 
 ### 32. A served listener gets a cancel listener of VanillaBP's own, and the release line says which elements can have one
 
-Superseded by decision 33. The construct this entry rests on cannot sit on an activity. So what it
-describes could never be deployed, and it was taken out again. The entry stays, because a reader
-of the code and of its history has to be able to find out what was tried.
-
-This superseded the paragraph of decision 27 about what `@TaskEvent` receives. The rest of that
-entry stayed as it was.
-
-A listener fires at the moment the modeller picked, and at no other. An interrupting boundary event
-or a terminating end event can take an element away. Such an element never reaches that moment. So
-the method serving the listener is never told that the work it was waiting for is gone. Version 1
-had the same hole and said nothing about it.
-
-`TaskEvent.Event` is not widened for this. No BPMS promises a listener in the same way. Camunda 7
-knows `start`, `end` and `take` on an execution listener. Camunda 8 knows `creating`, `assigning`,
-`updating`, `completing` and `canceling` on a task listener. A common set over the two would be a
-promise VanillaBP cannot keep, and every new event of a BPMS would be forced onto a value which does
-not mean it. So a listener knows the two events which `TaskEvent.Event` already has. `CREATED` is
-the modelled listener firing, whatever moment that is. The event which a method really wants is in
-the model: one listener per event, one method per listener. `CANCELED` is the element going away.
-
-VanillaBP writes the second listener itself while the process is wired: one per served listener,
-with the SAME job type. One listener with one job and one method, exactly as everywhere else in
-this adapter. And the method which already serves the listener is the method which hears the
-cancellation. The alternative was one job which fans out over every listener of the element. That
-would have put `retries="0"` in front of somebody else's method. It would also have needed a
-delivery key per fanned-out call, and a job timeout covering all of them. Order in a model counts
-only within one listener event. So the added listeners move nothing a modeller wrote.
-
-A listener which the modeller put on the cancel moment itself gets none. Such a method hears the
-moment through its own listener, as `CREATED`, and a second report would be the same moment twice.
-A modelled `completing` listener does get `CANCELED`, and that is intended. It waits for the task to
-finish, and the answer is that it never will.
-
-The cancel listener has no retry loop. The cluster holds the element while the job runs, so a retry
-loop would hold the cancellation as well. With no attempt left, the first failure raises the
-incident which an operator can act on. Since story 507, what the model says and what this adapter
-passes at a failure are two different numbers, see decision 41. The model carries one attempt, so
-a delivery which the gateway lost comes back. A failed notification, however, is still failed with
-no retry left. It costs one method and no other, and that is what one listener per method buys.
-
-What can be written depends on the element and on the release line. A user task managed by
-Camunda carries a `canceling` task listener on every line. Every other element needs a `cancel`
-execution listener, which the cluster has from 8.10 on. So `Camunda8CancelListeners` is a class per
-line. This is the first case where a line decides what this adapter can DO, and not only how it
-says something. The class carries the writing half and the reading half together, because both
-name a client constant which the older lines do not have. The offer stays the same on all lines.
-The boot of a workflow module whose listeners are served names the listeners which hear no
-cancellation on this line. So the gap is read at startup instead of being found in production.
-
-A cancellation completes carrying nothing. That follows from decision 1 and is not a rule of its
-own. Only an execution listener on `end` carries values, and a canceled element has no gateway
-behind it to decide on them.
-
-`Camunda8CancelListenersTest` holds which element gets a listener and which does not.
-`Camunda8CancelListenersOfAnElementTest` holds what each line writes for an element other than a
-user task. `Camunda8ModelledListenerHandlerTest` holds that a cancellation arrives as `CANCELED`,
-and that a job with no retry left is failed with none.
-
-For 8.10, those tests prove the model and the client: the alpha client of that line accepts the
-listener in a model and names the event of such a job. Whether a cluster of that line really runs
-the listener when an element is canceled has not been measured here. An integration test of the
-spring-boot module against an 8.10 cluster would measure it. Until that test exists, a line which
-stops running the listener would show up as a workflow which is canceled without a word, and
-nothing in this repository would turn red.
-
-See [Listeners somebody modelled](./README.md#listeners-somebody-modelled).
+*Merged into decision 27 on 2026-10-12, before the 2.0 release.* It had VanillaBP write a cancel
+listener next to every served listener. That could never be deployed and was taken out again.
 
 ### 33. A cancel listener on the element is nothing the cluster takes, so a served listener hears CREATED again
 
-This supersedes decision 32 and puts the paragraph of decision 27 about what `@TaskEvent` receives
-back in force.
-
-Decision 32 had VanillaBP write a `cancel` execution listener beside every served listener, on the
-element the listener sits on. Camunda does not take it there. The 8.10 documentation lists the event
-type under the limitations of execution listeners: "`cancel`: Supported only on the process element."
-A cluster of that line says the same when it reads the model:
-
-```
-'listener-process.bpmn': - Element: Activity_Work > extensionElements > executionListeners
-    - ERROR: The 'cancel' execution listener event type is not supported for the 'serviceTask' element.
-      The 'cancel' event type is only supported on the 'process' element.
-```
-
-That is not a defect of the alpha, and no patch of the line will change it. The event type answers
-a different question from the one decision 32 asked. The same page says what such a listener does
-when it fires: "Cancel listeners run when a process instance is terminated. They execute
-sequentially after all child elements have terminated and before the process reaches its final
-terminated state." It reports that the INSTANCE is gone, not that one element was taken away.
-
-Nothing of the design survives the move to the process element. The design rested on one listener
-per served listener, each with the job type of the method which serves it. A process element has
-one place to hang a listener on, and no job type of its own. Such a listener would also fire only
-for a terminated instance. That is one of the ways an element goes away, and not the everyday one.
-So the design is removed, not bent into a shape it was never meant for.
-
-The `canceling` task listener which decision 32 wrote next to a served listener of a user task
-managed by Camunda goes as well, although that half deploys on every line. Half an answer costs more
-than a gap which somebody named. A method would hear `CANCELED` for a user task and nothing for the
-element next to it, and no rule a developer could read would tell the two apart. The `canceling`
-listener VanillaBP writes for a user task of its own is untouched. It is older than decision 32 and
-it still delivers `CANCELED` for that task.
-
-So a served listener is back where decision 27 left it. `@TaskEvent` receives `CREATED` whenever
-the modelled listener fires, whatever moment the modeller picked for it. A listener which the
-modeller put on the cancel moment is served as `CREATED` like any other. When an interrupting
-boundary event or a terminating end event takes an element away, a served method hears nothing,
-and the startup report says that openly again.
-
-What replaces it is designed in the stories which follow this one, and both of them start at the
-process element, because that is where the cluster has the construct.
-
-See [Listeners somebody modelled](./README.md#listeners-somebody-modelled).
+*Merged into decision 27 on 2026-10-12, before the 2.0 release.* It said why a cancel listener on
+the element is nothing the cluster takes, and that a served listener hears `CREATED` again.
 
 ### 34. The process element reports the cancelation of an instance, and only where a worker answers it
 
-Decision 33 took the `cancel` execution listener off the element on which a served listener sits,
-because a cluster refuses it there. This entry starts with what the 8.10 documentation says about
-the event type: "`cancel`: Supported only on the process element", and "Cancel listeners run when a
-process instance is terminated. They execute sequentially after all child elements have terminated
-and before the process reaches its final terminated state."
-
-So the construct answers one question, and it is a good one. An instance canceled through the API
-reports its end, with the kind `CANCELED`. The core then reports to the application, as
-`CANCELED`, every task it still believes is open in that instance. Measured on 8.10.0-alpha5: the
-job says `CANCEL`, `job.getKind()` is `EXECUTION_LISTENER`, the job carries the process variables
-including the aggregate id, and `getProcessInstanceKey()` names the instance which is being
-terminated. A called process whose parent is canceled gets a job of its own. That is why the
-notification reports that key and never `getRootProcessInstanceKey()`: a derivation limited to one
-instance must not reach for the root of the call tree.
-
-Two paths are not cancelations, however they look in a model. A terminate end event and an
-interrupting event subprocess both COMPLETE the instance. The end listener runs, no cancel job is
-created, and the application hears `COMPLETED`. That is the cluster's view, and not a gap which
-this adapter can close.
-
-**The listener and the worker are one decision.** The listener holds the instance until its job is
-answered. So a model with a listener which nobody serves turns a cancelation into a workflow which
-never goes away and raises no incident either. That is worse than an incident, because nothing
-says anything at all. So the listener is written only where this adapter also opens the worker.
-The end listener follows the same rule, and that is why the two conditions stand next to each
-other in `wireBpmn`.
-
-**It is written in more places than where the end is reported.** A process whose end nobody asked
-about still gets the cancel listener, as long as this application serves one of its tasks and the
-aggregate id can be resolved. The reason is the derivation, not the notification. Such a process
-can leave a task open, and a canceled instance is the only moment at which the core can tell the
-application that the task is gone. Both listeners carry the SAME job type, so one worker answers
-both, and `Camunda8WorkflowEndedHandler` tells them apart by `job.getListenerEventType()`. Anything
-which is neither `END` nor `CANCEL` completes the job and reports nothing. The client's enum grows
-within a line, and a newer cluster reports an event which this build does not know as
-`UNKNOWN_ENUM_VALUE`. Reading such a job as an end would tell the application something untrue.
-
-The retries are the ones the end listener has, which is the model's default. A failed notification
-is failed with one attempt less and a backoff. The cluster hands the job out again, and the last
-failure raises the incident. Measured: the cluster raises `EXECUTION_LISTENER_NO_RETRIES` on the
-process element with our message and the job key. The instance reads `ACTIVE` while the incident
-stands. Updating the retries and resolving the incident hands the same job out again, until the
-instance reaches `TERMINATED`. A task listener is failed differently, on purpose. Nothing else is
-waiting behind this listener, and a notification which failed once on a busy database deserves a
-second attempt. A task listener is failed with no retry left, whatever its model says; decision 41
-keeps that apart from the number the model carries.
-
-`Camunda8CancelListeners` is per release line, for the same reason as under decision 32. The
-writing half names `ZeebeExecutionListenerEventType.cancel`, the reading half names
-`ListenerEventType.CANCEL`, and neither exists in the client of 8.8 or 8.9. This time it is public,
-with the retries as a parameter. The Business Cockpit writes the same listener with retries of its
-own, and it must not build its own copy (see decision 28). On the lines which do not have the
-construct, the boot names every BPMN process whose cancelation is not reported for that reason. So
-the gap is read at startup instead of being found in production.
-
-`Camunda8CancelListenersTest` and `Camunda8CancelListenerDeploymentTest` hold what each line writes
-and recognises. `Camunda8WorkflowEndedKindTest` holds what the handler reports for which event.
-`Camunda8WorkflowCanceledIT` holds that a cluster of the 8.10 line really runs the listener when an
-instance is canceled.
-
-See [The end of a workflow](./README.md#the-end-of-a-workflow).
+*Merged into decision 27 on 2026-10-12, before the 2.0 release.* It said how the process element
+reports the cancelation of an instance, and that the listener is written only where a worker answers
+it.
 
 ### 35. The engine is asked before the search, and the question is a command it refuses
 
@@ -1484,7 +1462,7 @@ workflow goes on with what the newer run wrote. The duplicate work is the same. 
 longer depends on which run happens to be faster, and the refusal says what happened.
 
 **Which workers lease.** Those which hold their job from the activation to the answer: the
-user-task listeners, the listeners somebody modelled, the cancel listeners of decision 32, the
+user-task listeners, the listeners somebody modelled, the cancel listener on the process element (decision 27), the
 start events which the cluster fires itself, and the end of a workflow. A task worker leases only
 where NO task definition of its job type completes asynchronously
 (`workflowTaskCompletesAsynchronously`, asked per job type because a worker subscribes to a job
@@ -1735,35 +1713,8 @@ the rule for the case where a person runs the deploy by hand.
 
 ### 41. Two numbers answer two questions: the one in the model and the one at the failure
 
-A listener job of this adapter carries two retry numbers. Until story 507 both were zero, so
-nobody had to tell them apart. They answer different questions.
-
-**The number in the model** is what the gateway hands back when it could not deliver an activated
-job. The gateway fails such a job with the retries it had, so that it is available again at once.
-With zero there is nothing to hand back. The job dies, the cluster raises an incident, and a user
-task managed by Camunda stays in `CREATING` forever. Measured on line 8.9 in the nightly run
-35958279261: the cluster log had `Failed to send 1 activated jobs ... to client`, and the user task
-never arrived. So `creating` and `canceling` listeners are written with one attempt left,
-`Camunda8TaskWiring#ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST`.
-
-**The number at the failure** is what this adapter passes when a notification really failed. It
-stays at none, whatever the model says. `Camunda8UserTaskListenerHandler` fails such a job with
-`Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT`. So the first failure raises the incident which an
-operator acts on, as before. Nothing waits behind a task listener except the task itself. A retry
-loop there would hold the element while a handler which just failed runs again.
-
-So 507 changed only the answer to the first question. A lost delivery comes back, a failed
-notification does not, and the two numbers say so separately.
-
-Decision 32 and decision 34 were written while both numbers were zero, and they read as if there
-were only one. Their reasoning holds. The cancel listener still has no retry loop. The cancel
-listener on the process still keeps the retries of the end listener, which are the model's
-default. The number each of them names is the one in the model, and this entry says what that
-number does.
-
-`Camunda8TaskProcessingIT#aLostListenerDeliveryComesBack` fails the job back as the gateway does,
-and reads it from the queue again. `Camunda8ShutdownHandlingTest#aListenerFailingIsReported` holds
-the other half.
+*Merged into decision 27 on 2026-10-12, before the 2.0 release.* It said which two retry numbers a
+listener job of this adapter carries: the one in the model and the one at the failure.
 
 ### 42. A pull request waits for every line, the same as the night does
 
@@ -2116,7 +2067,7 @@ the model reaches the cluster with a listener on those and on nothing else.
 
 ### 49. The cluster holds the workflow's name in the variable named after the aggregate's id
 
-*Decision 76 leaves a called process out: it gets no start listener.*
+*Decision 27 leaves a called process out: it gets no start listener.*
 
 The id of a workflow is the id of its workflow aggregate. The application assigns it in the
 `@WorkflowStartedByBpms` method, and nobody else does. Camunda 8 keeps no business key, so this
@@ -2460,7 +2411,7 @@ Camunda, and that the WARN asks for nothing.
 
 *Superseded in part by decision 73: a process nobody claims is not looked at any more, so it keeps no WARN.*
 
-*Superseded in part by decision 72: the part about a modelled listener no method names. Such a listener now goes to the core's wiring validation, which asks for a method or for `implemented-externally=true`, and an element template counts only on a job element, not on a user task. The ad-hoc subprocess part stands, and a marked ad-hoc subprocess now passes as well.*
+*Superseded in part by decision 27: the part about a modelled listener no method names. Such a listener now goes to the core's wiring validation, which asks for a method or for `implemented-externally=true`, and an element template counts only on a job element, not on a user task. The ad-hoc subprocess part stands, and a marked ad-hoc subprocess now passes as well.*
 
 A `@WorkflowService` class which claims a BPMN process says that this application stands in for
 the process. So no element of such a process may be left standing. Where the cluster creates a job
@@ -3001,7 +2952,7 @@ hold up the operations which search: `correlateMessage`, `aggregateChanged`, the
 extension asks for. Each of them either fails in the caller's transaction, which then rolls back and can be
 repeated, or waits in the outbox, which repeats it.
 
-**Where it holds today.** Measured on 2026-10-04 against `camunda/camunda:8.10.0` with PostgreSQL as its storage,
+**Where it holds.** Measured on 2026-10-04 against `camunda/camunda:8.10.0` with PostgreSQL as its storage,
 twelve minutes of outage under load, the application restarted in the middle (analysis `895`):
 
 - With the storage stopped or frozen, every one of about 610 workflows per run ended exactly once. Phase one of a
@@ -3009,153 +2960,121 @@ twelve minutes of outage under load, the application restarted in the middle (an
   used more than six of its fifty attempts; a pod started during the outage, thirty seconds slower.
 - With the exporter paused, the engine and every task kept going as well.
 
-**Where it does not hold yet.** Three cases, all with a stopped exporter, each with its own story:
+The same measurement found three cases with a stopped exporter where the rule did not hold. All three are closed
+for every workflow which has a start row:
 
-- `897`: a planned `aggregateChanged` or `correlateMessage` whose workflow the exporter has not written yet is
-  dropped as stale by a node which has no memory of that workflow, after a restart or on a second node. 480 entries
-  were dropped this way in the measurement. Reading the start row of `889` instead of the in-memory hint closes it,
-  and on Camunda 8 the `workflowId` in that row lets the engine answer without the copy.
-- `898`: waiting for the copy counts as an attempt, ten seconds each, so such an entry is blocked after about eight
-  minutes (measured: 8 min 11 s, 153 entries) and needs a hand to reopen it. Waiting has to spend time, not
-  attempts.
-- `899`: a task-scoped `aggregateChanged` for a task created while the exporter stands still cannot find the scope
-  of that task and is skipped after the `workflow-visibility-timeout`. It has to be repeated instead.
+- `897`: a planned `aggregateChanged` or `correlateMessage` whose workflow the exporter has not written yet was
+  dropped as stale by a node with no memory of that workflow, after a restart or on a second node. Reading the
+  start row of `889` instead of the in-memory hint closed it. On Camunda 8 the `workflowId` in that row lets the
+  engine answer without the copy.
+- `898` and `902`: waiting for the copy counted as an attempt, so such an entry was blocked after about eight
+  minutes. Now waiting spends time and not attempts, on every store.
+- `899` and `903`: a task-scoped `aggregateChanged` for a task created while the exporter stands still could not
+  find the scope of that task and was skipped. Now it waits for its scope, into a user task as well. How is said
+  below.
 
-Until those are done, the wiki page "When the read model fails" says what an operator does meanwhile: not restart
-application pods while the exporter stands still, raise `vanillabp.outbox.block-after-attempts` before maintenance
-of the exporter, and reopen blocked entries afterwards.
+A workflow without a start row, such as one started under version 1, still has these gaps. For such a workflow
+only, the wiki page "When the read model fails" says what an operator does meanwhile: not restart application pods
+while the exporter stands still, raise `vanillabp.outbox.block-after-attempts` before maintenance of the exporter,
+and reopen blocked entries afterwards.
 
-**What was not chosen.** Treating "the search does not know this workflow" as an outage. It would stop the loss
-and the blocking. But it would also make every operation on a workflow which really does not exist wait for hours
-instead of failing at once. And it would end the fallback election of a migration, which depends on exactly that
-answer. Reading what VanillaBP itself wrote down about the start is cheaper, and it is the exact answer.
+**A task-scoped push.** `aggregateChanged(aggregate, taskId)` writes into the scope the task runs in. Camunda 8 has
+no command which names that scope, so the adapter reads it from the query API. That API is fed by an exporter.
+While that exporter stands still, it knows nothing about a task created after it stopped. Reading "the query API
+does not know the scope" as "the task is completed" would lose the value. Analysis `895` measured that on
+2026-10-04: the exporter paused for five minutes, and all 20 workflows whose task was created in that time lost
+their task-scoped push.
 
-The measurement can be repeated: `analysis/895/bin/run.sh` builds the cluster, runs the load, takes the read model
-away and prints whether every workflow ended exactly once.
-
-*Superseded in part on 2026-10-04: the three cases under "Where it does not hold yet" are closed for every workflow which has a start row. A planned operation is no longer dropped after a restart (`897`), waiting for the copy spends time and not attempts on every store (`898`, `902`), and a task-scoped push waits for its scope (`899`), into a user task as well (`903`, decision 66). A workflow without a start row, such as one started under version 1, still has the gaps described there. The wiki page "When the read model fails" therefore no longer advises against restarting application pods while the exporter stands still. That advice still holds for a workflow without a start row, and only for it.*
-
-### 65. A task-scoped push which cannot find its scope asks the engine before it gives up
-
-*Replaced in part by decision 66: the engine is asked only about a task the row of the
-delivery log says rests. Without such a row the push waits for the read model.*
-
-*Replaced in part by decision 78: phase two searches for the scope once.
-It no longer waits up to the window before it asks the engine or gives the entry back.*
-
-`aggregateChanged(aggregate, taskId)` writes into the scope the task runs in. Camunda 8 has no command which names
-that scope, so the adapter reads it from the query API: first the job behind the task id, then the scopes from the
-process instance down to the job. The query API is fed by an exporter. While that exporter stands still, it knows
-nothing about a task created after it stopped.
-
-The push used to read "the query API does not know the scope after the `workflow-visibility-timeout`" as "the task
-is completed" and skipped the push. For a task created while the exporter stood still that was wrong, and the value
-never arrived. Analysis `895` measured it against `camunda/camunda:8.10.0` on 2026-10-04: the exporter paused for
-five minutes, and all 20 workflows whose task was created in that time lost their task-scoped push. Decision 64 does
-not allow that, because it is work which never arrives.
-
-So the adapter now asks the ENGINE when the query API has no answer within the window. The question is an
-`UpdateJobTimeout` on the job key, the same non-advancing command the awareness probe of a task sends:
-
-- `404`: the cluster holds no job of that key any more. The task is completed, and skipping the push with the WARN
-  is right. The workflow's own scope is still not written instead, because every branch reads it.
-- `400` (the job is not activated right now) or `409` (another activation holds it): the cluster has the job. The
-  push throws `PhaseTwoRetryLater` with the visibility window, and the outbox brings the entry back after it.
-- no answer at all, an outage: the failure is thrown as it is, and the outbox repeats it with its own backoff.
-
-Where no visibility window is configured, the push throws an ordinary failure instead of `PhaseTwoRetryLater`. A
-window of zero would bring the entry back at once, again and again.
-
-The same rule covers the other end. The write itself is a command, so the engine answers it. A `404` there means the
-scope ended between the search and the write, together with the task, and the push is skipped with a WARN. Repeating
-it would meet the same answer until the entry is blocked.
-
-**What it costs.** As before, each attempt still waits up to the window for the query API before it asks the engine.
-So the everyday case, where the exporter is a moment behind, stays one attempt. While the exporter stands still, each
-attempt takes the window on the dispatching thread and then the window again until it is due. The entry counts an
-attempt each time, so with the defaults it is blocked after `vanillabp.outbox.block-after-attempts` of them, about
-16 minutes. Waiting which spends time instead of attempts is the platform's story `898`, and with it the push waits
-for as long as the exporter stands still.
-
-The probe has the side effect the awareness probe has as well: the lock of an activated job is set to
-`async-task-lock-renewal`. It only runs where the query API did not know the scope within the window, which a
-synchronous handler has normally finished long before.
-
-**What was not chosen.** Giving up at once when the job search finds nothing, without waiting for the window. That
-would turn the everyday case, a read model a second behind, into a second attempt ten seconds later. And writing into
-the workflow's own scope as a fallback. That is the lost update between iterations of a multi-instance subprocess,
-which the task scope exists to prevent.
-
-Measured after the change on 2026-10-04 with the setup of analysis `895`, run E again (`camunda/camunda:8.10.0`,
-exporter paused for five minutes, a timer of 30 seconds before the subprocess, no restart): the same 20 workflows
-met a task the read model did not know, their pushes were repeated 90 times in all, every one of them reached the
-scope of its subprocess once the exporter was back, and no entry used more than 8 attempts. `Camunda8AggregateChangedIT`
-holds the case against the test cluster: it pauses the exporter, pushes into a task created after that, and waits
-for the value. Without this change that test runs into its timeout.
-
-### 66. A task-scoped push finds its task through the row of the delivery log, and asks the engine only about a task which rests
-
-`aggregateChanged(aggregate, taskId)` writes into the scope the task runs in. Until now the adapter found that scope
-through the job behind the task id. The id of a user task is a user-task key and not a job key, so the job search found
-nothing, the engine answered `404` to `UpdateJobTimeout`, and the push was skipped with the WARN "task ... is
-completed". Measured on 2026-10-04 against `camunda/camunda:8.10.0` with `Camunda8AggregateChangedIT`: a push into
-an open user task directly in its process, one into a user task in an iteration of a multi-instance subprocess, and
-one into a user task while the exporter stood still. All three were skipped, and no value arrived. A user-task form
-which calls `aggregateChanged` with its task id lost every push.
-
-**The row of the task.** When the adapter leaves a task open, the core writes a row into the delivery log. Phase two of
-a task-scoped push gets that row from the core as `PhaseTwoRequest#taskRecord()`, where the row names this adapter. The row names the process instance of the task (`workflowId`), its element
-(`bpmnElementId`), its kind (`taskKind`) and the version of its process (`processVersion`). The adapter reads three
-things from it:
+When the adapter leaves a task open, the core writes a row into the delivery log. Phase two of a task-scoped push
+gets that row from the core as `PhaseTwoRequest#taskRecord()`, where the row names this adapter. The row names the
+process instance of the task (`workflowId`), its element (`bpmnElementId`), its kind (`taskKind`) and the version of
+its process (`processVersion`). The adapter reads three things from it:
 
 - **Where the task runs.** Where the version is the one this application deployed, the deployed model says what
   encloses the element. A task directly in its process runs in the process instance of the row, so the push writes
   there without a search. That works while the exporter stands still. A task directly in an iteration of a
   multi-instance subprocess runs in that iteration. Every iteration carries the variable the adapter maps its index
-  into (decision 5 in this log), and that variable is local to the iteration. So for a user task the adapter reads that one
-  variable from the variables the user task sees, and the scope the cluster reports for it is the iteration. That is
-  one search instead of the walk down from the process instance. Everything else is searched for as decision 65
-  says: a deeper scope, a service task in an iteration (a job has no variable search), and a row of a version this
-  application did not deploy, whose model may enclose the element differently.
+  into (decision 5 in this log), and that variable is local to the iteration. So for a user task the adapter reads
+  that one variable from the variables the user task sees, and the scope the cluster reports for it is the
+  iteration. Everything else is searched for in the query API, first the job or user task behind the task id, then
+  the scopes from the process instance down to it: a deeper scope, a service task in an iteration (a job has no
+  variable search), and a row of a version this application did not deploy, whose model may enclose the element
+  differently.
 - **Which kind of key the id is.** A user task is found by the user-task search, a service task by the job search.
   Without a row the job is looked for first and then the user task. Both kinds of key are unique within a cluster.
 - **Whether the engine may be asked.** See below.
 
-**The engine is asked only about a task which rests.** The probe of decision 65 is not a harmless question. An
-`UpdateJobTimeout` sets the lock of an activated job to `async-task-lock-renewal`, and so it can cut short the lock
-of a job a handler is working on. A task rests where the adapter left it open: every user task, and a service task
-whose method asked for the task id. Its job is renewed by the adapter to that same value anyway. The row says that
-the task rests: it exists only for a task left open (`COMPLETION_PENDING`), and `taskClosedAt` stays empty until the
-application closed it. So the engine is asked when the read model does not know the scope within the window and the
-row says the task rests. A user task is asked with the empty `UpdateUserTask` of its awareness probe, a service task
-with `UpdateJobTimeout`. `404` lets the push go with the WARN, any other refusal throws `PhaseTwoRetryLater`.
+Phase two searches once, and it does not sleep, because decision 49 of the platform says that phase two does not
+sleep. If the query API reports the scope, the push writes there. If it does not, the engine is asked, but only
+about a task which rests. A task rests where the adapter left it open: every user task, and a service task whose
+method asked for the task id. The row says that the task rests: it exists only for a task left open
+(`COMPLETION_PENDING`), and `taskClosedAt` stays empty until the application closed it. A user task is asked with
+the empty `UpdateUserTask` of its awareness probe, a service task with `UpdateJobTimeout`:
 
-Without such a row nothing is asked, and the push throws `PhaseTwoRetryLater` until the read model knows the task.
-That replaces the part of decision 65 which asked the engine about every task the search did not find. The read
-model also reports a completed job and a completed scope, so such a push either finds its scope once the exporter
-caught up, or meets the `404` of the write and is skipped there. The core counts such a wait in time and not in
-attempts, and `vanillabp.outbox.wait-for-visibility-at-most` ends it. A task id which never existed in
-this cluster is therefore blocked after that time instead of being skipped at once. That is accepted. Without
-asking the engine, nobody can tell such an id from a task which the exporter has not written yet. And the engine
-may not be asked about a task which nobody says rests.
+- `404`: the cluster holds the task no more. It is completed, and the push is skipped with a WARN. The workflow's
+  own scope is not written instead, because every branch reads it.
+- any other refusal: the cluster has the task. The push throws `PhaseTwoRetryLater` with the visibility window, and
+  the outbox brings the entry back after it.
+- no answer at all, an outage: the failure is thrown as it is, and the outbox repeats it with its own backoff.
+
+The question is not harmless for a task which does not rest. An `UpdateJobTimeout` sets the lock of an activated
+job to `async-task-lock-renewal`, and so it can cut short the lock of a job a handler is working on. The job of a
+task which rests is renewed by the adapter to that same value anyway. So without such a row nothing is asked, and
+the push throws `PhaseTwoRetryLater` until the read model knows the task. The read model also reports a completed
+job and a completed scope, so such a push either finds its scope once the exporter caught up, or meets the `404` of
+the write and is skipped there. The core counts such a wait in time and not in attempts, and
+`vanillabp.outbox.wait-for-visibility-at-most` ends it. A task id which never existed in this cluster is therefore
+blocked after that time instead of being skipped at once. That is accepted. Without asking the engine, nobody can
+tell such an id from a task which the exporter has not written yet.
+
+Where no visibility window is configured, the push throws an ordinary failure instead of `PhaseTwoRetryLater`. A
+window of zero would bring the entry back at once, again and again. The write itself is a command, so the engine
+answers it. A `404` there means the scope ended between the search and the write, together with the task, and the
+push is skipped with a WARN. Repeating it would meet the same answer until the entry is blocked.
+
+What this costs: the everyday case, a read model a moment behind, is not answered in the first attempt. The entry
+comes back one window later, ten seconds with the defaults. Where the row says that the task rests, the engine is
+asked in that first attempt already.
 
 **What was not chosen.**
 
+- Treating "the search does not know this workflow" as an outage. It would stop the loss and the blocking. But it
+  would also make every operation on a workflow which really does not exist wait for hours instead of failing at
+  once. And it would end the fallback election of a migration, which depends on exactly that answer. Reading what
+  VanillaBP itself wrote down about the start is cheaper, and it is the exact answer.
+- Writing into the workflow's own scope when the task scope cannot be found. That is the lost update between
+  iterations of a multi-instance subprocess, which the task scope exists to prevent.
+- Searching again and again within the window, with a pause in between. Analysis `960` measured it with the
+  exporter paused: two attempts of 10.1 seconds each, about 40 searches each. The answer at the end was right, but
+  each push held a dispatching thread and a database connection while the exporter stood still. A short pause for
+  the everyday case only has the same cost, and decision 49 of the platform makes no exception for a short one.
 - A column for the key of the scope in the delivery log. The job of a user-task listener carries the element
   instance of the task, but not the one of the scope around it, so there is nothing to write. It would also be a
   schema change for the one case the model and the row already answer.
-- Deriving the iteration from the job of the task alone. The context of a multi-instance can be nested (an iteration
-  inside an iteration) and does not come from this one task, so the adapter reads the variable it writes for every
-  iteration instead.
+- Deriving the iteration from the job of the task alone. The context of a multi-instance can be nested (an
+  iteration inside an iteration) and does not come from this one task, so the adapter reads the variable it writes
+  for every iteration instead.
 - Asking the engine with a longer `UpdateJobTimeout` for a job which does not rest. It would lengthen the lock of a
   handler instead of cutting it short, but it would still change a job nobody asked the adapter to change.
 
-Measured after the change on 2026-10-04 with the same three tests against `camunda/camunda:8.10.0`: all three values
-arrived. The push into the user task directly in its process was written while the exporter still stood. The push
-into the iteration was answered by the variable search alone, checked once with the walk switched off. The three
-older tests of `Camunda8AggregateChangedIT` stayed green. `Camunda8TaskScopedPushWaitsForItsScopeTest` holds the
-rules without a cluster: no row or a closed row asks nothing, a user task is asked as a user task, a task directly in
-its process is written without a search, a row of another version is searched for.
+The measurement can be repeated: `analysis/895/bin/run.sh` builds the cluster, runs the load, takes the read model
+away and prints whether every workflow ended exactly once. `Camunda8AggregateChangedIT` holds the task-scoped push
+against the test cluster: into an open user task directly in its process, into a user task in an iteration of a
+multi-instance subprocess, and into a task created while the exporter is paused.
+`Camunda8TaskScopedPushWaitsForItsScopeTest` holds the rules without a cluster: no row or a closed row asks
+nothing, a user task is asked as a user task, a task directly in its process is written without a search, a row of
+another version is searched for, and a scope the query API does not know is given back at once, after one search.
+
+### 65. A task-scoped push which cannot find its scope asks the engine before it gives up
+
+*Merged into decision 64 on 2026-10-12, before the 2.0 release.* It said that a task-scoped push
+which cannot find its scope asks the engine before it gives up.
+
+### 66. A task-scoped push finds its task through the row of the delivery log, and asks the engine only about a task which rests
+
+*Merged into decision 64 on 2026-10-12, before the 2.0 release.* It said that a task-scoped push
+finds its task through the row of the delivery log, and asks the engine only about a task which
+rests.
 
 ### 67. A missing cluster address means the local cluster, and the start warns about it
 
@@ -3283,55 +3202,14 @@ See [A form reference has to be a name as well](./README.md#a-form-reference-has
 
 ### 70. The user-task listeners of a declared process id are read from the models the cluster holds
 
-Proposed by story 933. It changes part of decision 19: the main session gives it a number when it
-merges, and marks the paragraph of decision 19 named below as superseded in part by it.
-
-## What was decided
-
-A workflow module may declare a BPMN process id it deploys nothing under, which is how a renamed
-process keeps being served. Decision 19 composes the workers for that id from what the
-application serves: the task definition of every `@WorkflowTask` method of that id, scoped by it.
-For the user-task listeners this is not enough. A user task may go without a method, and the
-cluster still waits for its `creating` listener. For a model the application deploys, the adapter
-opens a listener worker for every user task, served or not. For the declared id it did so only
-for the user tasks a method names. So a user task without a method, created in a workflow of the
-old id after the rename, stood in `CREATING` for good.
-
-The job types of these listeners are now READ from the models the cluster holds under the
-declared id, as written there: every task listener whose type starts with
-`io.vanillabp.userTask:`. A listener worker is opened for each of them which no other worker of
-the module serves. The composed workers of decision 19 stay as they are. Reading is added, not
-swapped in.
-
-Decision 19 left reading the models open as "its own piece of work", once decision 20 required a
-cluster which can be searched. Decision 21 already reads the same models for the multi-instance
-chains. This entry takes up the alternative for one case only: the listeners of user tasks,
-where composing cannot see the unserved ones at all.
-
-Where the cluster cannot be asked for its models, nothing is added, and the user tasks of those
-workflows are served only where a method names them, as before.
-
-## What was measured
-
-On 2026-10-06 against `camunda/camunda:8.10.0`, with `Camunda8UnservedUserTaskOfARenamedProcessIT`
-(`use-prefix`). The first generation deploys `UnservedRenameOld` and starts a workflow which waits
-for a message in front of a user task without a method. The second generation deploys the model
-under `UnservedRenameNew`, declares the old id and sends the message. Without the change the user
-task stood in `CREATING`, and its listener job of type
-`io.vanillabp.userTask:test-app__UnservedRenameOld__reviewByHand` stood in `CREATED` with no
-worker, for the whole 60 seconds of the wait. With the change the task reached `CREATED`, and the
-class was green in 29 seconds.
-
-## Which paragraph of decision 19 it touches
-
-"They are COMPOSED from what the application serves." This stays true for task workers. For
-user-task listeners the workers are composed AND read.
+*Merged into decision 19 on 2026-10-12, before the 2.0 release.* It said that the user-task
+listeners of a declared process id are read from the models the cluster holds.
 
 ### 71. A standard loop is refused in a claimed process, warned about in one nobody claims, and a held version is warned about while workflows run on it
 
 *Superseded in part by decision 73: a standard loop in a process nobody claims is not looked at any more, so it gets no WARN.*
 
-## What was decided
+#### What was decided
 
 Camunda 8 does not run a standard loop. An activity carrying `standardLoopCharacteristics` deploys
 without a word, runs once, and the workflow moves on, with no error, no incident and no log line.
@@ -3352,9 +3230,9 @@ subprocesses, and answers in three ways:
   workflows still run on it, the start of the workflow module logs a WARN naming the version, the
   activity and how many workflows are on it. A version no workflow runs on any more is passed over.
   Where the cluster cannot count, the WARN says so instead of a number. The models come from the
-  picture of decision 21, and a count is asked only for a version which carries the marker.
+  picture of decision 19, and a count is asked only for a version which carries the marker.
 
-## Why
+#### Why
 
 The price is accepted on purpose: a model which deployed in version 1 does not deploy any more. The
 upgrade is the moment somebody can still change the model, and the refusal is how they learn that
@@ -3372,50 +3250,9 @@ See [A standard loop is refused while deploying](https://github.com/camunda-comm
 
 ### 72. A listener nobody here serves is marked in the configuration, and an element template counts on a job element only
 
-Supersedes the listener part of decision 54. The platform decided on 2026-10-07 that every task of a
-claimed BPMN process needs a `@WorkflowTask` method or the property `implemented-externally=true`, and
-that the core holds that rule for every adapter (decision 119 of `adapter-platform-integration`). This entry
-says what it means for this adapter.
-
-**Listeners.** Decision 54 refused a claimed process whose modelled listener no method names, and let
-the listener pass where its element carried a `zeebe:modelerTemplate`. The template was the only
-marker this adapter read for "somebody else serves this", and it was taken for that reason. It does not
-say that on a user task: the Camunda Modeler sets a template there to preset a form or an assignee.
-A developer who set one for that reason and forgot the method of a listener read a WARN instead of a
-refusal, which decision 54 named as its price.
-
-Three markers were weighed. First, the template: it costs nothing, but it mixes two statements.
-Second, a naming rule for job types: it costs nothing in the model, but it forces a worker we do not
-own to take a name we chose. And a look at the SDK, the docs and about 230 published templates on
-2026-10-07 found no format by which a connector could be recognised either. Third, a configuration
-key: it stands next to the model and can go out of date. The maintainer took the key. The core warns
-about a line which no deployed model needs, and that answers the objection.
-
-So an unserved listener of a claimed process is now handed to `validateTaskWiring` as a task of its
-own (`BpmnTaskSpec.listener`), and the core asks for a method or for the line. The line names the job
-type or the element id; the element id covers every listener on the element. The adapter's own
-refusal of such a listener and its text are gone. A listener on a JOB element built from an element
-template, a connector for example, still belongs to the runtime which owns the element, as decision
-23 and decision 24 say: it is named in its WARN and does not reach the core. On a user task the
-template does not count any more.
-
-**User tasks.** A Camunda-managed user task of a claimed process without a method passed and was named
-at INFO (`Camunda8UnservedUserTasks`). It now ends the boot unless the line marks it, as version 1
-did: `Camunda8DeploymentAdapter` (1.9.1) wired every user task with `allowNoMethodFound=false`. The
-INFO line is gone. Its listener worker is opened all the same, so a marked user task is created and
-completed without this application.
-
-**Ad-hoc subprocesses.** An ad-hoc subprocess with a job of its own and without a template is still
-refused in a claimed process, and the line now lets it pass for a worker the application runs itself.
-A marked one is handed to the core like a task, so a method next to the line is refused there.
-
-**What the claim is.** The question whether a workflow service claims a process is asked through
-`WorkflowTaskWiring.isClaimedByAWorkflowService`, everywhere in this adapter since
-decision 73.
-
-`Camunda8ListenersReportTest` holds the listener handed to the core, the template on a user task
-which does not count, and the WARN of a templated job element. The spring-boot listener ITs use the
-line instead of a template for the two listeners nobody here answers.
+*Merged into decision 27 on 2026-10-12, before the 2.0 release.* It said that a listener nobody here
+serves is marked in the configuration, that an element template counts on a job element only, and
+what that means for user tasks and ad-hoc subprocesses.
 
 ### 73. A process nobody claims is left as it was modelled
 
@@ -3431,8 +3268,8 @@ alone:
 - `wireBpmn` returns for it before anything else. No user-task listener, no start, end or cancel
   listener, no multi-instance mapping and no correlation key is written into its model, no worker
   is opened for its jobs, and its start messages are not reported to the core.
-- No check ends the start or warns because of it. That ends the WARNs of decisions 53, 54, 59, 69 and
-  71 for a process nobody claims, the WARN about a listener nobody serves, and the wait for the
+- No check ends the start or warns because of it. That ends the WARNs of decisions 24, 53, 54, 59, 69
+  and 71 for a process nobody claims, the WARN about a listener nobody serves, and the wait for the
   cluster which decision 53 took to count the open jobs of such a process. The refusals for a
   claimed process stay as they were.
 - The refusal of a file whose unclaimed process waits for a message without a correlation key is
@@ -3520,33 +3357,8 @@ a process called by an expression, a process called by name, the caller and an u
 
 ### 76. A called process gets no start listener and no end listener, and keeps the cancel listener for its tasks
 
-The platform decided that a called process is not a workflow of its own (decision 124 of `adapter-platform-integration`,
-story 949). Its start and its end do not reach the application. The core tells an adapter which processes these are:
-`BpmsInitiatedStartInvoker#startsAWorkflowOfItsOwn` and `WorkflowEndedInvoker#workflowEndedHandlerExists` answer
-`false` for a process the application declares only in `secondaryBpmnProcesses` and deploys a model for.
-
-**The start.** This adapter writes the start listener into the model, on every start event the process holds
-(decisions 48 and 49). For a called process it now writes none and opens no worker for one. A listener nobody needs
-still holds the instance until a worker answers its job, so leaving it in place would cost a job per called instance
-for nothing. The start events are still read and handed to the core, which refuses a called process with a start
-event the cluster fires by itself.
-
-**The end.** The end listener was already written only where `workflowEndedHandlerExists` says so, so a called
-process gets none now without a change here.
-
-**The cancel listener stays** where this application serves a task of the called process (release line 8.10 on). It
-does not report the end of a workflow. The core reads the tasks it still believes open in the canceled instance and
-reports them as canceled, and for a called process that is all it does: no `@WorkflowEnded` method runs. A boundary
-event on the call activity is the usual way such an instance is canceled, and its open tasks would otherwise never be
-reported.
-
-**Models deployed before.** A called process deployed by an earlier snapshot of this adapter still carries the start
-listener and, where a method existed, the end listener. The core answers such a notification without effect on the
-workflow. A start listener of such a model has no worker any more, so an instance of it waits. Version 1 wrote no
-listener at all, so this concerns snapshots of 2.0 only.
-
-`Camunda8CalledProcessDeploymentTest` holds it without a cluster: the start events of the called process carry no
-listener and the process element no end listener, while the caller gets both.
+*Merged into decision 27 on 2026-10-12, before the 2.0 release.* It said that a called process gets
+no start listener and no end listener, and keeps the cancel listener for its tasks.
 
 ### 77. A setting of a called process is read under the called process' own id
 
@@ -3605,32 +3417,6 @@ the message.
 
 ### 78. A task-scoped push searches for its scope once, and phase two does not sleep
 
-*Replaces in part decision 65: the paragraph "What it costs" and the first point under "What was not chosen".*
-
-`aggregateChanged(aggregate, taskId)` writes into the scope the task runs in, and the adapter reads that scope from
-the query API (decisions 65 and 66). Until now phase two repeated that search for as long as the
-`workflow-visibility-timeout` allowed, and slept between the searches. This waiting ran on the thread which
-dispatches the outbox entry, and it held that thread and a database connection for the whole window.
-
-Analysis `960` measured it with the exporter paused: two attempts of 10.1 seconds each, about 40 searches each. The
-answer at the end was right. The price was a dispatching thread and a connection for each push while the exporter
-stood still.
-
-Decision 49 of the platform says that phase two does not sleep. A dispatch which cannot run yet ends, and it gives
-the entry back with the time it is due again. So the push now searches once. If the query API reports the scope,
-the push writes there, as before. If it does not, the push goes on as it did after the window ran out: it asks the
-engine where the row of the delivery log says that the task rests (decision 66), and otherwise throws
-`PhaseTwoRetryLater` with the visibility window. The outbox brings the entry back after that window, and the core
-counts this wait in time and not in attempts.
-
-**What it costs.** The everyday case, a read model a moment behind, is no longer answered in the first attempt. The
-entry comes back one window later, ten seconds with the defaults. Where the row says that the task rests, the engine
-is asked in that first attempt already. That question is harmless for a task which rests, because the adapter
-renews the lock of its job to the same value anyway.
-
-**What was not chosen.** A short sleep for the everyday case only. Any sleep in phase two holds a thread and a
-connection, and decision 49 of the platform makes no exception for a short one.
-
-`Camunda8TaskScopedPushWaitsForItsScopeTest` holds it without a cluster: with a window of 30 seconds, a scope the
-query API does not know is given back at once, after one search. `Camunda8AggregateChangedIT` still pauses the
-exporter, pushes into a task created after that and waits for the value.
+*Merged into decision 64 on 2026-10-12, before the 2.0 release.*
+It said that a task-scoped push searches for its scope once, and
+that phase two does not sleep.

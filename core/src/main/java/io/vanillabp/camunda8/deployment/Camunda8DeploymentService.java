@@ -642,7 +642,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         adapterId, clientFactory::getClient, this::scopedProcessId, this::tenantIdOf);
     // which models the cluster holds for the ids this application declares. Every check
     // of a model asks this picture. So no verdict depends on which application version
-    // deployed the model (see decision 21 in the repository's DECISIONS.md). It is built
+    // deployed the model (see decision 19 in the repository's DECISIONS.md). It is built
     // here, because only the deployment service can read its cluster. It is handed to the
     // factory, because the message check of the process service reads it
     clientFactory
@@ -709,7 +709,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * The model of ONE version the cluster holds. It is taken from the picture of what the
-   * cluster holds for the ids this application declares (see decision 21 in the
+   * cluster holds for the ids this application declares (see decision 19 in the
    * repository's DECISIONS.md). So a question about a held version and a check against
    * one read the same models.
    *
@@ -1490,7 +1490,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
     // the start of a workflow. The execution listener which decides what a start means is
     // ADDED TO THE MODEL here as well, on every start event of the process itself. A called
     // process starts no workflow of its own, so it gets no listener and no worker, see
-    // decision 76 in the repository's DECISIONS.md
+    // decision 27 in the repository's DECISIONS.md
     if (bpmsInitiatedStartInvoker != null) {
       final var startsAWorkflow = bpmsInitiatedStartInvoker.startsAWorkflowOfItsOwn(workflowModuleId, bpmnProcessId);
       final var bpmsInitiatedStarts = startsAWorkflow
