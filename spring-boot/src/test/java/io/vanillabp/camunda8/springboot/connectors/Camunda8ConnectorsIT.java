@@ -24,7 +24,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * workflow is expected to wait at the element forever. The cluster proves the rest:
  * <ul>
  * <li>the model deploys, and a workflow starts on it,</li>
- * <li>the adapter opened no worker for the connector's job type,</li>
+ * <li>nothing of this application served the connector's job: the workflow does not get past
+ * the element. That is how the test sees that the adapter opened no worker for the job
+ * type,</li>
  * <li>the job waiting on the cluster has that job type UNPREFIXED, although this workflow
  * module runs with name-clash avoidance {@code use-prefix}.</li>
  * </ul>

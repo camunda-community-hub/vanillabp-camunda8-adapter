@@ -32,8 +32,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * End-to-end test of pushing a changed aggregate against a real Camunda 8.
  * <p>
- * Camunda 8 has no business key and no command addressing a workflow by one of its
- * variables, so a search is the only way from an aggregate ID to the process-instance and
+ * Camunda 8 has no command addressing a workflow by one of its variables or by its
+ * business id (which VanillaBP does not read anyway), so a search is the only way from an aggregate ID to the process-instance and
  * element-instance keys {@code SetVariables} needs. This is one of the reasons why the
  * adapter requires a cluster it can search, instead of serving only half of this.
  */

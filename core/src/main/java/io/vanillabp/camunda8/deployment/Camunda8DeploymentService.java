@@ -555,9 +555,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
   /**
    * The core's name-clash-avoidance model: decides whether a workflow
-   * module is isolated by a TENANT ({@code by-adapter}, version 1's behavior), by
-   * PREFIXING the identifiers ({@code use-prefix} - no tenant, which is what makes
-   * tenant licenses avoidable) or not at all ({@code none}, this adapter's default).
+   * module is isolated by a TENANT ({@code by-adapter}, version 1's behavior and this
+   * adapter's default), by PREFIXING the identifiers ({@code use-prefix} - no tenant, which
+   * is what makes tenant licenses avoidable) or not at all ({@code none}).
    * May be <code>null</code> (tests): nothing is scoped then.
    */
   private final NameClashAvoidanceSupport scoping;

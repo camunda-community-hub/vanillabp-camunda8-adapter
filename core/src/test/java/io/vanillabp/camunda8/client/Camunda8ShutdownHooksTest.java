@@ -20,11 +20,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What one workflow module of one adapter id may register with its client, now that an
  * extension opens workers beside the adapter's.
  * <p>
- * Three promises are pinned here, and all three are about a second party being there: a
- * module holds more than one shutdown hook, the hooks run so that what was opened last goes
- * down first, and the adapter removing ITS hook leaves an extension's alone. The fourth test
- * is the backstop of the drain, and the fifth the resolver an extension asks for a job's
- * lock.
+ * Most promises pinned here are about a second party being there: a module holds more than
+ * one shutdown hook, the adapter removing ITS hook leaves an extension's alone, a hook which
+ * throws does not keep the others from running, and two modules are closed independently.
+ * The last two tests are about the drain every party of a module shares, and the resolver an
+ * extension asks for a job's lock.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ShutdownHooksTest {

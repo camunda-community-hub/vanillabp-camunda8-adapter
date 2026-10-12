@@ -1022,9 +1022,9 @@ public final class Camunda8TaskWiring {
         .getModelElementsByType(UserTask.class)
         .stream()
         .filter(task -> bpmnProcessId.equals(owningProcessId(task)))
-        // only Camunda-managed user tasks (zeebe:userTask, the 8.8 default);
-        // worker-based user tasks (a zeebe:taskDefinition instead) are handled
-        // like service tasks by tasksOf
+        // only Camunda-managed user tasks (zeebe:userTask, the 8.8 default). Worker-based
+        // user tasks (a zeebe:taskDefinition instead) are not wired at all. They are found
+        // and reported by jobWorkerUserTasksOf
         .filter(task -> task.getSingleExtensionElement(ZeebeUserTask.class) != null)
         .forEach(task -> {
           final var formDefinition = task.getSingleExtensionElement(ZeebeFormDefinition.class);

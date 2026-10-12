@@ -732,7 +732,7 @@ the `shutdown-grace` it already had. In those runs the wait cost 8.2 to 8.5 seco
 first job of 20 seconds into one of 30 milliseconds. There is one wait for all workflow modules of
 an adapter instance. Each module closes its own workers when it is stopped, and the module stopped
 last waits for all of them. So the grace limits the whole shutdown, however many modules an
-application has. Two things follow for an application:
+application has. Three things follow for an application:
 
 - an ordinary restart takes those seconds longer. `shutdown-grace` (default `PT20S`) limits it, and
   it still stays below the shutdown budgets of Spring Boot and Kubernetes. `PT0S` skips the wait

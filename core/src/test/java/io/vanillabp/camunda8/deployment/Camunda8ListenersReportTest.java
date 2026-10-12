@@ -34,9 +34,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * A listener whose job type no method of this application names is the other half, and who
  * claims the process decides it. In the process of a {@code @WorkflowService} class it goes to
  * the core's wiring validation as a task, which asks for a method or for
- * {@code implemented-externally=true}. A process nobody claims keeps its WARN, and so does a
- * listener on a job element built from an element template: that template is how a developer
- * says the element belongs to somebody else. On a user task a template does not count.
+ * {@code implemented-externally=true}. A process nobody claims is not looked at (decision 73 in
+ * the repository's DECISIONS.md). A listener on a job element built from an element template is
+ * warned about, not refused: that template is how a developer says the element belongs to
+ * somebody else. On a user task a template does not count.
  * <p>
  * The cluster is an address nothing listens on. The test is about the text a reader gets and
  * the task specs the core is handed. Neither needs a cluster.

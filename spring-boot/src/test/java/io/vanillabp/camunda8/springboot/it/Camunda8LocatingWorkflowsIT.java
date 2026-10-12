@@ -45,9 +45,9 @@ public class Camunda8LocatingWorkflowsIT extends SpringBootTestOnTheSharedCluste
       final DynamicPropertyRegistry registry) {
 
     // the correlation right after the start waits for two things to happen: the
-    // phase-two outbox dispatching the start (poll interval 10s) and the exporter
-    // feeding the query API. The production default of 10s covers the export lag of
-    // a warm cluster, not a cold container plus a poll interval
+    // phase-two outbox dispatching the start (poll interval PT0.5S in camunda8-it.yaml)
+    // and the exporter feeding the query API. The production default of 10s covers the
+    // export lag of a warm cluster, not a cold container
     registry.add("vanillabp.adapters.c8.workflow-visibility-timeout", () -> "PT60S");
 
   }

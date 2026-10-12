@@ -28,8 +28,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What one job worker costs, in connections, threads and heap.
  * <p>
  * The adapter opens one worker per BPMN process and per kind, so the number grows with the
- * product of both: the Spring Boot test module deploys 35 processes and opens 85 workers on
- * the GA lines and 115 on 8.10, where a cancel listener per process comes on top. Whether
+ * product of both: the Spring Boot test module deploys dozens of processes and opens a worker
+ * for every kind of job each of them has. The exact numbers were never counted. Whether
  * that cut holds is a question about a price nobody had measured, and this is the price.
  * <p>
  * <b>How it is measured.</b> Workers are opened in batches against the shared cluster, with

@@ -204,9 +204,10 @@ without a registry. `Camunda8HealthTest` covers the two timeouts and the UNKNOWN
 
 The adapter SPI is served completely: deployment, workflow start (two-phase), task
 processing, user tasks, message correlation, aggregate sync and the viewer/history API.
-There is ONE deliberate gap: `cancelUserTask`. Camunda 8.8 offers no command for it. So it
+There is ONE deliberate gap: `cancelUserTask`. No cluster offers a command for it. So it
 throws an `UnsupportedOperationException` which says what to do instead, rather than
-pretending to work. It is expected to arrive with the listener support of 8.10. The election
+pretending to work, on every line, 8.10 included. The listeners of 8.10 make it possible, but
+this adapter does not build on them yet. The election
 awareness probes are implemented:
 
 - `awarenessOfTask` (refreshes the job timeout);
@@ -360,9 +361,9 @@ exists and what is deliberately not on it.
 ## BPMN model type
 
 The BPMN model type is `io.camunda.zeebe.model.bpmn.BpmnModelInstance`, shipped in the
-artifact `io.camunda:zeebe-bpmn-model`. Against the resolved Camunda 8 client
-`io.camunda:camunda-client-java:8.8.31`, `zeebe-bpmn-model:8.8.31` is a transitive
-dependency. Class and artifact are **unchanged** from Camunda 7-era Zeebe; 8.8 did not rename
+artifact `io.camunda:zeebe-bpmn-model`. It is a transitive dependency of the Camunda 8 client
+`io.camunda:camunda-client-java`, in the same version, which the release line pins in the parent
+`pom.xml`. Class and artifact are **unchanged** from Camunda 7-era Zeebe; 8.8 did not rename
 them. `readBpmn` parses with it. `prepareBpmn` and `wireBpmn` modify the model: they inject
 listeners and subscriptions. `deployResources` serializes it back.
 

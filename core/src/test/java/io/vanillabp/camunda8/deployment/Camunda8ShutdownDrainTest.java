@@ -39,7 +39,7 @@ public class Camunda8ShutdownDrainTest {
   private static final Duration GRACE = Duration.ofSeconds(2);
 
   /**
-   * The grace of the two tests which say that a shutdown did NOT sit it out. A minute, so
+   * The grace of the three tests which say that a shutdown did NOT sit it out. A minute, so
    * that sitting it out and returning early are a minute apart and no stalled JVM can be
    * mistaken for either.
    */

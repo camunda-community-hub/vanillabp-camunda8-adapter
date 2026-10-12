@@ -22,10 +22,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * The V1-COMPATIBILITY contract of the user-task listener injection:
- * listener job types keep the V1 prefix, retries stay "0" and the insertion order
- * is EXACTLY V1's (VanillaBP "creating" FIRST, custom listeners in between,
- * VanillaBP "canceling" LAST) - upgrading a V1 application must produce a
- * byte-identical BPMN so no new process version is deployed.
+ * listener job types keep the V1 prefix and the insertion order is EXACTLY V1's
+ * (VanillaBP "creating" FIRST, custom listeners in between, VanillaBP "canceling"
+ * LAST). The retries are "1" where V1 wrote "0", see decision 41 in the repository's
+ * DECISIONS.md. So the first deployment after an upgrade from V1 makes a new process
+ * version; deploying the same model again does not.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UserTaskWiringTest {

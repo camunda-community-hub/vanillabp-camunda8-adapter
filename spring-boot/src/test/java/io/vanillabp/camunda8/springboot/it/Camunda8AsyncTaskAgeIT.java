@@ -139,6 +139,10 @@ public class Camunda8AsyncTaskAgeIT extends SpringBootTestOnTheSharedCluster {
           .orElseThrow();
       assertTrue(failed.contains(String.valueOf(aggregateId)), "the incident names the workflow aggregate");
       assertTrue(failed.contains("asyncTask"), "the incident names the task");
+      assertTrue(
+          failed.contains("asynchronous completion for PT"),
+          "the incident names how long the task has been open, but read: "
+              + failed);
 
       // the incident replaces the renewal. The job stays where it is and is not handed out
       // again, so the handler is not invoked a second time

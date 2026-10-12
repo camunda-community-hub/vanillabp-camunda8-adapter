@@ -967,7 +967,8 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * A client of the test's own: this runs while no application of the test is up.
+   * A client of the test's own: this also runs while no application of the test is up, before
+   * a class takes the cluster over.
    */
   private static CamundaClient clientOfTheTest() {
 

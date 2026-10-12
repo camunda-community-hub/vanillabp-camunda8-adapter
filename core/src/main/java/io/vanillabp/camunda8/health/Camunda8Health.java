@@ -13,8 +13,8 @@ import io.vanillabp.integration.adapter.spi.health.AdapterHealth;
  * topology. That is the cheapest question a Camunda 8 cluster answers. Camunda's own
  * Spring Boot starter asks the same one in its health check.
  * <p>
- * Three answers are possible, and which one is given is decided before the cluster is
- * contacted:
+ * Three answers are possible. The first one is decided before the cluster is contacted,
+ * the other two by what the cluster answers:
  * <ul>
  * <li>the connection is not configured yet, or the check was switched off with
  * <code>health-timeout: PT0S</code>: UNKNOWN. An application which booted with a guiding

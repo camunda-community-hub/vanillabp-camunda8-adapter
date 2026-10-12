@@ -51,9 +51,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * The second generation's file carries a SECOND executable process which no workflow
  * service of this application claims, waiting for a message whose correlation key its
- * modeller wrote. Such a process costs the boot nothing: it is deployed with the file, the
- * core names it in the report every workflow module writes, and the workflow of the rename
- * runs through it all. What happens where its model is NOT complete for the cluster is the
+ * modeller wrote. Such a process costs the boot nothing once the application marks it with
+ * {@code implemented-externally=true}, which the test does. Without that mark the start ends
+ * over it. With it, the process is deployed with the file, the core names it in the report
+ * every workflow module writes, and the workflow of the rename runs through it all. What happens where its model is NOT complete for the cluster is the
  * case below: Camunda 8 answers a message catch element without a subscription by rejecting
  * the whole file, so the deployment refuses such a file rather than writing a correlation
  * key into a process this application does not serve.

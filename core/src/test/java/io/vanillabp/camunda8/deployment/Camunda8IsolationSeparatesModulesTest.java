@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import io.camunda.client.CamundaClient;
 import io.vanillabp.camunda8.TestCollaborators;
 import io.vanillabp.camunda8.TestScoping;
 import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
@@ -34,9 +35,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * resolved per workflow module. And an unset tenant name under {@code by-adapter} means the
  * workflow module id.
  * <p>
- * No cluster is involved in any of it. The adapter instances built here have no connection
- * configured, so they have no client either, and a question which asked the cluster something
- * would fail instead of answering.
+ * No cluster is involved in any of it. The client of the adapter instances built here refuses
+ * to be asked, so a question which asked the cluster something would fail instead of
+ * answering.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8IsolationSeparatesModulesTest {
@@ -73,7 +74,14 @@ public class Camunda8IsolationSeparatesModulesTest {
     final var configuration = new Camunda8AdapterConfiguration();
     configuration.setTenantId(tenantOfTheAdapter);
     final var service = DeploymentServiceUnderTest.of(
-        "c8", new Camunda8ClientFactory("c8", configuration), TestCollaborators
+        "c8", new Camunda8ClientFactory("c8", configuration) {
+          @Override
+          public CamundaClient getClient() {
+
+            throw new AssertionError("the isolation question must not reach the cluster");
+
+          }
+        }, TestCollaborators
             .of(new Camunda8DeploymentServiceTest.NoOpInvoker()),
         (
             workflowModuleId,

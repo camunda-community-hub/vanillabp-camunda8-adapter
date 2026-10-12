@@ -30,7 +30,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What this adapter says about a standard loop. The cluster runs such an activity once and says
  * nothing, so a model this boot deploys is refused where the application claims its process,
- * and a warning where nobody does. A version the cluster already holds is a warning where
+ * and not looked at where nobody does (decision 73 in the repository's DECISIONS.md). A version the cluster already holds is a warning where
  * workflows still run on it.
  * <p>
  * Every refusal stands next to the model which must NOT be refused. A multi-instance element

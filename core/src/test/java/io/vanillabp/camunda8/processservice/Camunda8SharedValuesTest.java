@@ -23,8 +23,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * {@code WorkflowAggregateSync} promises two things which nothing held here: the
  * workflow-aggregate's ID is never one of the shared values, and the technical variable
- * carrying it is written ALWAYS, no matter what the sync model says. Camunda 8 has no
- * business key, so that variable is the only way back to the workflow: an aggregate
+ * carrying it is written ALWAYS, no matter what the sync model says. VanillaBP does not
+ * read the business id of Camunda 8, so that variable is the only way back to the workflow: an aggregate
  * annotated {@code @NoSyncWithBPMS} would otherwise be started and never found again -
  * not by an awareness probe, not by a correlation, not by the viewer. The integration
  * tests start aggregates which share everything, so the interesting half was never

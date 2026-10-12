@@ -20,7 +20,7 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * Workflow service of the task-processing integration test: one
- * {@code @WorkflowTask} method per outcome variation, serving three BPMN processes
+ * {@code @WorkflowTask} method per outcome variation, serving eleven BPMN processes
  * of one aggregate. Handlers record invocation counts so the test can prove
  * at-least-once redelivery convergence and async-task dormancy.
  */
@@ -284,7 +284,7 @@ public class TaskDockerWorkflowService {
    * declared as <code>Object</code> because the point of this task is the cluster's
    * view of the variables, not a type the application expects. The test application
    * therefore declares the three names in <code>camunda8-it.yaml</code>, at the
-   * workflow module, because this one workflow service serves twelve processes.
+   * workflow module, because this one workflow service serves eleven processes.
    *
    * @param aggregate The workflow aggregate
    * @param approved What the cluster holds for the approval

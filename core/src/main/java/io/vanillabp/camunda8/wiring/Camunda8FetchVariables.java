@@ -95,8 +95,7 @@ public final class Camunda8FetchVariables {
                           List<String> names) {
 
     /**
-     * The selection of a worker which asks for everything, which is what mode <code>all</code>
-     * ends up as.
+     * The selection of a worker which asks for everything.
      *
      * @return A selection asking for the complete variable scope
      */

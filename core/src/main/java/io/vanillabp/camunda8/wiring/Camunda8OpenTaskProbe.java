@@ -76,9 +76,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <b>A job.</b> <code>UpdateJobTimeout</code> for the task the record names. The adapter
  * sends this command for every open asynchronous task anyway. A 404 or a gRPC
- * <code>NOT_FOUND</code> is gone. Everything else is "cannot say", including the 400 which
- * says the cluster holds the job and nobody has it activated right now: that answer means the
- * task is alive.
+ * <code>NOT_FOUND</code> is gone. The 400 which says the cluster holds the job and nobody has
+ * it activated right now is "still there": that is how an asynchronous task whose lock ran out
+ * looks. Everything else is "cannot say".
  * <p>
  * <b>A Camunda-managed user task.</b> Its key is not a job key. Handed to a job command, it
  * answers <code>NOT_FOUND</code> for as long as the task is open. Read as gone, that would

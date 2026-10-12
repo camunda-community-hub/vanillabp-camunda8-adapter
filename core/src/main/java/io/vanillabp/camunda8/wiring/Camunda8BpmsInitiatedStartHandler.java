@@ -101,7 +101,7 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
    * @param bpmsInitiatedStartInvoker What the platform calls when the cluster starts a workflow
    * @param drain Where the running handler is counted, or <code>null</code> for a drain of its own
    * @param retryBackoffResolver Answers how long the cluster waits before it offers a failed job
-   *          again, or <code>null</code> for the cluster's own backoff
+   *          again, or <code>null</code> for VanillaBP's default of ten seconds
    */
   public Camunda8BpmsInitiatedStartHandler(
       final String adapterId,

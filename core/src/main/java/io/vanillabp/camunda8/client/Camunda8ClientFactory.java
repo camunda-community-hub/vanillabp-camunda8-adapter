@@ -67,9 +67,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
 
   /**
    * Whether this adapter's cluster can be searched, asked once and remembered - here for
-   * the same reason as the record above: deployment service, process service, version
-   * catalog and viewer all ask it, and all of them already receive the factory per
-   * adapter id.
+   * the same reason as the record above: the deployment service and the process service
+   * both ask it, and both already receive the factory per adapter id.
    */
   @Getter
   private final Camunda8QueryApi queryApi;

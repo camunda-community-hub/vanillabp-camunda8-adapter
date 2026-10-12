@@ -180,7 +180,7 @@ public class Camunda8JobHandler implements JobHandler {
 
   /**
    * The worker this handler serves. Built through the generated
-   * <code>Camunda8JobHandler.builder()</code>: seven of these twelve values may be left
+   * <code>Camunda8JobHandler.builder()</code>: eight of these thirteen values may be left
    * out, and a positional list of that length no longer says which is which.
    *
    * @param adapterId The adapter whose worker delivers here

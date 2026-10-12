@@ -10,8 +10,9 @@ import jakarta.inject.Singleton;
 
 /**
  * A minimal workflow service so a {@link ProcessService} bean is built and the adapter
- * wiring is exercised. No BPMN file is provided, so deployment never runs. Persistence
- * is implemented inline but never used (no workflow is started).
+ * wiring is exercised. It brings no BPMN file of its own. Some tests add one, and then the
+ * deployment runs. Persistence is implemented inline but never used (no workflow is
+ * started).
  */
 @Singleton
 @WorkflowService(

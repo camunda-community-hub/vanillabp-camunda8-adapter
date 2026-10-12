@@ -2,6 +2,7 @@ package io.vanillabp.camunda8.springboot.listeners;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.net.URI;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.camunda.client.CamundaClient;
 import io.camunda.client.api.response.ActivatedJob;
+import io.vanillabp.camunda8.client.Camunda8Errors;
 import io.vanillabp.camunda8.client.Camunda8JobLease;
 import io.vanillabp.camunda8.springboot.TestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
@@ -96,7 +98,7 @@ public class Camunda8TaskListenerVariablesCanaryIT extends TestOnTheSharedCluste
       // would then stay green, and the cluster would never be asked about the payload
       final var leaseToken = Camunda8JobLease.tokenOf(job);
 
-      assertThrows(
+      final var refusal = assertThrows(
           Exception.class,
           () -> Camunda8JobLease
               .withToken(client.newCompleteCommand(job.getKey()), leaseToken)
@@ -110,6 +112,15 @@ public class Camunda8TaskListenerVariablesCanaryIT extends TestOnTheSharedCluste
               + "Read what the cluster does with such variables now, decide what a task-listener "
               + "method may write, and change Camunda8ModelledListenerHandler, decision 1 and this "
               + "canary together.");
+      // INVALID_ARGUMENT is HTTP 400 on the REST gateway this client prefers
+      assertTrue(
+          Camunda8Errors.rejection(refusal).startsWith("HTTP 400"),
+          "the cluster refuses the variables as an invalid argument, but answered: "
+              + Camunda8Errors.rejection(refusal));
+      assertTrue(
+          Camunda8Errors.rejection(refusal).contains("23702"),
+          "and its answer names issue 23702, but answered: "
+              + Camunda8Errors.rejection(refusal));
 
       // the same job, completed the way the adapter completes it. This shows that the refusal
       // above was about the payload and nothing else. A job which had expired or was gone would

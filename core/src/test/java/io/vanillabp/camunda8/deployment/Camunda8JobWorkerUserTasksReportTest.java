@@ -38,14 +38,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Who claims the process decides the answer. A process a {@code @WorkflowService} class of the
  * application claims is a promise that the application serves it, so the boot ends over such an
  * element. A process nobody claims travels to the cluster because of the file it sits in, and
- * there is nothing to ask of a model somebody else owns, so it is named and the boot goes on.
+ * there is nothing to ask of a model somebody else owns, so it is not looked at and the boot
+ * goes on (decision 73 in the repository's DECISIONS.md).
  * <p>
  * One element has the shape and is still none of this: a user task with a
  * {@code zeebe:taskDefinition} of its own. A worker of the application serves it under a job
  * type the application chose. So the reader passes over it, and a test below holds that
  * boundary.
  * <p>
- * Two shapes reach both messages and both have to keep them apart. One carries the
+ * Two shapes reach the message and it has to keep them apart. One carries the
  * {@code formKey} VanillaBP 1 read the task definition from up to its release 1.6.3, and an
  * upgrading application finds those by searching its models for that word. The other carries
  * no {@code formKey} at all, so no such search finds it, while the cluster does exactly the
@@ -54,8 +55,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * The cluster is an address nothing listens on, so the count of open tasks is the one thing
  * these runs cannot have. That the message says so instead of a number is asserted as well.
- * So is the wait for the cluster before the count: the boot which goes on waits, so a cluster
- * starting with the application still gives a number, and the boot which ends does not.
+ * So is that no boot waits for the cluster before the count: the boot which ends does not wait,
+ * and a process nobody claims is not counted at all.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput

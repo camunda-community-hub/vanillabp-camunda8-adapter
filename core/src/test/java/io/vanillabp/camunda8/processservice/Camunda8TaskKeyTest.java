@@ -20,10 +20,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8TaskKeyTest {
 
   /**
-   * The parse site is private, and every command of the process service goes through it.
-   * Reaching it through a command would need a client; reaching it by reflection would
-   * test the reflection. So the behaviour is asserted where it is observable: the
-   * exception a caller gets, produced by the same code path.
+   * The parse site is package-private, and every command of the process service goes through
+   * it. Reaching it through a command would need a client. So the test calls it directly and
+   * asserts the exception a caller gets, produced by the same code path.
    */
   private static IllegalArgumentException parse(
       final String taskId) {

@@ -482,8 +482,8 @@ public class Camunda8ProcessVersions extends CachingProcessVersionCatalog {
   /**
    * The versions the cluster still holds under one BPMN process id, oldest first.
    * They are read fresh, not from the resolution cache. The caller keeps the answer
-   * itself, and a swallowed failure would make an empty cluster look like an
-   * unreachable one.
+   * itself, and a swallowed failure would make an unreachable cluster look like an
+   * empty one.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID

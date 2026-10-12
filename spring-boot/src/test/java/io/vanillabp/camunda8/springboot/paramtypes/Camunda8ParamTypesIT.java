@@ -236,8 +236,10 @@ public class Camunda8ParamTypesIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The incidents of the cluster, by the element they sit on. This scenario runs one
-   * workflow of one model, so every incident the cluster holds belongs to it.
+   * The incidents of the cluster, by the element they sit on. The cluster is shared, so other
+   * classes may have left incidents there. The search does not filter them out, and it reads
+   * one page of 100. The element ids of this model are its own, so an incident of another
+   * model is not mistaken for one of this scenario.
    */
   private Map<String, Incident> incidentsByElement() {
 

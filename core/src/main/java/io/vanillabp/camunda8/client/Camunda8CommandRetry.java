@@ -45,8 +45,9 @@ import lombok.extern.slf4j.Slf4j;
  * ({@code ExponentialBackoffBuilderImpl}): {@value #INITIAL_BACKOFF_MILLIS} ms at first,
  * factor {@value #BACKOFF_FACTOR}, a ceiling of {@value #MAX_BACKOFF_MILLIS} ms and
  * {@value #JITTER_FACTOR} jitter. So the documentation tells one story about backoff, not
- * two. With five attempts the ceiling is never reached - the longest wait is
- * around 330 ms and the whole sequence stays below half a second, which is the point.
+ * two. With five attempts the ceiling is never reached. There are four waits, of 50, 80, 128
+ * and 205 ms before jitter, so the whole sequence stays around half a second, which is the
+ * point.
  * <p>
  * <b>What is not retried.</b> The classification is the one the outbox already uses
  * ({@link Camunda8Errors#repeatableJobCommandFailure}). So the adapter has one opinion

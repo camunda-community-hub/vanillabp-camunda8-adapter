@@ -118,7 +118,7 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
 
   /**
    * The user-task listener worker this handler serves. Built through the generated
-   * <code>Camunda8UserTaskListenerHandler.builder()</code>: four of these seven values may
+   * <code>Camunda8UserTaskListenerHandler.builder()</code>: five of these eight values may
    * be left out, and a positional list of that length no longer says which is which.
    *
    * @param adapterId The adapter whose worker delivers here

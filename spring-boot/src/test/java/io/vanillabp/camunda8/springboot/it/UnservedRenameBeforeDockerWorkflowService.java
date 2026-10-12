@@ -10,7 +10,8 @@ import io.vanillabp.spi.service.WorkflowService;
 /**
  * The application of {@code Camunda8UnservedUserTaskOfARenamedProcessIT} BEFORE the rename.
  * It starts the workflow and serves no task at all: the one user task of the model has no
- * method, which a user task is allowed.
+ * method, which a user task is allowed once the application marks it with
+ * {@code implemented-externally=true}, as the test does.
  */
 @Service
 @Profile("unserved-rename-before")

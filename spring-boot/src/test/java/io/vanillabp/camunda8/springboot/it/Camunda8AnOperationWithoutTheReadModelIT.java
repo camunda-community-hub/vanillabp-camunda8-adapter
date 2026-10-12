@@ -256,8 +256,7 @@ public class Camunda8AnOperationWithoutTheReadModelIT extends SpringBootTestOnTh
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
 
-    // generous on purpose: the outbox dispatches every ten seconds, and a cold cluster
-    // needs a while for its first jobs
+    // generous on purpose: a cold cluster needs a while for its first jobs
     final var deadline = System.currentTimeMillis() + 120_000;
     while (!Boolean.TRUE.equals(condition.get())) {
       if (System.currentTimeMillis() > deadline) {

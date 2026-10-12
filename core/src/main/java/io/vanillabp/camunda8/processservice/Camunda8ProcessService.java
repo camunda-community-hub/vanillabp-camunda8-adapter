@@ -255,8 +255,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Sets the name-clash-avoidance support (constructor injection is not possible -
-   * this class is built by Lombok's all-args constructor, which the platform
-   * modules call).
+   * the platform modules call the constructor of this class, which does not take it).
    *
    * @param scoping The name-clash-avoidance support
    */
@@ -398,13 +397,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * The process variables written whenever this adapter talks to the cluster on behalf of
    * a workflow. These are the shared attributes of the aggregate PLUS the technical
    * variable which carries the ID of the aggregate (named after its ID property). The ID
-   * variable is always written, whatever the sync model says. Camunda 8 has no
-   * business key: that variable is how VanillaBP finds the workflow again.
+   * variable is always written, whatever the sync model says. VanillaBP never reads the
+   * business id of Camunda 8 (decision 37 in the repository's DECISIONS.md): that variable
+   * is how VanillaBP finds the workflow again.
    * <p>
    * Package-private, so {@code Camunda8SharedValuesTest} can hold the second half of that
    * promise without a cluster. An aggregate annotated {@code @NoSyncWithBPMS} shares
-   * nothing, and Camunda 8 has no business key, so losing the ID variable would start a
-   * workflow nobody can find again.
+   * nothing, and VanillaBP does not read a business id, so losing the ID variable would
+   * start a workflow nobody can find again.
    *
    * @param aggregatePersistence The aggregate's persistence
    * @param workflowAggregateId The aggregate's ID
@@ -971,7 +971,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void preflightCancelUserTask(
       final PhaseOneRequest<A> request) {
 
-    // fail EARLY inside the caller's transaction: see cancelUserTaskPhaseTwo
+    // fail EARLY inside the caller's transaction: see newCancelUserTaskUnsupported
     throw newCancelUserTaskUnsupported(request.taskId(), request.bpmnProcessId());
 
   }
@@ -1346,8 +1346,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * whereas a duplicate start is the accepted at-least-once residual).
    * Differences to the election probe:
    * <ul>
-   * <li>no state filter - a workflow COMPLETED since the crashed start still
-   * proves the start succeeded;</li>
+   * <li>an ended instance counts as well - a workflow COMPLETED since the crashed start
+   * still proves the start succeeded. The election probe skips instances which ended;</li>
    * <li>a failed search is {@link WorkflowAwareness#BPMS_UNAVAILABLE} and never an
    * optimistic ACTIVE, so the outbox entry is retried instead of a recovered start
    * being skipped under the at-least-once contract of
@@ -1618,8 +1618,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private static final String DEFAULT_TENANT = "<default>";
 
   /**
-   * The name of the process variable holding the workflow-aggregate ID: Camunda 8
-   * has no business key, so every lookup of a workflow filters by that variable.
+   * The name of the process variable holding the workflow-aggregate ID: VanillaBP never
+   * reads the business id of Camunda 8, so every lookup of a workflow filters by that
+   * variable.
    * <p>
    * It is ALWAYS taken from the aggregate persistence of the call at hand, and never
    * remembered between calls. One process service serves every workflow module and
@@ -1679,14 +1680,15 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * publication, the TTL passes, and nothing ever correlates. So the mistake is reported
    * where the application made the call.
    * <p>
-   * The check stays silent where its set of models is incomplete: where this
-   * application version deployed no process of the workflow module (a workflow still
+   * The check stays silent where its set of models is incomplete. That is the case where
+   * this application version deployed no process of the workflow module (a workflow still
    * running on a definition of a previous version - see
-   * {@code Camunda8DeployedProcesses}), and where the module declares a BPMN process
-   * id nothing was deployed under (the old id of a renamed process, whose models the
-   * cluster holds). In both cases the declared names are unknown rather than absent,
-   * and a check which cannot see every model that could carry the answer must stay
-   * silent, never refuse.
+   * {@code Camunda8DeployedProcesses}). A module which declares a BPMN process id nothing
+   * was deployed under (the old id of a renamed process) is judged by the models the
+   * cluster holds for its ids, see decision 21 in the repository's DECISIONS.md. Only where
+   * that picture is missing or the cluster cannot be asked are the declared names unknown
+   * rather than absent. A check which cannot see every model that could carry the answer
+   * must stay silent, never refuse.
    */
   private void preflightCorrelateMessage(
       final PhaseOneRequest<A> request) {
@@ -2484,7 +2486,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * The key of the ACTIVE process instance carrying the aggregate's ID variable -
-   * Camunda 8 has no business key, so the eventually-consistent query API answers
+   * VanillaBP finds a workflow by that variable, so the eventually-consistent query API answers
    * (like {@link #awarenessOfWorkflow}).
    *
    * @param workflowAggregateId The aggregate's ID
@@ -2957,7 +2959,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Creates a Camunda 8 process instance of the latest version of the given BPMN process,
-   * passing the workflow aggregate's ID as a single process variable. How the aggregate's
+   * passing the given process variables, which carry the workflow aggregate's ID. How the aggregate's
    * ID is stored in the BPMS is the adapter's decision: Camunda 8 stores the aggregate as
    * process variables, so the variable carrying the ID is named after the aggregate's ID
    * property (see {@link AggregatePersistenceAware#getAggregateIdName()}). This is what
@@ -3081,8 +3083,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   private Camunda8WorkflowViewer viewer() {
 
-    // built on first use: this class is constructed by Lombok's all-args
-    // constructor, so a field initializer could not reference the final fields
+    // built on first use: a field initializer runs before the constructor assigns the
+    // final fields, so it would hand the viewer a client factory which is still null
     if (viewer == null) {
       viewer = new Camunda8WorkflowViewer(adapterId, clientFactory, this::scopedProcessId, this::tenantIdOf);
     }

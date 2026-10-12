@@ -371,11 +371,17 @@ public class Camunda8StartupQuestionCostTest {
 
     // the core puts this question per pair of workflow modules whose BPMN process ids meet,
     // so an application with many modules puts it many times. The answer is the tenant each
-    // module would be deployed to, which is configuration: this adapter instance has no
-    // connection and therefore no client at all, so a question which went to the cluster
-    // would fail here instead of being counted
+    // module would be deployed to, which is configuration. The client of this adapter
+    // instance refuses to be asked, so a question which went to the cluster would fail here
     final var deploymentService = DeploymentServiceUnderTest.of(
-        "c8", new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration()), TestCollaborators
+        "c8", new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration()) {
+          @Override
+          public CamundaClient getClient() {
+
+            throw new AssertionError("the isolation question must not reach the cluster");
+
+          }
+        }, TestCollaborators
             .of(new Camunda8DeploymentServiceTest.NoOpInvoker()),
         (
             workflowModuleId,

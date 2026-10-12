@@ -10,7 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Release line <code>8.9</code>, the current GA line, which is also what a build without a profile produces.
+ * Release line <code>8.9</code>, a bugfix line, which carries bugfixes only.
  * <p>
  * This test exists once per line, in the line's own test source directory. Only the copy of
  * the active line is compiled. It proves that the per-line build works: the profile selected

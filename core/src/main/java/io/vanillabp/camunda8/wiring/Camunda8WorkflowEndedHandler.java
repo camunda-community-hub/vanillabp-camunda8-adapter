@@ -99,7 +99,7 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
    * @param workflowEndedInvoker What the platform calls when a workflow of that process ended
    * @param drain Where the running handler is counted, or <code>null</code> for a drain of its own
    * @param retryBackoffResolver Answers how long the cluster waits before it offers a failed job
-   *          again, or <code>null</code> for the cluster's own backoff
+   *          again, or <code>null</code> for VanillaBP's default of ten seconds
    */
   public Camunda8WorkflowEndedHandler(
       final String adapterId,

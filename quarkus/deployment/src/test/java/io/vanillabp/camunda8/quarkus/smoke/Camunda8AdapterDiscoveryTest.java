@@ -23,8 +23,9 @@ import jakarta.inject.Inject;
 /**
  * Smoke test proving the Camunda 8 adapter is discovered on Quarkus when configured
  * ({@code vanillabp.adapters.c8: camunda8}), without any Camunda 8 cluster or Docker: no
- * BPMN files are provided and no workflow is started, so neither the deployment pipeline
- * nor a client/cluster is required.
+ * BPMN files are provided and no workflow is started, so the deployment pipeline sends
+ * nothing. One test asks the local cluster of the release line for its health, and it holds
+ * whether one runs there or not.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8AdapterDiscoveryTest {
