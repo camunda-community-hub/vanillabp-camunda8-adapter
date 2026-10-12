@@ -31,10 +31,10 @@ import io.vanillabp.integration.spi.PhaseOperation;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Unit tests of {@link Camunda8ProcessService} that do not require a cluster: phase one
- * validates only (never contacts Camunda 8). Phase two (which creates the process
- * instance on the cluster) is covered end-to-end by {@code Camunda8DeploymentAndStartIT},
- * and here only for what it reports back to VanillaBP.
+ * Unit tests of {@link Camunda8ProcessService} which need no cluster. Phase one only
+ * validates and never contacts Camunda 8. Phase two creates the process instance on the
+ * cluster. {@code Camunda8DeploymentAndStartIT} covers it end to end. Here it is only
+ * tested for what it reports back to VanillaBP.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ProcessServiceTest {
@@ -78,7 +78,7 @@ public class Camunda8ProcessServiceTest {
     final var configuration = new Camunda8AdapterConfiguration();
     // a bogus address that is never contacted in phase one
     configuration.setRestAddress("http://localhost:1");
-    // no waiting for the exporter in a unit test - the cluster is never contacted
+    // no waiting for the exporter in a unit test, the cluster is never contacted
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     return new Camunda8ProcessService<>(
         "c8", new Camunda8ClientFactory("c8", configuration), Duration
@@ -125,8 +125,8 @@ public class Camunda8ProcessServiceTest {
   public void phaseTwoOfAStartReportsTheProcessInstanceKeyAndTheVersion() {
 
     // a cluster which answers every create with the same instance. On a real cluster the
-    // worker of the start event writes the same key down a moment later, so only a test
-    // without one shows that phase two reports it on its own
+    // worker of the start event writes the same key down a moment later. So only a test
+    // without that worker shows that phase two reports the key on its own
     final var started = mock(ProcessInstanceEvent.class);
     when(started.getProcessInstanceKey()).thenReturn(2251799813685249L);
     when(started.getVersion()).thenReturn(3);
@@ -187,9 +187,9 @@ public class Camunda8ProcessServiceTest {
   @DisplayName("the re-dispatch probe never answers ACTIVE on a failing query - a recovered start must not be skipped")
   public void redispatchProbeIsNeverOptimisticOnFailure() {
 
-    // an unreachable cluster must yield BPMS_UNAVAILABLE (the outbox entry stays
-    // pending and is retried) - answering ACTIVE would SKIP a recovered start and
-    // thereby lose the workflow
+    // an unreachable cluster must answer BPMS_UNAVAILABLE. Then the outbox entry stays
+    // pending and is retried. Answering ACTIVE would SKIP a recovered start, and so lose
+    // the workflow
     final var awareness = configuredService().awarenessOfWorkflowForRedispatch(SCOPE, persistence("agg-1"), "agg-1");
 
     assertTrue(

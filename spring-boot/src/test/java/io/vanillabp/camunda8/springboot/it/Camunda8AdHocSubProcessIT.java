@@ -20,16 +20,16 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * An ad-hoc subprocess against a REAL Camunda 8 broker: the activities the workflow
- * aggregate names are the ones which run, and the workflow leaves the element when they
- * are done.
+ * An ad-hoc subprocess against a REAL Camunda 8 broker. The activities which the workflow
+ * aggregate names are the ones which run. The workflow leaves the element when they are
+ * done.
  *
  * <p>
- * Nothing was added to the adapter for this. The element is none the wiring collects, the
- * activities inside it are ordinary tasks, and the list of ids reaches the cluster because
- * the workflow aggregate is shared with every command. This test is what says so: it is the
- * proof that serving the element costs no framework code, and it is the only way to prove
- * it, because a cluster is what evaluates the expression.
+ * Nothing was added to the adapter for this. The wiring does not collect the element. The
+ * activities inside it are ordinary tasks. The list of ids reaches the cluster because the
+ * workflow aggregate is shared with every command. This test proves that serving the
+ * element costs no framework code. Only a test against a cluster can prove it, because the
+ * cluster evaluates the expression.
  * </p>
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -73,8 +73,8 @@ public class Camunda8AdHocSubProcessIT extends SpringBootTestOnTheSharedCluster 
         .execute(status -> workflowService.startWorkflow(picked).getId());
     assertNotNull(aggregateId);
 
-    // the service task BEHIND the subprocess is what proves the workflow left it, and no
-    // completion condition is modelled: the element ends when its activated activities do
+    // the service task AFTER the subprocess proves that the workflow left it. No completion
+    // condition is modelled, so the element ends when its activated activities end
     awaitUntil(
         () -> repository
             .findById(aggregateId)

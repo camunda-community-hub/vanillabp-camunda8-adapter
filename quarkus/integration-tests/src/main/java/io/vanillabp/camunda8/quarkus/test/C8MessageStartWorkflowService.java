@@ -10,8 +10,8 @@ import jakarta.inject.Inject;
 /**
  * The workflow service of the process which starts on the message 'C8OrderPlaced'. A
  * message passed to <code>startWorkflowByMessage</code> has to start the process of the
- * calling process service, so this process needs a process service, and with it a
- * workflow service, of its own.
+ * calling process service. So this process needs a process service of its own, and with it
+ * a workflow service of its own.
  */
 @ApplicationScoped
 @WorkflowService(

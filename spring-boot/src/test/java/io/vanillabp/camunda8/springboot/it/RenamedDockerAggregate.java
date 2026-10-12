@@ -10,8 +10,8 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of the renamed-process integration test. It outlives the
- * application which started its workflow: the second boot of that test reads it from the
- * same database, which is what a workflow running across an upgrade needs.
+ * application which started its workflow. The second boot of that test reads it from the
+ * same database. A workflow which runs across an upgrade needs exactly that.
  */
 @Entity
 @Table(name = "C8_RENAMED_AGGREGATE")

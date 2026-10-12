@@ -24,8 +24,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Which listeners of a model this adapter treats as the modeller's, and which it leaves
  * alone because VanillaBP or one of its extensions wrote them.
  * <p>
- * Every case is asserted together with a listener which must NOT be affected: the whole
- * point of the recognition is telling the two apart, and a rule reaching too far would end
+ * Every case is asserted together with a listener which must NOT be affected. The whole
+ * point of the recognition is to tell the two apart. A rule which reaches too far would end
  * a boot over a listener the framework wrote itself.
  */
 @ExtendWith(SuppressOutputExtension.class)

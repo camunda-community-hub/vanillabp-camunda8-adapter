@@ -13,8 +13,8 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
  * Builds the deployment service for a test which does not need every collaborator.
  * <p>
  * The service itself has one constructor, and it takes everything an application can
- * configure. The shorter forms live here because a public constructor is a promise to every
- * application, and these are only meant for our own tests.
+ * configure. The shorter forms live here, because a public constructor is a promise to every
+ * application. These are only meant for our own tests.
  */
 public final class DeploymentServiceUnderTest {
 
@@ -46,8 +46,8 @@ public final class DeploymentServiceUnderTest {
   }
 
   /**
-   * Builds the service without the name-clash avoidance, which is what a test of a single
-   * adapter id needs.
+   * Builds the service without the name-clash avoidance. A test of a single adapter id needs
+   * no more.
    *
    * @param adapterId The configured adapter id this service deploys for
    * @param clientFactory The clients of that adapter id

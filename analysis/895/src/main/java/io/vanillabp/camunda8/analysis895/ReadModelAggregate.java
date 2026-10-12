@@ -9,8 +9,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The workflow aggregate. Every column the driver needs to know how far a workflow got is
- * here, so a restart of the application carries on where the last run stopped.
+ * The workflow aggregate. It has every column the driver needs to know how far a workflow
+ * got. So a restart of the application carries on where the last run stopped.
  */
 @Entity
 @Table(name = "A895_AGGREGATE")
@@ -41,9 +41,9 @@ public class ReadModelAggregate {
   private String endedAs;
 
   /**
-   * How long the workflow waits between 'work' and the subprocess, an ISO duration. The
-   * targeted run of the task-scoped push sets it, so a task can come into being while the
-   * exporter stands still although its workflow was exported before.
+   * How long the workflow waits between 'work' and the subprocess, as an ISO duration. The
+   * run which targets the task-scoped push sets it. Then a task can come into being while
+   * the exporter stands still, although its workflow was exported before.
    */
   private String delay;
 

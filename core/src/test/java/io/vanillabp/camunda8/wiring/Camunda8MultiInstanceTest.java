@@ -26,9 +26,9 @@ import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeIoMapping;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the adapter has to do to a model before Camunda 8 can report an iteration:
- * every multi-instance element gets input mappings named after itself,
- * and which iterations enclose which element is remembered for dispatch.
+ * What the adapter has to do to a model before Camunda 8 can report an iteration. Every
+ * multi-instance element gets input mappings named after itself. And the adapter remembers
+ * for dispatch which iterations enclose which element.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8MultiInstanceTest {
@@ -74,8 +74,8 @@ public class Camunda8MultiInstanceTest {
       """;
 
   /**
-   * One process called from two places, each of them inside a multi-instance element of
-   * its own - the shape which makes the chain a union rather than a path.
+   * One process called from two places, each of them inside a multi-instance element of its
+   * own. This shape makes the chain a union instead of a path.
    */
   private static final String TWO_CALLERS = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -268,8 +268,8 @@ public class Camunda8MultiInstanceTest {
       """;
 
   /**
-   * What the model says at a call activity about the variables of the enclosing scopes -
-   * read off the DOM, so an absent attribute reads as <code>null</code> rather than as the
+   * What the model says at a call activity about the variables of the enclosing scopes. It
+   * is read off the DOM, so an absent attribute reads as <code>null</code>, not as the
    * default.
    */
   private static String propagationOf(
@@ -603,9 +603,9 @@ public class Camunda8MultiInstanceTest {
 
 
   /**
-   * Decomposition over two levels: a call activity inside a multi-instance subprocess
-   * calls a process which is itself multi-instance in one place and calls a third process
-   * in another - the shapes the chain of a called process has to answer.
+   * Decomposition over two levels. A call activity inside a multi-instance subprocess calls
+   * a process. That process is multi-instance itself in one place, and calls a third process
+   * in another. These are the shapes the chain of a called process has to answer.
    */
   private static final String CALL_GRAPH = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -1030,8 +1030,8 @@ public class Camunda8MultiInstanceTest {
 
   /**
    * A job whose only variable is the handed-down chain, the way a worker of this adapter gets
-   * it: the fetch list names that variable, and the values of the caller's levels are in the
-   * list rather than in variables of their own.
+   * it. The fetch list names that variable. The values of the caller's levels are in the
+   * list, not in variables of their own.
    */
   private static Map<String, Object> jobCarrying(
       final Object handedDown) {

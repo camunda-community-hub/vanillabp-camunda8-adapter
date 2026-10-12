@@ -30,10 +30,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What a boot says about a handler which wants the item of an iteration the model hands
  * none over for.
  * <p>
- * Every refusal is asserted together with the model that must NOT be refused. An element
+ * Every refusal is asserted together with the model which must NOT be refused. An element
  * whose handler only wants to know how far the iteration got needs no
- * <code>inputElement</code>, and refusing it would end the boot of an application that
- * does nothing wrong.
+ * <code>inputElement</code>. Refusing it would end the boot of an application which does
+ * nothing wrong.
  * <p>
  * The cluster is an address nothing listens on. Everything asserted below is read from the
  * model.
@@ -49,8 +49,8 @@ public class Camunda8MultiInstanceItemsTest {
   private static final String FILE = "loan-approval.bpmn";
 
   /**
-   * A subprocess walking a collection without naming what one entry of it is called, with
-   * one task inside it.
+   * A subprocess which walks a collection without naming what one entry of it is called,
+   * with one task inside it.
    */
   private static final String SUBPROCESS_WITHOUT_AN_ITEM = """
           <bpmn:subProcess id="Subprocess_applications">
@@ -67,7 +67,7 @@ public class Camunda8MultiInstanceItemsTest {
           </bpmn:subProcess>
       """;
 
-  /** The same subprocess naming the variable each round's entry goes into. */
+  /** The same subprocess, naming the variable the entry of each round goes into. */
   private static final String SUBPROCESS_WITH_AN_ITEM = """
           <bpmn:subProcess id="Subprocess_applications">
             <bpmn:multiInstanceLoopCharacteristics>
@@ -101,8 +101,8 @@ public class Camunda8MultiInstanceItemsTest {
 
   /**
    * The core of an application whose methods want the item of the given elements, keyed by
-   * what the method was wired by. Everything it is not asked about answers nothing, which
-   * is what a method declaring no <code>@MultiInstanceElement</code> looks like.
+   * what the method was wired by. Everything it is not asked about answers nothing. That is
+   * what a method which declares no <code>@MultiInstanceElement</code> looks like.
    */
   private static class ACoreWantingTheItemOf extends Camunda8DeploymentServiceTest.NoOpInvoker {
 
@@ -138,9 +138,9 @@ public class Camunda8MultiInstanceItemsTest {
   }
 
   /**
-   * A caller iterating over a call activity without naming the item, and the process it calls
-   * statically, with one task of its own and one multi-instance element of its own which names
-   * no item either.
+   * A caller which iterates over a call activity without naming the item. And the process it
+   * calls statically, with one task of its own and one multi-instance element of its own,
+   * which names no item either.
    */
   private static String callerAndCalled(
       final String loopCharacteristicsOfTheCaller) {
@@ -186,8 +186,8 @@ public class Camunda8MultiInstanceItemsTest {
 
   /**
    * Reads, prepares and wires every process of one file, the way the pipeline does for a
-   * workflow module, and links the calls between them as the deployment does before it asks
-   * the cluster anything.
+   * workflow module. Then it links the calls between them, as the deployment does before it
+   * asks the cluster anything.
    *
    * @return The service, for the registry it filled
    */

@@ -29,15 +29,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The one rule, at every place this adapter writes a prefix: a value written as a FEEL
  * expression gets the prefix INSIDE the expression, and every other value gets it in front.
  * <p>
- * Which of those places Camunda 8 evaluates an expression at is deliberately not asked. A list
- * of them would age with every Camunda release, while the rule cannot be wrong: where no
- * expression is evaluated a value starting with {@code =} does not appear, and where one is
- * evaluated later nothing here has to change. So every place is held to the same two forms
- * below.
+ * The test does not ask at which of those places Camunda 8 evaluates an expression, on
+ * purpose. A list of them would age with every Camunda release, but the rule cannot be wrong.
+ * Where no expression is evaluated, a value starting with {@code =} does not appear. And
+ * where one is evaluated later, nothing here has to change. So every place is held to the
+ * same two forms below.
  * <p>
- * A job type is the place where the prefix is more than the workflow module's, because a task
- * definition is scoped by its BPMN process as well. The frame has to carry that longer prefix,
- * which is what one of the cases reads.
+ * A job type is the place where the prefix is more than the one of the workflow module,
+ * because a task definition is scoped by its BPMN process as well. The frame has to carry
+ * that longer prefix, and one of the cases reads it.
  * <p>
  * The cluster is not asked anything here. What this adapter writes into a model is read back out
  * of the model.
@@ -50,7 +50,7 @@ public class Camunda8PrefixInEveryPlaceTest {
   private static final String PROCESS = "LoanApproval";
 
   /**
-   * A model carrying one of every place a prefix is written, each of them given the value the
+   * A model with one of every place a prefix is written. Each of them gets the value the
    * caller passes, so one text can be put through all of them.
    */
   private static BpmnModelInstance aModelWriting(
@@ -91,7 +91,7 @@ public class Camunda8PrefixInEveryPlaceTest {
   }
 
   /**
-   * A model whose listener job type is served by this application, which is what makes it a task
+   * A model whose listener job type is served by this application. That makes it a task
    * definition of the workflow module.
    */
   private static final BiPredicate<String, String> everyListenerIsServed = (

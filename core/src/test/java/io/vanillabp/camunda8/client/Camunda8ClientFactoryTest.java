@@ -23,9 +23,9 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Unit tests of {@link Camunda8ClientFactory} / {@link Camunda8AdapterConfiguration}: a
- * self-managed adapter without an address gets a client for the local cluster,
- * and a missing SaaS property is reported on first use, naming the exact property. Building
+ * Unit tests of {@link Camunda8ClientFactory} and {@link Camunda8AdapterConfiguration}. A
+ * self-managed adapter without an address gets a client for the local cluster. A missing
+ * SaaS property is reported on first use, and the message names the exact property. Building
  * the self-managed client does not contact any cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)

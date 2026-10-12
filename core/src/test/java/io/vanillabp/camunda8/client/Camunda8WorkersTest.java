@@ -25,9 +25,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What a worker gets from its adapter id, asked of the class an EXTENSION calls.
  * <p>
- * The promise is that a worker an extension opens looks to an operator like a worker of the
- * adapter, so the test asserts the two things a worker cannot inherit from the client: the
- * counters, which carry the adapter id and the job type, and the stream timeout.
+ * The promise: to an operator, a worker which an extension opens looks like a worker of the
+ * adapter. So the test asserts the two things a worker cannot inherit from the client. One
+ * is the counters, which carry the adapter id and the job type. The other is the stream
+ * timeout.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8WorkersTest {

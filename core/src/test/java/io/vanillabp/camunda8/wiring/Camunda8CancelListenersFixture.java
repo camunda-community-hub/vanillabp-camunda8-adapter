@@ -12,9 +12,9 @@ import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeExecutionListeners;
  * What the per-line tests of {@link Camunda8CancelListeners} share: one model with a process
  * element, and the listeners of that element after the adapter wrote into it.
  * <p>
- * It lives in the shared test tree, because the three per-line tests would otherwise be three
- * copies of the same model - and a model which differs per line would make the tests
- * incomparable, which is the one thing a per-line pair has to avoid.
+ * It lives in the shared test tree. Otherwise the three per-line tests would be three copies
+ * of the same model. A model which differs per line would make the tests impossible to
+ * compare, and that is the one thing a per-line pair has to avoid.
  */
 public final class Camunda8CancelListenersFixture {
 
@@ -27,8 +27,8 @@ public final class Camunda8CancelListenersFixture {
   public static final String PROCESS = "test-module-CancelableProcess";
 
   /**
-   * The job type the end listener of that process carries, which is the job type of its
-   * cancelation as well.
+   * The job type the end listener of that process carries. Its cancelation carries the same
+   * job type.
    */
   public static final String JOB_TYPE = Camunda8TaskWiring.workflowEndedJobTypeOf(PROCESS);
 

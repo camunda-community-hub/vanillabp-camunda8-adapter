@@ -43,15 +43,14 @@ import io.vanillabp.spi.service.BpmsStartTrigger;
  * answer the core judges the <code>&#64;WorkflowStartedByBpms</code> methods of a
  * declared-only BPMN process id by, the id a renamed process left behind.
  * <p>
- * Nothing wires such an id while an application boots, so those methods used to be judged
- * by nothing while the cluster kept firing the old model's timer every day. What the
- * judgement needs is read out of the models the cluster holds
- * ({@link Camunda8ModelsTheClusterHolds}), which is where every question about a model
- * this application did not deploy is answered from.
+ * Nothing wires such an id while an application boots. So nothing judged those methods,
+ * while the cluster kept firing the timer of the old model every day. What the judgement
+ * needs is read out of the models the cluster holds ({@link Camunda8ModelsTheClusterHolds}).
+ * Every question about a model this application did not deploy is answered from there.
  * <p>
- * The cluster is played by a definition search and an XML request, which is what the
- * adapter's side of this can be held against without a cluster: whether it asks for the
- * right thing and reports what the model says.
+ * A definition search and an XML request play the cluster. Against them the side of the
+ * adapter can be held without a cluster: whether it asks for the right thing and reports
+ * what the model says.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8StartEventsOfHeldVersionsTest {
@@ -212,7 +211,7 @@ public class Camunda8StartEventsOfHeldVersionsTest {
         });
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
 

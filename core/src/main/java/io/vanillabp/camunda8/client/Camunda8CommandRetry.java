@@ -7,70 +7,69 @@ import java.util.function.BooleanSupplier;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * The bounded retries this adapter puts around a command whose answer another attempt can
- * change. There are two of them, and they wait out two different things.
+ * The bounded retries which this adapter puts around a command when another attempt can
+ * change the answer. There are two of them, and they wait for two different things.
  * <p>
- * {@link #send} carries the command a job handler sends BACK to the cluster - the
- * completion, the BPMN error, the failure and the lock renewal of an open asynchronous task
- * - and waits out a cluster which is busy. {@link #sendWhileTheUserTaskIsStillChanging}
- * carries a phase-two command against a Camunda-managed user task and waits out a task the
- * cluster has not finished creating. Both use the same attempt count and the same backoff,
- * so the adapter tells one story about how long it waits. Everything in this comment is
- * about the first one unless it says otherwise.
+ * {@link #send} carries the command a job handler sends BACK to the cluster. That is the
+ * completion, the BPMN error, the failure, and the lock renewal of an open asynchronous
+ * task. It waits for a busy cluster. {@link #sendWhileTheUserTaskIsStillChanging} carries
+ * a phase-two command against a Camunda-managed user task. It waits for a task which the
+ * cluster has not finished creating. Both use the same number of attempts and the same
+ * backoff. So the adapter tells one story about how long it waits. Everything in this
+ * comment is about the first one, unless it says otherwise.
  * <p>
  * <b>Why it exists.</b> A command the cluster rejects because it is busy arrives as
- * <code>RESOURCE_EXHAUSTED</code> on gRPC and as HTTP 503 on REST, and nothing in the
- * Camunda client repeats either of them: the gRPC retry policy is switched off by default,
- * and even switched on it is a channel setting which does nothing for the REST transport
+ * <code>RESOURCE_EXHAUSTED</code> on gRPC and as HTTP 503 on REST. Nothing in the Camunda
+ * client repeats either of them. The gRPC retry policy is switched off by default. Even
+ * when it is on, it is a channel setting, and it does nothing for the REST transport which
  * this adapter prefers. Measured against a single node, 19.433 of 20.000 gRPC commands came
- * back rejected. Phase-two commands survive that because the outbox repeats them; the
- * command inside a job handler had nobody to repeat it, so a rejected completion of work
- * which was already committed escaped into the client's fail path and cost the job one of
- * its retries. Under sustained load that walks a job into an incident although every
+ * back rejected. Phase-two commands survive that, because the outbox repeats them. The
+ * command inside a job handler had nobody to repeat it. So a rejected completion of work
+ * which was already committed went into the client's fail path, and the job lost one of
+ * its retries. Under lasting load, that drives a job into an incident, although every
  * attempt of it succeeded.
  * <p>
  * <b>What bounds it.</b> Two things, and the tighter one wins:
  * <ul>
- * <li><b>the job's lock.</b> Retrying past it hands the job to somebody else, so the
- * remaining lock is the real deadline. It is read from the job's own deadline rather than
- * from the configured timeout, which says how long the lock was granted for and not how
- * much of it is left;</li>
- * <li><b>{@value #MAX_ATTEMPTS} attempts.</b> A handler waiting for a cluster to calm down
- * occupies an execution slot (see
- * {@link Camunda8ExecutionModel}), and a slot which waits
- * delivers nothing. Five attempts spread over less than half a second are a hiccup; more
- * than that is a cluster problem an operator has to see rather than one a worker should
- * sit out.</li>
+ * <li><b>the job's lock.</b> A retry after it ends hands the job to somebody else. So the
+ * rest of the lock is the real deadline. It is read from the job's own deadline, not from
+ * the configured timeout. The timeout says how long the lock was granted for, not how much
+ * of it is left.</li>
+ * <li><b>{@value #MAX_ATTEMPTS} attempts.</b> A handler which waits for a cluster to calm
+ * down holds an execution slot (see {@link Camunda8ExecutionModel}). A slot which waits
+ * delivers nothing. Five attempts spread over less than half a second are a hiccup. More
+ * than that is a cluster problem which an operator has to see. A worker should not just
+ * sit it out.</li>
  * </ul>
- * The backoff is exponential and shaped like the client's own activation backoff
- * ({@code ExponentialBackoffBuilderImpl}): {@value #INITIAL_BACKOFF_MILLIS} ms initially,
+ * The backoff is exponential and has the shape of the client's own activation backoff
+ * ({@code ExponentialBackoffBuilderImpl}): {@value #INITIAL_BACKOFF_MILLIS} ms at first,
  * factor {@value #BACKOFF_FACTOR}, a ceiling of {@value #MAX_BACKOFF_MILLIS} ms and
- * {@value #JITTER_FACTOR} jitter, so the documentation tells one story about backoff
- * instead of two. With five attempts the ceiling is never reached - the longest wait is
+ * {@value #JITTER_FACTOR} jitter. So the documentation tells one story about backoff, not
+ * two. With five attempts the ceiling is never reached - the longest wait is
  * around 330 ms and the whole sequence stays below half a second, which is the point.
  * <p>
  * <b>What is not retried.</b> The classification is the one the outbox already uses
- * ({@link Camunda8Errors#repeatableJobCommandFailure}), so the adapter has one opinion
- * about what a repetition can change rather than two. A job which is gone and a request
- * the cluster rejects come back on the first attempt. And a shutdown ends the retry at
- * once: while the module is going down, the failure belongs to the shutdown and the job is
- * left to its lock instead of being failed - a retry loop must not hold the
- * drain, and it must not turn into a failure the shutdown would have avoided.
+ * ({@link Camunda8Errors#repeatableJobCommandFailure}). So the adapter has one opinion
+ * about what a repetition can change, not two. A job which is gone and a request which the
+ * cluster rejects come back on the first attempt. And a shutdown ends the retry at once.
+ * While the module is going down, the failure belongs to the shutdown. The job is left to
+ * its lock and is not failed. A retry loop must not hold up the drain. And it must not
+ * turn into a failure which the shutdown would have avoided.
  * <p>
- * <b>A job somebody else holds.</b> One answer ends HERE rather than at the caller: where
- * the cluster says another activation holds the job
- * ({@link Camunda8Errors#jobHeldByAnotherActivation}), the command is dropped with one line
- * and the handler goes on as if it had been accepted. That is what a leased job answers to
- * the run whose lock expired while it worked, and there is nothing a handler could do about
- * it - the newer run answered already, and failing the job would take it away from whoever
+ * <b>A job somebody else holds.</b> One answer ends HERE and not at the caller. If the
+ * cluster says that another activation holds the job
+ * ({@link Camunda8Errors#jobHeldByAnotherActivation}), the command is dropped with one
+ * line. The handler goes on as if the command had been accepted. A leased job gives this
+ * answer to the run whose lock expired while it worked. A handler cannot do anything about
+ * it. The newer run answered already, and failing the job would take it away from whoever
  * holds it now.
  * <p>
  * <b>A job which is gone.</b> {@link #sendUnlessTheJobIsGone} is the same retry for a caller
  * whose command may arrive after the cluster moved on. It takes the <code>404</code> as a late
  * answer and tells the caller so, instead of throwing it.
  * <p>
- * When the bound is reached the original failure is rethrown, so the behaviour after the
- * retries are used up is what it was before this class existed.
+ * When the limit is reached, the original failure is thrown again. So after the retries
+ * are used up, the behaviour is what it was before this class existed.
  * <p>
  * What may be repeated, what bounds the repetition, and why a shutdown ends it at once is decision
  * 9 in the repository's DECISIONS.md.
@@ -82,36 +81,36 @@ public final class Camunda8CommandRetry {
   }
 
   /**
-   * How often a repeatable failure of an outcome command is tried at all, the first
+   * How often an outcome command with a repeatable failure is tried in total, the first
    * attempt included.
    */
   public static final int MAX_ATTEMPTS = 5;
 
   /**
-   * The first backoff in milliseconds - the client's own initial activation delay.
+   * The first backoff in milliseconds. It is the client's own first activation delay.
    */
   public static final long INITIAL_BACKOFF_MILLIS = 50;
 
   /**
-   * What each backoff is multiplied by - the client's own factor.
+   * What each backoff is multiplied by. It is the client's own factor.
    */
   public static final double BACKOFF_FACTOR = 1.6;
 
   /**
-   * The longest backoff in milliseconds - the client's own ceiling. Deliberately never
-   * reached within {@value #MAX_ATTEMPTS} attempts.
+   * The longest backoff in milliseconds. It is the client's own ceiling. On purpose, it is
+   * never reached within {@value #MAX_ATTEMPTS} attempts.
    */
   public static final long MAX_BACKOFF_MILLIS = 5_000;
 
   /**
-   * How much a backoff is spread around its nominal value, so two handlers rejected in the
-   * same moment do not come back in the same moment - the client's own jitter.
+   * How much a backoff is spread around its nominal value. So two handlers rejected at the
+   * same moment do not come back at the same moment. It is the client's own jitter.
    */
   public static final double JITTER_FACTOR = 0.1;
 
   /**
-   * Sends an outcome command, repeating it while the cluster's answer is worth repeating
-   * and the job's lock still allows another attempt.
+   * Sends an outcome command. It repeats the command while the answer of the cluster is
+   * worth a repetition and the lock of the job still allows another attempt.
    *
    * @param adapterId The adapter instance, for the messages
    * @param command What is being sent, named the way the log should name it (e.g.
@@ -149,10 +148,10 @@ public final class Camunda8CommandRetry {
         return;
       } catch (final RuntimeException e) {
         if (Camunda8Errors.jobHeldByAnotherActivation(e)) {
-          // the lock of this job ran out while the work was running, the cluster handed
-          // the job out again, and that activation holds it now. Its run is the one the
-          // workflow continues with, so this answer is not sent, not repeated and not a
-          // failure of anything: both runs did the same work and the newer one won
+          // the lock of this job ran out while the work was running. The cluster handed
+          // the job out again, and that activation holds it now. The workflow goes on with
+          // that run. So this answer is not sent, not repeated and not a failure of
+          // anything. Both runs did the same work, and the newer one won
           log.info(
               """
                   Camunda8[{}]: the {} of job {} ('{}') was refused because another activation holds \
@@ -201,8 +200,8 @@ public final class Camunda8CommandRetry {
   }
 
   /**
-   * Sends an outcome command like {@link #send}, and takes a job the cluster no longer holds
-   * as a late answer rather than as a failure.
+   * Sends an outcome command like {@link #send}. A job which the cluster no longer holds
+   * counts as a late answer, not as a failure.
    * <p>
    * The cluster answers a command to a job it does not hold with HTTP <code>404</code>, on
    * gRPC with <code>NOT_FOUND</code> ({@link Camunda8Errors#jobAlreadyGone}). For an outcome
@@ -261,24 +260,24 @@ public final class Camunda8CommandRetry {
   }
 
   /**
-   * Sends a command against a Camunda-managed user task, repeating it while the cluster
-   * refuses it because the task is in a transition of its own.
+   * Sends a command against a Camunda-managed user task. It repeats the command while the
+   * cluster refuses it because the task is in a transition of its own.
    * <p>
    * <b>Why it exists.</b> VanillaBP tells an application about a user task from the
-   * <code>creating</code> listener of that task, so the task stands in state
-   * <code>CREATING</code> while the application is being notified and until the listener
-   * job of that notification is answered on the partition. An application which answers its
-   * task in the same breath addresses a task the cluster is still creating, and the cluster
-   * refuses the completion with HTTP <code>409</code>
-   * ({@link Camunda8Errors#refusedAboutAUserTaskItHolds}). That answer is repeatable, so the
-   * outbox would send the operation again - after <code>attempt-frequency</code>, thirty
-   * seconds by default, for a state which passes in a few milliseconds.
+   * <code>creating</code> listener of that task. So the task is in state
+   * <code>CREATING</code> while the application is told, and until the listener job of that
+   * message is answered on the partition. An application which answers its task right away
+   * addresses a task the cluster is still creating. The cluster refuses the completion with
+   * HTTP <code>409</code> ({@link Camunda8Errors#refusedAboutAUserTaskItHolds}). That answer
+   * is repeatable, so the outbox would send the operation again. But it would do so only
+   * after <code>attempt-frequency</code>, thirty seconds by default, for a state which
+   * passes in a few milliseconds.
    * <p>
    * <b>What bounds it.</b> {@value #MAX_ATTEMPTS} attempts with the backoff of
-   * {@link #send}, under half a second all together. This runs on a thread of the phase-two
-   * dispatcher, and half a second of it is a hiccup while thirty seconds of waiting is a
-   * delay somebody notices. Nothing is lost when the attempts are used up: the failure is
-   * rethrown and the outbox repeats the entry as it does today.
+   * {@link #send}, under half a second in total. This runs on a thread of the phase-two
+   * dispatcher. Half a second there is a hiccup, but thirty seconds of waiting is a delay
+   * somebody notices. Nothing is lost when the attempts are used up. The failure is thrown
+   * again, and the outbox repeats the entry as it does today.
    *
    * @param adapterId The adapter instance, for the messages
    * @param command What is being sent, named the way the log should name it (e.g.
@@ -332,7 +331,7 @@ public final class Camunda8CommandRetry {
    * Why no further attempt is made, or <code>null</code> while one is.
    *
    * @param text What the message says after "and"
-   * @param worthAWarning Whether giving up is worth a WARN - a job which is gone and a
+   * @param worthAWarning Whether giving up is worth a WARN. A job which is gone and a
    *          command the cluster refuses are reported by the caller, not here
    */
   private record Stop(
@@ -347,9 +346,8 @@ public final class Camunda8CommandRetry {
       final BooleanSupplier shuttingDown) {
 
     if (!Camunda8Errors.repeatableJobCommandFailure(failure)) {
-      // the job is gone, or the cluster refuses the command itself: repeating it would
-      // only produce the same answer, and both cases have a caller which knows what to
-      // make of them
+      // the job is gone, or the cluster refuses the command itself. A repetition would
+      // only give the same answer. In both cases the caller knows what to do with it
       return new Stop("repeating it cannot change the answer", false);
     }
     if (shuttingDown.getAsBoolean()) {
@@ -372,8 +370,8 @@ public final class Camunda8CommandRetry {
   }
 
   /**
-   * The nominal backoff after the given attempt, without jitter - what the decision
-   * whether the lock still allows another attempt is made on.
+   * The nominal backoff after the given attempt, without jitter. The check whether the
+   * lock still allows another attempt uses it.
    *
    * @param attempt The attempt which just failed (one-based)
    * @return The backoff in milliseconds
@@ -387,8 +385,8 @@ public final class Camunda8CommandRetry {
   }
 
   /**
-   * The backoff actually waited: the nominal one spread by {@value #JITTER_FACTOR}, so
-   * handlers rejected together do not come back together.
+   * The backoff which is really waited. It is the nominal one, spread by
+   * {@value #JITTER_FACTOR}. So handlers rejected together do not come back together.
    *
    * @param attempt The attempt which just failed (one-based)
    * @return The backoff to wait
@@ -404,7 +402,7 @@ public final class Camunda8CommandRetry {
   }
 
   /**
-   * @return Whether the wait completed - an interrupted handler stops retrying and lets
+   * @return Whether the wait completed. An interrupted handler stops retrying and lets
    *         its caller report the original failure
    */
   private static boolean sleep(

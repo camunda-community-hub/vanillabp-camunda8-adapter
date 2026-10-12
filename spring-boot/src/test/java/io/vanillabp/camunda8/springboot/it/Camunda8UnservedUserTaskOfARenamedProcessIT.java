@@ -23,27 +23,28 @@ import io.vanillabp.camunda8.springboot.TestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * A user task no method serves, in an old version of a renamed process, which is created
- * after the rename.
+ * A user task which no method serves, in an old version of a renamed process. The task is
+ * created after the rename.
  * <p>
- * A user task may go without a {@code @WorkflowTask} method where the application marks it with
- * {@code implemented-externally=true}, a task worked off in a task list say. For the models it deploys, the
- * adapter answers the {@code creating} listener of every user task, served or not, so the task
- * reaches state CREATED and shows up in a task list. Under {@code use-prefix} the listener job
- * type carries the id of the process it was deployed with. After a rename, the jobs of the
- * workflows under the OLD id are named after that id, and the renamed application opens extra
- * workers for them. Composed from the methods, those workers miss a user task nobody serves, so
- * the adapter also reads the listener job types from the models the cluster holds under the old
- * id. Without that worker nobody answers the listener and the task stays in CREATING: measured on
- * 2026-10-06 against {@code camunda/camunda:8.10.0}, the listener job stood in CREATED with no
- * worker for the whole wait below.
+ * A user task may go without a {@code @WorkflowTask} method where the application marks it
+ * with {@code implemented-externally=true}, for example a task worked off in a task list.
+ * For the models it deploys, the adapter answers the {@code creating} listener of every user
+ * task, served or not. So the task reaches state CREATED and shows up in a task list. Under
+ * {@code use-prefix} the listener job type carries the id of the process it was deployed
+ * with. After a rename, the jobs of the workflows under the OLD id are named after that id,
+ * and the renamed application opens extra workers for them. Those workers are composed from
+ * the methods, so they miss a user task which nobody serves. So the adapter also reads the
+ * listener job types from the models which the cluster holds under the old id. Without that
+ * worker nobody answers the listener, and the task stays in CREATING. Measured on 2026-10-06
+ * against {@code camunda/camunda:8.10.0}: the listener job stood in CREATED with no worker
+ * for the whole wait below.
  * <p>
  * The first generation starts a workflow which waits for a message. The second generation
  * deploys the model under the new id, declares the old one, and sends the message. Only then
- * does the workflow reach the user task, so the task is created while the renamed application
- * runs. The first generation waits until the workflow stands at the message: its start event
- * carries a listener of that generation, and a declared id gets no start-event worker after the
- * rename.
+ * does the workflow reach the user task. So the task is created while the renamed
+ * application runs. The first generation waits until the workflow stands at the message. Its
+ * start event carries a listener of that generation, and a declared id gets no start-event
+ * worker after the rename.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -52,8 +53,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheSharedCluster {
 
   /**
-   * The workflow started by the first generation and continued by the second one, which
-   * reads it from the same database.
+   * The workflow which the first generation started. The second one continues it and reads it
+   * from the same database.
    */
   static Long orderId;
 
@@ -69,7 +70,7 @@ public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheShared
           .getBean(TransactionTemplate.class)
           .execute(status -> workflowService.startWorkflow())
           .getOrderId();
-      // the start event carries a listener of this application, so the workflow has to get
+      // the start event carries a listener of this application. So the workflow has to get
       // past it before this generation goes down
       awaitUntil(() -> client
           .newElementInstanceSearchRequest()
@@ -97,8 +98,8 @@ public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheShared
     final var application = boot("unserved-rename-after", "v2");
     try (var client = testClient()) {
       final var workflowService = application.getBean(UnservedRenameAfterDockerWorkflowService.class);
-      // the subscription of the message is created when the workflow reaches the wait, which
-      // the first generation did not wait for, so the correlation is repeated until it lands
+      // the subscription of the message is created when the workflow reaches the wait. The
+      // first generation did not wait for that. So the correlation is repeated until it lands
       awaitUntil(() -> {
         try {
           application
@@ -110,10 +111,10 @@ public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheShared
         }
       }, "the message to reach the workflow of the old process id");
 
-      // first the wait for the message: once it is over, the workflow went on to the user
-      // task, so what follows is about the task and not about the message. The user task
-      // itself is no proof here: the search shows its element only once the creating
-      // listener was answered, which is the very thing in question
+      // first the wait for the message. Once it is over, the workflow went on to the user
+      // task. So what follows is about the task and not about the message. The user task
+      // itself is no proof here. The search shows its element only once the creating
+      // listener was answered, and that is the very thing in question
       awaitUntil(() -> client
           .newElementInstanceSearchRequest()
           .filter(filter -> filter.elementId("UR_Wait"))
@@ -231,8 +232,8 @@ public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheShared
   }
 
   /**
-   * Waits for something the cluster and the job workers have to bring about. A minute is
-   * long for a listener job: the first generation's listener answers one within a second.
+   * Waits for something which the cluster and the job workers have to bring about. A minute
+   * is long for a listener job. The first generation's listener answers one within a second.
    */
   private static void awaitUntil(
       final java.util.function.BooleanSupplier condition,
@@ -249,9 +250,9 @@ public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheShared
   }
 
   /**
-   * One generation of the application, like the one of {@code Camunda8RenamedProcessIT}:
-   * the workflow service of that generation (a Spring profile decides which one) and the
-   * BPMN it deploys, over one in-memory database both boots share.
+   * One generation of the application, like the one of {@code Camunda8RenamedProcessIT}: the
+   * workflow service of that generation (a Spring profile decides which one) and the BPMN it
+   * deploys. Both boots share one in-memory database.
    */
   private static ConfigurableApplicationContext boot(
       final String profile,
@@ -265,8 +266,8 @@ public class Camunda8UnservedUserTaskOfARenamedProcessIT extends TestOnTheShared
     boot.add("--spring.jpa.hibernate.ddl-auto=update");
     boot.add("--vanillabp.adapters.c8.rest-address=%s".formatted(restAddress()));
     boot.add("--vanillabp.adapters.c8.grpc-address=%s".formatted(grpcAddress()));
-    // prefixed identifiers: the listener job type then carries the process id the model was
-    // deployed with, which is what makes the old id need workers of its own
+    // prefixed identifiers. The listener job type then carries the process id the model was
+    // deployed with. That is why the old id needs workers of its own
     boot.add("--vanillabp.workflow-modules.test-app.adapters.c8.name-clash-avoidance=use-prefix");
     boot
         .add("--vanillabp.workflow-modules.test-app.adapters.c8.resources-location=classpath*:unserved-rename/%s"

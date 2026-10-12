@@ -6,8 +6,8 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 
 /**
- * JPA persistence of {@link C8TimerAggregate} - saves within the caller's JTA transaction, which
- * is the transaction a task handler runs in.
+ * JPA persistence of {@link C8TimerAggregate}. It saves within the caller's JTA transaction,
+ * which is the transaction a task handler runs in.
  */
 @ApplicationScoped
 public class C8TimerPersistence implements AggregatePersistenceAware<C8TimerAggregate> {
@@ -36,9 +36,9 @@ public class C8TimerPersistence implements AggregatePersistenceAware<C8TimerAggr
   }
 
   /**
-   * Named explicitly: a workflow the BPMS starts on its own is built by the platform,
-   * which needs the id property's name to hand the aggregate its identity - and a
-   * hand-written persistence has nothing to derive it from.
+   * Named explicitly. The platform builds a workflow the BPMS starts on its own. It needs
+   * the name of the id property to give the aggregate its identity, and a hand-written
+   * persistence has nothing to derive that name from.
    *
    * @return The name of the aggregate's id property
    */

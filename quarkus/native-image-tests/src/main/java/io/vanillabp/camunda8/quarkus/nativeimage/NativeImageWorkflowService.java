@@ -8,9 +8,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 /**
- * The workflow of the native-image application: one service task, which is enough to
- * need everything a native image lacks by default - the BPMN is parsed, modified,
- * serialized, deployed, and the job comes back from the cluster into a handler.
+ * The workflow of the native-image application. One service task is enough to need
+ * everything a native image lacks by default. The BPMN is parsed, changed, written back to
+ * XML and deployed, and the job comes back from the cluster into a handler.
  */
 @ApplicationScoped
 @WorkflowService(
@@ -19,8 +19,8 @@ import jakarta.inject.Inject;
 public class NativeImageWorkflowService {
 
   /**
-   * What the handler writes into the aggregate, and what the application's main waits for:
-   * a job which never arrives must not end in a green run.
+   * What the handler writes into the aggregate. The application's main waits for it,
+   * because a job which never arrives must not end in a green run.
    */
   public static final String SERVED = "served";
 

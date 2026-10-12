@@ -20,19 +20,19 @@ import io.vanillabp.spi.service.TaskEvent;
  * Two asynchronous tasks open in one workflow, and an interrupting boundary event takes one
  * of them away.
  * <p>
- * Zeebe tells no worker about a job it removed, so nothing in the application would ever
- * learn about that task. What closes the gap is the next wake-up of the SAME workflow: the
- * core looks at the tasks it still believes are open in it, this adapter asks the cluster
- * about each of them, and the ones the cluster no longer has are reported as
+ * Zeebe tells no worker about a job it removed. So nothing in the application would ever
+ * learn about that task. The next wake-up of the SAME workflow closes the gap. The core looks
+ * at the tasks which it still believes are open in that workflow. This adapter asks the
+ * cluster about each of them. The ones which the cluster no longer has are reported as
  * <code>CANCELED</code>.
  * <p>
  * The wake-up here is the redelivery of the other task's job. An open asynchronous task keeps
- * its job locked for <code>async-task-lock-renewal</code>, which this class sets to three
- * seconds, so the cluster hands that job to the worker again shortly after the boundary event
+ * its job locked for <code>async-task-lock-renewal</code>. This class sets it to three
+ * seconds. So the cluster hands that job to the worker again shortly after the boundary event
  * fired.
  * <p>
- * Nothing in this is about one line. It runs wherever the module runs, which is what keeps it
- * from being read as an 8.10 feature.
+ * Nothing in this is about one line. It runs wherever the module runs. So nobody reads it as
+ * an 8.10 feature.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -41,7 +41,7 @@ import io.vanillabp.spi.service.TaskEvent;
     properties = {
         "spring.config.name=camunda8-it",
         // the job of the task which stays open goes back to the cluster after three
-        // seconds, and the redelivery is the wake-up this test is about
+        // seconds. That redelivery is the wake-up this test is about
         "vanillabp.adapters.c8.async-task-lock-renewal=PT3S"
     })
 public class Camunda8OtherOpenTasksIT extends SpringBootTestOnTheSharedCluster {
@@ -70,17 +70,17 @@ public class Camunda8OtherOpenTasksIT extends SpringBootTestOnTheSharedCluster {
     final var takenAwayTaskId = taskOf(aggregateId, true);
     assertNotNull(takenAwayTaskId);
 
-    // the boundary event removes the job of the first task, and the cluster says nothing
-    // about it to anybody
+    // the boundary event removes the job of the first task. The cluster tells nobody
+    // about it
     transactionTemplate.executeWithoutResult(status -> {
       final var aggregate = repository.findById(aggregateId).orElseThrow();
       workflowService.correlate(aggregate, "TakeTaskAway");
     });
 
-    // the wait ends at the handler's COMMIT, because the aggregate read below is written
-    // by that commit. The map the handler fills is already set a moment earlier, while
-    // its transaction is still open, so waiting for the map and reading the aggregate
-    // right after can read the aggregate before the commit wrote anything into it
+    // the wait ends at the handler's COMMIT, because that commit writes the aggregate read
+    // below. The handler fills the map a moment earlier, while its transaction is still
+    // open. So a test which waited for the map and read the aggregate right after could
+    // read the aggregate before the commit wrote anything into it
     awaitUntil(
         () -> repository
             .findById(aggregateId)

@@ -29,9 +29,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What the boot tells the core about the messages which start a process. The core refuses a
  * message passed to <code>startWorkflowByMessage</code> which does not start the process of
- * the calling process service, and the names it compares with are the ones reported here.
- * Publishing a message in Camunda 8 names no process, so this report is the only thing which
- * keeps a message from starting a foreign process.
+ * the calling process service. It compares with the names reported here. Publishing a
+ * message in Camunda 8 names no process. So this report is the only thing which keeps a
+ * message from starting a foreign process.
  * <p>
  * The cluster is an address nothing listens on. Everything asserted here is read from the
  * model.

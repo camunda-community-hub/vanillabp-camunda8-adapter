@@ -13,9 +13,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service. Every handler writes one row into {@code A895_EFFECT} in the
- * transaction VanillaBP opens for it, so a handler which ran twice with effect shows up as
- * two rows of the same effect, and one which never ran as none.
+ * The workflow service. Every handler writes one row into {@code A895_EFFECT}, in the
+ * transaction VanillaBP opens for it. So a handler which ran twice with effect shows up as
+ * two rows of the same effect. A handler which never ran shows up as no row.
  */
 @Service
 @WorkflowService(
@@ -65,8 +65,8 @@ public class ReadModelWorkflow {
   }
 
   /**
-   * A service task which completes at once. No task id is asked for, because a method
-   * asking for one leaves its task open.
+   * A service task which completes at once. It asks for no task id, because a method which
+   * asks for one leaves its task open.
    *
    * @param aggregate The aggregate
    */

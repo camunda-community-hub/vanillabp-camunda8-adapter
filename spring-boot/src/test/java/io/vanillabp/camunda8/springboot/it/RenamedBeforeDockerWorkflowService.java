@@ -10,13 +10,13 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The application of the renamed-process integration test BEFORE the rename: one BPMN
- * process, under the id the workflows of this test are started on.
+ * process, under the id on which the workflows of this test are started.
  * <p>
- * Both halves of the test carry a Spring profile, because the two are two generations of
- * one application and must never boot together: they declare the same workflow aggregate
- * with a different process to start. A workflow service is registered because it is a
- * bean, so a profile which is not active registers nothing - which is also what keeps the
- * other integration tests of this module out of this scenario.
+ * Both halves of the test carry a Spring profile. They are two generations of one
+ * application and must never boot together, because they declare the same workflow
+ * aggregate with a different process to start. A workflow service is registered because it
+ * is a bean. So a profile which is not active registers nothing. That also keeps the other
+ * integration tests of this module out of this scenario.
  */
 @Service
 @Profile("rename-before")

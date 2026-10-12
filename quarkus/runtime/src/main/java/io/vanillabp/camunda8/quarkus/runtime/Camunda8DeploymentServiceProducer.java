@@ -28,21 +28,20 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
 
 /**
- * Produces the Camunda 8 adapter's {@link Camunda8DeploymentService} instances - ONE
- * per configured adapter id of type {@code camunda8} (the per-adapter-id shape on
- * Quarkus: a CDI producer cannot yield N element beans for N runtime-configured
- * ids), consumed by the VanillaBP Quarkus integration's runtime deployment pipeline.
- * Each instance obtains its {@code CamundaClient} from the
- * {@link Camunda8ClientFactoryRegistry}.
+ * Produces the {@link Camunda8DeploymentService} instances of the Camunda 8 adapter, ONE per
+ * configured adapter id of type {@code camunda8}. They come as one list, because a CDI
+ * producer cannot yield one bean per id when the ids are only known at runtime. The
+ * deployment pipeline of the VanillaBP Quarkus integration uses them at runtime. Each
+ * instance gets its {@code CamundaClient} from the {@link Camunda8ClientFactoryRegistry}.
  * <p>
- * Platform contract: the List's element type is the SPI interface with BOTH type
- * parameters literally {@code Object} - regardless of the adapter's actual model
- * ({@code BpmnModelInstance}) and context ({@code Camunda8ProcessingContext})
- * classes: CDI's parameterized-type matching of differing type arguments is not
- * reliable across modes, so the platform looks the beans up with the exact type. The
- * pipeline matches models via {@code getModelType()}/{@code getProcessContextType()},
- * never via the generics. The producer method is {@code @Singleton} (deployment
- * services are not client-proxyable).
+ * Platform contract: the element type of the list is the SPI interface with BOTH type
+ * parameters set to {@code Object}. This holds whatever the adapter's real model class
+ * ({@code BpmnModelInstance}) and context class ({@code Camunda8ProcessingContext}) are.
+ * The reason: CDI does not match parameterized types with different type arguments
+ * reliably in all modes, so the platform looks the beans up with the exact type. The
+ * pipeline matches models with {@code getModelType()} and {@code getProcessContextType()},
+ * never with the generics. The producer method is {@code @Singleton}, because a CDI
+ * client proxy cannot be built for a deployment service.
  */
 @ApplicationScoped
 public class Camunda8DeploymentServiceProducer {
@@ -56,9 +55,9 @@ public class Camunda8DeploymentServiceProducer {
   /**
    * Builds one deployment service per configured adapter id of type <code>camunda8</code>.
    * <p>
-   * The list is what the platform looks up, because a CDI producer cannot yield one bean per id
-   * an application configures at runtime. Its element type carries <code>Object</code> for both
-   * type parameters on purpose, see the class javadoc.
+   * The platform looks up the list, because a CDI producer cannot yield one bean per id when
+   * the application configures the ids at runtime. Its element type has <code>Object</code>
+   * for both type parameters on purpose, see the class javadoc.
    *
    * @param properties The platform's properties, which name the configured adapter ids and
    *          their types
@@ -113,8 +112,8 @@ public class Camunda8DeploymentServiceProducer {
                   .orElse(Camunda8AdapterConfiguration.DEFAULT_ASYNC_TASK_LOCK_RENEWAL)
               : Camunda8AdapterConfiguration.DEFAULT_ASYNC_TASK_LOCK_RENEWAL;
           final var clientFactory = clientFactoryRegistry.getFactory(adapterId);
-          // published per adapter id, so an extension asks the adapter how long a job of
-          // this adapter stays locked instead of reading the configuration again
+          // published per adapter id. An extension asks the adapter how long a job stays
+          // locked, so it does not have to read the configuration again
           final Camunda8JobTimeoutResolver jobTimeoutResolver = (
               workflowModuleId,
               bpmnProcessId,
@@ -133,29 +132,29 @@ public class Camunda8DeploymentServiceProducer {
                               bpmnProcessId,
                               taskDefinition) -> overlay.configuredRetryBackoffFor(
                                   workflowModuleId, bpmnProcessId, taskDefinition, adapterId));
-          // the tenant a workflow module is deployed into, resolved per module with
-          // the adapter's own name as the fallback
+          // the tenant a workflow module is deployed into. It is resolved per module, and
+          // the tenant name of the adapter is the fallback
           deploymentService
               .setConfiguredTenants(
                   workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));
-          // Which elements of a model this application leaves to the runtime which
-          // owns them, resolvable down to the workflow
+          // which elements of a model this application leaves to the runtime that owns
+          // them; it can be set down to the level of the workflow
           deploymentService.setAllowConnectorsResolver((
               workflowModuleId,
               bpmnProcessId) -> overlay.allowConnectorsFor(workflowModuleId, bpmnProcessId, adapterId));
-          // Whether the listeners somebody modelled are served by this application,
-          // resolvable down to the workflow
+          // whether this application serves the listeners in a model; it can be set down
+          // to the level of the workflow
           deploymentService.setAllowListenersResolver((
               workflowModuleId,
               bpmnProcessId) -> overlay.allowListenersFor(workflowModuleId, bpmnProcessId, adapterId));
-          // Where this adapter says what it found while the application starts:
-          // the block both platform integrations write at the end of a start
+          // where this adapter reports what it found while the application starts: the
+          // block both platform integrations write at the end of a start
           deploymentService.setStartupReport(
               startupReport.isResolvable()
                   ? startupReport.get()
                   : null);
-          // The client's job counters and this adapter's execution slots,
-          // where the application uses the Micrometer extension
+          // the client's job counters and this adapter's execution slots, if the
+          // application uses the Micrometer extension
           deploymentService.setMetrics(
               metrics.isResolvable()
                   ? metrics.get()

@@ -10,9 +10,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * The aggregate of the orphan-method test. It has one of its own because a workflow
- * aggregate belongs to exactly one workflow service, and reusing another test's aggregate
- * ends the boot with that message instead of the one under test.
+ * The aggregate of the orphan-method test. It has an aggregate of its own, because a
+ * workflow aggregate belongs to exactly one workflow service. Reusing another test's
+ * aggregate ends the boot with that message, instead of the one under test.
  */
 @Entity
 @Table(name = "C8_ORPHAN_METHOD_TEST")

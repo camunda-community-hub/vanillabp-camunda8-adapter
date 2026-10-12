@@ -33,38 +33,34 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The Camunda 8 adapter's documented features, run end to end on a BOOTED Quarkus
  * application against a real cluster.
  * <p>
- * This duplicates what the Spring Boot integration tests prove, and the duplication is
- * the point: the adapter's platform-neutral core being correct says nothing about a
- * platform's glue ever calling it. Coverage is measured per platform for exactly that
- * reason, so the core lines Quarkus never reaches name the features Quarkus never runs
- * - deploying a workflow module, starting a workflow through the two-phase outbox,
- * having a task delivered, completing and cancelling one, notifying about user tasks,
- * correlating a message, broadcasting a signal, pushing a changed aggregate, matching
- * process versions and reading a workflow through the viewer.
+ * This duplicates what the Spring Boot integration tests prove, and the duplication is the
+ * point. A correct platform-neutral core of the adapter says nothing about whether the glue
+ * code of a platform ever calls it. That is exactly why coverage is measured per platform. The
+ * core lines which Quarkus never reaches name the features which Quarkus never runs. The
+ * features are: deploying a workflow module, starting a workflow through the two-phase
+ * outbox, having a task delivered, completing and cancelling one, notifying about user tasks,
+ * correlating a message, broadcasting a signal, pushing a changed aggregate, matching process
+ * versions and reading a workflow through the viewer.
  * <p>
- * Everything is observed through the application's own <code>introspect/...</code>
- * endpoints, because a prod-mode test runs the application in a forked JVM. The JaCoCo
- * agent is forwarded into it, otherwise the run would prove the features and count as
- * nothing.
+ * Everything is observed through the application's own <code>introspect/...</code> endpoints,
+ * because a prod-mode test runs the application in a forked JVM. The JaCoCo agent is passed on
+ * into that JVM. Otherwise the run would prove the features but count as nothing.
  * <p>
- * One cluster carries all of it. A prod-mode test boots its application once per test
- * class, and on Camunda 8 that boot drags a cluster along, because the adapter serves no
- * cluster it cannot search. So this is deliberately ONE class with many tests instead of
- * a class per feature: the Spring Boot module pays for one cluster per class, this one
- * pays for one in total.
+ * One cluster carries all of it. A prod-mode test boots its application once per test class.
+ * On Camunda 8 that boot needs a cluster, because the adapter serves no cluster which it
+ * cannot search. So this is ONE class with many tests on purpose, not a class per feature. The
+ * Spring Boot module pays for one cluster per class. This one pays for one in total.
  * <p>
- * Three things of the Spring Boot suite are deliberately NOT repeated here:
+ * Three things of the Spring Boot suite are NOT repeated here, on purpose:
  * <ul>
- * <li>the startup check for old process versions needs several boots
- * against one cluster, each with a different model, and a prod-mode test boots its
- * application once per test class - the same reason the Camunda 7 adapter wrote
- * down;</li>
- * <li>authentication against a protected cluster and the shutdown drain
- * each need a cluster or a lifecycle of their own, which is a second
- * container and a second boot;</li>
- * <li>{@code cancelUserTask} is answered by the release line the build runs on, so
- * asserting it here would need a test source per line - the core's
- * {@code Camunda8ReleaseLineTest} is where that belongs.</li>
+ * <li>the startup check for old process versions needs several boots against one cluster,
+ * each with a different model. A prod-mode test boots its application once per test class.
+ * The Camunda 7 adapter wrote down the same reason;</li>
+ * <li>authentication against a protected cluster and the shutdown drain each need a cluster
+ * or a lifecycle of their own. That means a second container and a second boot;</li>
+ * <li>the release line the build runs on answers {@code cancelUserTask}. So asserting it here
+ * would need a test source per line. That belongs in the core's
+ * {@code Camunda8ReleaseLineTest}.</li>
  * </ul>
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -76,26 +72,25 @@ public class Camunda8WorkflowLifecycleTest {
   private static final String MODULE = "c8-e2e";
 
   /**
-   * What the cluster needs to answer a command. Generous on purpose: the existing
-   * integration tests of this repository stand at 180 s because shorter deadlines
-   * tipped over in a full build.
+   * What the cluster needs to answer a command. Generous on purpose. The other integration
+   * tests of this repository use 180 s, because shorter deadlines failed in a full build.
    */
   private static final long TIMEOUT_MS = 180_000;
 
   /**
    * How long a wait may go on before it says out loud what it is still missing.
    * <p>
-   * Three minutes of a runner printing nothing is what made the lost user-task
-   * notification unreadable afterwards: the deadline's message says what the state was
-   * at the END, and nothing says whether it had been that way from the first second or
-   * moved once and then stopped. A line every quarter minute turns the wait into a
-   * record. It costs nothing in a green run, where no wait ever reaches it.
+   * A runner once printed nothing for three minutes. Afterwards nobody could read why a
+   * user-task notification got lost. The deadline's message says what the state was at the
+   * END. Nothing says whether it had been that way from the first second, or whether it moved
+   * once and then stopped. A line every fifteen seconds turns the wait into a record. It costs
+   * nothing in a green run, where no wait ever gets that long.
    */
   private static final long PROGRESS_INTERVAL_MS = 15_000;
 
   /**
-   * What the query API needs on top: it is fed by an exporter, so everything read
-   * through it arrives after the cluster already acted.
+   * What the query API needs on top. An exporter fills it. So everything read through it
+   * arrives after the cluster already acted.
    */
   private static final long QUERY_TIMEOUT_MS = 240_000;
 
@@ -104,10 +99,10 @@ public class Camunda8WorkflowLifecycleTest {
   static final GenericContainer<?> CAMUNDA = ClusterUnderTest.cluster("lifecycle-cluster");
 
   /*
-   * The cluster is started HERE and not by the Testcontainers extension: the
-   * application's configuration needs the mapped ports, and a prod-mode test reads its
-   * runtime properties while the field below is initialized - which happens before any
-   * extension callback runs. Ryuk removes what is left when this JVM exits.
+   * The cluster is started HERE, not by the Testcontainers extension. The application's
+   * configuration needs the mapped ports. A prod-mode test reads its runtime properties while
+   * the field below is initialized, and that happens before any extension callback runs. Ryuk
+   * removes what is left when this JVM exits.
    */
   static {
     CAMUNDA.start();
@@ -117,9 +112,9 @@ public class Camunda8WorkflowLifecycleTest {
 
   @RegisterExtension
   static final QuarkusProdModeTest prodModeTest = new QuarkusProdModeTest()
-      // the lines below are the deployment, not the directory: classes travel by package,
-      // every resource travels by a line of its own, so a BPMN file added to
-      // src/main/resources reaches this application only once it is listed here
+      // the lines below are the deployment, not the directory. Classes travel by package.
+      // Every resource needs a line of its own. So a BPMN file added to src/main/resources
+      // reaches this application only once it is listed here
       .withApplicationRoot(jar -> jar
           .addPackage("io.vanillabp.camunda8.quarkus.test")
           .addAsResource("application.yaml")
@@ -132,12 +127,12 @@ public class Camunda8WorkflowLifecycleTest {
           .addAsResource("c8-e2e/processes/connector-process.bpmn")
           .addAsResource("c8-e2e/processes/multi-instance-call.bpmn")
           .addAsResource("c8-e2e/processes/multi-instance-called.bpmn")
-          // deployed by the test WHILE the application runs, so it must travel with it
-          // but must not sit in the workflow module's resources location
+          // the test deploys it WHILE the application runs. So it must travel with the
+          // application, but must not sit in the workflow module's resources location
           .addAsResource("c8-e2e/versioned/versioned-process-v2.bpmn")
           .addAsResource("workflow-module-descriptor/workflow-module", "META-INF/workflow-module"))
-      // JVM args needed for tracking coverage - check this module's POM for the
-      // systemPropertyVariables feeding 'jacoco.agent'
+      // JVM args needed to track coverage. This module's POM sets the
+      // systemPropertyVariables which feed 'jacoco.agent'
       .setJVMArgs(testCoverageJavaAgent(quarkusProdModeTestDefaults()))
       .setRun(true)
       .setRuntimeProperties(Map
@@ -149,8 +144,8 @@ public class Camunda8WorkflowLifecycleTest {
               "http://%s:%d".formatted(CAMUNDA.getHost(), CAMUNDA.getMappedPort(8080)),
               "vanillabp.adapters.c8.grpc-address",
               "http://%s:%d".formatted(CAMUNDA.getHost(), CAMUNDA.getMappedPort(26500)),
-              // the application runs in a forked JVM, so its own log is the only place
-              // a failure inside it can be read afterwards
+              // the application runs in a forked JVM. So a failure inside it can be read
+              // afterwards only in its own log
               "quarkus.log.file.enable",
               "true",
               "quarkus.log.file.path",
@@ -241,12 +236,12 @@ public class Camunda8WorkflowLifecycleTest {
   }
 
   /**
-   * Waits for a condition and, if it never becomes true, says what it saw while waiting.
+   * Waits for a condition. If it never becomes true, it says what it saw while waiting.
    * <p>
-   * A message holding nothing but its own description is what makes a timeout in a
-   * runner unreadable: the run is gone, and "the notification never came" leaves every
-   * explanation open. So the caller of a wait which can go red on a machine nobody
-   * watches hands over a second supplier, and that one is asked once, at the deadline.
+   * A timeout in a runner is hard to read if its message only holds its own description. The
+   * run is gone, and "the notification never came" leaves every explanation open. So a caller
+   * whose wait can fail on a machine nobody watches hands over a second supplier. That
+   * supplier is asked once, at the deadline.
    *
    * @param condition What is waited for
    * @param timeoutMillis How long to wait
@@ -306,10 +301,9 @@ public class Camunda8WorkflowLifecycleTest {
   /**
    * What the timeout appends to its message, or nothing.
    * <p>
-   * Reading the state can run into the same trouble the wait did, and a diagnosis which
-   * fails must not replace the timeout it was written to explain. An assertion is caught
-   * along with the exceptions because that is what a REST client raises for an
-   * unexpected status.
+   * Reading the state can run into the same trouble as the wait. A diagnosis which fails must
+   * not replace the timeout it was written to explain. An assertion is caught along with the
+   * exceptions, because a REST client raises one for an unexpected status.
    *
    * @param whatWasSeen The state at the deadline
    * @return The sentence to append
@@ -331,9 +325,9 @@ public class Camunda8WorkflowLifecycleTest {
   }
 
   /**
-   * Five seconds is more than the outbox needs to dispatch (poll interval 0.5 s) and
-   * more than the cluster needs to hand a job out - long enough to make "nothing
-   * happened" a statement rather than a race.
+   * Five seconds is more than the outbox needs to dispatch (poll interval 0.5 s). It is also
+   * more than the cluster needs to hand out a job. So "nothing happened" is a fact, not a
+   * race.
    */
   private static void awaitNothingElseHappens() throws InterruptedException {
 
@@ -402,13 +396,13 @@ public class Camunda8WorkflowLifecycleTest {
   }
 
   /**
-   * The events the handlers reported into the aggregate, a repetition of the same event
-   * collapsed into its first occurrence.
+   * The events the handlers reported into the aggregate. A repeated event counts only once,
+   * at its first place.
    * <p>
-   * Camunda 8 delivers at least once. The core drops the repetition carrying the same job
-   * key and nothing drops one carrying a new one, so an assertion about WHICH events
-   * reached the aggregate must not turn red over how often one of them did. How often is
-   * what the inbound-idempotency tests measure.
+   * Camunda 8 delivers at least once. The core drops a repetition with the same job key, but
+   * nothing drops one with a new job key. So an assertion about WHICH events reached the
+   * aggregate must not fail because of how often one of them did. The inbound-idempotency
+   * tests measure how often.
    *
    * @param aggregateId The aggregate the events were reported into
    * @return The reported events in the order they arrived
@@ -428,19 +422,19 @@ public class Camunda8WorkflowLifecycleTest {
 
   /**
    * Everything the CREATED notification of a user task depends on, in one line: what the
-   * handler wrote into the aggregate, how often it ran at all, and which user tasks and
-   * jobs the cluster itself holds for the workflow.
+   * handler wrote into the aggregate, how often it ran at all, and which user tasks and jobs
+   * the cluster itself holds for the workflow.
    * <p>
-   * The jobs are the half which decides where a missing notification was lost. The
-   * notification IS a listener job, so a job the cluster still reports as
-   * <code>CREATED</code> was there to be fetched and no worker fetched it, while a
-   * workflow whose listener job is gone was served and the notification was lost on this
-   * side. A job reported as <code>FAILED</code> was failed by a command, and the retries
-   * and the error message printed with it say who sent that command.
+   * The jobs show where a missing notification was lost. The notification IS a listener job.
+   * If the cluster still reports the job as <code>CREATED</code>, it was there to be fetched,
+   * and no worker fetched it. If the listener job of a workflow is gone, it was served, and
+   * the notification was lost on this side. A job reported as <code>FAILED</code> was failed
+   * by a command. The retries and the error message printed with it say who sent that
+   * command.
    * <p>
-   * The incidents are the third place a notification can end. A listener job failed with
-   * no retry left raises one, and the user task then stays in <code>CREATING</code> until
-   * an operator resolves it.
+   * The incidents are the third place where a notification can end. A listener job which is
+   * failed with no retry left raises one. The user task then stays in <code>CREATING</code>
+   * until an operator resolves it.
    *
    * @param aggregateId The aggregate the notification is awaited for
    * @param processInstanceKey The workflow the user task belongs to
@@ -464,9 +458,9 @@ public class Camunda8WorkflowLifecycleTest {
   }
 
   /**
-   * The user tasks the cluster holds, or why they could not be read. Guarded on its own
-   * rather than only by the caller's guard, so a cluster which cannot answer still leaves
-   * the application's half of the message readable.
+   * The user tasks the cluster holds, or why they could not be read. It has a guard of its
+   * own, not only the caller's guard. So a cluster which cannot answer still leaves the
+   * application's half of the message readable.
    *
    * @param processInstanceKey The workflow to ask about
    * @return The user-task keys, or what went wrong instead
@@ -547,9 +541,8 @@ public class Camunda8WorkflowLifecycleTest {
   }
 
   /**
-   * Waits until the query API knows the workflow. Everything probing workflow
-   * awareness reads it from there, and the exporter feeding it runs behind the
-   * cluster.
+   * Waits until the query API knows the workflow. Every probe of workflow awareness reads it
+   * from there. The exporter which fills it runs behind the cluster.
    *
    * @param aggregateId The aggregate
    * @return The instance key the query API reports
@@ -576,7 +569,7 @@ public class Camunda8WorkflowLifecycleTest {
 
     assertEquals(MODULE, text("introspect/workflow-module"));
 
-    // what the cluster holds is read through the query API, which an exporter feeds
+    // what the cluster holds is read through the query API. An exporter fills it
     await(
         () -> strings("introspect/cluster/definitions").size() >= 6,
         QUERY_TIMEOUT_MS,
@@ -594,8 +587,7 @@ public class Camunda8WorkflowLifecycleTest {
             .allMatch(definition -> definition.startsWith("%s__".formatted(MODULE))),
         "with name-clash-avoidance 'use-prefix' no identifier may reach the cluster unscoped: "
             + definitions);
-    // every BPMN below the resources location is deployed, the ones nobody starts
-    // included
+    // every BPMN below the resources location is deployed, also the ones nobody starts
     for (final var bpmnProcessId : List
         .of("SignalCatchProcess", "MultiInstanceProcess", "TimerStartProcess", "AggregateChangedProcess")) {
       assertTrue(
@@ -647,8 +639,8 @@ public class Camunda8WorkflowLifecycleTest {
         },
         "TaskProcess to converge through the error boundary");
 
-    // the throwing handler's mutation is committed although it threw - a
-    // TaskException is a BPMN error, not a rollback
+    // the change of the throwing handler is committed, although it threw. A TaskException
+    // is a BPMN error, not a rollback
     assertEquals("happy|error-raised|handled", resultsOf(aggregateId));
 
   }
@@ -680,10 +672,10 @@ public class Camunda8WorkflowLifecycleTest {
 
     final var aggregateId = aggregateIdOf(startProcess("ConnectorProcess"));
 
-    // no connector runtime runs here, so the job waits: which is the point. The job type
-    // it waits under is the one the modeller wrote, although this workflow module runs
-    // with name-clash avoidance 'use-prefix' and every job type of its own carries the
-    // module and the process
+    // no connector runtime runs here, so the job waits. That is the point. It waits under
+    // the job type which the modeller wrote. Yet this workflow module runs with name-clash
+    // avoidance 'use-prefix', and every job type of its own carries the module and the
+    // process
     await(
         () -> !text("introspect/cluster/element-waiting-for-job-type/io.camunda:http-json:1").isEmpty(),
         "the cluster to hold a job of the connector's unprefixed job type");
@@ -692,8 +684,8 @@ public class Camunda8WorkflowLifecycleTest {
         text("introspect/cluster/element-waiting-for-job-type/io.camunda:http-json:1"),
         "the waiting job belongs to the connector element");
 
-    // and nothing of this application served it, so the task behind the element was
-    // never reached
+    // and the task behind the element was never reached. So nothing of this application
+    // served the job
     Thread.sleep(5000);
     assertEquals(
         0,
@@ -711,9 +703,9 @@ public class Camunda8WorkflowLifecycleTest {
     final var aggregateId = aggregateIdOf(startProcess("FailProcess"));
 
     await(() -> invocations("alwaysFails", aggregateId) >= 1, "the failing job to be delivered");
-    // FailProcess is configured with 'retry-backoff: PT5S': without it the cluster
-    // hands the job out again within milliseconds, which used to burn all three
-    // retries before the cause of the failure had any chance to pass
+    // FailProcess is configured with 'retry-backoff: PT5S'. Without it, the cluster hands
+    // out the job again within milliseconds. That used to use up all three retries before
+    // the cause of the failure had any chance to pass
     Thread.sleep(3000);
     assertEquals(
         1,
@@ -737,16 +729,16 @@ public class Camunda8WorkflowLifecycleTest {
   public void theModelledBackoffReachesTheCluster() throws Exception {
 
     final var aggregateId = aggregateIdOf(startProcess("ModelledBackoffProcess"));
-    // a model which brings its own backoff is what an application arriving from version 1
-    // has, and keeping that value must not cost it a new process version
+    // an application which comes from version 1 has models with their own backoff. Keeping
+    // that value must not cost it a new process version
 
     await(() -> invocations("modelledBackoffFails", aggregateId) >= 1, "the failing job to be delivered");
     await(() -> invocations("modelledBackoffFails", aggregateId) >= 2, "the failing job to be handed out again");
 
-    // the element models PT12S while its workflow configures PT1S, so the distance
-    // between two deliveries is what says which of the two the cluster was given. The
-    // long value is the modelled one on purpose: a busy cluster can stretch a gap but
-    // never shorten it, so this assertion cannot go red on a slow machine
+    // the element models PT12S, while its workflow configures PT1S. So the time between two
+    // deliveries shows which of the two the cluster was given. The long value is the
+    // modelled one, on purpose. A busy cluster can stretch a gap but never shorten it. So
+    // this assertion cannot fail on a slow machine
     final var gap = Long.parseLong(text("introspect/delivery-gap/modelledBackoffFails/"
         + aggregateId));
     assertTrue(gap >= 8000, "expected the twelve seconds the model asks for between two deliveries but saw "
@@ -770,8 +762,8 @@ public class Camunda8WorkflowLifecycleTest {
 
     assertTrue(invocations("retryTask", aggregateId) >= 2, "expected a second delivery but saw "
         + invocations("retryTask", aggregateId));
-    // exactly one 'retried': the second delivery converged idempotently and the
-    // first delivery's mutation was rolled back
+    // exactly one 'retried'. The second delivery converged idempotently, and the change of
+    // the first delivery was rolled back
     assertEquals("retried", resultsOf(aggregateId));
 
   }
@@ -785,8 +777,8 @@ public class Camunda8WorkflowLifecycleTest {
     final var taskId = awaitParkedTask(aggregateId);
     assertEquals("async-open", resultsOf(aggregateId));
 
-    // the task's job timeout is PT2S - without the dormancy lock renewal the cluster
-    // would hand the job out again within this horizon
+    // the task's job timeout is PT2S. Without the lock renewal of a dormant job, the
+    // cluster would hand out the job again within this time
     Thread.sleep(8000);
     assertEquals(1, invocations("asyncTask", aggregateId), "the dormant job must not be re-invoked");
 
@@ -825,7 +817,7 @@ public class Camunda8WorkflowLifecycleTest {
     final var aggregateId = aggregateIdOf(startProcess("AsyncProcess"));
     final var taskId = awaitParkedTask(aggregateId);
 
-    // the job is completed OUTSIDE VanillaBP - what a concurrent completion looks like
+    // the job is completed OUTSIDE VanillaBP. A concurrent completion looks like this
     postWithoutResponse("introspect/cluster/jobs/%s/complete".formatted(taskId));
 
     final var failed = post("introspect/tasks/%s/complete/%s".formatted(taskId, aggregateId));
@@ -875,8 +867,8 @@ public class Camunda8WorkflowLifecycleTest {
         },
         "the nested multi-instance task to report all six iterations");
 
-    // Camunda 8 shadows the OUTER iteration for a nested task - what the adapter
-    // makes readable again is the group the iteration ran in
+    // Camunda 8 hides the OUTER iteration from a nested task. The adapter makes the group
+    // readable again in which the iteration ran
     assertEquals(
         "g1#0/2-x#0/3,g1#0/2-y#1/3,g1#0/2-z#2/3,g2#1/2-x#0/3,g2#1/2-y#1/3,g2#1/2-z#2/3",
         object("introspect/aggregates/"
@@ -933,10 +925,9 @@ public class Camunda8WorkflowLifecycleTest {
     final var aggregateId = aggregateIdOf(started);
     final var instanceKey = instanceKeyOf(started);
 
-    // containment and not equality, the way the Spring Boot suite asks it: a repeated
-    // notification appends a second event, and an exact comparison could then never
-    // become true again - which would turn a tolerated repetition into a timeout whose
-    // message is about something else entirely
+    // contains, not equals, as in the Spring Boot suite. A repeated notification appends a
+    // second event. An exact comparison could then never become true again. That would turn
+    // an accepted repetition into a timeout whose message is about something else entirely
     await(
         () -> {
           final var results = resultsOf(aggregateId);
@@ -1012,7 +1003,7 @@ public class Camunda8WorkflowLifecycleTest {
   public void correlateMessageResumesTheWaitingWorkflow() throws Exception {
 
     final var aggregateId = aggregateIdOf(startProcess("MessageProcess"));
-    // correlating probes workflow awareness, which is a query-API question
+    // correlating checks workflow awareness, and that asks the query API
     awaitKnownToTheQueryApi(aggregateId);
 
     post("introspect/messages/C8PaymentReceived/correlate-and-rollback/"
@@ -1039,7 +1030,7 @@ public class Camunda8WorkflowLifecycleTest {
     final var aggregateId = aggregateIdOf(startProcess("MessageProcess"));
     awaitKnownToTheQueryApi(aggregateId);
 
-    // the subscription is injected as '=id', so this one matches no workflow
+    // the subscription is injected as '=id'. So this one matches no workflow
     post("introspect/messages/C8PaymentReceived/correlate/%s/no-such-correlation".formatted(aggregateId));
 
     awaitNothingElseHappens();
@@ -1068,9 +1059,9 @@ public class Camunda8WorkflowLifecycleTest {
   @DisplayName("startWorkflowByMessage refuses a message which starts another process")
   public void startWorkflowByMessageRefusesTheMessageOfAnotherProcess() {
 
-    // 'C8OrderPlaced' starts MessageStartProcess. Publishing it names no process, so the
+    // 'C8OrderPlaced' starts MessageStartProcess. Publishing it names no process. So the
     // cluster would start that process for the aggregate of TaskProcess. The core refuses
-    // it before phase one, from the message names this adapter read out of the model
+    // it before phase one. It uses the message names which this adapter read from the model
     final var refused = post("introspect/messages/C8OrderPlaced/start-task-process");
 
     assertEquals("IllegalArgumentException", refused.get("rootException"), () -> "but got: "
@@ -1233,14 +1224,14 @@ public class Camunda8WorkflowLifecycleTest {
   @DisplayName("The version of the deployed process definition decides which method serves the task")
   public void theDeployedVersionDecidesWhichMethodServesTheTask() throws Exception {
 
-    // the application deployed version 1 while booting - a version made of numbers is
-    // compared to what the job carries, so nothing is asked of the cluster
+    // the application deployed version 1 while booting. A version made of numbers is
+    // compared to what the job carries. So nothing is asked of the cluster
     final var first = aggregateIdOf(startProcess("VersionedProcess"));
     await(() -> "firstVersion".equals(resultsOf(first)), "the method naming version 1 to serve the task");
 
     postWithoutResponse("introspect/cluster/deploy-version-two");
-    // the query API is fed by an exporter, so the tag arrives there a moment later -
-    // and a job of a version no method serves would burn its retries
+    // an exporter fills the query API, so the tag arrives there a moment later. And a job
+    // of a version which no method serves would use up its retries
     await(
         () -> Boolean.parseBoolean(text("introspect/cluster/tagged-version-known")),
         QUERY_TIMEOUT_MS,
@@ -1287,9 +1278,9 @@ public class Camunda8WorkflowLifecycleTest {
         },
         "SyncProcess to pass the FEEL gateway");
 
-    // the gateway's condition '=approved = true' branched on the value the
-    // @WorkflowTask method produced - without the push it would have taken the
-    // default (rejected) flow
+    // the gateway's condition '=approved = true' branched on the value which the
+    // @WorkflowTask method produced. Without the push it would have taken the default
+    // (rejected) flow
     assertEquals("sync-task|sync-approved", resultsOf(aggregateId));
 
     final var observed = object("introspect/observed-variables");
@@ -1314,8 +1305,8 @@ public class Camunda8WorkflowLifecycleTest {
 
     // the FIRST task configures nothing, and the declared name reaches its worker
     await(() -> invocations("fetchAllTask", aggregateId) >= 1, "the first task to be delivered");
-    // the SECOND task configures nothing either, and its worker asks for 'bigPayload' too:
-    // the core scanned the name off the method while wiring
+    // the SECOND task configures nothing either, and its worker asks for 'bigPayload' too.
+    // The core read the name from the method while wiring
     await(() -> invocations("fetchDerivedTask", aggregateId) >= 1, "the task fetching the derived list");
     await(() -> "fetch-all|fetch-derived".equals(resultsOf(aggregateId)), "both tasks to have committed");
 
@@ -1344,8 +1335,8 @@ public class Camunda8WorkflowLifecycleTest {
     final var definition = definitions.getFirst();
     assertTrue(definition.startsWith("c8#"), "process definition ids are namespaced per adapter id: "
         + definition);
-    // the viewer reports the BPMN process id the APPLICATION knows, not the prefixed
-    // one the cluster holds - name-clash avoidance is the adapter's business
+    // the viewer reports the BPMN process id which the APPLICATION knows, not the prefixed
+    // one the cluster holds. Name-clash avoidance is the adapter's business
     assertTrue(definition.contains("|TaskProcess|"), definition);
     assertTrue(definition.endsWith("|null"), "the primary definition is used by no element: "
         + definition);
@@ -1362,8 +1353,8 @@ public class Camunda8WorkflowLifecycleTest {
         + xml);
     assertTrue(xml.contains("happyTask"), "the XML is the model AS DEPLOYED, VanillaBP's wiring included");
 
-    // the exporter feeds the search the history is read by, so the elements arrive a
-    // moment after the workflow does
+    // the history is read by a search, and the exporter fills it. So the elements arrive a
+    // moment after the workflow
     await(
         () -> {
           final var history = object("introspect/viewer/history/"

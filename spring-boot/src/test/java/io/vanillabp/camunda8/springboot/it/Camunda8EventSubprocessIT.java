@@ -17,14 +17,14 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * End-to-end test of an event subprocess against a real Camunda 8.
  * <p>
- * Its start event fires on a timer, so it looks like a start the cluster decides on. It is
- * none: the workflow runs already and has the aggregate the application gave it when it
- * started the workflow. The application therefore serves that start event with no
- * <code>&#64;WorkflowStartedByBpms</code> method, and the deployment of this model has to
- * boot all the same.
+ * Its start event fires on a timer, so it looks like a start which the cluster decides on.
+ * It is not. The workflow already runs, and it has the aggregate which the application gave
+ * it at the start. So the application serves that start event with no
+ * <code>&#64;WorkflowStartedByBpms</code> method, and the deployment of this model still has
+ * to boot.
  * <p>
- * What runs afterwards proves the second half: the event subprocess takes the workflow
- * over, and the task inside it is handed the aggregate the application created.
+ * What runs afterwards proves the second half. The event subprocess takes the workflow
+ * over, and the task inside it is handed the aggregate which the application created.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -46,8 +46,8 @@ public class Camunda8EventSubprocessIT extends SpringBootTestOnTheSharedCluster 
       final Supplier<Boolean> condition,
       final String description) throws InterruptedException {
 
-    // the workflow instance is created after the commit (phase two), the event
-    // subprocess waits two seconds on top of that, and the job worker polls
+    // the workflow instance is created after the commit (phase two). The event subprocess
+    // waits two more seconds, and then the job worker polls
     final var deadline = System.currentTimeMillis() + 180_000;
     while (!Boolean.TRUE.equals(condition.get())) {
       if (System.currentTimeMillis() > deadline) {

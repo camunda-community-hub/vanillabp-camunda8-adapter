@@ -7,12 +7,12 @@ import io.vanillabp.integration.adapter.AdapterConfigurationBase;
 import io.vanillabp.integration.processservice.SpringBootMigrationAdapterAutoConfiguration;
 
 /**
- * Announces the Camunda 8 adapter to the VanillaBP Spring Boot integration. It must be
- * built <i>before</i> the platform validates the configured adapter types, hence
- * {@code before = SpringBootMigrationAdapterAutoConfiguration.class}.
+ * Announces the Camunda 8 adapter to the VanillaBP Spring Boot integration. The platform
+ * validates the configured adapter types, and this class must be built before that. This is
+ * why it says {@code before = SpringBootMigrationAdapterAutoConfiguration.class}.
  * <p>
- * This configuration must not declare any other bean definitions since it needs to be
- * constructible very early during bootstrapping of the Spring context.
+ * Do not declare any other beans here. Spring has to build this class very early while the
+ * context starts, and other beans would make that harder.
  */
 @AutoConfiguration(before = SpringBootMigrationAdapterAutoConfiguration.class)
 public class Camunda8AdapterConfiguration extends AdapterConfigurationBase {
@@ -24,8 +24,8 @@ public class Camunda8AdapterConfiguration extends AdapterConfigurationBase {
   }
 
   /**
-   * The adapter type this auto-configuration registers, taken from the deployment service so
-   * both halves cannot drift apart.
+   * The adapter type this auto-configuration registers. It is taken from the deployment
+   * service, so the two places cannot drift apart.
    */
   public static final String ADAPTER_TYPE = Camunda8DeploymentService.ADAPTER_TYPE;
 

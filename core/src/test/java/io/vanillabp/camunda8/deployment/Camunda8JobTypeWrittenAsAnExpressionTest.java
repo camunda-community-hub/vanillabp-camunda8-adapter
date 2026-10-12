@@ -34,11 +34,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What a boot does with a model which names a job type by a FEEL expression.
  * <p>
  * A job type is the name a worker subscribes to. This adapter opens one worker per job type it
- * reads out of the model and subscribes exactly the string the model says, so an expression
- * there leaves the element unserved: where the cluster evaluates it the job carries the result
- * while the worker waits for the expression, and where it does not, no
+ * reads out of the model, and subscribes exactly the string the model says. So an expression
+ * there leaves the element unserved. Where the cluster evaluates it, the job carries the
+ * result while the worker waits for the expression. Where it does not, no
  * {@code @WorkflowTask} method can be named after it. Before this was asked, the boot ended
- * over the second half alone and demanded a method whose name nobody can write.
+ * over the second half alone, and it demanded a method whose name nobody can write.
  * <p>
  * Who claims the process decides what happens about it, the same way it decides about a user
  * task a job worker serves and about an ad-hoc subprocess nothing serves.
@@ -72,8 +72,8 @@ public class Camunda8JobTypeWrittenAsAnExpressionTest {
   }
 
   /**
-   * The same element built from an element template, which says that the runtime owning the
-   * template serves it - and such a runtime may well compose its job type by expression.
+   * The same element built from an element template. That says that the runtime which owns the
+   * template serves it, and such a runtime may well compose its job type by expression.
    */
   private static BpmnModelInstance anotherRuntimesTaskNamingItsJobTypeByExpression() {
 
@@ -139,8 +139,8 @@ public class Camunda8JobTypeWrittenAsAnExpressionTest {
 
   /**
    * What one boot asked the core to validate, keyed by activity id. A boot which ends over the
-   * job type must not have asked anything about it first: the method the core would demand is
-   * the message this test exists to replace.
+   * job type must not have asked anything about it first. The core's message, which would
+   * demand a method, is the message this test exists to replace.
    */
   private static class Reported extends Camunda8DeploymentServiceTest.NoOpInvoker {
 
@@ -159,8 +159,8 @@ public class Camunda8JobTypeWrittenAsAnExpressionTest {
   }
 
   /**
-   * The same core answering that no {@code @WorkflowService} class of the application claims the
-   * process - the answer the core gives by not knowing a workflow aggregate for it.
+   * The same core, answering that no {@code @WorkflowService} class of the application claims the
+   * process. The core gives that answer by not knowing a workflow aggregate for it.
    */
   private static class ReportedForAProcessNobodyClaims extends Reported {
 
@@ -189,7 +189,7 @@ public class Camunda8JobTypeWrittenAsAnExpressionTest {
   }
 
   /**
-   * Preparing and wiring one model, unrun, so a test can catch what it refused.
+   * Preparing and wiring one model, not yet run, so a test can catch what it refused.
    */
   private static Runnable bootOf(
       final Reported core,
@@ -215,7 +215,7 @@ public class Camunda8JobTypeWrittenAsAnExpressionTest {
                 bpmnProcessId) -> new Camunda8AllowConnectorsResolver.Setting(
                     connectorsAreAllowed, "vanillabp.adapters.c8.allow-connectors"));
     // the listeners are allowed, so a listener job type reaches this boot as something the
-    // application asked to be served: the shape of the value is what decides, not the key
+    // application asked to be served. The shape of the value decides, not the key
     service
         .setAllowListenersResolver(
             (Camunda8AllowListenersResolver) (

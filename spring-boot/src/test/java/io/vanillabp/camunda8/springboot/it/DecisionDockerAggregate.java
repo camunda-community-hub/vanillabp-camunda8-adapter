@@ -9,9 +9,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the decision-table integration test. What the decision
- * decides on travels as a shared value ({@code approved}), and what it decided comes back
- * into {@code rating}.
+ * JPA workflow aggregate of the decision-table integration test. The input of the decision
+ * travels as a shared value ({@code approved}). The result of the decision comes back into
+ * {@code rating}.
  */
 @Entity
 @Table(name = "C8_DECISION_AGGREGATE")

@@ -31,18 +31,18 @@ import io.vanillabp.integration.adapter.spi.version.ProcessVersionCatalog;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which elements of a version the cluster still HOLDS can put a second token into a
- * running workflow - two branches writing one workflow aggregate, which loses an update
- * where the aggregate carries no version attribute.
+ * Which elements of a version the cluster still HOLDS can put a second token into a running
+ * workflow. Then two branches write one workflow aggregate, and that loses an update where
+ * the aggregate carries no version attribute.
  * <p>
- * The versions which run longest are the ones a walk over this boot's model never reaches:
- * a parallel gateway the newest model dropped keeps forking every workflow started before
- * it. Reading the old model is this adapter's part, deciding what it means is the core's,
- * which is the same split the model of the current deployment goes through.
+ * A walk over the model of this boot never reaches the versions which run longest. A
+ * parallel gateway the newest model dropped keeps forking every workflow started before it.
+ * This adapter reads the old model, and the core decides what it means. The model of the
+ * current deployment goes through the same split.
  * <p>
- * The cluster is played by a definition search and an XML request, the same way
- * {@link Camunda8StartEventsOfHeldVersionsTest} plays it for the other question about a
- * held version.
+ * A definition search and an XML request play the cluster, the same way
+ * {@link Camunda8StartEventsOfHeldVersionsTest} plays it for the other question about a held
+ * version.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ConcurrentTokensOfHeldVersionsTest {
@@ -167,7 +167,7 @@ public class Camunda8ConcurrentTokensOfHeldVersionsTest {
         });
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
 

@@ -15,25 +15,25 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The POM this line publishes asks for this line's Camunda client, and for nothing an
  * application of another line would have to take.
  * <p>
- * A release line is a promise about the cluster an application may run: the client a build
- * was compiled against is the lowest cluster version that build accepts. The promise is
- * kept by the POM rather than by the jar, because that POM is what puts the client on an
- * application's classpath. It used to say something else. The version lived in a property
- * the line profile sets, the published POM was a copy of the source POM, and a consumer
- * activates none of our profiles, so every line asked for the client of the current GA
- * line. That is what the flatten plugin's 'oss' mode ended, and this test is what keeps it
- * ended. See decision 39 in the repository's DECISIONS.md.
+ * A release line is a promise about the cluster an application may run. The client a build
+ * was compiled against is the lowest cluster version that build accepts. The POM keeps the
+ * promise, not the jar, because the POM puts the client on the classpath of an application.
+ * It used to say something else. The version lived in a property which the line profile
+ * sets, and the published POM was a copy of the source POM. A consumer activates none of our
+ * profiles, so every line asked for the client of the current GA line. The 'oss' mode of the
+ * flatten plugin ended that, and this test keeps it ended. See decision 39 in the
+ * repository's DECISIONS.md.
  * <p>
  * The same POM also says where the artifact comes from, and it used to say where we deploy
  * it. Decision 40 is about that half.
  * <p>
- * What the assertions know sits in {@link PublishedPom} of the module 'published-pom',
- * because the Business Cockpit's Camunda 8 adapter is built the same way and checks the same
+ * What the assertions know sits in {@link PublishedPom} of the module 'published-pom'. The
+ * Camunda 8 adapter of the Business Cockpit is built the same way and checks the same
  * promise. This test is the caller which names the artifact and the versions expected of it.
  * <p>
  * It also names the release line, because a failure has to say which line it came from. Our
- * nightly version carries the line and a pull request build's version does not, and the
- * module cannot fill that in: it knows the line it was built for, not the line a caller is
+ * nightly version carries the line, but the version of a pull request build does not. The
+ * module cannot fill that in. It knows the line it was built for, not the line a caller is
  * testing.
  */
 @ExtendWith(SuppressOutputExtension.class)

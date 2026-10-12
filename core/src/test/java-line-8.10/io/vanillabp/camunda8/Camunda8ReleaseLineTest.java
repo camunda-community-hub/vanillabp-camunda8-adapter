@@ -12,15 +12,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * Release line <code>8.10</code>, the current GA line, built against the newest Camunda minor.
  * <p>
- * This test exists once per line, in the line's own test source directory, and only the
- * active line's copy is compiled. It is what proves the per-line build itself: the profile
- * selected a client, the build filtered it into the adapter's version descriptor, and the
- * runtime reads back the line it was actually built for. A pin that does not reach the
- * descriptor would otherwise surface as a message naming the wrong cluster version.
+ * This test exists once per line, in the line's own test source directory. Only the copy of
+ * the active line is compiled. It proves that the per-line build works: the profile selected
+ * a client, the build filtered it into the adapter's version descriptor, and the runtime
+ * reads back the line it was built for. Without it, a pin which does not reach the descriptor
+ * would show up as a message which names the wrong cluster version.
  * <p>
- * A line differs in what its cluster can do, never in what the adapter offers, so nothing
- * here asserts an API. That the API is identical across lines is checked by
- * <code>bin/api-identity.sh</code>.
+ * Lines differ in what their cluster can do, never in what the adapter offers. So nothing
+ * here asserts an API. <code>bin/api-identity.sh</code> checks that the API is the same on
+ * every line.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ReleaseLineTest {

@@ -20,22 +20,22 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A CANARY: it watches the cluster, not this adapter.
  * <p>
- * The deployment refuses a model whose job type is written as a FEEL expression, because this
- * adapter subscribes a worker to the string the model says. This case measures what the cluster
- * does with such a job type, which is the half of that reasoning Camunda owns: it starts one
- * workflow and then asks for the job under both names, the expression as it stands in the model
- * and what the expression yields.
+ * The deployment refuses a model whose job type is written as a FEEL expression. This adapter
+ * subscribes a worker to the string which the model says. This case measures what the cluster
+ * does with such a job type. That is the half of the reasoning which Camunda owns. The case
+ * starts one workflow. Then it asks for the job under both names: the expression as it stands
+ * in the model, and what the expression yields.
  * <p>
  * Measured on 2026-10-01 against {@code camunda/camunda:8.10.0} and {@code camunda/camunda:8.9.21}:
- * the job carried the RESULT on both. Nothing answered under the expression itself, so a worker of
- * this adapter would have waited for a name no job ever carries. The 8.8 line runs the same case
- * in the pull request's matrix.
+ * on both, the job carried the RESULT. Nothing answered under the expression itself. So a worker
+ * of this adapter would have waited for a name which no job ever carries. The 8.8 line runs the
+ * same case in the pull request's matrix.
  * <p>
- * The refusal does not depend on this answer and says both: where the cluster evaluates the
- * expression the worker waits for a name nothing uses, and where it does not, the job carries
- * the expression and no {@code @WorkflowTask} method can be named after it. A red run here is
- * therefore news about Camunda rather than a reason to let such a model boot. What would change
- * is the sentence about what it costs, not the refusal.
+ * The refusal does not depend on this answer, and it covers both cases. If the cluster evaluates
+ * the expression, the worker waits for a name nothing uses. If it does not, the job carries the
+ * expression, and no {@code @WorkflowTask} method can be named after it. So a red run here is
+ * news about Camunda, not a reason to let such a model boot. Only the sentence about what it
+ * costs would change, not the refusal.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -112,8 +112,8 @@ public class Camunda8JobTypeWrittenAsAnExpressionCanaryIT extends TestOnTheShare
   }
 
   /**
-   * Asks for the job under both names until one of them answers, and completes the one which
-   * does, so the workflow this canary started goes away.
+   * Asks for the job under both names until one of them answers. It completes the job which
+   * answers. So the workflow this canary started goes away.
    *
    * @param instance The workflow instance, ended where no name answers
    * @return The name the job came under, or what happened instead
@@ -151,9 +151,9 @@ public class Camunda8JobTypeWrittenAsAnExpressionCanaryIT extends TestOnTheShare
   }
 
   /**
-   * Ends the workflow this canary started, where it is still running. Completing the job ends it
-   * on its own, and the cluster answers a cancellation of a workflow which is gone with
-   * <code>404</code> - which is the answer this canary hopes for rather than a failure of it.
+   * Ends the workflow this canary started, if it is still running. Completing the job ends it on
+   * its own. The cluster answers a cancellation of a workflow which is gone with
+   * <code>404</code>. This canary hopes for that answer. It is not a failure.
    *
    * @param instance The workflow instance
    */
@@ -163,15 +163,15 @@ public class Camunda8JobTypeWrittenAsAnExpressionCanaryIT extends TestOnTheShare
     try {
       client.newCancelInstanceCommand(instance).send().join();
     } catch (final RuntimeException alreadyGone) {
-      // nothing to do: the cluster holds no workflow of this canary either way, which is what
-      // the cleanup is for
+      // nothing to do. The cluster holds no workflow of this canary either way, and that is
+      // what the cleanup is for
     }
 
   }
 
   /**
-   * How long the one case may take. A job of a workflow just started arrives in well under a
-   * second.
+   * How long the one case may take. The job of a workflow which just started arrives in well
+   * under a second.
    */
   private static final Duration THE_CLUSTER_ANSWERS_WITHIN = Duration.ofSeconds(60);
 
@@ -189,9 +189,9 @@ public class Camunda8JobTypeWrittenAsAnExpressionCanaryIT extends TestOnTheShare
   /**
    * One process with one service task, whose job type is whatever is handed in.
    * <p>
-   * The quotes of the FEEL string are escaped, because the value sits in an XML attribute. A
-   * model written by a modeller is escaped by the modeller; one composed here is not, and
-   * leaving it out refuses the deployment over the test's own XML.
+   * The quotes of the FEEL string are escaped, because the value sits in an XML attribute. The
+   * modeller escapes a model which it writes. A model composed here is not escaped by anybody.
+   * Without the escaping, the deployment would be refused because of the test's own XML.
    *
    * @param jobType What the task definition says
    * @return The model

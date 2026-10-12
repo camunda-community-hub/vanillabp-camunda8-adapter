@@ -17,12 +17,12 @@ import io.vanillabp.integration.adapter.spi.workflowtask.CompensationSpec;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Which elements of a model can put a SECOND token into a running workflow -
- * the finding this adapter reports to the core, which turns it into the hint about two
- * writers on one workflow aggregate.
+ * Which elements of a model can put a SECOND token into a running workflow. This adapter
+ * reports that finding to the core. The core turns it into the hint about two writers on
+ * one workflow aggregate.
  * <p>
- * Every construct is asserted together with the variant that does NOT produce a second
- * token, since a hint given for a sequential model would be worse than none.
+ * Every construct is asserted together with the variant which does NOT produce a second
+ * token. A hint given for a sequential model would be worse than none.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ConcurrentTokensTest {
@@ -69,7 +69,7 @@ public class Camunda8ConcurrentTokensTest {
 
   /**
    * Two activities which were compensated, drawn the way a modeller draws them: a
-   * compensation boundary event on each, and an association to the handler undoing it.
+   * compensation boundary event on each, and an association to the handler which undoes it.
    */
   private static final String TWO_ACTIVITIES_WITH_A_HANDLER = """
           <bpmn:serviceTask id="Activity_Book" />
@@ -158,8 +158,8 @@ public class Camunda8ConcurrentTokensTest {
                 </bpmn:subProcess>
             """ + TWO_ACTIVITIES_WITH_A_HANDLER);
 
-    // the two handlers of the process scope are not started by a throw event of the
-    // subprocess, so this one starts one handler and is no finding for the caller
+    // a throw event of the subprocess does not start the two handlers of the process scope.
+    // So this one starts one handler, and that is no finding for the caller
     assertEquals(
         List.of(new CompensationSpec("Event_UndoTheTrip", List.of("Activity_CancelSeat"))), found);
 
@@ -188,8 +188,8 @@ public class Camunda8ConcurrentTokensTest {
             </bpmn:intermediateThrowEvent>
         """ + TWO_ACTIVITIES_WITH_A_HANDLER);
 
-    // what compensation means is reported with its shape, so nothing of it leaks into the
-    // flat list the other constructs are reported through
+    // what compensation means is reported with its shape. So nothing of it leaks into the
+    // flat list through which the other constructs are reported
     assertTrue(found.isEmpty(), found.toString());
 
   }
@@ -315,7 +315,7 @@ public class Camunda8ConcurrentTokensTest {
   @DisplayName("An ad-hoc subprocess activating exactly one activity is reported all the same")
   public void adHocSubProcessActivatingOneActivity() {
 
-    // the collection is an expression evaluated when the workflow enters the element, so
+    // the collection is an expression, evaluated when the workflow enters the element. So
     // a list of one today is a list of two as soon as the data behind it changes
     final var found = elementsOf("""
             <bpmn:adHocSubProcess id="AdHoc_OneCheck">
@@ -338,8 +338,8 @@ public class Camunda8ConcurrentTokensTest {
   @DisplayName("An ad-hoc subprocess of the job worker flavour is reported as well")
   public void adHocSubProcessServedByAWorker() {
 
-    // a worker may activate several elements in one result, so this flavour produces
-    // concurrent tokens too - whether or not anything serves the job
+    // a worker may activate several elements in one result. So this flavour produces
+    // concurrent tokens too, whether or not anything serves the job
     final var found = elementsOf("""
             <bpmn:adHocSubProcess id="AdHoc_AgentTools">
               <bpmn:extensionElements>

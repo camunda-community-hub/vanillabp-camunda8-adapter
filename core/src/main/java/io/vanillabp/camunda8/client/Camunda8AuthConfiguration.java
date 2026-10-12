@@ -8,28 +8,29 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * How one Camunda 8 adapter instance proves who it is - the block
+ * How one Camunda 8 adapter instance proves who it is. This is the block
  * <code>vanillabp.adapters.&lt;id&gt;.auth.*</code>.
  * <p>
- * A credential belongs to the connection and not to a workflow, so this block lives at
- * the adapter level only; there is nothing to resolve per workflow module, workflow or
+ * A credential belongs to the connection and not to a workflow. So this block lives at
+ * the adapter level only. There is nothing to resolve per workflow module, workflow or
  * task.
  * <p>
- * Three methods, the same three the Camunda client knows: {@link Method#NONE},
- * {@link Method#BASIC} and {@link Method#OIDC}. An absent {@link #method} is detected
- * from the keys which are set, and the detection is REPORTED, because a silent fallback
- * to <code>none</code> against a cluster which wants credentials is precisely the
- * failure this block exists for.
+ * There are three methods, the same three the Camunda client knows: {@link Method#NONE},
+ * {@link Method#BASIC} and {@link Method#OIDC}. If {@link #method} is not set, the keys
+ * which are set decide it, and the adapter REPORTS that choice. A silent fallback to
+ * <code>none</code> against a cluster which wants credentials is exactly the failure
+ * this block exists for.
  * <p>
- * Client certificates for the cluster connection are not among the methods: the Camunda
- * client has no keystore of its own for gRPC or REST on any supported release line -
- * neither a builder method, nor a client property, nor an environment variable. The
- * keystore and truststore keys here are the ones the client does have, and they belong
- * to the token request against the authorization server. What the cluster connection
- * offers is {@link #caCertificatePath} and the adapter's <code>override-authority</code>.
+ * Client certificates for the cluster connection are not among the methods. On no
+ * supported release line does the Camunda client have a keystore of its own for gRPC or
+ * REST. There is no builder method, no client property and no environment variable for
+ * it. The keystore and truststore keys here are the ones the client does have. They
+ * belong to the token request against the authorization server. For the cluster
+ * connection there is {@link #caCertificatePath} and the adapter's
+ * <code>override-authority</code>.
  * <p>
- * Messages built here name property KEYS and never values: no secret and no length of
- * one ever reaches a log line.
+ * Messages built here name property KEYS and never values. No secret, and not even the
+ * length of one, ever reaches a log line.
  * <p>
  * Why these keys exist only at adapter level, and why there is no mtls among them, is decision 10
  * in the repository's DECISIONS.md.
@@ -56,9 +57,10 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * The audience a Camunda 8 SaaS cluster expects, and the token endpoint of Camunda's
-   * login service. A SaaS adapter is an OIDC adapter with these two presets, which is
-   * why both modes share one code path - see {@link Camunda8Authentication}.
+   * The audience a Camunda 8 SaaS cluster expects. Together with the token endpoint of
+   * Camunda's login service it makes the two SaaS presets. A SaaS adapter is an OIDC
+   * adapter with these two presets. That is why both modes share one code path, see
+   * {@link Camunda8Authentication}.
    */
   public static final String SAAS_AUDIENCE = "zeebe.camunda.io";
 
@@ -295,8 +297,8 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * Where the client keeps the tokens it fetched, so a restart does not fetch a new one
-   * while the old is still valid. Default: the client's
+   * Where the client keeps the tokens it fetched. Then a restart does not fetch a new
+   * one while the old one is still valid. Default: the client's
    * <code>${user.home}/.camunda/credentials</code>.
    */
   private String credentialsCachePath;
@@ -382,8 +384,8 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * The keystore holding the client certificate the AUTHORIZATION SERVER asks for (not
-   * the cluster - see the class comment).
+   * The keystore with the client certificate the AUTHORIZATION SERVER asks for. It is
+   * not for the cluster, see the class comment.
    */
   private String keystorePath;
 
@@ -467,8 +469,8 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * The truststore the AUTHORIZATION SERVER's certificate is verified against (not the
-   * cluster's - see the class comment).
+   * The truststore which verifies the certificate of the AUTHORIZATION SERVER. It is not
+   * for the certificate of the cluster, see the class comment.
    */
   private String truststorePath;
 
@@ -524,9 +526,10 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * The certificate authority the CLUSTER's TLS certificate is verified against, for a
-   * gateway with a certificate the JVM's truststore does not know. Independent of the
-   * method: a cluster may want TLS without wanting credentials, and the other way round.
+   * The certificate authority which verifies the TLS certificate of the CLUSTER. It is
+   * for a gateway whose certificate the truststore of the JVM does not know. It does not
+   * depend on the method. A cluster may want TLS without credentials, and the other way
+   * round.
    */
   private String caCertificatePath;
 
@@ -554,8 +557,8 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * Whether NO authentication key is set at all - an adapter configured before this
-   * block existed.
+   * Whether NO authentication key is set at all. This is the case for an adapter
+   * configured before this block existed.
    *
    * @return Whether the authentication configuration is entirely absent
    */
@@ -577,9 +580,9 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * Whether a key is set which only a credential-sending method uses. The CA certificate
-   * is deliberately not among them: verifying the cluster's TLS certificate is a question
-   * of the transport, and a cluster may want TLS without wanting credentials.
+   * Whether a key is set which only a method that sends credentials uses. The CA
+   * certificate is left out on purpose. Verifying the TLS certificate of the cluster is a
+   * matter of the transport. A cluster may want TLS without wanting credentials.
    *
    * @return Whether a credential key carries a value
    */
@@ -605,13 +608,13 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * The method this adapter instance uses: the configured one, or the one its keys
-   * imply.
+   * The method this adapter instance uses. It is the configured one, or else the one its
+   * keys point to.
    * <p>
-   * Detection order, most specific first: a basic key names basic, an OIDC key names
-   * oidc, a SaaS adapter is oidc through its presets, and everything else is
-   * <code>none</code>. Two methods configured at once are not detectable and fail the
-   * boot (see {@link #validate(String, Camunda8AdapterConfiguration.Mode)}).
+   * The detection goes from the most specific to the least. A basic key means basic. An
+   * OIDC key means oidc. A SaaS adapter is oidc through its presets. Everything else is
+   * <code>none</code>. If keys of two methods are set, the method cannot be detected, and
+   * the boot fails (see {@link #validate(String, Camunda8AdapterConfiguration.Mode)}).
    *
    * @param mode The adapter's connection mode
    * @return The method in use, never <code>null</code>
@@ -633,9 +636,9 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * The keys of the resolved method which are missing (relative to
-   * <code>vanillabp.adapters.&lt;id&gt;.auth.</code>). An empty list means the method
-   * can be built.
+   * The keys of the resolved method which are missing, relative to
+   * <code>vanillabp.adapters.&lt;id&gt;.auth.</code>. An empty list means the method can
+   * be built.
    *
    * @param saas Whether the adapter runs in SaaS mode, where the connection keys supply
    *          the OIDC client and the presets supply audience and authorization server
@@ -658,8 +661,8 @@ public class Camunda8AuthConfiguration {
         }
       }
       case OIDC -> {
-        // in SaaS mode the connection keys ARE the OIDC client, so nothing is missing
-        // here which the connection validation does not already report
+        // In SaaS mode the connection keys ARE the OIDC client. The connection validation
+        // already reports what is missing there.
         if (!saas) {
           if (!hasText(clientId)) {
             missing.add("auth.client-id");
@@ -668,8 +671,8 @@ public class Camunda8AuthConfiguration {
             missing.add("auth.client-secret");
           }
           if (!hasText(authorizationServerUrl)) {
-            // without one the client silently points at Camunda's SaaS login, which a
-            // self-managed setup never means
+            // Without one, the client silently uses Camunda's SaaS login. A self-managed
+            // setup never wants that.
             missing.add("auth.authorization-server-url");
           }
           if (!hasText(audience)) {
@@ -685,10 +688,9 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * Validates the authentication block of one adapter instance AT STARTUP. Every defect
-   * it reports is one a boot cannot recover from: a method whose credentials are
-   * incomplete cannot be built, and a credential which will never be sent is a key
-   * somebody wrote for nothing.
+   * Validates the authentication block of one adapter instance AT STARTUP. The boot cannot
+   * recover from any defect it reports. A method with incomplete credentials cannot be
+   * built. A credential which is never sent is a key somebody wrote for nothing.
    *
    * @param adapterId The adapter id
    * @param mode The adapter's connection mode
@@ -763,10 +765,9 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * The minimal YAML of a method, indented for a message. It is the second half of every
-   * complaint this class makes: naming what is missing without showing where it goes
-   * sends the reader to the documentation, which is what these messages are here to
-   * avoid.
+   * The minimal YAML of a method, indented for a message. Every complaint of this class
+   * ends with it. A message which names what is missing, but not where it goes, sends the
+   * reader to the documentation. These messages are here to avoid that.
    *
    * @param adapterId The adapter id
    * @param method The method
@@ -809,9 +810,9 @@ public class Camunda8AuthConfiguration {
   }
 
   /**
-   * Who this adapter instance authenticates as - a user name or a client id, never a
-   * secret. Used where two adapter ids on ONE cluster have to be told apart
-   * ({@link Camunda8InstanceIdentity}) and in the startup line.
+   * Who this adapter instance authenticates as. It is a user name or a client id, never a
+   * secret. It tells apart two adapter ids on ONE cluster
+   * ({@link Camunda8InstanceIdentity}), and it shows in the startup line.
    *
    * @param configuration The adapter's connection configuration (SaaS keys serve as the
    *          OIDC client)

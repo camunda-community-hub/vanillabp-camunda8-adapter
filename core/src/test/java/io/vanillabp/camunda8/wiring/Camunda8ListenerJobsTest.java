@@ -26,13 +26,13 @@ import io.vanillabp.integration.adapter.spi.workflowtask.DeliveryOfAnUnknownWork
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The protocol a listener job follows, asked of the class an EXTENSION calls rather than of
- * one of the adapter's two handlers.
+ * The protocol a listener job follows, asked of the class an EXTENSION calls, not of one of
+ * the adapter's two handlers.
  * <p>
  * The promises of {@link Camunda8ListenerJobs} are the reason it is public, so each of them
- * has a test: the completion, the failure with the retries the caller chose, and the one a
- * listener whose failure leaves no retries depends on - a job cut off by a shutdown is not
- * failed at all, because failing it with no attempt left IS the incident.
+ * has a test: the completion, the failure with the retries the caller chose, and one more.
+ * A listener whose failure leaves no retries depends on it: a job cut off by a shutdown is
+ * not failed at all, because failing it with no attempt left IS the incident.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ListenerJobsTest {
@@ -130,8 +130,8 @@ public class Camunda8ListenerJobsTest {
     verify(jobClient.newFailCommand(4711L).retries(0)).errorMessage(message.capture());
     final var incident = message.getValue();
 
-    // the reader is told what happened and where to look, and is not told that they deleted
-    // a workflow aggregate - which nobody can know here
+    // the reader is told what happened and where to look. They are not told that they
+    // deleted a workflow aggregate, because nobody can know that here
     assertTrue(
         incident.contains("This application was given a task of a workflow it does not own"),
         incident);
@@ -139,8 +139,8 @@ public class Camunda8ListenerJobsTest {
     assertTrue(incident.contains("Another application shares this BPMS and owns this workflow"), incident);
     assertFalse(incident.contains("must not be deleted while the workflow is active"), incident);
 
-    // the type is part of the incident text, which is what tells this refusal from a defect
-    // of the application at a glance
+    // the type is part of the incident text. It tells this refusal from a defect of the
+    // application at a glance
     assertTrue(incident.startsWith(DeliveryOfAnUnknownWorkflowException.class.getName()), incident);
 
   }

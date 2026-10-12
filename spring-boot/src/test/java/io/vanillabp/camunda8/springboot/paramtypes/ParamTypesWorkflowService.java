@@ -13,13 +13,13 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the parameter-types integration test. One handler per branch of
- * the model, each of them declaring the parameter type whose answer is asserted.
+ * The workflow service of the parameter-types integration test. It has one handler per branch
+ * of the model. Each handler declares the parameter type whose answer the test asserts.
  * <p>
- * Five of the nine branches are meant to run, and four are meant to fail before the
- * handler is entered. The four are written all the same, because a handler which IS
- * entered has to be visible: the test reads {@link #received()} for the five and asserts
- * that the other four left nothing behind.
+ * Five of the nine branches are meant to run. Four are meant to fail before the handler is
+ * entered. The four are written in the same way as the five, because a handler which IS
+ * entered has to be visible. The test reads {@link #received()} for the five, and asserts that
+ * the other four left nothing behind.
  */
 @Service
 @WorkflowService(
@@ -30,8 +30,8 @@ public class ParamTypesWorkflowService {
   private final ProcessService<ParamTypesAggregate> processService;
 
   /**
-   * What each handler was given, by the name of its task definition. The map is written
-   * from job-worker threads and read by the test.
+   * What each handler was given, by the name of its task definition. Job-worker threads write
+   * the map, and the test reads it.
    */
   private final Map<String, Object> received = new ConcurrentHashMap<>();
 

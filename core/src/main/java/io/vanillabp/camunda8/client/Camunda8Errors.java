@@ -13,22 +13,22 @@ import io.grpc.Status;
 /**
  * Shared classification of Camunda 8 client errors. Two kinds of caller ask.
  * <p>
- * A caller which SENT something asks whether another attempt can change the answer:
- * whether a job-based command failed because the job is GONE (already completed, canceled
- * by a boundary event, or the workflow moved on) - the at-least-once residual tolerated by
- * completions and mapped to UNKNOWN_TO_BPMS by awareness probes - and whether a phase-two
- * operation is refused the same way every time. Everything else is treated as an
- * infrastructure failure.
+ * A caller which SENT something asks whether another attempt can change the answer. One
+ * question is whether a job-based command failed because the job is GONE (already
+ * completed, canceled by a boundary event, or the workflow moved on). That is the small
+ * rest of at-least-once delivery. Completions accept it, and awareness probes map it to
+ * UNKNOWN_TO_BPMS. The other question is whether a phase-two operation is refused the
+ * same way every time. Everything else counts as an infrastructure failure.
  * <p>
  * A caller which READ something asks what the cluster's answer means about the state it
- * asked for: {@link #notFound(Throwable)} is the reading side of the same code, where it
- * is usually the exporter which has not caught up rather than a failure. That side is what
- * this class is public for.
+ * asked for. {@link #notFound(Throwable)} is the reading side of the same code. There it
+ * usually means that the exporter has not caught up yet, not a failure. This class is
+ * public for that side.
  * <p>
- * Every question is answered from the codes of the two transports, down the failure's
- * cause chain, and never from the words the cluster wraps around them. Why a job which is
- * gone is final even though the classification is otherwise generous is decision 9 in the
- * repository's DECISIONS.md.
+ * Every question is answered from the codes of the two transports, along the cause chain
+ * of the failure. It is never answered from the words the cluster wraps around them. Why
+ * a job which is gone is final even though the classification is otherwise generous is
+ * decision 9 in the repository's DECISIONS.md.
  */
 public final class Camunda8Errors {
 
@@ -39,12 +39,12 @@ public final class Camunda8Errors {
    * The first failure in the chain of causes which answers the question, or
    * <code>null</code> where none does.
    * <p>
-   * Every classification here reads a cause chain, and a cause chain is not guaranteed to
-   * end. A client which wraps a failure it already wrapped hands over a ring, and the walk
-   * would then run forever inside a job handler or an outbox dispatch, which is worse than
-   * any answer it could have given. Remembering the failures already seen, by identity
-   * rather than by <code>equals</code>, ends the walk on the second sight of one - a self
-   * reference and a longer ring alike.
+   * Every classification here reads a cause chain, and a cause chain does not always end.
+   * A client which wraps a failure it already wrapped hands over a ring. The walk would
+   * then run forever inside a job handler or an outbox dispatch. That is worse than any
+   * answer it could have given. So the walk remembers the failures it has seen, by identity
+   * and not by <code>equals</code>. It ends when it sees one of them a second time. This
+   * works for a self reference and for a longer ring alike.
    */
   private static Throwable firstCauseAnswering(
       final Throwable throwable,
@@ -63,8 +63,8 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether any failure in the chain of causes answers the question, bounded as
-   * {@link #firstCauseAnswering(Throwable, Predicate)} describes.
+   * Whether any failure in the chain of causes answers the question. The walk is bounded
+   * as {@link #firstCauseAnswering(Throwable, Predicate)} describes.
    */
   private static boolean anyCauseAnswers(
       final Throwable throwable,
@@ -75,20 +75,20 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether the cluster answered "I do not hold that" - the one answer which means the
-   * addressed key is not there, whatever was addressed by it.
+   * Whether the cluster answered "I do not hold that". It is the one answer which means
+   * that the addressed key is not there, whatever the key addressed.
    * <p>
-   * Both transports say it with a code of their own: the REST gateway answers with HTTP
-   * <code>404</code> (a {@link ProblemException} carries it as well, it extends
-   * {@link ClientHttpException}), the gRPC gateway with the status
-   * <code>NOT_FOUND</code>. Nothing here reads the message text - the words the cluster
-   * wraps around that code are the cluster's to change.
+   * Both transports say it with a code of their own. The REST gateway answers with HTTP
+   * <code>404</code> (a {@link ProblemException} carries it as well, because it extends
+   * {@link ClientHttpException}). The gRPC gateway answers with the status
+   * <code>NOT_FOUND</code>. Nothing here reads the message text. The cluster is free to
+   * change the words it wraps around that code.
    * <p>
-   * Public because the answer means different things to different callers and every one
-   * of them has to recognise it first: for a job command it is a job which is gone (see
-   * {@link #jobAlreadyGone(Throwable)}), for a read of something just written it is the
-   * exporter which has not caught up yet, and reading either from ONE of the two codes
-   * turns the other transport's answer into a hard failure.
+   * It is public because the answer means different things to different callers, and
+   * each of them has to recognise it first. For a job command it is a job which is gone
+   * (see {@link #jobAlreadyGone(Throwable)}). For a read of something just written, the
+   * exporter has not caught up yet. If either reads only ONE of the two codes, the answer
+   * of the other transport turns into a hard failure.
    *
    * @param throwable What the command or the request failed with
    * @return Whether the cluster does not (or does not yet) hold what was addressed
@@ -107,9 +107,9 @@ public final class Camunda8Errors {
   /**
    * Whether the given failure means "this job does not exist (anymore)".
    * <p>
-   * A job command addresses one key and nothing else, so the cluster not holding that key
-   * is the whole answer: {@link #notFound(Throwable)} is what it reads, and what it adds
-   * is the meaning, which is that the job was completed, canceled or otherwise moved on.
+   * A job command addresses one key and nothing else. So if the cluster does not hold that
+   * key, that is the whole answer. This method reads {@link #notFound(Throwable)} and adds
+   * the meaning: the job was completed, canceled or has moved on in some other way.
    *
    * @param throwable The failure of a job-based command
    * @return Whether the job is gone
@@ -123,25 +123,25 @@ public final class Camunda8Errors {
 
   /**
    * Whether the cluster refused a job command because the job is THERE but not activated
-   * right now - the answer which says the BPMS still holds the task.
+   * right now. This answer says that the BPMS still holds the task.
    * <p>
-   * Measured on 8.8.37, 8.9.19 and 8.10.0-alpha5 with the same answer on all three: an
+   * Measured on 8.8.37, 8.9.19 and 8.10.0-alpha5, with the same answer on all three. An
    * <code>UpdateJobTimeout</code> against a job which is not locked is refused with HTTP
-   * <code>400</code>, on gRPC with <code>INVALID_ARGUMENT</code>. Three situations produce
-   * it and the BPMS holds the task in all three - the job waits in the queue and was never
-   * activated, its lock ran out and it went back into the queue, or it failed with no retry
-   * left and an incident is open on it.
+   * <code>400</code>, on gRPC with <code>INVALID_ARGUMENT</code>. Three situations cause it,
+   * and the BPMS holds the task in all three. The job waits in the queue and was never
+   * activated. Or its lock ran out and it went back into the queue. Or it failed with no
+   * retry left, and an incident is open on it.
    * <p>
    * The middle one happens in normal operation. An asynchronous task keeps its job locked
-   * for <code>async-task-lock-renewal</code>, and when that hour passes the cluster puts the
-   * job back into the queue until a worker takes it again. Reading that gap as an outage
-   * sends the caller into retries for a task which is perfectly alive.
+   * for <code>async-task-lock-renewal</code>. When that hour passes, the cluster puts the
+   * job back into the queue until a worker takes it again. If the caller reads that gap as
+   * an outage, it retries for a task which is perfectly alive.
    * <p>
    * The CODE alone carries the meaning here, so decision 16 in the repository's DECISIONS.md
-   * needs no widening: a job command names one key, the cluster answers a key it does not
-   * hold with {@link #notFound(Throwable)}, and a refusal which is not that one is a refusal
-   * about a job the cluster HAS. Which of the three situations it is does not change the
-   * answer, so the sentence the cluster writes around the code is not read.
+   * needs no widening. A job command names one key. The cluster answers a key it does not
+   * hold with {@link #notFound(Throwable)}. So any other refusal is about a job the cluster
+   * HAS. Which of the three situations it is does not change the answer. So the sentence
+   * the cluster writes around the code is not read.
    *
    * @param throwable The failure of a job-based command
    * @return Whether the cluster holds the job and refused the command anyway
@@ -159,29 +159,29 @@ public final class Camunda8Errors {
 
   /**
    * Whether the cluster refused a command of a job because ANOTHER activation holds that
-   * job - what an answer of a run whose lock had expired meets.
+   * job. A run whose lock had expired meets this answer.
    * <p>
    * A worker of this adapter may lease its activations (see decision 36 in the
-   * repository's DECISIONS.md). The cluster then takes the completion, the failure and the
-   * BPMN error of a job only from whoever carries the token of the CURRENT activation, and
-   * an activation which followed an expired lock supersedes the token before it. So the
-   * run which finished first is refused and the values of the run which finished last are
-   * what the workflow continues with.
+   * repository's DECISIONS.md). Then the cluster takes the completion, the failure and the
+   * BPMN error of a job only from whoever carries the token of the CURRENT activation. An
+   * activation which followed an expired lock replaces the token before it. So the run
+   * which finished first is refused. The workflow goes on with the values of the run which
+   * finished last.
    * <p>
-   * Measured on 8.10.0-alpha5: a completion carrying a superseded token is refused with
-   * HTTP <code>409</code>, title <code>INVALID_STATE</code>, on gRPC with
-   * <code>FAILED_PRECONDITION</code>, and a completion carrying no token at all against a
-   * leased job with the same pair. A failure and a BPMN error answer the same. Every other
+   * Measured on 8.10.0-alpha5: a completion with a replaced token is refused with HTTP
+   * <code>409</code>, title <code>INVALID_STATE</code>, and on gRPC with
+   * <code>FAILED_PRECONDITION</code>. A completion with no token at all against a leased
+   * job gets the same pair. A failure and a BPMN error get the same answer. Every other
    * wrong state of a job command measured there is a <code>404</code>: a key which never
-   * existed, a job which is already completed, and a token handed to a job which carries no
+   * existed, a job which is already completed, and a token handed to a job which has no
    * lease.
    * <p>
-   * The code alone cannot say WHICH wrong state the cluster means - the REST specification
-   * says 409 is "the job is in the wrong state" and nothing narrower, and the sentence
-   * around it is the cluster's to reword (decision 16 in the repository's DECISIONS.md). So
-   * the rule this adapter follows is the honest one: a 409 of a JOB command means somebody
-   * else holds this activation, whatever the reason. Both readings end the same way - the
-   * command is not repeated, because no repetition of it is going to be accepted either.
+   * The code alone cannot say WHICH wrong state the cluster means. The REST specification
+   * says that 409 is "the job is in the wrong state", and nothing narrower. The cluster is
+   * free to reword the sentence around it (decision 16 in the repository's DECISIONS.md).
+   * So this adapter follows the honest rule: a 409 of a JOB command means that somebody
+   * else holds this activation, whatever the reason. Both readings end the same way. The
+   * command is not repeated, because no repetition of it would be accepted either.
    *
    * @param throwable The failure of a job-based command
    * @return Whether another activation of that job is the one the cluster is holding
@@ -198,17 +198,17 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether the cluster refused a publication because a message of the same id was
-   * published before and still lives - the answer which makes an outbox entry done
-   * rather than repeated, because a repetition would be refused again.
+   * Whether the cluster refused a publication because a message with the same id was
+   * published before and still lives. This answer makes an outbox entry done, and it is not
+   * repeated, because a repetition would be refused again.
    * <p>
-   * Both transports name the rejection with a code, and this adapter uses both: a
-   * publication travels REST or gRPC depending on
+   * Both transports name the rejection with a code, and this adapter uses both. A
+   * publication goes over REST or gRPC, depending on
    * <code>vanillabp.adapters.&lt;id&gt;.prefer-rest-over-grpc</code>. On gRPC the
    * rejection arrives as the status <code>ALREADY_EXISTS</code>, on REST as HTTP
-   * <code>409</code> (whose problem detail carries the same word as its title). No other
-   * conflict reaches a publication, so the code alone settles it, and the sentence the
-   * cluster writes around it stays the cluster's to reword.
+   * <code>409</code> (whose problem detail has the same word as its title). No other
+   * conflict reaches a publication, so the code alone decides it. The cluster stays free
+   * to reword the sentence around it.
    *
    * @param throwable What the publish command threw
    * @return Whether the message was published before
@@ -225,22 +225,22 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether the cluster refused a command ABOUT AN INSTANCE IT HOLDS - the answer which
-   * makes a deliberately refused command a question about whether the engine has that
-   * instance at all.
+   * Whether the cluster refused a command ABOUT AN INSTANCE IT HOLDS. With this answer, a
+   * command which is refused on purpose becomes a question: does the engine have that
+   * instance at all?
    * <p>
    * An engine addressed by an instance key answers a key it does not hold with
-   * {@link #notFound(Throwable)}, and it forgets an instance the moment it ends. Everything
-   * it refuses for a reason of its own is therefore about an instance it HAS: a
-   * modification naming an element the model does not have is rejected with HTTP
-   * <code>400</code> (on gRPC <code>INVALID_ARGUMENT</code>), and a business id assigned to
-   * an instance which already carries one with HTTP <code>409</code> (on gRPC
+   * {@link #notFound(Throwable)}. It forgets an instance the moment the instance ends. So
+   * everything it refuses for a reason of its own is about an instance it HAS. A
+   * modification which names an element the model does not have is rejected with HTTP
+   * <code>400</code> (on gRPC <code>INVALID_ARGUMENT</code>). A business id assigned to an
+   * instance which already has one is rejected with HTTP <code>409</code> (on gRPC
    * <code>FAILED_PRECONDITION</code>).
    * <p>
-   * The list is spelled out rather than written as "anything which is not a 404", because
-   * an expired token and a missing permission are refusals too and they say nothing about
-   * the instance. Which command is sent and why both of them are refused rather than
-   * carried out is decision 35 in the repository's DECISIONS.md.
+   * The list is spelled out, and not written as "anything which is not a 404". An expired
+   * token and a missing permission are refusals too, and they say nothing about the
+   * instance. Which command is sent, and why both of them are refused and not carried out,
+   * is decision 35 in the repository's DECISIONS.md.
    *
    * @param throwable What the command about one instance threw
    * @return Whether the cluster refused it about an instance it holds
@@ -258,24 +258,25 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether the cluster refused a command ABOUT A USER TASK IT HOLDS - the answer which
-   * makes the empty update of {@link Camunda8UserTaskProbe} a question about whether the
-   * task is still open, and which keeps a completion from being read as a task which is
-   * gone.
+   * Whether the cluster refused a command ABOUT A USER TASK IT HOLDS. With this answer,
+   * the empty update of {@link Camunda8UserTaskProbe} becomes a question about whether the
+   * task is still open. It also keeps a refused completion from being read as a task which
+   * is gone.
    * <p>
    * A user task the cluster no longer has is answered with {@link #notFound(Throwable)}.
    * HTTP <code>409</code> (on gRPC <code>FAILED_PRECONDITION</code>) is something else. It
-   * was measured for three states of a task the cluster was holding: a task standing in
-   * <code>UPDATING</code>, a task whose modelled <code>updating</code> listener denied the
-   * update, and a task standing in <code>CREATING</code> because a <code>creating</code>
-   * listener of it had not been answered yet. The third one is the everyday case, because
-   * VanillaBP notifies the application FROM such a listener: an application which completes
-   * its user task right away addresses a task the cluster is still creating, and both the
-   * empty update and the completion answer <code>409</code> while that lasts.
+   * was measured for three states of a task the cluster was holding. The task was in
+   * <code>UPDATING</code>. Or the modelled <code>updating</code> listener of the task denied
+   * the update. Or the task was in <code>CREATING</code>, because one of its
+   * <code>creating</code> listeners had not been answered yet. The third one is the everyday
+   * case, because VanillaBP tells the application FROM such a listener. An application
+   * which completes its user task right away addresses a task the cluster is still
+   * creating. While that lasts, both the empty update and the completion get
+   * <code>409</code>.
    * <p>
-   * HTTP <code>400</code> is deliberately NOT in here, although the endpoint documents it.
-   * No run has ever produced one for a user task, so what it would mean is a guess, and a
-   * guess in this direction turns an open task into a canceled one.
+   * HTTP <code>400</code> is NOT in here, on purpose, although the endpoint documents it.
+   * No run has ever produced one for a user task. So what it would mean is a guess. A guess
+   * in this direction turns an open task into a canceled one.
    *
    * @param throwable What the command about one user task threw
    * @return Whether the cluster refused it about a user task it holds
@@ -292,13 +293,13 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether the cluster REFUSED a query-API request, which is what a cluster does that
-   * cannot be searched at all.
+   * Whether the cluster REFUSED a query-API request. A cluster which cannot be searched at
+   * all does that.
    * <p>
-   * The searches of this adapter travel REST only - the client offers no gRPC equivalent
-   * for them - and the cluster refuses them with HTTP <code>403</code>. That code does
-   * not say WHY, see {@link Camunda8QueryApi}, which is why only the probe asks this
-   * question and everything else reads the remembered answer.
+   * The searches of this adapter go over REST only, because the client offers no gRPC
+   * equivalent for them. The cluster refuses them with HTTP <code>403</code>. That code
+   * does not say WHY, see {@link Camunda8QueryApi}. So only the probe asks this question,
+   * and everything else reads the remembered answer.
    *
    * @param throwable What a query-API request failed with
    * @return Whether the cluster refused to answer it
@@ -313,27 +314,27 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether the cluster refused to START a workflow in a way every further attempt meets
-   * again. Measured against a cluster of the tested line on 2026-09-11, over both
+   * Whether the cluster refused to START a workflow in a way which every further attempt
+   * meets again. Measured against a cluster of the tested line on 2026-09-11, over both
    * transports where both could be asked:
    * <ul>
-   * <li>the process is not deployed on this cluster - HTTP <code>404</code> with the
-   * title <code>NOT_FOUND</code>, on gRPC the status <code>NOT_FOUND</code>;</li>
-   * <li>the model has no plain start event, so nothing can be started without the
-   * message or the timer the model asks for - HTTP <code>409</code> with the title
+   * <li>The process is not deployed on this cluster. That is HTTP <code>404</code> with
+   * the title <code>NOT_FOUND</code>, on gRPC the status <code>NOT_FOUND</code>.</li>
+   * <li>The model has no plain start event. So nothing can be started without the message
+   * or the timer the model asks for. That is HTTP <code>409</code> with the title
    * <code>INVALID_STATE</code>.</li>
    * </ul>
-   * Neither of them passes while the application waits: a deployment reaches the cluster
-   * before the outbox dispatches anything, and a model is changed by a deployment and
+   * Neither of them goes away while the application waits. A deployment reaches the
+   * cluster before the outbox dispatches anything. A model is changed by a deployment and
    * never by a repetition. So the start behind such an answer is better parked where an
-   * operator finds it than repeated for hours, which is what a start whose aggregate is
-   * committed would otherwise be.
+   * operator finds it. Otherwise a start whose aggregate is committed would be repeated for
+   * hours.
    * <p>
-   * The gRPC equivalent of the second one is not in here because it could not be
-   * measured: the cluster the tests run against answers a gRPC create of a deployed
-   * process by refusing the permission, which is permanent for other reasons. What is
-   * classified is what was measured, so an installation on gRPC meeting a model without
-   * a plain start event still pays the full row of attempts.
+   * The gRPC equivalent of the second one is not in here, because it could not be
+   * measured. The cluster the tests run against answers a gRPC create of a deployed
+   * process by refusing the permission, which is permanent for other reasons. Only what
+   * was measured is classified. So an installation on gRPC which meets a model without a
+   * plain start event still pays the full row of attempts.
    *
    * @param throwable What the create command threw
    * @return Whether this start is refused the same way however often it is sent
@@ -348,26 +349,26 @@ public final class Camunda8Errors {
   }
 
   /**
-   * HTTP statuses of the REST transport a repetition cannot change:
+   * HTTP statuses of the REST transport which a repetition cannot change:
    * <ul>
-   * <li><code>400</code> - the cluster rejected the request itself,</li>
-   * <li><code>403</code> - the credentials or the tenant are wrong, not late,</li>
-   * <li><code>405</code> and <code>501</code> - this cluster version has no such
+   * <li><code>400</code>: the cluster rejected the request itself.</li>
+   * <li><code>403</code>: the credentials or the tenant are wrong, not late.</li>
+   * <li><code>405</code> and <code>501</code>: this cluster version has no such
    * endpoint.</li>
    * </ul>
-   * Deliberately NOT in the list: <code>404</code> is the signature of eventual
+   * NOT in the list, on purpose: <code>404</code> is the typical sign of eventual
    * consistency (and for job commands it never gets here, see
-   * {@link #jobAlreadyGone(Throwable)}), <code>401</code> is usually an expired token
-   * the client refreshes, and <code>409</code>, <code>429</code> and every
-   * <code>5xx</code> are exactly what the outbox repeats for. Two of them mean something
-   * else when a START meets them, which is why a start brings its own answer along, see
+   * {@link #jobAlreadyGone(Throwable)}). <code>401</code> is usually an expired token which
+   * the client refreshes. And <code>409</code>, <code>429</code> and every <code>5xx</code>
+   * are exactly what the outbox repeats for. Two of them mean something else when a START
+   * meets them. That is why a start brings its own answer along, see
    * {@link Camunda8RefusedStart}.
    */
   private static final Set<Integer> PERMANENT_HTTP_STATUS = Set.of(400, 403, 405, 501);
 
   /**
-   * The gRPC equivalents of {@link #PERMANENT_HTTP_STATUS}, for the commands still
-   * travelling that transport. <code>NOT_FOUND</code>, <code>UNAUTHENTICATED</code>,
+   * The gRPC equivalents of {@link #PERMANENT_HTTP_STATUS}, for the commands which still
+   * use that transport. <code>NOT_FOUND</code>, <code>UNAUTHENTICATED</code>,
    * <code>ABORTED</code>, <code>RESOURCE_EXHAUSTED</code> and
    * <code>UNAVAILABLE</code> stay repeatable for the reasons given there.
    */
@@ -378,18 +379,17 @@ public final class Camunda8Errors {
           Status.Code.UNIMPLEMENTED);
 
   /**
-   * Whether repeating a phase-two operation which failed like this cannot help,
-   * so the outbox entry is blocked at once instead of being retried until
-   * its attempts are used up.
+   * Whether a repetition cannot help a phase-two operation which failed like this. Then
+   * the outbox entry is blocked at once. It is not retried until its attempts are used up.
    * <p>
-   * The list is short on purpose: repeating is the safe answer and stays the default
+   * The list is short on purpose. Repeating is the safe answer, and it stays the default
    * for everything not named here. {@link ProblemException} needs no rule of its own,
-   * it extends {@link ClientHttpException}.
+   * because it extends {@link ClientHttpException}.
    * <p>
-   * One operation adds an answer of its own, because the same code means different
-   * things depending on what was sent: a start which the cluster refused for good says
-   * so by wrapping the refusal into a {@link Camunda8RefusedStart}, and nothing about
-   * those codes changes for the operations which did not send a start.
+   * One operation adds an answer of its own, because the same code means different things
+   * depending on what was sent. A start which the cluster refused for good wraps the
+   * refusal into a {@link Camunda8RefusedStart}. For the operations which did not send a
+   * start, nothing about those codes changes.
    *
    * @param throwable What the phase-two command threw
    * @return Whether the cluster will answer the same way on every attempt
@@ -399,7 +399,7 @@ public final class Camunda8Errors {
 
     return anyCauseAnswers(
         throwable,
-        // the task or instance key of the outbox entry is not a number, and it will not
+        // the task or instance key of the outbox entry is not a number, and it will never
         // become one
         cause -> (cause instanceof Camunda8RefusedStart) || (cause instanceof NumberFormatException) || ((cause instanceof ClientHttpException http) && PERMANENT_HTTP_STATUS
             .contains(http.code())) || ((cause instanceof ClientStatusException status) && PERMANENT_GRPC_CODES
@@ -408,17 +408,18 @@ public final class Camunda8Errors {
   }
 
   /**
-   * Whether repeating a command a JOB HANDLER sends back to the cluster - a completion, a
-   * BPMN error, a failure, a lock renewal - can change its answer. It is
-   * {@link #permanentFailure} plus the two cases which are permanent for a job command and
-   * not for an outbox entry: a job which is gone stays gone, and a job another activation
-   * holds is not going to be handed back. Repeating either would turn the benign
-   * at-least-once residual into a retry storm which runs until the job's lock expires.
+   * Whether a repetition can change the answer to a command which a JOB HANDLER sends back
+   * to the cluster. That is a completion, a BPMN error, a failure or a lock renewal. It is
+   * {@link #permanentFailure} plus two cases which are permanent for a job command, but not
+   * for an outbox entry. A job which is gone stays gone. A job which another activation
+   * holds is not going to be handed back. A repetition of either would turn the harmless
+   * rest of at-least-once delivery into a storm of retries, until the lock of the job
+   * expires.
    * <p>
-   * There is deliberately no separate opinion about what backpressure looks like. The
-   * cluster answers it with <code>RESOURCE_EXHAUSTED</code> on gRPC and HTTP 503 on REST,
-   * neither of which is permanent, so the classification the outbox already uses covers it
-   * - and one classification cannot drift apart from itself.
+   * On purpose, there is no separate opinion about what backpressure looks like. The
+   * cluster answers it with <code>RESOURCE_EXHAUSTED</code> on gRPC and HTTP 503 on REST.
+   * Neither of them is permanent, so the classification the outbox already uses covers
+   * it. And one classification cannot drift apart from itself.
    *
    * @param throwable What the command threw
    * @return Whether another attempt is worth making
@@ -432,13 +433,13 @@ public final class Camunda8Errors {
   }
 
   /**
-   * How the cluster named a rejection, in the few words a log line can carry: the code of
-   * the transport it arrived on and the sentence the cluster wrote around it.
+   * How the cluster named a rejection, in the few words a log line can carry. It gives the
+   * code of the transport it arrived on and the sentence the cluster wrote around it.
    * <p>
-   * The classifications above read a code and nothing else, because a decision may not rest
-   * on words the cluster is free to reword (see decision 16 in the repository's
-   * DECISIONS.md). This one decides nothing. It is read by a reader, who wants both halves
-   * of what came back and wants them without turning on a stack trace first.
+   * The classifications above read a code and nothing else. A decision must not rest on
+   * words which the cluster is free to reword (see decision 16 in the repository's
+   * DECISIONS.md). This one decides nothing. A person reads it, and wants both halves of
+   * what came back, without turning on a stack trace first.
    *
    * @param throwable What the command failed with
    * @return One phrase naming the rejection, never <code>null</code>
@@ -461,9 +462,10 @@ public final class Camunda8Errors {
   }
 
   /**
-   * What the cluster wrote around a code, as one line: the reason the transport carries, and
-   * the exception's message where it carries none. A problem detail arrives with line breaks
-   * in it, and a log line which brings its own is a log line nothing greps.
+   * What the cluster wrote around a code, as one line. It is the reason the transport
+   * carries, or the message of the exception where the transport carries none. A problem
+   * detail arrives with line breaks in it. A log line with line breaks of its own is one
+   * which no grep finds.
    */
   private static String inOneLine(
       final String reason,
@@ -479,11 +481,11 @@ public final class Camunda8Errors {
   }
 
   /**
-   * What a failed job reports as its error message - the text an operator reads in the
-   * incident, so it carries the exception's TYPE next to its message. Camunda's own advice
-   * is that this message is what a human sees, and the plain message alone says
-   * <code>null</code> for every failure which carries none, a
-   * {@link NullPointerException} above all.
+   * What a failed job reports as its error message. An operator reads this text in the
+   * incident, so it carries the TYPE of the exception next to its message. Camunda's own
+   * advice is that a human sees this message. The plain message alone says
+   * <code>null</code> for every failure which has none, above all for a
+   * {@link NullPointerException}.
    *
    * @param throwable What the handler threw
    * @return The incident text, never <code>null</code>

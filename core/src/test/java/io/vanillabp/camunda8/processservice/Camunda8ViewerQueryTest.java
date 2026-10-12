@@ -51,16 +51,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.process.WorkflowElementType;
 
 /**
- * The viewer/history API's query paths of the Camunda 8 adapter, against a mocked cluster.
- * The point here is the mapping: which instance answers, how element instances and
- * incidents become a {@code WorkflowHistory}, and how a call activity's secondary history
- * context is resolved and validated.
+ * The query paths of the viewer and history API of the Camunda 8 adapter, against a mocked
+ * cluster. The point here is the mapping: which instance answers, how element instances and
+ * incidents become a {@code WorkflowHistory}, and how the secondary history context of a
+ * call activity is resolved and validated.
  * <p>
- * A mock rather than a container because three of these ask what a FAILING search does
+ * A mock and not a container, because three of these tests ask what a FAILING search does
  * ({@link #anOutageWhileReadingElementInstancesYieldsNoElementHistory},
  * {@link #anOutageWhileReadingIncidentsYieldsNoErrors} and
- * {@link #anOutageIsWarnedAboutOnce}), and an outage is not something a healthy Docker
- * cluster does on request.
+ * {@link #anOutageIsWarnedAboutOnce}). A healthy Docker cluster does not fail on request.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ViewerQueryTest {
@@ -98,19 +97,19 @@ public class Camunda8ViewerQueryTest {
   private Camunda8WorkflowViewer viewer;
 
   /**
-   * The process instances the mocked cluster knows - the search returns the first
-   * one matching the filter the production code applies (the filters themselves
-   * are consumers, so the test steers the ANSWER, not the filter).
+   * The process instances the mocked cluster knows. The search returns the first one which
+   * matches the filter the production code applies. The filters themselves are consumers, so
+   * the test steers the ANSWER, not the filter.
    */
   private List<ProcessInstance> foundInstances = List.of();
 
   private List<ElementInstance> foundElementInstances = List.of();
 
   /**
-   * Answers for CONSECUTIVE instance searches (the production code searches the
-   * primary instance first, then the called one) - the mocked cluster cannot
-   * distinguish the filters, so the test scripts the sequence. Falls back to
-   * {@link #foundInstances} once exhausted.
+   * Answers for CONSECUTIVE instance searches. The production code searches the primary
+   * instance first, then the called one. The mocked cluster cannot tell the filters apart,
+   * so the test scripts the sequence. Once the script is used up, {@link #foundInstances}
+   * answers.
    */
   private final Deque<List<ProcessInstance>> scriptedInstanceAnswers = new ArrayDeque<>();
 
@@ -164,9 +163,9 @@ public class Camunda8ViewerQueryTest {
   }
 
   /**
-   * A cluster which stopped answering. The adapter's cluster can be searched - the
-   * deployment refuses one which cannot - so this is what a viewer query fails with, and
-   * what the viewer reports as no history rather than as an error.
+   * A cluster which stopped answering. The adapter's cluster can be searched, because
+   * the deployment refuses one which cannot. So a viewer query fails with this, and the
+   * viewer reports it as no history, not as an error.
    *
    * @return The failure a search of an unreachable cluster ends with
    */
@@ -276,7 +275,7 @@ public class Camunda8ViewerQueryTest {
         .get(1);
     assertEquals(WorkflowElementType.CALL_ACTIVITY, callActivityHistory.elementType());
     assertEquals("something went wrong", callActivityHistory.error());
-    // the called instance is looked up by the call activity's element instance key
+    // the called instance is looked up by the element instance key of the call activity
     assertEquals("4711", callActivityHistory.secondaryWorkflowHistoryContext());
 
   }
@@ -304,8 +303,8 @@ public class Camunda8ViewerQueryTest {
   @DisplayName("A history context is accepted only if its instance belongs to the workflow")
   public void historyContextIsValidatedAgainstTheWorkflow() {
 
-    // the search answers the SAME instance for every filter - a called instance
-    // whose parent chain reaches the primary instance
+    // the search answers the SAME instance for every filter: a called instance whose
+    // parent chain reaches the primary instance
     foundInstances = List.of(instance(4711L, "222", null));
 
     final var definitions = viewer.getProcessDefinitions("test-module", "ParentProcess", "id", "42", "4711");
@@ -316,9 +315,9 @@ public class Camunda8ViewerQueryTest {
         .getFirst()
         .id());
 
-    // a called instance whose parent chain does NOT reach the workflow's primary
-    // instance is rejected (scripted: first search = primary, second = the called
-    // instance the context names)
+    // a called instance whose parent chain does NOT reach the primary instance of the
+    // workflow is rejected. Scripted: the first search answers the primary instance, the
+    // second one the called instance the context names
     final var primaryInstance = instance(4711L, "111", null);
     final var foreignInstance = instance(9999L, "222", null);
     scriptedInstanceAnswers.add(List.of(primaryInstance));
@@ -412,7 +411,7 @@ public class Camunda8ViewerQueryTest {
   @DisplayName("The instance search filters by the aggregate ID as the cluster stores it")
   public void theInstanceSearchFiltersByTheAggregateIdVariable() {
 
-    // proves the filter callback is executed (it is a consumer of the filter API)
+    // proves that the filter callback is run. It is a consumer of the filter API
     final var filter = mock(ProcessInstanceFilter.class, RETURNS_SELF);
     final var instanceSearch = mock(ProcessInstanceSearchRequest.class, RETURNS_SELF);
     when(client.newProcessInstanceSearchRequest()).thenReturn(instanceSearch);
@@ -427,10 +426,9 @@ public class Camunda8ViewerQueryTest {
 
     assertNull(viewer.getWorkflowHistory("test-module", "ParentProcess", "aggregateId", "42", null).elementsHistory());
 
-    // The cluster compares a variable against its stored JSON, so the ID
-    // travels quoted. This assertion used to pin the plain value and thereby pinned
-    // the defect - the viewer found no workflow at all on a cluster with secondary
-    // storage
+    // The cluster compares a variable against its stored JSON, so the ID travels quoted.
+    // This assertion used to pin the plain value, and so it pinned the defect: the viewer
+    // found no workflow at all on a cluster with secondary storage
     Mockito
         .verify(filter)
         .variables(Map.of("aggregateId", "\"42\""));
@@ -470,8 +468,8 @@ public class Camunda8ViewerQueryTest {
     when(client.newProcessInstanceSearchRequest()).thenReturn(instanceSearch);
     when(instanceSearch.send()).thenThrow(clusterDoesNotAnswer());
 
-    // all three calls fall back to what this application version deployed, and the
-    // reader is told about it once rather than per read
+    // all three calls fall back to what this application version deployed. The reader is
+    // told about it once, not per read
     assertNotNull(viewer.getWorkflowHistory("test-module", "ParentProcess", "id", "42", null));
     assertNotNull(viewer.getWorkflowHistory("test-module", "ParentProcess", "id", "42", null));
     assertEquals(2, viewer.getProcessDefinitions("test-module", "ParentProcess", "id", "42", null).size());
@@ -482,8 +480,8 @@ public class Camunda8ViewerQueryTest {
         logged.split("could not query process instances, so", -1).length - 1,
         () -> "one warning, not one per read: "
             + logged);
-    // and it says outage rather than missing capability, because a failed query cannot
-    // tell those apart and the deployment already settled which cluster this is
+    // and it says outage, not missing capability. A failed query cannot tell those apart,
+    // and the deployment already settled which cluster this is
     assertTrue(
         logged.contains("Retried on the next call"),
         () -> "the warning is about an outage: "

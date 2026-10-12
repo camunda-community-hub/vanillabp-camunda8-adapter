@@ -22,9 +22,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * An instance of this line can carry a business id, and this adapter writes the workflow
  * aggregate's id into it where the application asked for that.
  * <p>
- * What the tests pin is the value rather than the plumbing: nothing reads it back, so a value
- * which is wrong is only ever seen by a person reading Operate, and the one value the cluster
- * REFUSES - a string longer than its limit - would refuse the start of a workflow.
+ * The tests pin the value, not the plumbing. Nothing reads the value back, so only a person
+ * who reads Operate ever sees a wrong value. And the one value the cluster REFUSES, a string
+ * longer than its limit, would refuse the start of a workflow.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8BusinessIdTest {

@@ -21,26 +21,26 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A CANARY: it watches the cluster, not this adapter.
  * <p>
- * Under {@code name-clash-avoidance: use-prefix} a value written as a FEEL expression is
- * deployed with the prefix of its place written INSIDE the expression, {@code =whichProcess}
- * becoming {@code ="loan-approval__" + string(whichProcess)} ({@code Camunda8Scoping}). That
- * frame is Camunda's FEEL and not ours, so what it does belongs to the cluster: {@code +}
- * concatenates two strings, {@code string(...)} turns the application's part into one, and the
- * parentheses hold whatever shape that part has. This test holds the cluster to all of it, with
- * the raw client so nothing of VanillaBP is in the way.
+ * Under {@code name-clash-avoidance: use-prefix}, a value written as a FEEL expression is
+ * deployed with the prefix of its place written INSIDE the expression. {@code =whichProcess}
+ * becomes {@code ="loan-approval__" + string(whichProcess)} ({@code Camunda8Scoping}). That
+ * frame is Camunda's FEEL, not ours. So what it does belongs to the cluster. {@code +}
+ * concatenates two strings. {@code string(...)} turns the application's part into a string.
+ * The parentheses hold whatever shape that part has. This test holds the cluster to all of
+ * it. It uses the raw client, so nothing of VanillaBP is in the way.
  * <p>
- * Two things are watched. The called process and the called decision are the places Camunda 8
- * evaluates such an expression at, so the cases below read what the frame RESOLVES to. Every
- * other place a prefix is written gets the same frame without being measured first, because a
- * list of the places Camunda evaluates ages with every release while the rule cannot be wrong.
- * What is watched there is only that the cluster still ACCEPTS such a model, which the last case
- * does by deploying the same model twice, once plain and once framed.
+ * Two things are watched. Camunda 8 evaluates such an expression at the called process and at
+ * the called decision. So the cases below read what the frame RESOLVES to there. Every other
+ * place where a prefix is written gets the same frame, without measuring it first. A list of
+ * the places which Camunda evaluates gets out of date with every release, but the rule cannot
+ * be wrong. At those places the test only watches that the cluster still ACCEPTS such a model.
+ * The last case does that. It deploys the same model twice, once plain and once framed.
  * <p>
- * A red run here is news about Camunda rather than a defect of this repository, and each
- * message says what to do with the news. The fallback, measured on the same day and working
- * on all three lines, is {@code string join(["loan-approval__", string(...)], "")}; it hides a
- * <code>null</code> of the application's part instead of raising an incident about it, which
- * is why it was not taken.
+ * A red run here is news about Camunda, not a defect of this repository. Each message says what
+ * to do with the news. There is a fallback, measured on the same day, which works on all three
+ * lines: {@code string join(["loan-approval__", string(...)], "")}. It was not taken, because
+ * it hides a <code>null</code> of the application's part instead of raising an incident about
+ * it.
  * <p>
  * Measured on 2026-10-01 against {@code camunda/camunda:8.8.40}, {@code 8.9.21} and
  * {@code 8.10.0-rc3}: every case below answered the same on all three lines, down to the
@@ -54,16 +54,16 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedCluster {
 
   /**
-   * The prefix of a workflow module called {@code loan-approval}, which is what the core
-   * composes under {@code use-prefix}.
+   * The prefix of a workflow module called {@code loan-approval}, as the core composes it
+   * under {@code use-prefix}.
    */
   private static final String PREFIX = "loan-approval__";
 
   private static final String JOB_TYPE = "theJobOfThePrefixCanary";
 
   /**
-   * The two processes the frame has to reach, deployed under prefixed ids the way a workflow
-   * module of this mode is deployed.
+   * The two processes which the frame has to reach. They are deployed under prefixed ids, the
+   * way a workflow module in this mode is deployed.
    */
   private static final String ONE_CALLED_PROCESS = PREFIX
       + "CanaryPaymentHandling";
@@ -200,15 +200,15 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
   /**
    * Measured on 2026-10-01 against {@code camunda/camunda:8.9.21}: the cluster accepted the frame
    * at the message name, the signal name, the error code, the escalation code, the job type, the
-   * external form reference and the job type of a task listener, and it accepted the same model
-   * with plain values at those places as well. The other release lines run the same case in the
-   * pull request's matrix.
+   * external form reference and the job type of a task listener. It also accepted the same model
+   * with plain values at those places. The other release lines run the same case in the pull
+   * request's matrix.
    */
   @Test
   @DisplayName("The cluster still accepts the frame at every other place a prefix is written")
   public void theFrameIsStillAcceptedEverywhereElse() {
 
-    // the same model twice, so a refusal cannot be blamed on the model: first with plain values
+    // the same model twice, so a refusal cannot be blamed on the model. First with plain values
     // at every place, then with the frame at every one of them
     deploy("canary-every-place-plain.bpmn", aModelWriting("CanaryEveryPlacePlain", "theCanaryValue"));
     try {
@@ -234,8 +234,8 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
    * One process writing the given value at every place this adapter writes a prefix, except the
    * two the cases above measure.
    *
-   * @param processId The BPMN process id, which differs per deployment so the two models stand
-   *          next to each other rather than as two versions of one
+   * @param processId The BPMN process id. It differs per deployment, so the two models stand
+   *          next to each other and are not two versions of one model
    * @param value What every one of those places says
    * @return The model
    */
@@ -333,8 +333,8 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
   }
 
   /**
-   * Deploys a caller with the given call activity expression, starts it and says which process
-   * its call reached, or what the cluster raised instead.
+   * Deploys a caller with the given call activity expression and starts it. Then it says which
+   * process the call reached, or what the cluster raised instead.
    */
   private static String whichProcessWasCalled(
       final String which,
@@ -350,8 +350,8 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
   }
 
   /**
-   * Deploys one caller, starts it and waits for the job behind its call respectively for the
-   * incident the cluster raises instead.
+   * Deploys one caller and starts it. Then it waits for the job behind its call, or for the
+   * incident which the cluster raises instead.
    *
    * @param caller The model, whose process id is read off it
    * @param variables What the instance is started with
@@ -410,8 +410,9 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
   }
 
   /**
-   * How long one case may take. Generous: a job of a called process arrives in well under a
-   * second, and an incident is read from the secondary storage, which lags by about one.
+   * How long one case may take. The value is generous. A job of a called process arrives in well
+   * under a second. An incident is read from the secondary storage, which lags by about one
+   * second.
    */
   private static final Duration THE_CLUSTER_ANSWERS_WITHIN = Duration.ofSeconds(60);
 
@@ -480,8 +481,8 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
   }
 
   /**
-   * A caller whose call activity names its process with the given expression. The attribute is
-   * single quoted, so the FEEL string literals read as they are written.
+   * A caller whose call activity names its process with the given expression. The attribute
+   * uses single quotes. So the FEEL string literals can stay as they are written.
    */
   private static ModelOfACaller aCallActivityNaming(
       final String processId,
@@ -511,8 +512,8 @@ public class Camunda8PrefixInsideAnExpressionCanaryIT extends TestOnTheSharedClu
   }
 
   /**
-   * A caller whose business rule task names its decision with the given expression, and a
-   * service task behind it whose job says the decision was found.
+   * A caller whose business rule task names its decision with the given expression. Behind it
+   * is a service task. Its job shows that the decision was found.
    */
   private static ModelOfACaller aBusinessRuleTaskNaming(
       final String processId,

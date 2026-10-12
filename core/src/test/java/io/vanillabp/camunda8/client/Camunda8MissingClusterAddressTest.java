@@ -29,7 +29,7 @@ public class Camunda8MissingClusterAddressTest {
   private static List<String> warningsOfTheStart(
       final Camunda8AdapterConfiguration configuration) {
 
-    // every line has to know whether the jobs are leased; it is not what this test is about
+    // every line has to know whether the jobs are leased. This test is not about that
     configuration.setJobLease(Camunda8AdapterConfiguration.JobLease.DO_NOT_USE);
     final var warnings = new ArrayList<String>();
     Camunda8StartupValidation.validateAtStartup(

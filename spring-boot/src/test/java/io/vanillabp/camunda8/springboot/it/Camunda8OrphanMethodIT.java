@@ -12,18 +12,18 @@ import io.vanillabp.camunda8.springboot.TestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * A <code>&#64;WorkflowTask</code> method matching no task of any BPMN process of its
- * workflow module ends the boot, naming the method and the fix.
+ * A <code>&#64;WorkflowTask</code> method which matches no task of any BPMN process of its
+ * workflow module ends the boot. The message names the method and the fix.
  * <p>
- * The check belongs to the platform's core - this adapter used to call it itself, and
- * Camunda 7 used to forget it. What this test adds is the proof that it still fires for
- * Camunda 8 now that nobody calls it here: the model reaches a REAL cluster, so the
- * deployment really finishes, which is the moment the core is waiting for.
+ * The check belongs to the platform's core. This adapter used to call it itself, and
+ * Camunda 7 used to forget it. This test proves that it still fires for Camunda 8, now that
+ * nobody calls it here. The model reaches a REAL cluster, so the deployment really finishes.
+ * The core waits for exactly that moment.
  * <p>
- * Which is also why the assertions name the orphan method rather than just any refusal.
- * The adapter has a second reason to end a boot against a cluster it cannot search, and
- * that one fires BEFORE the deployment; a test which only asked whether the boot failed
- * would pass on a cluster that never saw the model at all.
+ * That is also why the assertions name the orphan method and not just any refusal. The
+ * adapter has a second reason to end a boot: a cluster it cannot search. That one fires
+ * BEFORE the deployment. A test which only asked whether the boot failed would pass on a
+ * cluster which never saw the model at all.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8OrphanMethodIT extends TestOnTheSharedCluster {

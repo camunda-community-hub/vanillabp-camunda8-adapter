@@ -8,10 +8,11 @@ import io.vanillabp.spi.service.MultiInstanceElementResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * Writes down the chain in the order it arrives, which is the one thing a
- * <code>&#64;MultiInstanceElement("...")</code> per level cannot show: naming the levels
- * yourself says nothing about the order they came in. The SPI promises outermost first,
- * and across a call activity the outermost level belongs to another process.
+ * Writes down the chain in the order it arrives. A
+ * <code>&#64;MultiInstanceElement("...")</code> per level cannot show that order: if you
+ * name the levels yourself, you learn nothing about the order they came in. The SPI
+ * promises the outermost level first. Across a call activity the outermost level belongs to
+ * another process.
  */
 @ApplicationScoped
 public class MiCallChainResolver implements MultiInstanceElementResolver<C8E2eAggregate, String> {

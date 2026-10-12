@@ -25,9 +25,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * An extension runs in the same deployment pipeline, on the same files, and needs the same
  * list to place its own wiring. It reads with {@code readUserTasksOf}, which touches
- * nothing. {@code userTasksOf} is the deployment path and writes the lifecycle listeners,
- * and it promises that a second call adds no second set of them - a promise the adapter's
- * own re-wiring of a model the cluster holds already relies on.
+ * nothing. {@code userTasksOf} is the deployment path and writes the lifecycle listeners.
+ * It promises that a second call adds no second set of them. The adapter relies on that
+ * promise when it wires again a model the cluster already holds.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UserTasksReadAndPrepareTest {

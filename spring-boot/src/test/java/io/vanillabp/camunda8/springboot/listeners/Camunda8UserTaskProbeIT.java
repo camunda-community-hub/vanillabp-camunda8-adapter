@@ -20,37 +20,37 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.service.TaskEvent;
 
 /**
- * Three user tasks of one workflow, one of them completed behind VanillaBP's back, and what
- * the check of the other open tasks makes of the three.
+ * Three user tasks of one workflow. One of them is completed behind VanillaBP's back. The test
+ * shows what the check of the other open tasks makes of the three.
  * <p>
- * A user task the engine manages is completed by whoever holds it - a task list, a form, an
- * operator - and VanillaBP hears nothing when that happens outside its own
- * {@code completeUserTask}. Its record of the task stays open, and
- * {@code probe-open-user-tasks} is what closes it: an empty {@code UpdateUserTask} per user
- * task of an instance which is still running, {@code 404} for the one which is gone.
+ * Whoever holds a user task which the engine manages can complete it: a task list, a form, an
+ * operator. VanillaBP hears nothing when that happens outside its own
+ * {@code completeUserTask}. Its record of the task stays open. {@code probe-open-user-tasks}
+ * closes it. It sends an empty {@code UpdateUserTask} for each user task of an instance which
+ * is still running. The cluster answers {@code 404} for the task which is gone.
  * <p>
- * The three tasks differ in one thing only, which is the whole point:
+ * The three tasks differ in one thing only, and that is the whole point:
  * <ul>
- * <li>the PLAIN one carries no listener, is completed through the raw client and has to be
+ * <li>the PLAIN one has no listener. It is completed through the raw client, and it has to be
  * reported as <code>CANCELED</code> at the next wake-up;</li>
- * <li>the SERVED one carries an <code>updating</code> listener a method of this application
- * serves. It stays open while the plain one is reported, so every wake-up in between probes it
- * and fires that listener, and the adapter recognises the job by its action and its empty change
- * list and completes it without the method running - which is what
- * {@link UserTaskProbeDockerWorkflowService#UPDATES_THE_APPLICATION_SAW} holds at zero. It is
- * completed at the end and reported as gone, which is what says those probes really reached
- * it;</li>
- * <li>the FOREIGN one carries an <code>updating</code> listener of a job type nothing here
- * subscribes to. No probe is sent for it at all, so it is completed through the raw client
- * like the plain one and is still NOT reported, because the adapter cannot say.</li>
+ * <li>the SERVED one has an <code>updating</code> listener which a method of this application
+ * serves. It stays open while the plain one is reported. So every wake-up in between probes it
+ * and fires that listener. The adapter recognises the job by its action and its empty change
+ * list. It completes the job without running the method.
+ * {@link UserTaskProbeDockerWorkflowService#UPDATES_THE_APPLICATION_SAW} stays at zero because
+ * of that. At the end the task is completed and reported as gone. That shows the probes really
+ * reached it;</li>
+ * <li>the FOREIGN one has an <code>updating</code> listener of a job type which nothing here
+ * subscribes to. No probe is sent for it at all. So it is completed through the raw client like
+ * the plain one, and it is still NOT reported, because the adapter cannot tell.</li>
  * </ul>
- * The wake-up is the redelivery of the asynchronous task's job, whose lock this class sets to
+ * The wake-up is the redelivery of the asynchronous task's job. This class sets its lock to
  * three seconds.
  * <p>
  * Every user task here is delivered through its <code>creating</code> listener job. The REST
- * gateway of the 8.10 alphas dropped the batch those arrive in, and without the CREATED
- * notification there is no delivery record to probe, so this class was kept off the preview
- * line. {@code 8.10.0-rc1} hands the job out and it runs there again.
+ * gateway of the 8.10 alphas dropped the batch those jobs arrive in. Without the CREATED
+ * notification there is no delivery record to probe. So this class was kept off the preview
+ * line. {@code 8.10.0-rc1} hands out the job, and the class runs there again.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -63,8 +63,8 @@ import io.vanillabp.spi.service.TaskEvent;
         "spring.config.name=camunda8-listeners-it",
         // the question this test is about, off everywhere else
         "vanillabp.adapters.c8.probe-open-user-tasks=true",
-        // the job of the asynchronous task goes back to the cluster after three seconds,
-        // and that redelivery is the wake-up the check rides in on
+        // the job of the asynchronous task goes back to the cluster after three seconds.
+        // That redelivery is the wake-up which runs the check
         "vanillabp.adapters.c8.async-task-lock-renewal=PT3S"
     })
 public class Camunda8UserTaskProbeIT extends SpringBootTestOnTheSharedCluster {
@@ -96,8 +96,8 @@ public class Camunda8UserTaskProbeIT extends SpringBootTestOnTheSharedCluster {
         120000,
         "all three user tasks and the asynchronous task to be open at once");
 
-    // completed through the raw client, which is what a task list does: VanillaBP's own
-    // 'canceling' listener does not fire for a completion, so nothing tells the application
+    // completed through the raw client, as a task list does. VanillaBP's own 'canceling'
+    // listener does not fire for a completion. So nothing tells the application
     completeThroughTheCluster(taskIdOf(aggregateId, "thePlainUserTask"));
     completeThroughTheCluster(taskIdOf(aggregateId, "theForeignUserTask"));
 
@@ -122,10 +122,10 @@ public class Camunda8UserTaskProbeIT extends SpringBootTestOnTheSharedCluster {
             + "action and its empty change list - no application method runs because somebody asked "
             + "whether a task is still there");
 
-    // the served task is completed LAST, and only now, because up to here it had to be
-    // alive: that is what made every wake-up above probe it, fire its 'updating' listener
-    // and close that job. A task which is never probed would leave the counter at zero
-    // just the same, so this is the half which says the probe really reached it
+    // the served task is completed LAST, and only now. Up to here it had to be alive. Only
+    // then did every wake-up above probe it, fire its 'updating' listener and close that job.
+    // A task which is never probed would leave the counter at zero just the same. So this
+    // half shows that the probe really reached it
     completeThroughTheCluster(taskIdOf(aggregateId, "theServedUserTask"));
     awaitUntil(
         () -> TaskEvent.Event.CANCELED.name().equals(whatHappenedTo(aggregateId, "theServedUserTask")),
@@ -159,20 +159,19 @@ public class Camunda8UserTaskProbeIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * Completes a user task the way somebody outside VanillaBP does, waiting out a task the
-   * cluster is busy with.
+   * Completes a user task the way somebody outside VanillaBP does. It waits while the cluster
+   * is busy with the task.
    * <p>
-   * The probe this test switches on is an <code>UpdateUserTask</code>, and a task under
-   * update stands in state <code>UPDATING</code> until the update and its listener job are
-   * through. Measured on 8.9.19: 60 to 145 milliseconds per probe of the served task, and
-   * every command against the task is answered with HTTP <code>409</code> for that long.
-   * The probes are densest right after the instance starts, which is where this test sends
-   * its completions, and a run of the pull request for story 419 was refused there.
+   * The probe this test switches on is an <code>UpdateUserTask</code>. A task under update
+   * stays in state <code>UPDATING</code> until the update and its listener job are through.
+   * Measured on 8.9.19: 60 to 145 milliseconds per probe of the served task. For that long the
+   * cluster answers every command against the task with HTTP <code>409</code>. Most probes come
+   * right after the instance starts. That is when this test sends its completions, and a run of
+   * the pull request for story 419 was refused there.
    * <p>
-   * The adapter waits the same window out wherever it sends such a command itself, see
-   * {@code Camunda8CommandRetry#sendWhileTheUserTaskIsStillChanging}. A task list has no
-   * such helper and pays the <code>409</code>, so the test which plays the task list waits
-   * here.
+   * The adapter waits out the same window wherever it sends such a command itself. See
+   * {@code Camunda8CommandRetry#sendWhileTheUserTaskIsStillChanging}. A task list has no such
+   * helper and gets the <code>409</code>. So the test, which plays the task list, waits here.
    */
   private void completeThroughTheCluster(
       final String userTaskKey) throws InterruptedException {

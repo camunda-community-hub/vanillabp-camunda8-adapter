@@ -25,13 +25,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 /**
- * The workflow service of the Quarkus end-to-end application: one
- * <code>&#64;WorkflowTask</code> method per outcome and per binding variation, serving
- * the same BPMN models the Spring Boot integration tests use.
+ * The workflow service of the Quarkus end-to-end application. It has one
+ * <code>&#64;WorkflowTask</code> method per outcome and per way of binding parameters. It
+ * serves the same BPMN models the Spring Boot integration tests use.
  * <p>
- * That both platforms run the identical set of documented features is deliberate. The
- * adapter's platform-neutral core being correct says nothing about a platform's glue
- * ever calling it, and coverage is measured per platform for exactly that reason.
+ * Both platforms run the same set of documented features on purpose. A correct core does
+ * not prove that a platform's glue code ever calls it. This is also why coverage is
+ * measured per platform.
  */
 @ApplicationScoped
 @WorkflowService(
@@ -57,21 +57,21 @@ import jakarta.inject.Inject;
 public class C8E2eWorkflowService {
 
   /**
-   * How often a task definition was delivered, per (task definition + aggregate id) -
-   * the redelivery and dormancy assertions read this through the introspection
+   * How often a task definition was delivered, per task definition and aggregate id. The
+   * assertions about redelivery and dormancy read this through the introspection
    * endpoints.
    */
   public static final Map<String, AtomicInteger> INVOCATIONS = new ConcurrentHashMap<>();
 
   /**
-   * When each delivery happened - what the retry-backoff assertion measures the
-   * distance between two deliveries with.
+   * When each delivery happened. The retry-backoff assertion measures the time between two
+   * deliveries with it.
    */
   public static final Map<String, List<Long>> INVOCATION_TIMES = new ConcurrentHashMap<>();
 
   /**
-   * What the cluster delivered to a task as variables - the view the cluster has of
-   * the aggregate, as opposed to what the database holds.
+   * What the cluster delivered to a task as variables. This is the cluster's view of the
+   * aggregate, not what the database holds.
    */
   public static final Map<String, String> OBSERVED_VARIABLES = new ConcurrentHashMap<>();
 
@@ -244,7 +244,7 @@ public class C8E2eWorkflowService {
       final C8E2eAggregate aggregate) {
 
     countInvocation("happyTask", aggregate);
-    // idempotent: keyed on the aggregate's state, not on the number of deliveries
+    // idempotent: it depends on the aggregate's state, not on the number of deliveries
     if ((aggregate.getResults() == null) || !aggregate.getResults().contains("happy")) {
       aggregate.appendResult("happy");
     }
@@ -253,8 +253,8 @@ public class C8E2eWorkflowService {
 
   /**
    * The task BEHIND the connector element. It is never reached while nothing serves the
-   * connector's job type, and that is what the connector test asserts: this application
-   * opened no worker for a job type belonging to somebody else's runtime.
+   * connector's job type. The connector test asserts exactly that: this application opened
+   * no worker for a job type which belongs to somebody else's runtime.
    */
   @WorkflowTask
   public void afterConnector(
@@ -270,8 +270,8 @@ public class C8E2eWorkflowService {
       final C8E2eAggregate aggregate) {
 
     countInvocation("errorTask", aggregate);
-    // the mutation has to be COMMITTED although the handler throws - a TaskException
-    // is a BPMN error, not a rollback
+    // the change has to be COMMITTED although the handler throws. A TaskException is a
+    // BPMN error, not a rollback
     aggregate.appendResult("error-raised");
     throw new TaskException("PaymentFailed", "PAYMENT_FAILED");
 
@@ -291,8 +291,8 @@ public class C8E2eWorkflowService {
       final C8E2eAggregate aggregate) {
 
     countInvocation("alwaysFails", aggregate);
-    // must NEVER become visible: a technical exception rolls the job's local
-    // transaction back and fails the job with decremented retries
+    // must NEVER become visible. A technical exception rolls the job's local transaction
+    // back and fails the job with one retry less
     aggregate.appendResult("must-never-be-visible");
     throw new IllegalStateException("boom-c8-quarkus-e2e");
 
@@ -303,8 +303,8 @@ public class C8E2eWorkflowService {
       final C8E2eAggregate aggregate) {
 
     countInvocation("modelledBackoffFails", aggregate);
-    // its element carries the task header 'retryBackoff', which is what decides how
-    // long the cluster waits before the next delivery
+    // its element carries the task header 'retryBackoff'. That header decides how long
+    // the cluster waits before the next delivery
     throw new IllegalStateException("boom-modelled-backoff");
 
   }
@@ -313,8 +313,8 @@ public class C8E2eWorkflowService {
   public void retryTask(
       final C8E2eAggregate aggregate) {
 
-    // the FIRST delivery fails technically, the cluster redelivers, and the second
-    // delivery converges idempotently: at-least-once proven
+    // the FIRST delivery fails technically and the cluster delivers again. The second
+    // delivery leads to the same result. This proves at-least-once delivery
     if (countInvocation("retryTask", aggregate) == 1) {
       throw new IllegalStateException("first delivery fails - forcing a redelivery");
     }
@@ -386,8 +386,8 @@ public class C8E2eWorkflowService {
       final C8E2eAggregate aggregate) {
 
     countInvocation("syncTask", aggregate);
-    // both changes happen AFTER the workflow was started, so the cluster can only
-    // know them if the job completion pushes the aggregate's state
+    // both changes happen AFTER the workflow was started. So the cluster only knows
+    // them if the job completion pushes the aggregate's state
     aggregate.setApproved(true);
     aggregate.setSecret("s3cr3t");
     aggregate.appendResult("sync-task");
@@ -395,11 +395,11 @@ public class C8E2eWorkflowService {
   }
 
   /**
-   * Reads what the cluster holds, whatever type that is: the three parameters are
-   * declared as <code>Object</code> because the point of this task is the cluster's
-   * view of the variables, not a type the application expects. The test application
-   * therefore declares the three names in its <code>application.yaml</code>, at the
-   * workflow module, because this one workflow service serves every process of it.
+   * Reads what the cluster holds, whatever type that is. The three parameters are
+   * declared as <code>Object</code>. This task is about the cluster's view of the
+   * variables, not about a type the application expects. So the test application declares
+   * the three names in its <code>application.yaml</code>, at the workflow module. This
+   * one workflow service serves every process of that module.
    *
    * @param aggregate The workflow aggregate
    * @param approved What the cluster holds for the approval
@@ -414,7 +414,7 @@ public class C8E2eWorkflowService {
       @TaskParam("secret") final Object secret) {
 
     countInvocation("syncApproved", aggregate);
-    // @TaskParam reads the variables of the delivered job: the cluster's view
+    // @TaskParam reads the variables of the delivered job, so this is the cluster's view
     OBSERVED_VARIABLES.put("approved", String.valueOf(approved));
     OBSERVED_VARIABLES.put("results", String.valueOf(results));
     OBSERVED_VARIABLES.put("secret", String.valueOf(secret));
@@ -427,7 +427,7 @@ public class C8E2eWorkflowService {
       final C8E2eAggregate aggregate) {
 
     countInvocation("syncRejected", aggregate);
-    // reached only if the gateway evaluated STALE data
+    // reached only if the gateway evaluated OLD data
     aggregate.appendResult("sync-rejected");
 
   }
@@ -516,8 +516,8 @@ public class C8E2eWorkflowService {
   }
 
   /**
-   * Which method serves the task is decided by the version of the deployed
-   * process definition - this one by its number.
+   * The version of the deployed process definition decides which method serves the task.
+   * This one is chosen by its number.
    *
    * @param aggregate The workflow aggregate
    */
@@ -531,17 +531,17 @@ public class C8E2eWorkflowService {
   }
 
   /**
-   * This one by the <code>zeebe:versionTag</code> of the second version,
-   * which is deployed while the application runs - the way another node of a rolling
-   * deployment does it. Which version carries which tag is read by searching the cluster,
-   * which is one of the reasons the adapter requires one it can search.
+   * This one is chosen by the <code>zeebe:versionTag</code> of the second version. That
+   * version is deployed while the application runs, the way another node of a rolling
+   * deployment does it. The adapter searches the cluster to learn which version carries
+   * which tag. This is one of the reasons why the adapter needs a cluster it can search.
    * <p>
-   * The range is open at the top, like the one of the Spring Boot test: a start refuses the
-   * version it deploys if a task of it has no method for that version. This application boots
-   * once on a cluster of its own today, but a later boot on the same cluster would deploy the
-   * untagged model as a version after the tagged one, and exactly 'release-2' would fail it.
-   * Like the Spring Boot test, it also holds that a range starting at a tag finds a version
-   * which came after the start.
+   * The range is open at the top, like the one of the Spring Boot test. A start refuses the
+   * version it deploys if a task of it has no method for that version. Today this
+   * application boots once, on a cluster of its own. But a later boot on the same cluster
+   * would deploy the untagged model as a version after the tagged one, and exactly
+   * 'release-2' would make that boot fail. Like the Spring Boot test, it also holds that a
+   * range starting at a tag finds a version which came after the start.
    *
    * @param aggregate The workflow aggregate
    */
@@ -555,9 +555,9 @@ public class C8E2eWorkflowService {
   }
 
   /**
-   * A plain task of a called process, which runs in the iteration of the subprocess the
-   * call activity sits in. That subprocess belongs to another BPMN file, and this engine
-   * says nothing about it, so the adapter has to.
+   * A plain task of a called process. It runs in the iteration of the subprocess which
+   * holds the call activity. That subprocess belongs to another BPMN file. This engine says
+   * nothing about it, so the adapter has to.
    */
   @WorkflowTask
   public void collectInCalledProcess(
@@ -573,8 +573,8 @@ public class C8E2eWorkflowService {
   }
 
   /**
-   * A task which is multi-instance in the called process: it reports its own iteration
-   * and the caller's, and the resolver reports the order the two arrived in.
+   * A task which is multi-instance in the called process. It reports its own iteration and
+   * the caller's. The resolver reports the order the two arrived in.
    */
   @WorkflowTask
   public void collectBothChains(

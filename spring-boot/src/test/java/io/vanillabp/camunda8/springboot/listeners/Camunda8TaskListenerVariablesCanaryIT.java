@@ -21,18 +21,18 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A CANARY: it watches the cluster, not this adapter.
  * <p>
- * A task listener of a Camunda-managed user task is completed without variables, and that is not
- * a decision of VanillaBP: the cluster refuses a task-listener completion carrying a variables
- * payload, answers INVALID_ARGUMENT and names its issue 23702 while doing so. This test holds the
- * cluster to that answer, with the raw client so nothing of VanillaBP is in the way. A red run
- * here is news about Camunda rather than a defect of this repository, and the message says what
- * to do with the news.
+ * A task listener of a Camunda-managed user task is completed without variables. That is not a
+ * decision of VanillaBP. The cluster refuses a task-listener completion with a variables
+ * payload. It answers INVALID_ARGUMENT and names its issue 23702. This test holds the cluster to
+ * that answer. It uses the raw client, so nothing of VanillaBP is in the way. A red run here is
+ * news about Camunda, not a defect of this repository. The message says what to do with the
+ * news.
  * <p>
  * It runs on the line this build is pinned to, and on every line. It was kept off the 8.10 line
- * while that line was built against an alpha, because its model waits for a {@code creating}
- * listener job and the REST gateway of those alphas never handed one out. A canary which dies of
- * somebody else's alpha bug stops being read, so the same exclusion is owed to the next preview
- * line which cannot hand out what this model waits for.
+ * while that line was built against an alpha. Its model waits for a {@code creating} listener
+ * job, and the REST gateway of those alphas never handed one out. Nobody reads a canary which
+ * dies of somebody else's alpha bug. So the next preview line which cannot hand out what this
+ * model waits for needs the same exclusion.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -91,9 +91,9 @@ public class Camunda8TaskListenerVariablesCanaryIT extends TestOnTheSharedCluste
 
       final var job = awaitTheListenerJob(client);
 
-      // the token of this activation rides on both completions below. A leased job whose answer
-      // carries no token is refused for THAT reason from 8.10.0-rc1 on, which would leave this
-      // canary green without the cluster ever being asked about the payload
+      // both completions below carry the token of this activation. From 8.10.0-rc1 on, the
+      // cluster refuses a leased job whose answer has no token, for THAT reason. This canary
+      // would then stay green, and the cluster would never be asked about the payload
       final var leaseToken = Camunda8JobLease.tokenOf(job);
 
       assertThrows(
@@ -111,9 +111,9 @@ public class Camunda8TaskListenerVariablesCanaryIT extends TestOnTheSharedCluste
               + "method may write, and change Camunda8ModelledListenerHandler, decision 1 and this "
               + "canary together.");
 
-      // the same job, completed the way the adapter completes it: the refusal above was about
-      // the payload and about nothing else - a job which had expired or was gone would fail here
-      // too and would leave the canary green for the wrong reason
+      // the same job, completed the way the adapter completes it. This shows that the refusal
+      // above was about the payload and nothing else. A job which had expired or was gone would
+      // fail here too. Without this, the canary would stay green for the wrong reason
       Camunda8JobLease
           .withToken(client.newCompleteCommand(job.getKey()), leaseToken)
           .send()
@@ -135,8 +135,8 @@ public class Camunda8TaskListenerVariablesCanaryIT extends TestOnTheSharedCluste
   }
 
   /**
-   * The listener job, activated directly rather than through a worker, so the completion below
-   * runs in the test's own thread and its answer is what the test reads.
+   * The listener job, activated directly and not through a worker. So the completion below runs
+   * in the test's own thread, and the test reads its answer.
    *
    * @param client The client of the cluster under test
    * @return The activated job
@@ -146,8 +146,8 @@ public class Camunda8TaskListenerVariablesCanaryIT extends TestOnTheSharedCluste
 
     final var deadline = System.currentTimeMillis() + 120_000;
     while (System.currentTimeMillis() < deadline) {
-      // a leased job is never handed to an activation which does not ask for one, and
-      // this suite configures 'job-lease: use'
+      // the cluster never hands a leased job to an activation which does not ask for a lease.
+      // This suite configures 'job-lease: use'
       final var jobs = Camunda8JobLease
           .leaseTheActivation(
               client

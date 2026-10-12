@@ -40,13 +40,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.service.BpmsStartTrigger;
 
 /**
- * The retry at the handler: each of the commands a worker sends BACK to the cluster is
- * repeated where the cluster rejected it because it was busy, and none of them is repeated
- * where a repetition cannot change the answer. What makes the difference is the
- * classification of {@code Camunda8Errors} and nothing the handlers decide themselves.
+ * The retry at the handler. Each command a worker sends BACK to the cluster is repeated where
+ * the cluster rejected it because it was busy. None of them is repeated where a repetition
+ * cannot change the answer. The classification of {@code Camunda8Errors} makes the
+ * difference, not anything the handlers decide themselves.
  * <p>
- * The counter-tests matter as much as the tests: a job which is GONE must stay the benign
- * at-least-once residual it was rather than becoming five commands, and a shutdown during a
+ * The counter-tests matter as much as the tests. A job which is GONE must stay the harmless
+ * rest of at-least-once it was, and must not become five commands. And a shutdown during a
  * retry must still end without a fail command.
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -59,7 +59,7 @@ public class Camunda8OutcomeCommandRetryTest {
   private final Camunda8Drain drain = new Camunda8Drain("c8", "test-module");
 
   /**
-   * How the REST transport reports backpressure - the failure the retry exists for.
+   * How the REST transport reports backpressure, the failure the retry exists for.
    */
   private static ProblemException backpressure() {
 
@@ -80,9 +80,9 @@ public class Camunda8OutcomeCommandRetryTest {
   }
 
   /**
-   * Answers a command's {@code send()}: the first <code>rejections</code> calls are
-   * rejected, the rest go through. The response is a mock of whatever the client's release
-   * line declares, so this test does not name a type which changed between them.
+   * Answers the {@code send()} of a command. The first <code>rejections</code> calls are
+   * rejected, the rest go through. The response is a mock of whatever the release line of
+   * the client declares. So this test does not name a type which changed between the lines.
    */
   private static Answer<Object> rejecting(
       final AtomicInteger attempts,
@@ -164,7 +164,7 @@ public class Camunda8OutcomeCommandRetryTest {
     when(jobClient.newCompleteCommand(4711L).variables(any(Map.class)).send())
         .thenAnswer(rejecting(attempts, Integer.MAX_VALUE, problem(400)));
 
-    // and the failure escapes to the client, which fails the job - a retry which gave up
+    // and the failure escapes to the client, which fails the job. A retry which gave up
     // changes nothing about that
     Assertions.assertThrows(
         ProblemException.class,
@@ -345,8 +345,8 @@ public class Camunda8OutcomeCommandRetryTest {
         .workflowEnded(anyString(), anyString(), any());
 
     final var endListenerJob = job();
-    // the worker of a process' execution listeners answers two of them now, and the event
-    // the job reports is what tells them apart
+    // the worker of the execution listeners of a process answers two of them now. The
+    // event the job reports tells them apart
     when(endListenerJob.getListenerEventType()).thenReturn(ListenerEventType.END);
 
     new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null)

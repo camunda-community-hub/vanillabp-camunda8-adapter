@@ -20,20 +20,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The executor of the virtual-thread mode: what the client submits runs on a virtual
- * thread and never more of it at once than the bound allows, while what the client
- * SCHEDULES runs on a platform thread of its own. What both executors share - the bound,
- * the gate in front of the scheduled tasks and the shutdown - is
- * {@link Camunda8ExecutorTest}.
+ * The executor of the virtual-thread mode. What the client submits runs on a virtual thread,
+ * and never more of it at once than the bound allows. What the client SCHEDULES runs on a
+ * platform thread of its own. What both executors share - the bound, the gate in front of
+ * the scheduled tasks and the shutdown - is {@link Camunda8ExecutorTest}.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8VirtualThreadExecutorTest {
 
   /**
    * How long a wait for the executor goes on before the test gives up. It guards against
-   * something which never got its turn and it measures nothing: what these tests claim is
-   * read from which kind of thread ran the work and from what was still inside its slot,
-   * so a loaded machine makes a test slower rather than red.
+   * something which never got its turn, and it measures nothing. These tests read their
+   * claims from which kind of thread ran the work and from what was still inside its slot.
+   * So a loaded machine makes a test slower, not red.
    */
   private static final long UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK = 30000;
 
@@ -85,8 +84,8 @@ public class Camunda8VirtualThreadExecutorTest {
           peak.accumulateAndGet(running.incrementAndGet(), Math::max);
           started.countDown();
           try {
-            // the handlers stay inside until this test lets them out, so what is read
-            // about the slots below is read while they really are taken
+            // the handlers stay inside until this test lets them out. So the slots below
+            // are read while they really are taken
             release.await(UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK, TimeUnit.MILLISECONDS);
           } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -106,8 +105,8 @@ public class Camunda8VirtualThreadExecutorTest {
           finished.await(UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK, TimeUnit.MILLISECONDS),
           "every job ran");
       assertEquals(bound, peak.get(), "never more handlers at once than the bound allows");
-      // the slot is given back AFTER the runnable returned, so the last job's countDown
-      // may arrive before its permit is back - the CI runner is slow enough to see it
+      // the slot is given back AFTER the runnable returned. So the countDown of the last
+      // job may arrive before its permit is back, and the CI runner is slow enough to see it
       assertTrue(
           slotsBackWithin(executor, bound, UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK),
           "the slots are given back");
@@ -118,8 +117,8 @@ public class Camunda8VirtualThreadExecutorTest {
   }
 
   /**
-   * Waits for every permit of the bound to be back, since the executor releases a slot
-   * after the runnable it wrapped returned.
+   * Waits until every permit of the bound is back. The executor releases a slot only after
+   * the runnable it wrapped returned.
    *
    * @param executor The executor under test
    * @param bound The number of slots it was built with
@@ -146,8 +145,8 @@ public class Camunda8VirtualThreadExecutorTest {
   @DisplayName("a scheduled poll runs on a platform thread while handlers are busy")
   public void schedulingIsNotStarvedByBusyHandlers() throws Exception {
 
-    // one slot is left free on purpose: what a scheduled task does when there is none is
-    // the gate of Camunda8ExecutorTest, while this test is about which thread runs it
+    // one slot is left free on purpose. Camunda8ExecutorTest holds what a scheduled task does
+    // when no slot is free. This test is about which thread runs it
     final var bound = 3;
     final var executor = new Camunda8VirtualThreadExecutor("c8", bound);
     try {
@@ -182,10 +181,10 @@ public class Camunda8VirtualThreadExecutorTest {
         polled.countDown();
       }, 10, TimeUnit.MILLISECONDS);
 
-      // the wait is a generous guard against a poll which never ran; what says that the
-      // poll was not starved is the number of handlers which were still inside when it
-      // did run. A short wait would carry that claim itself, and on a machine carrying
-      // several builds it would report a stopped JVM as a starved poll
+      // the wait is a generous guard against a poll which never ran. The number of
+      // handlers still inside when the poll ran says that the poll was not starved. A short
+      // wait would carry that claim itself. On a machine which runs several builds it would
+      // report a stopped JVM as a starved poll
       assertTrue(
           polled.await(UNTIL_THE_EXECUTOR_COUNTS_AS_STUCK, TimeUnit.MILLISECONDS),
           "a scheduled poll runs although handlers are inside their slots");

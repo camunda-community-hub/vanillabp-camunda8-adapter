@@ -39,11 +39,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What this adapter asks the cluster about the identifiers a workflow module is about to
  * deploy, and what it makes of the answer.
  * <p>
- * The cluster is played by the two searches, which is what the adapter's side of this can
- * be held against without one: whether it asks for the right thing, whether it keeps its
- * own earlier deployments out of the answer, and what it says about a holder it cannot
- * attribute. The findings are the records the core is handed, so this is the boundary
- * both sides meet at.
+ * The two searches play the cluster. Against them the adapter's side can be held
+ * without a cluster: whether it asks for the right thing, whether it keeps its own earlier
+ * deployments out of the answer, and what it says about a holder it cannot attribute. The
+ * findings are the records the core is handed. So both sides meet at this boundary.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8IdentifiersTheClusterHoldsTest {
@@ -88,14 +87,13 @@ public class Camunda8IdentifiersTheClusterHoldsTest {
   private int pagesAskedFor;
 
   /**
-   * A cluster answering the process definition search with the given definitions, one entry
-   * of the list per page, and a cursor on every page so the next one can be asked for.
+   * A cluster which answers the process definition search with the given definitions, one
+   * entry of the list per page. Every page has a cursor, so the next one can be asked for.
    * <p>
-   * The page lambda itself is deliberately not stubbed: WHICH type the client hands it
-   * differs between the release lines this adapter is built from, and naming that type here
-   * would make the test compile on one line only. The adapter passes a lambda, which compiles
-   * against every line, and whether it asks for a second page is measured by the pages this
-   * double is asked for.
+   * The page lambda itself is not stubbed, on purpose. WHICH type the client hands it differs
+   * between the release lines this adapter is built from. Naming that type here would make
+   * the test compile on one line only. The adapter passes a lambda, which compiles against
+   * every line. The pages this double is asked for measure whether it asks for a second page.
    */
   private void theClusterHoldsProcessDefinitions(
       final List<List<ProcessDefinition>> pages) {
@@ -163,7 +161,7 @@ public class Camunda8IdentifiersTheClusterHoldsTest {
   }
 
   /**
-   * A cluster answering every decision definition search with the given definitions.
+   * A cluster which answers every decision definition search with the given definitions.
    */
   private void theClusterHoldsDecisionDefinitions(
       final List<DecisionDefinition> definitions) {

@@ -14,13 +14,12 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * A handler which outlives the lock of its job, so somebody else can take the activation
+ * A handler which outlives the lock of its job. So somebody else can take the activation
  * away from it while it is still working.
  * <p>
- * The handler holds until the test says it may finish. That is what makes the test about
- * the lease rather than about timing: the test takes the job over first and lets the
- * handler answer afterwards, so the answer of this run is the one which arrives while
- * another activation holds the job.
+ * The handler waits until the test says it may finish. That makes the test about the lease
+ * and not about timing. The test takes the job over first and lets the handler answer
+ * afterwards. So the answer of this run arrives while another activation holds the job.
  */
 @Service
 @WorkflowService(
@@ -29,25 +28,25 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class LeaseDockerWorkflowService {
 
   /**
-   * How long the handler waits to be released. It is a bound and not a delay: the wait
+   * How long the handler waits to be released. It is an upper limit, not a delay. The wait
    * ends the moment the test has taken the activation over.
    */
   private static final long WAIT_TO_BE_RELEASED_SECONDS = 120;
 
   /**
-   * How often the handler ran, counted across the deliveries of the one job this test
+   * How often the handler ran, counted across the deliveries of the one job which this test
    * produces.
    */
   public static final AtomicInteger RUNS = new AtomicInteger();
 
   /**
-   * Counted down when the handler is inside the application, which is what the test waits
-   * for before it takes the job over.
+   * Counted down when the handler is inside the application. The test waits for this before
+   * it takes the job over.
    */
   public static volatile CountDownLatch entered = new CountDownLatch(1);
 
   /**
-   * Counted down by the test once it holds the activation, which lets the handler answer.
+   * The test counts it down once it holds the activation. That lets the handler answer.
    */
   public static volatile CountDownLatch mayAnswer = new CountDownLatch(1);
 

@@ -14,14 +14,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.service.WorkflowEnd;
 
 /**
- * What the worker of a process' execution listeners reports, and what it refuses to report.
+ * What the worker of the execution listeners of a process reports, and what it refuses to
+ * report.
  * <p>
  * One worker answers two listeners now: the <code>end</code> of a completed instance and, on
- * the 8.10 line, the <code>cancel</code> of a terminated one. They carry the same job type, so
- * the event the job reports is the only thing which tells them apart - and an event this build
- * does not know is answered rather than guessed at, because the client's enum grows inside a
- * line. What the cancel job does is asserted in the per-line test of the 8.10 directory, which
- * is the only line whose client names that event.
+ * the 8.10 line, the <code>cancel</code> of a terminated one. They carry the same job type. So
+ * only the event the job reports tells them apart. An event this build does not know is
+ * answered, not guessed at, because the client's enum grows inside a line. The per-line
+ * test of the 8.10 directory asserts what the cancel job does. 8.10 is the only line whose
+ * client names that event.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8WorkflowEndedKindTest {

@@ -10,21 +10,21 @@ import java.util.stream.Collectors;
 import io.camunda.client.CamundaClientConfiguration;
 
 /**
- * Makes visible what an environment variable changed about a client this adapter had just
- * configured, validated and reported at startup.
+ * Shows what an environment variable changed about a client. This adapter had just
+ * configured, validated and reported that client at startup.
  * <p>
- * The Camunda client reads a set of <code>CAMUNDA_*</code> variables (with legacy
- * <code>ZEEBE_*</code> fallbacks) and applies them OVER everything the builder set, and this
- * adapter deliberately keeps that on: it is today the only way to reach a client option
- * VanillaBP does not model. What was missing is the trace. Nothing is logged about it, not
- * even at TRACE, so the addresses, the transport preference, the CA certificate, the TLS
- * authority, the default tenant and the streaming default could all be replaced without a
- * word in VanillaBP's own log.
+ * The Camunda client reads a set of <code>CAMUNDA_*</code> variables (with the old
+ * <code>ZEEBE_*</code> names as fallback). It applies them OVER everything the builder set.
+ * This adapter keeps that on purpose. Today it is the only way to reach a client option
+ * which VanillaBP does not model. What was missing is the trace. Nothing is logged about
+ * it, not even at TRACE. So the addresses, the transport preference, the CA certificate,
+ * the TLS authority, the default tenant and the streaming default could all be replaced
+ * without a word in VanillaBP's own log.
  * <p>
- * This class closes that: after the client was built, what the adapter asked for is compared
- * against what the client reports, and every value an environment variable changed is named
- * with the variable, the configured value and the effective one. Credentials are not among
- * the compared values, so no message can carry a secret.
+ * This class fills that gap. After the client was built, what the adapter asked for is
+ * compared with what the client reports. Every value an environment variable changed is
+ * named, with the variable, the configured value and the effective one. Credentials are
+ * not among the compared values, so no message can carry a secret.
  * <p>
  * Why the adapter configures the client rather than each worker, which is what lets an environment
  * variable win here, is decision 7 in the repository's DECISIONS.md.
@@ -50,7 +50,7 @@ public final class Camunda8EnvironmentOverrides {
   }
 
   /**
-   * Compares the adapter's configuration against the built client's.
+   * Compares the configuration of the adapter with the one of the built client.
    *
    * @param adapterId The adapter id (used to build the property keys)
    * @param configuration What the adapter configured
@@ -111,11 +111,11 @@ public final class Camunda8EnvironmentOverrides {
   }
 
   /**
-   * The variables from which the client would pick an authentication method of its own -
-   * but only while the application set none. Once the adapter sets a provider, which it
-   * always does unless it authenticates with <code>none</code>, these stop
-   * choosing the method. The values still apply where they belong to the method the
-   * adapter chose, because the client's credential builders read their own environment.
+   * The variables from which the client would pick an authentication method of its own.
+   * It does so only while the application set none. The adapter always sets a provider,
+   * unless it authenticates with <code>none</code>. Once it does, these variables no longer
+   * choose the method. Their values still apply where they belong to the method the adapter
+   * chose, because the credential builders of the client read their own environment.
    *
    * @param adapterId The adapter id
    * @param authentication The resolved authentication of the adapter instance
@@ -128,7 +128,7 @@ public final class Camunda8EnvironmentOverrides {
       final Function<String, String> environment) {
 
     if (authentication.getMethod() == Camunda8AuthConfiguration.Method.NONE) {
-      // nothing was taken away: either the client still builds its provider from the
+      // nothing was taken away. Either the client still builds its provider from the
       // environment, or there is nothing in the environment to build one from
       return null;
     }

@@ -12,9 +12,9 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
 /**
- * What the restart-delivery test can see of the running application: start a workflow,
- * and ask how long its first job took to arrive. A prod-mode test runs the application
- * in a forked JVM, so nothing of it can be injected into the test.
+ * What the restart-delivery test can see of the running application. It can start a
+ * workflow and ask how long its first job took to arrive. A prod-mode test runs the
+ * application in a forked JVM, so nothing of it can be injected into the test.
  */
 @Path("/restart")
 @Produces(MediaType.APPLICATION_JSON)

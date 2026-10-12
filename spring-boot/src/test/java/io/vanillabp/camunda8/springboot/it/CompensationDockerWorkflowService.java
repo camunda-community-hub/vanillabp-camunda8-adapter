@@ -22,8 +22,8 @@ import io.vanillabp.spi.service.WorkflowTask;
  * Each of the two compensation handlers writes down when and on which thread it was entered,
  * and then waits a few seconds for the other one to be entered as well. Handlers which the
  * cluster hands out together meet each other at once. Handlers which it hands out one after
- * the other never meet: the first one gives up waiting and returns, and only then the second
- * one arrives.
+ * the other never meet. The first one gives up waiting and returns, and only then does the
+ * second one arrive.
  * </p>
  */
 @Service

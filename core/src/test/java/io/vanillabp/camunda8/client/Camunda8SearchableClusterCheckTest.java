@@ -24,12 +24,12 @@ import io.camunda.client.api.search.response.SearchResponse;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the deployment does with a cluster which refuses to be searched: it ends there, and
- * the message is what a developer can act on without opening the wiki.
+ * What the deployment does with a cluster which refuses to be searched. The deployment ends
+ * there, and a developer can act on the message without opening the wiki.
  * <p>
- * The refusal of {@link Camunda8ClusterWait} is the same shape one step earlier - a
- * cluster which answers nothing at all - so both live next to each other. This one is
- * about the cluster which answers everything except a search.
+ * The refusal of {@link Camunda8ClusterWait} has the same shape one step earlier: a cluster
+ * which answers nothing at all. So both live next to each other. This one is about the
+ * cluster which answers everything except a search.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8SearchableClusterCheckTest {
@@ -173,8 +173,8 @@ public class Camunda8SearchableClusterCheckTest {
         IllegalStateException.class,
         () -> Camunda8SearchableClusterCheck.requireAClusterWhichCanBeSearched("c8", queryApi));
 
-    // asking per module is what lets one module's 'deployment-failure: warn' boot
-    // degraded while another one ends the boot, and it costs nothing: the answer is
+    // asking per module lets one module with 'deployment-failure: warn' boot degraded
+    // while another one ends the boot. And it costs nothing, because the answer is
     // remembered
     assertEquals(1, searches.get());
 

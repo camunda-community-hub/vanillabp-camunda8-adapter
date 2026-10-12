@@ -25,31 +25,29 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Renaming a BPMN process, against a real cluster and across two generations of one
- * application: the first deploys the process under its old id and starts a workflow which
- * then waits for a message, the second deploys the same model under the NEW id and
- * declares the old one as a secondary process. The workflow started before the rename has
- * to run to its end through the methods of that second application - which is the whole
- * promise of the declaration.
+ * application. The first generation deploys the process under its old id. It starts a
+ * workflow which then waits for a message. The second generation deploys the same model
+ * under the NEW id and declares the old one as a secondary process. The workflow started
+ * before the rename has to run to its end through the methods of that second application.
+ * That is the whole promise of the declaration.
  * <p>
- * Two things make this a test only a cluster can answer. The job workers of the second
- * application subscribe to the task types of the model they deployed, and the jobs they
- * are handed belong to a process id that application does not deploy any more; and the
- * message correlated for the aggregate has to reach a subscription created by the first
- * application under the old id. Both are cases where a wrong translation between the id
- * the cluster knows and the id the core is keyed by would show up, and neither can be
- * faked.
+ * Two things make this a test which only a cluster can answer. First, the job workers of the
+ * second application subscribe to the task types of the model they deployed. But the jobs
+ * they are handed belong to a process id which that application does not deploy any more.
+ * Second, the message correlated for the aggregate has to reach a subscription which the
+ * first application created under the old id. In both cases a wrong translation between the
+ * id the cluster knows and the id the core uses as key would show up. Neither can be faked.
  * <p>
- * The message of that wait state carries a name only the FIRST generation's model
- * declares - the second generation renamed it. So the correlation passes phase one only
- * where the message check reads the models the cluster holds for the ids this
- * application declares, instead of the models this application version deployed; and a
- * name no model of either generation declares is still refused, with a remedy naming
- * what the cluster holds. Both are what this class measures about the check.
+ * The message of that wait state carries a name which only the FIRST generation's model
+ * declares. The second generation renamed it. So the correlation passes phase one only if
+ * the message check reads the models which the cluster holds for the ids this application
+ * declares, and not the models this application version deployed. A name which no model of
+ * either generation declares is still refused, with a remedy which names what the cluster
+ * holds. This class measures both about the check.
  * <p>
- * What is asked here is whether the workflows keep running, not what the startup check
- * reports about their versions - that report is held by
- * {@code Camunda8OldProcessVersionsIT} and by the platform's own
- * {@code RenamedBpmnProcessTest}.
+ * This class asks whether the workflows keep running. It does not ask what the startup
+ * check reports about their versions. {@code Camunda8OldProcessVersionsIT} and the
+ * platform's own {@code RenamedBpmnProcessTest} hold that report.
  * <p>
  * The second generation's file carries a SECOND executable process which no workflow
  * service of this application claims, waiting for a message whose correlation key its
@@ -61,13 +59,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * key into a process this application does not serve.
  * <p>
  * The workflow module of this scenario scopes its identifiers by prefix
- * ('name-clash-avoidance: use-prefix'), which is the case a rename is hard in: a task
- * definition is deployed as '&lt;module&gt;__&lt;process&gt;__&lt;task&gt;', so the jobs of
- * the workflows under the old id are named after the OLD id and the workers of the deployed
- * processes ask for none of them. The renamed application opens a worker per task
- * definition of the declared id for exactly that reason, and this test is what says it
- * works. Under every other mode a job of the old id is named like any other and those extra
- * workers are not opened at all, which {@code Camunda8DeclaredProcessWorkersTest} holds.
+ * ('name-clash-avoidance: use-prefix'). In this case a rename is hard. A task definition is
+ * deployed as '&lt;module&gt;__&lt;process&gt;__&lt;task&gt;'. So the jobs of the workflows
+ * under the old id are named after the OLD id, and the workers of the deployed processes ask
+ * for none of them. That is exactly why the renamed application opens a worker per task
+ * definition of the declared id. This test shows that it works. Under every other mode, a
+ * job of the old id is named like any other, and those extra workers are not opened at all.
+ * {@code Camunda8DeclaredProcessWorkersTest} holds that.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -76,8 +74,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
 
   /**
-   * The workflow started by the first application, read by the second one from the same
-   * database - a workflow which outlives an upgrade is the point of this test.
+   * The workflow which the first application started. The second one reads it from the same
+   * database. The point of this test is a workflow which outlives an upgrade.
    */
   static Long orderId;
 
@@ -95,8 +93,8 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
           .execute(status -> workflowService.startWorkflow());
       orderId = aggregate.getOrderId();
 
-      // the first task ran, so the workflow is on its way and reached the message it
-      // waits for - which is where it stands while the application is upgraded
+      // the first task ran, so the workflow is on its way and reached the message it waits
+      // for. It stands there while the application is upgraded
       awaitUntil(
           () -> repository.findById(orderId).orElseThrow().getStartedBy() != null,
           "the workflow of the old process id did not reach its first task");
@@ -123,9 +121,9 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
       final var workflowService = application.getBean(RenamedAfterDockerWorkflowService.class);
       final var repository = application.getBean(RenamedDockerAggregateRepository.class);
 
-      // a name NO model of either generation declares is still refused, and the
-      // refusal proves the message check read the models the CLUSTER holds: the
-      // remedy names 'RenameContinue', which only the old id's model declares
+      // a name which NO model of either generation declares is still refused. The refusal
+      // proves that the message check read the models which the CLUSTER holds. The remedy
+      // names 'RenameContinue', which only the old id's model declares
       final var refused = assertThrows(
           RuntimeException.class,
           () -> application
@@ -140,10 +138,10 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
           () -> "and what IS declared, the old id's model in the cluster included: "
               + refused.getMessage());
 
-      // the message reaches a subscription the FIRST application created, under the id
-      // this application does not deploy any more - and its name is declared only by
-      // the model the cluster holds under that old id, so the check has to read it
-      // there instead of refusing the correlation
+      // the message reaches a subscription which the FIRST application created, under the
+      // id which this application does not deploy any more. Only the model which the cluster
+      // holds under that old id declares its name. So the check has to read it there, and
+      // must not refuse the correlation
       application
           .getBean(TransactionTemplate.class)
           .executeWithoutResult(status -> workflowService.continueWorkflow(orderId));
@@ -172,9 +170,9 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * A file whose second process waits for a message without saying what to correlate it
-   * by, next to a process which is complete. Sent to the cluster as it stands, which is
-   * what the deployment does NOT do.
+   * A file whose second process waits for a message without saying what to correlate it by.
+   * Next to it is a process which is complete. The test sends it to the cluster as it is,
+   * which the deployment does NOT do.
    */
   private static final String A_KEYLESS_MESSAGE_NEXT_TO_A_COMPLETE_PROCESS = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -207,11 +205,11 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
   @DisplayName("The cluster answers a message catch element without a subscription by rejecting the file")
   public void theClusterRejectsTheWholeFileOverAMessageWithoutASubscription() {
 
-    // The premise of the message the deployment writes about a process nothing serves:
-    // the cluster judges the FILE, so leaving such a message alone would take the process
-    // next to it down as well, and refusing the file while starting is the earlier half of
-    // a failure which happens either way. Measured here rather than remembered, so a
-    // cluster which changes its mind about it turns this red.
+    // The premise of the message which the deployment writes about a process nothing serves.
+    // The cluster judges the FILE. So leaving such a message alone would take the process
+    // next to it down as well. Refusing the file at startup only makes a failure, which
+    // happens either way, happen earlier. Measured here, not remembered, so a cluster which
+    // changes its mind about it turns this red.
     try (var client = testClient()) {
       final var rejected = assertThrows(
           RuntimeException.class,
@@ -241,8 +239,8 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * A client of the test's own, for the one question which is asked while no application
-   * of this class is running.
+   * A client of the test's own, for the one question which is asked while no application of
+   * this class is running.
    */
   private static CamundaClient testClient() {
 
@@ -256,9 +254,10 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * Waits for something the cluster and the job workers have to bring about. Generous on
-   * purpose: in a full build this class shares its machine with everything else the module
-   * runs, and a deadline close to what a quiet machine needs fails while nothing is wrong.
+   * Waits for something which the cluster and the job workers have to bring about. The
+   * deadline is long on purpose. In a full build this class shares its machine with
+   * everything else the module runs. A deadline close to what a quiet machine needs fails
+   * while nothing is wrong.
    */
   private static void awaitUntil(
       final java.util.function.BooleanSupplier condition,
@@ -278,9 +277,9 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
    * One generation of the application: the workflow service of that generation (a Spring
    * profile decides which one) and the BPMN it deploys.
    * <p>
-   * Both boots share ONE in-memory database, kept alive across them by
-   * {@code DB_CLOSE_DELAY=-1}: the workflow aggregate written by the first application is
-   * what the second one loads when the cluster delivers the last task of that workflow.
+   * Both boots share ONE in-memory database, which {@code DB_CLOSE_DELAY=-1} keeps alive
+   * across them. The second application loads the workflow aggregate which the first one
+   * wrote, when the cluster delivers the last task of that workflow.
    */
   private static ConfigurableApplicationContext boot(
       final String profile,
@@ -300,16 +299,16 @@ public class Camunda8RenamedProcessIT extends TestOnTheSharedCluster {
         .add("--vanillabp.adapters.c8.grpc-address="
             + grpcAddress());
     boot.add("--vanillabp.adapters.c8.workflow-visibility-timeout=PT60S");
-    // prefixed identifiers, which is what makes this test worth a cluster: a task
-    // definition then carries the BPMN process id it was deployed with, so the jobs of the
-    // workflows running under the OLD id are named after that id and only a worker opened
-    // for the declared id reaches them
+    // prefixed identifiers make this test worth a cluster. A task definition then carries
+    // the BPMN process id it was deployed with. So the jobs of the workflows which run under
+    // the OLD id are named after that id. Only a worker opened for the declared id reaches
+    // them
     boot.add("--vanillabp.workflow-modules.test-app.adapters.c8.name-clash-avoidance=use-prefix");
     boot
         .add("--vanillabp.workflow-modules.test-app.adapters.c8.resources-location=classpath*:renamed-process/%s"
             .formatted(bpmnVersion));
-    // the second generation of the file carries a process no workflow service claims, and
-    // the start ends over it unless the application says that it is somebody else's
+    // the second generation of the file carries a process which no workflow service claims.
+    // The start ends over it, unless the application says that it belongs to somebody else
     boot.add("--vanillabp.workflow-modules.test-app.workflows.RenameNeighbour.implemented-externally=true");
     return new SpringApplicationBuilder(DockerTestApplication.class).run(boot.toArray(String[]::new));
 

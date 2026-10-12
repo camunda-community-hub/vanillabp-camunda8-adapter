@@ -14,21 +14,21 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Keeps the cluster busy: starts a workflow every {@code a895.start-every}, and moves every
- * running one on, one operation at a time, the way an application would.
+ * Keeps the cluster busy. It starts a workflow every {@code a895.start-every}. It moves
+ * every running workflow on, one operation at a time, the way an application would.
  * <p>
- * Every operation runs in a transaction of its own, like the call of a REST endpoint. Where
- * phase one throws, the transaction rolls back, the failure is written to
- * {@code A895_FAILURE} and the same operation is tried again on the next round - which is
- * the only repair the measure of analysis 895 allows. The next operation of a workflow
- * waits until the outbox holds no OPEN entry of that workflow any more, so a lost operation
+ * Every operation runs in a transaction of its own, like the call of a REST endpoint. If
+ * phase one throws, the transaction rolls back and the failure is written to
+ * {@code A895_FAILURE}. The same operation is tried again in the next round. That is the
+ * only repair the measure of analysis 895 allows. The next operation of a workflow waits
+ * until the outbox holds no OPEN entry of that workflow any more. So a lost operation
  * cannot hide behind a later one which carries the same values.
  * <p>
  * {@code a895.delay} (ISO duration, default PT0S) is how long a workflow waits on a timer
  * between 'work' and the subprocess.
  * <p>
- * The file {@code control/starts-off} in the working directory switches the starts off, so
- * the run can drain.
+ * The file {@code control/starts-off} in the working directory switches the starts off.
+ * Then the run can drain.
  */
 @Component
 public class LoadDriver {
@@ -175,7 +175,7 @@ public class LoadDriver {
           workflow.processService().correlateMessage(aggregate, "Proceed895");
         });
         default -> {
-          // CORRELATED: the rest is the cluster's and the handlers' business
+          // CORRELATED: the rest is up to the cluster and the handlers
         }
       }
     }

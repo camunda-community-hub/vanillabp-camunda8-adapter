@@ -18,33 +18,32 @@ import io.vanillabp.spi.service.BpmsStartTrigger;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Consumes the execution-listener jobs of the start events of a process - of EVERY start
- * event, the plain one included. The listener gates the workflow: nothing of the
- * process runs before this job is completed, which is exactly the window VanillaBP needs to
- * decide what this start is and, where nobody started the workflow through VanillaBP, to
- * ask the application for its workflow aggregate and write its id into the instance.
+ * Consumes the execution-listener jobs of the start events of a process. That means EVERY
+ * start event, the plain one included. The listener gates the workflow. Nothing of the
+ * process runs before this job is completed. VanillaBP needs exactly this window. In it,
+ * it decides what this start is. And where nobody started the workflow through VanillaBP,
+ * it asks the application for its workflow aggregate and writes its id into the instance.
  * <p>
- * The name the cluster holds for a workflow is the process variable called after the
- * workflow aggregate's id attribute, which is where every other part of this adapter reads
- * it as well. The job fetches every variable, so the core finds that name without the
- * handler having to know the attribute - see decision 49 in the repository's
- * DECISIONS.md.
+ * The name the cluster holds for a workflow is the process variable named after the id
+ * attribute of the workflow aggregate. Every other part of this adapter reads it there as
+ * well. The job fetches every variable. So the core finds that name, and the handler does
+ * not have to know the attribute. See decision 49 in the repository's DECISIONS.md.
  * <p>
- * The job is completed with the aggregate's ID (named after the aggregate's ID
- * attribute - how this adapter addresses workflows) plus the values shared per
- * {@code @SyncWithBPMS}. A failing build fails the job with one retry less, the way the
- * handler of a service task does, so the cluster retries and finally raises an incident: a
- * workflow without an aggregate could never be processed.
+ * The job is completed with the ID of the aggregate plus the values shared per
+ * {@code @SyncWithBPMS}. The ID is named after the ID attribute of the aggregate, which is
+ * how this adapter addresses workflows. A failing build fails the job with one retry less,
+ * the way the handler of a service task does. So the cluster retries and finally raises an
+ * incident. A workflow without an aggregate could never be processed.
  * <p>
- * While the workflow module is shutting down the job is left to its lock
- * instead: a listener cut off by a restart is not a defect of the application, and the
- * cluster hands the job out again with its retries intact. Both commands this handler sends
- * back are repeated where the cluster rejected them for backpressure, and a job which is
- * failed after all gets a <code>retry-backoff</code>.
+ * While the workflow module is shutting down, the job is left to its lock instead. A
+ * listener cut off by a restart is not a defect of the application. The cluster hands the
+ * job out again with its retries intact. Both commands this handler sends back are
+ * repeated where the cluster rejected them for backpressure. A job which is failed after
+ * all gets a <code>retry-backoff</code>.
  * <p>
- * A job the cluster no longer holds is a late answer and not a failure: a redelivery answered
- * it first, or the instance ended another way. So either command which meets it writes a
- * debug line, and the handler goes on.
+ * A job the cluster no longer holds is a late answer and not a failure. A redelivery
+ * answered it first, or the instance ended another way. So either command which meets it
+ * writes a debug line, and the handler goes on.
  * <p>
  * Why the start event carries a listener the adapter injected is decision 5 in the repository's
  * DECISIONS.md; why this handler stays silent about a job during shutdown is decision 6 in the repository's
@@ -72,7 +71,7 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
 
   /**
    * What the workflow module has in flight, and whether it is going down.
-   * Never <code>null</code> - a handler built without one (tests) gets a drain of its own,
+   * Never <code>null</code>. A handler built without one (tests) gets a drain of its own,
    * which never shuts down.
    */
   private final Camunda8Drain drain;
@@ -84,7 +83,7 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
 
   /**
    * How long the cluster waits before it hands a failed job out again. May be
-   * <code>null</code> (tests) - then
+   * <code>null</code> (tests). Then
    * {@link Camunda8RetryBackoffResolver#DEFAULT_RETRY_BACKOFF} applies.
    */
   private final Camunda8RetryBackoffResolver retryBackoffResolver;
@@ -168,13 +167,13 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
               .join());
 
     } catch (final Exception e) {
-      // While the module is going down, the failure is the shutdown and not the
-      // application - the job keeps its lock and its retries
+      // While the module is going down, the failure comes from the shutdown and not from
+      // the application. The job keeps its lock and its retries.
       if (drain.leaveJobToItsLock(job.getKey(), KIND, startEventId, e)) {
         return;
       }
-      // and otherwise the same treatment a service task gets: the cluster counts the
-      // retries down and raises an incident once they are used up
+      // otherwise the same treatment a service task gets. The cluster counts the
+      // retries down and raises an incident once they are used up.
       final var retryBackoff = Camunda8RetryBackoffResolver
           .resolve(retryBackoffResolver, workflowModuleId, bpmnProcessId, null)
           .duration();
@@ -214,11 +213,11 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
   private BpmsInitiatedStartContext contextOf(
       final ActivatedJob job) {
 
-    // whatever the model set before the start event completed - an input mapping of
+    // whatever the model set before the start event completed: an input mapping of
     // the start event, or the payload a broadcast signal carried
     //
-    // not Map.copyOf: the cluster holds a variable set to null as a value like any other,
-    // and Map.copyOf throws on it. The native image test met exactly that and the start
+    // not Map.copyOf. The cluster holds a variable set to null as a value like any other,
+    // and Map.copyOf throws on it. The native image test ran into exactly that. The start
     // died with a NullPointerException nobody could read.
     final Map<String, Object> variables = Collections
         .unmodifiableMap(new LinkedHashMap<>(job.getVariablesAsMap()));
@@ -262,8 +261,8 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
 
       @Override
       public AggregateSyncMode getAggregateSyncMode() {
-        // a remote BPMS holds the values it evaluates: what the aggregate shares
-        // has to travel with the completion of this job
+        // a remote BPMS holds the values it evaluates. So what the aggregate shares
+        // has to travel with the completion of this job.
         return AggregateSyncMode.FULL;
       }
 

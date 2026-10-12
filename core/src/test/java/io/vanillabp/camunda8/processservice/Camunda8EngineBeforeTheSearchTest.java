@@ -35,13 +35,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The engine answers before the search does.
  * <p>
  * Measured on three lines: the engine says "this instance exists" 16 to 19 ms after the
- * create was sent, while the search which locates a workflow by its aggregate id needs 167 to
+ * create was sent. The search which finds a workflow by its aggregate id needs 167 to
  * 1324 ms. So where VanillaBP holds the process instance key, the election asks the engine
  * first.
  * <p>
- * The rule every test here circles: the probe may shorten the YES and nothing else. The
- * engine forgets an instance the moment it ends, so a key it does not hold covers a completed
- * workflow, a canceled one and a key which never existed alike - and only the search tells
+ * Every test here is about one rule: the probe may shorten the YES and nothing else. The
+ * engine forgets an instance the moment it ends. So a key it does not hold may be a
+ * completed workflow, a canceled one or a key which never existed. Only the search tells
  * those apart. A design which read the engine's 404 as "unknown" would send every ended
  * workflow of a migration setup to the wrong BPMS.
  */
@@ -60,8 +60,8 @@ public class Camunda8EngineBeforeTheSearchTest {
   @DisplayName("An instance the engine refuses the probe for is ACTIVE, and no search is sent")
   public void anInstanceTheEngineHoldsIsActiveWithoutASearch() {
 
-    // the modification names an element no model has, so the engine refuses it - which it
-    // can only do about an instance it holds, and which changes nothing about the workflow
+    // the modification names an element no model has, so the engine refuses it. It can only
+    // do that about an instance it holds, and it changes nothing about the workflow
     theEngineRefusesTheProbe(problem(400, "INVALID_ARGUMENT", "no such element"));
 
     assertEquals(
@@ -105,8 +105,8 @@ public class Camunda8EngineBeforeTheSearchTest {
   @DisplayName("A probe which cannot answer falls through to the search unchanged")
   public void aProbeWhichCannotAnswerChangesNothing() {
 
-    // an unreachable engine says nothing at all about whether the workflow is young, so it
-    // must never be read as a 404. The search decides, which is what reports an outage
+    // an unreachable engine says nothing at all about whether the workflow is young. So it
+    // must never be read as a 404. The search decides, and the search reports an outage
     theEngineRefusesTheProbe(new IllegalStateException("connection reset"));
     theSearchFinds(ProcessInstanceState.ACTIVE);
 
@@ -165,8 +165,8 @@ public class Camunda8EngineBeforeTheSearchTest {
   public void aModelCarryingTheReservedIdIsLeftAlone() {
 
     // an element id which by accident matches one of the model would be ACTIVATED instead
-    // of refused, which is a change to a running workflow nobody asked for. The deployment
-    // reads the models for it, and this is what that reading buys
+    // of refused. That changes a running workflow, and nobody asked for it. The deployment
+    // reads the models for that id, and this test shows what the reading is good for
     final var clientFactory = aClientFactory();
     clientFactory
         .getDeployedProcesses()
@@ -186,9 +186,9 @@ public class Camunda8EngineBeforeTheSearchTest {
   @DisplayName("On a cluster shared with another adapter id the engine is not asked at all")
   public void aSharedClusterIsLeftToTheSearch() {
 
-    // an instance key is unique per CLUSTER and names no scope, and the election hands the
-    // same key to every adapter of its list. Asking the engine here would answer about the
-    // other adapter id's instance and end the election at the wrong adapter
+    // an instance key is unique per CLUSTER and names no scope. The election hands the same
+    // key to every adapter of its list. Asking the engine here would answer about the
+    // instance of the other adapter id, and end the election at the wrong adapter
     theEngineRefusesTheProbe(problem(400, "INVALID_ARGUMENT", "no such element"));
     theSearchFindsNothing();
 
@@ -289,9 +289,8 @@ public class Camunda8EngineBeforeTheSearchTest {
   }
 
   /**
-   * A cluster with both windows configured, which is what the defaults look like: ten
-   * seconds for a workflow which may just have been started, three for one the engine has
-   * already forgotten.
+   * A cluster with both windows configured as the defaults are. Ten seconds for a workflow
+   * which may just have been started, three for one the engine has already forgotten.
    */
   private Camunda8ClientFactory aClientFactoryWithWindows() {
 
@@ -306,7 +305,7 @@ public class Camunda8EngineBeforeTheSearchTest {
       final boolean shared) {
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     return new Camunda8ClientFactory("c8", configuration) {
@@ -339,8 +338,8 @@ public class Camunda8EngineBeforeTheSearchTest {
   }
 
   /**
-   * Answers the probe rather than refusing it, which is what an element id matching one of
-   * the model would produce - the case the deployment check keeps away from here.
+   * Answers the probe instead of refusing it. An element id which matches one of the model
+   * would produce that. The deployment check keeps this case away from here.
    */
   @Test
   @DisplayName("An instance whose probe the engine TOOK is ACTIVE as well")

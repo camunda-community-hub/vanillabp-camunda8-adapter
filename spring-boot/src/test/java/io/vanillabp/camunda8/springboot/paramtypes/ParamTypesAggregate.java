@@ -11,19 +11,19 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 
 /**
- * The workflow aggregate of the parameter-types integration test. Every public getter of
- * an aggregate is shared with the cluster, so the four numbers and the nested object
- * below are what the process variables of this scenario hold.
+ * The workflow aggregate of the parameter-types integration test. Every public getter of an
+ * aggregate is shared with the cluster. So the process variables of this scenario hold the
+ * four numbers and the nested object below.
  * <p>
  * Each of the four numbers is chosen so that one of the types a handler may declare cannot
- * hold it. That is what the test around this aggregate is about.
+ * hold it. The test around this aggregate is about that.
  */
 @Entity
 @Table(name = "C8_PARAM_TYPES_AGGREGATE")
 public class ParamTypesAggregate {
 
   /**
-   * A decimal with a trailing zero, which is what the scale question is about.
+   * A decimal with a trailing zero. The question about the scale is about this zero.
    */
   public static final BigDecimal TOTAL = new BigDecimal("120.50");
 
@@ -67,7 +67,7 @@ public class ParamTypesAggregate {
   }
 
   /**
-   * A BigInteger has no JPA column type of its own, so the aggregate keeps the text and
+   * A BigInteger has no JPA column type of its own. So the aggregate stores the text and
    * shares the number.
    */
   @Transient
@@ -90,8 +90,8 @@ public class ParamTypesAggregate {
   }
 
   /**
-   * The same decimal one level down. No cell of this test reads it, and it travels along
-   * so that the cluster holds what the measurement measured against.
+   * The same decimal one level down. No branch of this test reads it. It is shared so that the
+   * cluster holds the same values the measurement was taken against.
    */
   @Transient
   public ParamTypesOrder getOrder() {

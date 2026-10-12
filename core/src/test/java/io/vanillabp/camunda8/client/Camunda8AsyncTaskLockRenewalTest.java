@@ -15,17 +15,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The window an open asynchronous task's job lock is renewed in, and what the
+ * The window in which the job lock of an open asynchronous task is renewed, and what the
  * startup refuses about it.
  * <p>
- * Two configurations are silent at runtime and expensive in production, so both end the
- * boot: the key which used to carry a horizon of fourteen days, and a window which does
- * not fit below <code>vanillabp.delivery.retention</code>. It is that retention and not
- * the outbox one: the two were one property until they were told apart, and this check
- * always argued about the delivery half. The record is what answers the
- * redelivery which renews the lock, so a window outliving it lets the
- * <code>&#64;WorkflowTask</code> method run a second time - the very defect the window
- * exists to fix.
+ * Two configurations say nothing at runtime and are expensive in production, so both end
+ * the boot. One is the key which used to carry a horizon of fourteen days. The other is a
+ * window which does not fit below <code>vanillabp.delivery.retention</code>. It is that
+ * retention, not the one of the outbox. The two were one property until they were split,
+ * and this check was always about the delivery half. The record answers the redelivery
+ * which renews the lock. So a window which outlives the record lets the
+ * <code>&#64;WorkflowTask</code> method run a second time. That is the very defect the
+ * window exists to fix.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8AsyncTaskLockRenewalTest {
@@ -113,7 +113,7 @@ public class Camunda8AsyncTaskLockRenewalTest {
   public void aNonPositiveMessageTimeToLiveEndsTheBoot() {
 
     // zero means the cluster drops every message this adapter publishes the moment it
-    // arrives, and nothing at runtime says so - a workflow waiting for one waits forever
+    // arrives, and nothing at runtime says so. A workflow which waits for one waits forever
     for (final var wrong : List.of(Duration.ZERO, Duration.ofSeconds(-1))) {
       final var configuration = new Camunda8AdapterConfiguration();
       configuration.setMessageTimeToLive(wrong);
@@ -124,11 +124,11 @@ public class Camunda8AsyncTaskLockRenewalTest {
 
       assertTrue(message.contains("vanillabp.adapters.c8.message-time-to-live"), message);
       assertTrue(message.contains("dropped the moment"), message);
-      // and the way out, including the level a number which cannot serve everything goes to
+      // and the way out, including the level where a number goes which cannot serve everything
       assertTrue(message.contains("messages.<message>"), message);
     }
 
-    // nothing configured is the normal case: the client's own default applies and
+    // nothing configured is the normal case. The client's default applies, and
     // VanillaBP sets nothing on the command
     assertDoesNotThrow(() -> new Camunda8AdapterConfiguration().validateMessageTimeToLive("c8"));
     final var configured = new Camunda8AdapterConfiguration();

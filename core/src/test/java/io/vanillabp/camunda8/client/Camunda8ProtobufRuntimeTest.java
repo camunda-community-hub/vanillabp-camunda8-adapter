@@ -17,10 +17,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The startup says what protobuf would say at the first command, and it says what to do
  * about it.
  * <p>
- * The refusal is provoked rather than waited for: protobuf's own exception is handed to the
- * check, which is the exception the generated code raises out of its static initializer.
- * Producing the real thing would mean running a test against a protobuf runtime older than
- * the client of the line, and the build pins one which is new enough on purpose.
+ * The test provokes the refusal instead of waiting for it. It hands the check protobuf's own
+ * exception, the one the generated code raises out of its static initializer.
+ * The real thing would need a test run against a protobuf runtime older than the client of
+ * the line. But the build pins a runtime which is new enough, on purpose.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ProtobufRuntimeTest {

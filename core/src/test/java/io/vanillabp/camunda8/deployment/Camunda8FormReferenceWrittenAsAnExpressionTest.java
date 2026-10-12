@@ -36,9 +36,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The external form reference of a Camunda-managed user task is its task definition. The core
  * finds the {@code @WorkflowTask} method by it, and the job type of the listeners is built from
  * it. Measured on 2026-10-06 against {@code camunda/camunda:8.10.0} with one model and one
- * method before this was refused: without prefixes a method written as
- * {@code taskDefinition = "=whichForm"} was served, and under {@code use-prefix} the boot ended
- * in the core's wiring validation, which said the method matched no task.
+ * method, before this was refused. Without prefixes, a method written as
+ * {@code taskDefinition = "=whichForm"} was served. Under {@code use-prefix} the boot ended in
+ * the core's wiring validation, which said the method matched no task.
  * <p>
  * Who claims the process decides what happens about it, the same way it decides about a job
  * type written as an expression.
@@ -106,8 +106,8 @@ public class Camunda8FormReferenceWrittenAsAnExpressionTest {
 
   /**
    * What one boot asked the core to validate, keyed by activity id. A boot which ends over the
-   * form reference must not have asked anything about it first: the method the core would
-   * demand is the message this test exists to replace.
+   * form reference must not have asked anything about it first. The core's message, which
+   * would demand a method, is the message this test exists to replace.
    */
   private static class Reported extends Camunda8DeploymentServiceTest.NoOpInvoker {
 
@@ -126,8 +126,8 @@ public class Camunda8FormReferenceWrittenAsAnExpressionTest {
   }
 
   /**
-   * The same core answering that no {@code @WorkflowService} class of the application claims the
-   * process - the answer the core gives by not knowing a workflow aggregate for it.
+   * The same core, answering that no {@code @WorkflowService} class of the application claims the
+   * process. The core gives that answer by not knowing a workflow aggregate for it.
    */
   private static class ReportedForAProcessNobodyClaims extends Reported {
 
@@ -156,7 +156,7 @@ public class Camunda8FormReferenceWrittenAsAnExpressionTest {
   }
 
   /**
-   * Preparing and wiring one model, unrun, so a test can catch what it refused.
+   * Preparing and wiring one model, not yet run, so a test can catch what it refused.
    */
   private static Runnable bootOf(
       final Reported core,
@@ -182,7 +182,7 @@ public class Camunda8FormReferenceWrittenAsAnExpressionTest {
                 bpmnProcessId) -> new Camunda8AllowConnectorsResolver.Setting(
                     connectorsAreAllowed, "vanillabp.adapters.c8.allow-connectors"));
     // the listeners are allowed, so a listener job type reaches this boot as something the
-    // application asked to be served: the shape of the value is what decides, not the key
+    // application asked to be served. The shape of the value decides, not the key
     service
         .setAllowListenersResolver(
             (Camunda8AllowListenersResolver) (

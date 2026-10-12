@@ -9,10 +9,10 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the modelled-listener integration test: one method for the task and
- * one per listener, each named after the job type the model carries. Under
- * {@code name-clash-avoidance: use-prefix} the cluster knows those job types prefixed, and that
- * the methods below are reached at all is what proves the prefixing and its way back.
+ * The workflow service of the modelled-listener integration test. It has one method for the
+ * task and one per listener. Each is named after the job type in the model. Under
+ * {@code name-clash-avoidance: use-prefix} the cluster knows those job types with a prefix. If
+ * the methods below are reached at all, the prefix and its way back both work.
  */
 @Service
 @WorkflowService(
@@ -39,8 +39,8 @@ public class ListenerDockerWorkflowService {
 
   /**
    * The <code>start</code> execution listener of the service task. Its completion carries no
-   * variables, so this flag reaches the database and the cluster learns of it at the next sync
-   * point, which is the completion of the task itself.
+   * variables. So this flag reaches the database, and the cluster learns of it at the next sync
+   * point. That is the completion of the task itself.
    */
   @WorkflowTask(taskDefinition = "prepareTheWork")
   public void prepareTheWork(
@@ -51,10 +51,10 @@ public class ListenerDockerWorkflowService {
   }
 
   /**
-   * The <code>end</code> execution listener of the service task, and the method the gateway
-   * behind the task depends on: this flag is false in the cluster until this method sets it, so
-   * the process only takes the flow to {@link #confirmTheAudit} when the completion of this
-   * listener really carried the shared values.
+   * The <code>end</code> execution listener of the service task. The gateway behind the task
+   * depends on this method. This flag is false in the cluster until this method sets it. So the
+   * process takes the flow to {@link #confirmTheAudit} only if the completion of this listener
+   * really carried the shared values.
    */
   @WorkflowTask(taskDefinition = "auditTheWork")
   public void auditTheWork(
@@ -76,8 +76,8 @@ public class ListenerDockerWorkflowService {
   }
 
   /**
-   * The task the gateway takes otherwise, so a lost value fails the test with a flag saying
-   * which way the process went rather than with a timeout.
+   * The task the gateway takes otherwise. So a lost value fails the test with a flag which says
+   * which way the process went, and not with a timeout.
    */
   @WorkflowTask(taskDefinition = "reportTheLoss")
   public void reportTheLoss(
@@ -88,8 +88,8 @@ public class ListenerDockerWorkflowService {
   }
 
   /**
-   * The <code>end</code> execution listener of the end event, which is the placement version 1
-   * served on Camunda 7 and never on Camunda 8.
+   * The <code>end</code> execution listener of the end event. Version 1 served a listener there
+   * on Camunda 7, but never on Camunda 8.
    */
   @WorkflowTask(taskDefinition = "archiveTheOrder")
   public void archiveTheOrder(

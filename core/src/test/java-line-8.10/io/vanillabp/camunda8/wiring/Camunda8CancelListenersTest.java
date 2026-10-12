@@ -19,8 +19,8 @@ import io.vanillabp.spi.service.WorkflowEnd;
  * What release line <code>8.10</code> can say about an instance which was canceled: it has the
  * <code>cancel</code> execution listener of the process element, so it can say it.
  * <p>
- * The siblings of this test in the directories of the older lines assert the opposite, which is
- * the whole reason the three live per line.
+ * The siblings of this test in the directories of the older lines assert the opposite. That is
+ * the whole reason why the three live per line.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CancelListenersTest {

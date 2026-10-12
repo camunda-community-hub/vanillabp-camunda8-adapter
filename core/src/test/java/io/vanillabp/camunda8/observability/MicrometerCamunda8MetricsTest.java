@@ -15,9 +15,9 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What this adapter adds to the meters the platform publishes for every BPMS.
- * The client increments the job counters itself through the hook it is handed, so what
- * is pinned here is the naming, the tagging and the two states a registry can be in.
+ * What this adapter adds to the meters the platform publishes for every BPMS. The client
+ * counts the jobs itself, through the hook it is handed. So this test pins the naming, the
+ * tags and the two states a registry can be in: bound or not bound yet.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class MicrometerCamunda8MetricsTest {

@@ -10,8 +10,8 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of the test which completes a user task the cluster is still
- * creating. It carries nothing but its id: what the application was told is kept in the
- * static maps of {@link StillCreatingDockerWorkflowService}, for the reason written on
+ * creating. It holds nothing but its id. What the application was told is kept in the static
+ * maps of {@link StillCreatingDockerWorkflowService}. The reason is written on
  * {@link UserTaskProbeDockerAggregate}.
  */
 @Entity

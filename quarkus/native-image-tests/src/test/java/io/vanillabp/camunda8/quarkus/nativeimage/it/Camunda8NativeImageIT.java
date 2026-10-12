@@ -20,20 +20,19 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * Runs the native binary of this module against a real Camunda 8 cluster.
  * <p>
- * The image was built by the Quarkus plugin in the <code>package</code> phase, which is
- * why this is an integration test: at <code>test</code> time there is no binary yet. And
- * a binary which was built is not a binary which runs - the whole reason this module
- * exists is a deployment which parses BPMN, which the image could not do until the
- * adapter's extension registered what the parser reads. So the test starts the binary,
- * gives it a cluster and reads its exit code; the application's own main decides what
- * that code is (see {@code NativeImageApplication}).
+ * The Quarkus plugin built the image in the <code>package</code> phase. That is why this is an
+ * integration test: at <code>test</code> time there is no binary yet. And a binary which was
+ * built is not yet a binary which runs. This module exists because of a deployment which
+ * parses BPMN. The image could not do that until the adapter's extension registered what the
+ * parser reads. So the test starts the binary, gives it a cluster and reads its exit code.
+ * The application's own main decides what that code is (see {@code NativeImageApplication}).
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8NativeImageIT {
 
   /**
-   * How long the binary may take to boot, deploy, run its workflow and exit. Its own
-   * main waits two minutes for the job, so this is that plus room for the boot.
+   * How long the binary may take to boot, deploy, run its workflow and exit. Its own main
+   * waits two minutes for the job. So this is those two minutes plus time for the boot.
    */
   private static final Duration UNTIL_EXITED = Duration.ofMinutes(4);
 
@@ -73,9 +72,8 @@ public class Camunda8NativeImageIT {
   }
 
   /**
-   * What the binary printed and what it returned. Its output is the only report a
-   * failing run leaves behind, so it travels with the exit code rather than into the
-   * void.
+   * What the binary printed and what it returned. Its output is the only report which a
+   * failing run leaves behind. So it travels with the exit code and is not lost.
    *
    * @param exitCode The exit code of the binary
    * @param text Everything it wrote to stdout and stderr
@@ -89,12 +87,12 @@ public class Camunda8NativeImageIT {
     final var log = binary
         .resolveSibling("native-image-application.log");
     final var process = new ProcessBuilder(binary.toString())
-        // only the test knows the port Testcontainers mapped
         .redirectErrorStream(true)
         .redirectOutput(log.toFile())
         .directory(binary
             .getParent()
             .toFile());
+    // only the test knows the port Testcontainers mapped
     process
         .environment()
         .put(

@@ -16,34 +16,35 @@ import io.vanillabp.spi.service.WorkflowEnd;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Consumes the END execution-listener jobs of a process whose application wants to
- * be told that a workflow ended. The job is activated after the last
- * element of the process completed and gates the disappearance of the instance,
- * which is the window VanillaBP uses to call the application.
+ * Consumes the END execution-listener jobs of a process whose application wants to be told
+ * that a workflow ended. The job is activated after the last element of the process
+ * completed. It gates the disappearance of the instance. VanillaBP uses that window to call
+ * the application.
  * <p>
- * From release line 8.10 the same worker also consumes the CANCEL execution-listener job of
- * the process, which the cluster runs when an instance is terminated through the API. The two
- * jobs carry the same job type and are told apart by the event the job reports, so the
+ * From release line 8.10 on, the same worker also consumes the CANCEL execution-listener job
+ * of the process. The cluster runs it when an instance is terminated through the API. The two
+ * jobs carry the same job type. They are told apart by the event the job reports. So the
  * application hears {@link WorkflowEnd.Kind#CANCELED} for a canceled instance and
  * {@link WorkflowEnd.Kind#COMPLETED} for one which reached an end event. On the lines before
- * that one no cancel job exists, the boot says so, and a canceled instance is removed without
- * a word.
+ * 8.10 no cancel job exists, and the boot says so. There a canceled instance is removed
+ * without a word.
  * <p>
- * Two ends are NOT cancelations, whatever they look like in a model: a terminate end event and
- * an interrupting event subprocess both COMPLETE the instance, the end listener runs and no
- * cancel job is created. That is the cluster's view and not a gap this adapter can close.
+ * Two ends are NOT cancelations, whatever they look like in a model. A terminate end event
+ * and an interrupting event subprocess both COMPLETE the instance. The end listener runs and
+ * no cancel job is created. That is how the cluster sees it, and this adapter cannot close
+ * that gap.
  * <p>
  * A failing notification fails the job with one retry less, the way the handler of a
- * service task does, so the cluster retries and finally raises an incident. While the
- * workflow module is shutting down the job is left to its lock instead: a
- * notification cut off by a restart is not a defect of the application, and the cluster
- * hands the job out again with its retries intact. Both commands this handler sends back
- * are repeated where the cluster rejected them for backpressure, and a job which is failed
- * after all gets a <code>retry-backoff</code>.
+ * service task does. So the cluster retries and finally raises an incident. While the
+ * workflow module is shutting down, the job is left to its lock instead. A notification cut
+ * off by a restart is not a defect of the application. The cluster hands the job out again
+ * with its retries intact. Both commands this handler sends back are repeated where the
+ * cluster rejected them for backpressure. A job which is failed after all gets a
+ * <code>retry-backoff</code>.
  * <p>
- * A job the cluster no longer holds is a late answer and not a failure: a redelivery answered
- * it first, or the instance ended another way. So either command which meets it writes a
- * debug line, and the handler goes on.
+ * A job the cluster no longer holds is a late answer and not a failure. A redelivery
+ * answered it first, or the instance ended another way. So either command which meets it
+ * writes a debug line, and the handler goes on.
  * <p>
  * Why the end of a workflow is reported through a listener the adapter injected is decision 5 in
  * the repository's DECISIONS.md; why this handler stays silent about a job during shutdown is
@@ -62,7 +63,7 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
   private final String bpmnProcessId;
 
   /**
-   * The name of the variable carrying the workflow aggregate's ID.
+   * The name of the variable carrying the ID of the workflow aggregate.
    */
   private final String aggregateIdVariable;
 
@@ -70,7 +71,7 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
 
   /**
    * What the workflow module has in flight, and whether it is going down.
-   * Never <code>null</code> - a handler built without one (tests) gets a drain of its own,
+   * Never <code>null</code>. A handler built without one (tests) gets a drain of its own,
    * which never shuts down.
    */
   private final Camunda8Drain drain;
@@ -82,7 +83,7 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
 
   /**
    * How long the cluster waits before it hands a failed job out again. May be
-   * <code>null</code> (tests) - then
+   * <code>null</code> (tests). Then
    * {@link Camunda8RetryBackoffResolver#DEFAULT_RETRY_BACKOFF} applies.
    */
   private final Camunda8RetryBackoffResolver retryBackoffResolver;
@@ -94,7 +95,7 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
    * @param adapterId The adapter id this handler belongs to
    * @param workflowModuleId The workflow module the process belongs to
    * @param bpmnProcessId The PLAIN BPMN process id whose end is reported
-   * @param aggregateIdVariable The process variable carrying the workflow aggregate's id
+   * @param aggregateIdVariable The process variable carrying the id of the workflow aggregate
    * @param workflowEndedInvoker What the platform calls when a workflow of that process ended
    * @param drain Where the running handler is counted, or <code>null</code> for a drain of its own
    * @param retryBackoffResolver Answers how long the cluster waits before it offers a failed job
@@ -132,10 +133,10 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
       final var kind = whatHappenedToTheInstance(job);
       final var aggregateId = job.getVariablesAsMap().get(aggregateIdVariable);
       if (kind == null) {
-        // the client's event types grow inside a line, and a cluster newer than this build
+        // the event types of the client grow inside a line. A cluster newer than this build
         // reports one it does not know as UNKNOWN_ENUM_VALUE. Reading such a job as an end
-        // would tell the application something untrue, so the job is answered and nothing
-        // is reported
+        // would tell the application something untrue. So the job is answered and nothing
+        // is reported.
         log
             .warn(
                 "Camunda8[{}]: the execution-listener job '{}' of the instance '{}' of '{}' reports "
@@ -150,8 +151,8 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
                 bpmnProcessId,
                 job.getListenerEventType());
       } else if (aggregateId == null) {
-        // not a VanillaBP workflow, or its aggregate-ID variable was removed: there
-        // is nothing this end could be reported for
+        // not a VanillaBP workflow, or its aggregate-ID variable was removed. There
+        // is nothing this end could be reported for.
         log
             .debug(
                 "Camunda8[{}]: the instance '{}' of '{}' carries no '{}' variable - its end is not reported",
@@ -180,12 +181,12 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
               .join());
 
     } catch (final Exception e) {
-      // While the module is going down, the failure is the shutdown and not the
-      // application - the job keeps its lock and its retries
+      // While the module is going down, the failure comes from the shutdown and not from
+      // the application. The job keeps its lock and its retries.
       if (drain.leaveJobToItsLock(job.getKey(), KIND, job.getType(), e)) {
         return;
       }
-      // and otherwise the same treatment a service task gets
+      // otherwise the same treatment a service task gets
       final var retryBackoff = Camunda8RetryBackoffResolver
           .resolve(retryBackoffResolver, workflowModuleId, bpmnProcessId, null)
           .duration();
@@ -226,9 +227,9 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
    * How the instance of this job ended, or <code>null</code> where the job reports an event
    * this handler does not serve.
    * <p>
-   * Asked this way round on purpose. The client's enum grows inside a line and reports an
-   * event it does not know as <code>UNKNOWN_ENUM_VALUE</code>, so reading anything but the
-   * two known events as an end would tell the application something untrue.
+   * It is asked this way round on purpose. The enum of the client grows inside a line. It
+   * reports an event it does not know as <code>UNKNOWN_ENUM_VALUE</code>. So reading anything
+   * but the two known events as an end would tell the application something untrue.
    * {@code Camunda8UserTaskListenerHandler.whatHappenedToTheTask} is the same shape.
    *
    * @param job The execution-listener job
@@ -273,10 +274,10 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
 
       @Override
       public String getWorkflowId() {
-        // the key of THIS instance, which is what lets the core limit its derivation to
-        // it. Never getRootProcessInstanceKey(): that names the root of the call tree,
-        // and a called process whose parent was canceled gets a job of its own for its
-        // own instance
+        // the key of THIS instance. With it, the core can limit its derivation to this
+        // instance. Never getRootProcessInstanceKey(). That names the root of the call tree.
+        // And a called process whose parent was canceled gets a job of its own for its
+        // own instance.
         return String.valueOf(job.getProcessInstanceKey());
       }
 
@@ -287,8 +288,8 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
 
       @Override
       public String getEndEventId() {
-        // the listener sits on the PROCESS, so the cluster reports the process as
-        // the element - which end event was reached is not part of the job
+        // the listener sits on the PROCESS. So the cluster reports the process as the
+        // element. Which end event was reached is not part of the job.
         return null;
       }
 

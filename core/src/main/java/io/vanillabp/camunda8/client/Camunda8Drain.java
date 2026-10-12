@@ -15,28 +15,28 @@ import lombok.extern.slf4j.Slf4j;
  * What one workflow module of one adapter instance does with the work it has in flight
  * while the application is going down.
  * <p>
- * The Camunda client does not drain: {@code JobWorker#close()} returns without waiting
- * for the handlers of the jobs the worker already activated, and {@code
- * CamundaClient#close()} shuts its executor down with an interrupt, measured at two
- * milliseconds after the call. An interrupted handler throws, the adapter used to answer
- * every failure with {@code newFailCommand(retries - 1)}, and so an ordinary restart cost
- * one retry per job in flight - a rolling restart across replicas could walk a job into an
- * incident which has nothing to do with the business logic.
+ * The Camunda client does not drain. {@code JobWorker#close()} returns without waiting
+ * for the handlers of the jobs the worker already activated. {@code CamundaClient#close()}
+ * shuts its executor down with an interrupt, measured at two milliseconds after the call.
+ * An interrupted handler throws. The adapter used to answer every failure with
+ * {@code newFailCommand(retries - 1)}. So an ordinary restart cost one retry per job in
+ * flight. A rolling restart across replicas could drive a job into an incident which has
+ * nothing to do with the business logic.
  * <p>
- * This object is the answer, and it does two things. It counts what is in flight: every
- * handler of the module registers the job it is running and deregisters it afterwards, so
- * the shutdown can wait for the handlers to come back ({@link #awaitEveryModuleQuiet},
- * which waits for every module of the adapter instance at once) before the
- * client is closed under them, and what is still running when the grace period passed is
- * named per job so an operator knows what was cut off. And it carries the module's state:
- * while it is shutting down, a failing delivery is not the application's fault and is not
- * reported as one ({@link #leaveJobToItsLock}). Such a job keeps its lock, the cluster
- * hands it out again when the lock expires, its retries untouched, and VanillaBP's
- * delivery record decides whether the work has to run again.
+ * This object is the answer, and it does two things. First, it counts what is in flight.
+ * Every handler of the module registers the job it is running, and deregisters it
+ * afterwards. So the shutdown can wait for the handlers to come back before the client is
+ * closed under them ({@link #awaitEveryModuleQuiet} waits for every module of the adapter
+ * instance at once). What is still running when the grace period is over is named per job,
+ * so an operator knows what was cut off. Second, it carries the state of the module. While
+ * the module is shutting down, a failing delivery is not the fault of the application and
+ * is not reported as one ({@link #leaveJobToItsLock}). Such a job keeps its lock and its
+ * retries. The cluster hands it out again when the lock expires. The delivery record of
+ * VanillaBP decides whether the work has to run again.
  * <p>
  * <b>Why the drain waits for the workers as well.</b>
- * {@code JobWorker#isClosed()} is the client's own answer and it means three things at
- * once: the worker was closed, no activation request of it is in flight, and no activated
+ * {@code JobWorker#isClosed()} is the client's own answer, and it means three things at
+ * once. The worker was closed, no activation request of it is in flight, and no activated
  * job is left. This adapter does not wait for it, because a worker long-polls with the
  * request timeout (ten seconds by default) and closing it does not cancel the request in
  * flight, so a worker which runs nothing at all reports {@code false} for as long as that
@@ -44,21 +44,21 @@ import lombok.extern.slf4j.Slf4j;
  * the difference between an ordinary restart and a job which waits for its lock.
  * <p>
  * Measured against {@code camunda/camunda:8.9.16}, plain client, no VanillaBP: an
- * activation request which is parked at the cluster when its client is closed STAYS
- * parked. A job created afterwards is activated into it, nobody answers, and the worker
+ * activation request which waits at the cluster when its client is closed KEEPS waiting
+ * there. A job created after that is activated into it, and nobody answers. The worker
  * which is open at that moment sees the job only when the lock expires. With a gap of
- * seven seconds between the two applications the first job of the new one took 20027 to
- * 21559 ms in twenty runs at a {@code job-timeout} of {@code PT20S}, and 10 to 29 ms in
+ * seven seconds between the two applications, the first job of the new one took 20027 to
+ * 21559 ms in twenty runs at a {@code job-timeout} of {@code PT20S}. It took 10 to 29 ms in
  * twenty runs of the same scenario where the shutdown waited for the workers. A gap of
  * twelve seconds, which is above the request timeout, costs nothing either way. So the
- * hole is exactly as long as an activation request of the closed client can outlive it,
- * and waiting for the workers to report themselves closed is what shuts it. Only the REST
- * poll keeps such a request: over gRPC and over the push path of {@code stream-enabled}
- * the same scenario delivers in milliseconds without any wait.
+ * hole is exactly as long as an activation request of the closed client can outlive it.
+ * Waiting until the workers report themselves closed is what closes the hole. Only the
+ * REST poll keeps such a request. Over gRPC and over the push path of
+ * {@code stream-enabled}, the same scenario delivers in milliseconds without any wait.
  * <p>
- * Jobs activated but never handed to a handler are covered by the same wait: they are
- * what {@code isClosed()} counts as remaining, so the grace is spent on them rather than
- * on their lock.
+ * Jobs which were activated but never handed to a handler are covered by the same wait.
+ * {@code isClosed()} counts them as remaining. So the grace is spent on them, and they do
+ * not wait for their lock.
  * <p>
  * Why a shutdown waits for the handlers AND for the cluster releasing the workers, and why no
  * worker reports a job as failed while it runs, is decision 6 in the repository's DECISIONS.md.
@@ -69,8 +69,8 @@ import lombok.extern.slf4j.Slf4j;
 public class Camunda8Drain {
 
   /**
-   * How often the drain looks whether the handlers came back. Short enough not to add a
-   * noticeable delay to a shutdown which has nothing to wait for.
+   * How often the drain checks whether the handlers came back. It is short enough not to
+   * add a delay anyone notices to a shutdown which has nothing to wait for.
    */
   static final long POLL_MILLIS = 50;
 
@@ -86,8 +86,8 @@ public class Camunda8Drain {
   private volatile boolean shuttingDown;
 
   /**
-   * Opens the drain of one workflow module. The client factory builds one per module, on first
-   * use.
+   * Opens the drain of one workflow module. The client factory builds one per module, on
+   * first use.
    *
    * @param adapterId The adapter instance this belongs to
    * @param workflowModuleId The workflow module whose workers are drained
@@ -104,11 +104,11 @@ public class Camunda8Drain {
   /**
    * A delivery whose handler is running right now.
    * <p>
-   * The workflow module and the thread are here for the watch which looks for a slot
-   * nobody gives back. The module completes what a job timeout is resolved from, and the
-   * thread is what a stack trace of an overdue handler is taken from. The entry is
-   * removed when the handler returns, so nothing holds a thread alive for longer than the
-   * handler itself.
+   * The workflow module and the thread are here for the watch which looks for a slot that
+   * nobody gives back. The module completes what a job timeout is resolved from. The
+   * stack trace of an overdue handler is taken from the thread. The entry is removed when
+   * the handler returns. So nothing keeps a thread alive for longer than the handler
+   * itself.
    *
    * @param jobKey The job key the cluster handed out
    * @param kind What kind of worker delivered it (for the message)
@@ -157,9 +157,9 @@ public class Camunda8Drain {
   }
 
   /**
-   * Whether the workers of this workflow module are going down. Set before the workers are
-   * closed, so a handler which is interrupted by the shutdown can tell the difference
-   * between its own failure and the shutdown.
+   * Whether the workers of this workflow module are going down. It is set before the
+   * workers are closed. So a handler which the shutdown interrupts can tell its own failure
+   * apart from the shutdown.
    *
    * @return Whether shutdown began
    */
@@ -170,9 +170,9 @@ public class Camunda8Drain {
   }
 
   /**
-   * Marks the module as shutting down. Called by {@code stopWorkflowProcessing} BEFORE the
-   * workers are closed - a job failing between the flag and the close is already a job the
-   * shutdown cut off.
+   * Marks the module as shutting down. {@code stopWorkflowProcessing} calls this BEFORE the
+   * workers are closed. A job which fails between the flag and the close is already a job
+   * the shutdown cut off.
    */
   public void beginShutdown() {
 
@@ -203,8 +203,8 @@ public class Camunda8Drain {
   }
 
   /**
-   * Deregisters a delivery whose handler returned - in a {@code finally}, so a handler
-   * which threw is gone from the drain as well.
+   * Deregisters a delivery whose handler returned. It is called in a {@code finally}, so a
+   * handler which threw is gone from the drain as well.
    *
    * @param jobKey The job key
    */
@@ -216,8 +216,8 @@ public class Camunda8Drain {
   }
 
   /**
-   * What this module has in flight, which is what a shutdown waits for and what a report names
-   * where it gave up waiting.
+   * What this module has in flight. A shutdown waits for it, and a report names it where
+   * the shutdown gave up waiting.
    *
    * @return The deliveries whose handler is running right now
    */
@@ -228,14 +228,14 @@ public class Camunda8Drain {
   }
 
   /**
-   * What one workflow module's shutdown ended with: how long it waited, how many workers
-   * it closed, whether the handlers came back, and whether the cluster released the
-   * activation requests of those workers.
+   * What the shutdown of one workflow module ended with. It says how long it waited, how
+   * many workers it closed, whether the handlers came back, and whether the cluster
+   * released the activation requests of those workers.
    * <p>
-   * The two booleans are deliberately separate. Whether the workers were CLOSED is this
-   * adapter's own action and is therefore a count rather than a guess; whether they are
-   * RELEASED is the client's answer, and it is the one which decides whether closing the
-   * client now leaves a request parked at the cluster.
+   * The two booleans are separate on purpose. Whether the workers were CLOSED is an action
+   * of this adapter, so it is a count and not a guess. Whether they are RELEASED is the
+   * client's answer. That answer decides whether closing the client now leaves a request
+   * waiting at the cluster.
    *
    * @param waitedMillis How long the shutdown waited
    * @param workersClosed How many workers of this module were closed
@@ -249,7 +249,7 @@ public class Camunda8Drain {
                              boolean workersReleased) {
 
     /**
-     * Whether both halves came back, which is the only outcome a shutdown may call clean.
+     * Whether both halves came back. Only then may a shutdown call itself clean.
      *
      * @return Whether the module is quiet: no handler inside the application, no
      *         activation request of this module left at the cluster
@@ -263,12 +263,12 @@ public class Camunda8Drain {
   }
 
   /**
-   * Waits until this workflow module is quiet, or until the grace period passed: no
-   * handler running any more, and every worker reporting itself closed.
+   * Waits until this workflow module is quiet, or until the grace period is over. Quiet
+   * means that no handler is running any more and every worker reports itself closed.
    * <p>
-   * The one-module case of {@link #awaitEveryModuleQuiet}, which is what an application
-   * with a single workflow module has and what the backstop of the client factory does with
-   * a module that stopped on its own.
+   * This is the one-module case of {@link #awaitEveryModuleQuiet}. An application with a
+   * single workflow module uses it. The backstop of the client factory uses it too, for a
+   * module that stopped on its own.
    *
    * @param grace How long the shutdown waits
    * @param workersClosed How many workers of this module were closed before the wait
@@ -290,11 +290,11 @@ public class Camunda8Drain {
   /**
    * One workflow module whose workers are closed and which is now waiting to be released.
    * <p>
-   * It exists because the grace period is ONE budget for the whole application: the
-   * platform stops the modules one after another, and an adapter which spent a grace per
-   * module would spend the application's budget as often as it has modules. So the
-   * shutdown closes the workers of each module as that module is stopped and collects what
-   * it closed here, and the last module turns the collection into the one wait
+   * It exists because the grace period is ONE budget for the whole application. The
+   * platform stops the modules one after another. An adapter which spent a grace per module
+   * would spend the budget of the application as often as it has modules. So the shutdown
+   * closes the workers of each module when that module is stopped, and collects here what
+   * it closed. The last module turns the collection into the one wait
    * ({@link #awaitEveryModuleQuiet}).
    *
    * @param drain The drain of that module, which knows what it has in flight
@@ -310,28 +310,28 @@ public class Camunda8Drain {
 
   /**
    * Waits until EVERY workflow module which was closed is quiet, or until the grace period
-   * passed: no handler of any of them running any more, and every one of their workers
-   * reporting itself closed.
+   * is over. Quiet means that no handler of any of them is running any more, and every one
+   * of their workers reports itself closed.
    * <p>
-   * This is the wait of one application rather than of one module, and that is the whole
-   * point of it. The workers of a module which is still open keep renewing their activation
-   * request while another module is drained, so the module stopped next has a request of its
-   * own to sit out, and worse: the closed workers of the module being drained wait behind
-   * the still polling workers of the others, which can cost more than one request timeout.
-   * Closing every module's workers first and waiting once leaves the application with one
-   * wait, which is the number its runtime's shutdown budget can be held against.
+   * This is the wait of one application, not of one module, and that is the whole point.
+   * The workers of a module which is still open keep renewing their activation request
+   * while another module is drained. So the module stopped next has a request of its own
+   * to wait for. Worse, the closed workers of the module being drained wait behind the
+   * workers of the others, which still poll. That can cost more than one request timeout.
+   * If the workers of every module are closed first, the application waits only once. That
+   * one wait is what the shutdown budget of its runtime can be compared with.
    * <p>
    * Measured on 2026-10-01 with {@code Camunda8WhatSeveralModulesPayForAShutdownIT} against
    * {@code camunda/camunda:8.9.21}, one client with a pool of 256, a request timeout of
    * {@code PT10S}, a grace of {@code PT20S} and thirty workers per module: three modules
-   * drained one after another took 32743 ms, which is past the thirty seconds the runtime
-   * grants, and the last of them gave up after the whole grace with its workers still
-   * holding a request. The same three modules closed first and then waited for together took
-   * 5242 ms, with every module quiet.
+   * drained one after another took 32743 ms. That is more than the thirty seconds the
+   * runtime grants. The last of them gave up after the whole grace, and its workers still
+   * held a request. The same three modules, closed first and then waited for together, took
+   * 5242 ms, and every module was quiet.
    * <p>
-   * Every module gets the same waited time, because there was one wait. What is read per
-   * module is whether ITS handlers came back and whether ITS workers were released, so each
-   * of them still reports its own outcome.
+   * Every module gets the same waited time, because there was one wait. Per module the wait
+   * reads whether ITS handlers came back and whether ITS workers were released. So each of
+   * them still reports its own outcome.
    *
    * @param closed What the shutdown closed, one entry per workflow module
    * @param grace How long the shutdown waits, all modules together
@@ -369,9 +369,9 @@ public class Camunda8Drain {
   }
 
   /**
-   * What one workflow module answered in one round of the wait. The round is where the two
-   * answers are taken, so a module is asked once per round and the outcome reports what it
-   * said in the round the wait ended in.
+   * What one workflow module answered in one round of the wait. The round takes the two
+   * answers. So a module is asked once per round, and the outcome reports what it said in
+   * the last round of the wait.
    *
    * @param workersClosed How many workers of it were closed
    * @param handlersReturned Whether its handlers came back
@@ -409,13 +409,13 @@ public class Camunda8Drain {
   }
 
   /**
-   * Says what the shutdown of this workflow module ended with, which is the line an
-   * operator reads next to "Closing Camunda 8 client".
+   * Says what the shutdown of this workflow module ended with. An operator reads this line
+   * next to "Closing Camunda 8 client".
    * <p>
-   * It can only report what this adapter knows: the workers it closed is a count it took
-   * itself, and whether the cluster released them is the client's answer, asked after the
-   * wait rather than during it. A line claiming the workers were not closed while the
-   * client is going down cannot be produced here.
+   * It can only report what this adapter knows. The number of workers it closed is a count
+   * it took itself. Whether the cluster released them is the client's answer, asked after
+   * the wait and not during it. So this cannot write a line which claims that the workers
+   * were not closed while the client is going down.
    *
    * @param grace The grace period the shutdown was given
    * @param outcome What {@link #awaitQuiet} ended with
@@ -440,9 +440,9 @@ public class Camunda8Drain {
     if (outcome.workersReleased()) {
       return;
     }
-    // a grace of zero is a decision, not an accident: the operator asked for a shutdown
-    // which waits for nothing and gets the consequence at INFO rather than as a warning
-    // on every single restart
+    // a grace of zero is a decision, not an accident. The operator asked for a shutdown
+    // which waits for nothing. So the consequence comes at INFO, and not as a warning on
+    // every single restart
     final var message = """
         Camunda8[{}]: workflow module '{}' was stopped after {} ms with at least one of its {} closed \
         workers still holding an activation request at the cluster. Closing the client now leaves that \
@@ -464,9 +464,9 @@ public class Camunda8Drain {
   }
 
   /**
-   * Names what is still running after the grace period passed, once per job: those handlers
-   * are about to be interrupted by the closing client, and their jobs stay locked until the
-   * cluster hands them out again.
+   * Names what is still running after the grace period is over, once per job. The closing
+   * client is about to interrupt those handlers. Their jobs stay locked until the cluster
+   * hands them out again.
    *
    * @param grace The grace period which passed
    */
@@ -494,15 +494,15 @@ public class Camunda8Drain {
   }
 
   /**
-   * Whether a failed delivery is the shutdown rather than the application - the rule being
-   * the adapter's STATE and not the kind of exception: a handler interrupted by the closing
-   * client throws whatever the interrupt made it throw, and none of those exceptions is
-   * distinguishable from a genuine failure which happened to occur at the same moment.
+   * Whether a failed delivery is caused by the shutdown and not by the application. The
+   * STATE of the adapter decides, not the kind of exception. A handler which the closing
+   * client interrupts throws whatever the interrupt made it throw. None of those exceptions
+   * can be told apart from a real failure which happened at the same moment.
    * <p>
-   * Where it is the shutdown, the job is deliberately left to its lock: no
-   * {@code newFailCommand}, so the cluster redelivers it after the lock expires with its
-   * retries intact. It is logged at INFO with the job key, because a job left behind by a
-   * restart is a normal event but not an invisible one.
+   * If it is the shutdown, the job is left to its lock on purpose. There is no
+   * {@code newFailCommand}, so the cluster delivers the job again after the lock expires,
+   * with its retries intact. It is logged at INFO with the job key. A job left behind by a
+   * restart is a normal event, but it should not be invisible.
    *
    * @param jobKey The job key
    * @param kind What kind of worker delivered it

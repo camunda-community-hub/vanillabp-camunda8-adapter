@@ -12,8 +12,8 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the timer-start integration test. The cluster starts this
- * workflow, so the aggregate is built here and nowhere else, and the task following the
- * start event has to find it through the aggregate-ID variable the start listener wrote.
+ * workflow, so the aggregate is built here and nowhere else. The task after the start event
+ * has to find it through the aggregate-ID variable which the start listener wrote.
  */
 @Service
 @WorkflowService(
@@ -22,7 +22,7 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class TimerStartDockerWorkflowService {
 
   /**
-   * Builds the workflow aggregate of the workflow the timer started.
+   * Builds the workflow aggregate of the workflow which the timer started.
    *
    * @param trigger What the cluster fired
    * @return The workflow aggregate of the started workflow
@@ -32,8 +32,8 @@ public class TimerStartDockerWorkflowService {
       final BpmsStartTrigger trigger) {
 
     final var aggregate = new TimerStartDockerAggregate();
-    // the name of the workflow is the application's choice, and the cluster keeps it in
-    // the process variable named after this aggregate's id attribute
+    // the application chooses the name of the workflow. The cluster keeps it in the process
+    // variable which is named after this aggregate's id attribute
     aggregate.setId("timer-"
         + java.util.UUID.randomUUID());
     aggregate.setStartedBy(trigger.kind().name());

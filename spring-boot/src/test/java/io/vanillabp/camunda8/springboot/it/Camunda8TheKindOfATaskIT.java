@@ -25,32 +25,33 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * Which kind of task the delivery record says an id is, against a real cluster.
  * <p>
- * A Camunda 8 job key and a Camunda 8 user-task key are two namespaces. An application
- * which hands a user-task key to {@code completeTask} names a key the engine's job commands
- * find nothing under, however alive the user task is, and the answer it used to get listed
- * everything the id could be instead of naming the mistake. The record has carried the kind
- * since story 824 and the platform asks the adapter for it. This class is the measurement
- * that this adapter answers.
+ * A Camunda 8 job key and a Camunda 8 user-task key live in two namespaces. An application
+ * may hand a user-task key to {@code completeTask}. The engine's job commands find nothing
+ * under that key, however alive the user task is. The answer it used to get listed
+ * everything the id could be, instead of naming the mistake. The record has carried the kind
+ * since story 824, and the platform asks the adapter for it. This class measures that this
+ * adapter answers.
  * <p>
- * Both kinds are delivered as they really arrive, and both are read back through
+ * Both kinds are delivered as they really arrive. Both are read back through
  * {@link TaskDeliveryLog#recordOfTask}, which is the method the BPMS election asks. So the
- * test reads what a caller naming that id reads, out of the table rather than out of the
- * invocation context: a value only the context knows is the defect this is about. Only a
- * task left to the application is answered there, and those are the ids an application ever
- * names - a task this adapter completed itself is nobody's to address any more.
+ * test reads what a caller which names that id reads. It reads from the table, not from the
+ * invocation context. This is about the defect of a value which only the context knows. The
+ * log only answers for a task which is left to the application. Those are the only ids an
+ * application ever names. Nobody can address a task any more which this adapter completed
+ * itself.
  * <p>
  * The class brings a database of its own. The delivery log is not emptied between the test
- * classes of this module, their workflow aggregates all start their ids at one, and a record
+ * classes of this module. Their workflow aggregates all start their ids at one. So a record
  * of another class would be read here as if it were ours.
  * <p>
- * And it completes both tasks before it is done, which is the part this class learned the
- * hard way. A database of its own separates the database and not the cluster. An open
- * Camunda-managed user task left on the shared cluster is cancelled by the next class, and
- * the {@code canceling} listener job of that cancellation is then served to the next
+ * And it completes both tasks before it is done. This class learned that the hard way. A
+ * database of its own separates the database, not the cluster. The next class cancels an
+ * open Camunda-managed user task which is left on the shared cluster. The
+ * {@code canceling} listener job of that cancellation is then served to the next
  * application, which never held this class's workflow aggregate. Such a delivery is failed
- * with no retries left, on purpose, so the job dies, the cluster raises an incident and the
+ * with no retries left, on purpose. So the job dies, the cluster raises an incident, and the
  * user task never leaves {@code CANCELING}. The cleanup of every later class then waits its
- * minute out for a job nobody can activate any more.
+ * minute out for a job which nobody can activate any more.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -58,14 +59,14 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
     classes = DockerTestApplication.class,
     properties = {
         "spring.config.name=camunda8-it",
-        // a database no other class of this module writes into, see above
+        // a database which no other class of this module writes into, see above
         "spring.datasource.url=jdbc:h2:mem:c8-the-kind-of-a-task-it;DB_CLOSE_DELAY=-1"
     })
 public class Camunda8TheKindOfATaskIT extends SpringBootTestOnTheSharedCluster {
 
   /**
-   * The workflow module these models are deployed under, which is part of the question the
-   * election asks the log.
+   * The workflow module under which these models are deployed. It is part of the question
+   * which the election asks the log.
    */
   private static final String MODULE = "test-app";
 
@@ -101,8 +102,8 @@ public class Camunda8TheKindOfATaskIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("The record says whether an open id is a job or a user task")
   public void theRecordSaysWhichKindAnIdIs() throws Exception {
 
-    // AsyncProcess parks at a @TaskId task, so the job stays open and its record stays
-    // the record of a task the application still holds
+    // AsyncProcess parks at a @TaskId task. So the job stays open, and its record stays the
+    // record of a task which the application still holds
     final var taskAggregateId = seedAndStart("AsyncProcess");
     awaitUntil(
         () -> taskIdOf(taskAggregateId) != null,
@@ -132,9 +133,9 @@ public class Camunda8TheKindOfATaskIT extends SpringBootTestOnTheSharedCluster {
   /**
    * Completes what this class parked and waits until the cluster has forgotten it.
    * <p>
-   * It runs after a failed test as well, because a cluster the next class cannot clean is
-   * the more expensive of the two failures. Both models end right behind their task, so a
-   * completion ends the workflow with it.
+   * It runs after a failed test as well. A cluster which the next class cannot clean is the
+   * more expensive of the two failures. Both models end right after their task, so a
+   * completion also ends the workflow.
    *
    * @throws InterruptedException Where a wait is interrupted
    */
@@ -150,8 +151,8 @@ public class Camunda8TheKindOfATaskIT extends SpringBootTestOnTheSharedCluster {
             workflowService.completeAsyncTask(aggregate, task.taskId());
           }
         }));
-    // the completion travels through the phase-two outbox, so it is sent after the
-    // caller's transaction committed. A class which ends before that leaves the task open
+    // the completion travels through the phase-two outbox, so it is sent after the caller's
+    // transaction committed. A class which ends before that leaves the task open
     for (final var task : parkedTasks) {
       awaitUntil(
           () -> task.itIsAUserTask()
@@ -168,10 +169,10 @@ public class Camunda8TheKindOfATaskIT extends SpringBootTestOnTheSharedCluster {
   /**
    * Saves a workflow aggregate and starts one of the parking processes for it.
    * <p>
-   * Both processes are secondary ones of their workflow service, so they are started against
-   * the cluster with the aggregate-ID variable VanillaBP's own start writes. These tests run
-   * with {@code name-clash-avoidance: use-prefix}, so the cluster knows the process under its
-   * prefixed id.
+   * Both processes are secondary ones of their workflow service. So they are started directly
+   * at the cluster, with the aggregate-ID variable which VanillaBP's own start writes. These
+   * tests run with {@code name-clash-avoidance: use-prefix}, so the cluster knows the process
+   * under its prefixed id.
    *
    * @param bpmnProcessId The process as the application knows it
    * @return The id of the saved workflow aggregate
@@ -235,11 +236,11 @@ public class Camunda8TheKindOfATaskIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * Whether the cluster has forgotten the job, asked with an engine COMMAND rather than with
-   * the search API, which answers out of the exporter and lags behind. An UpdateJobTimeout
-   * renews a lock the adapter renews anyway while the job is there, and a job which is gone
-   * is answered with a 404. {@code Camunda8TaskProcessingIT} asks the same question the same
-   * way.
+   * Whether the cluster has forgotten the job. It is asked with an engine COMMAND, not with
+   * the search API, which answers from the exporter and lags behind. While the job is there,
+   * an UpdateJobTimeout renews a lock which the adapter renews anyway. For a job which is
+   * gone, the answer is a 404. {@code Camunda8TaskProcessingIT} asks the same question the
+   * same way.
    *
    * @param taskId The job key the handler reported
    * @return Whether the cluster refused the command because the job is gone
@@ -264,9 +265,9 @@ public class Camunda8TheKindOfATaskIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The same question about a user task, asked with the command this adapter's own awareness
-   * probe uses: an update carrying nothing but an audit action changes no attribute, and a
-   * user task which is over answers it with a 404.
+   * The same question about a user task, asked with the command which this adapter's own
+   * awareness probe uses. An update which carries nothing but an audit action changes no
+   * attribute. A user task which is over answers it with a 404.
    *
    * @param taskId The user-task key the creating listener reported
    * @return Whether the cluster refused the command because the user task is gone

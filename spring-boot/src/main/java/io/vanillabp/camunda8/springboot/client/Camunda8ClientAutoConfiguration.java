@@ -23,19 +23,24 @@ import io.vanillabp.integration.config.VanillaBpConfigurationProperties;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Exposes the {@link Camunda8ClientFactoryRegistry} built from the canonical
- * per-adapter configuration <code>vanillabp.adapters.&lt;id&gt;.*</code> (bound by the
- * adapter's overlay {@link VanillaBpCamunda8Properties}). The registry owns one lazily
- * built {@code CamundaClient} per adapter ID; it is a managed bean so its
- * {@code close()} is called on application shutdown, closing all clients.
+ * Exposes the {@link Camunda8ClientFactoryRegistry}. It is built from the configuration
+ * of each adapter at <code>vanillabp.adapters.&lt;id&gt;.*</code>, which the adapter's
+ * overlay {@link VanillaBpCamunda8Properties} binds. The registry owns one lazily built
+ * {@code CamundaClient} per adapter ID. It is a managed bean, so its {@code close()} runs
+ * when the application shuts down, and that closes all clients.
  * <p>
- * The adapter-id set comes from the platform's core properties (adapter ids of type
- * {@code camunda8}); the overlay map is used as a per-known-id lookup only. Every
- * instance's connection configuration is VALIDATED AT STARTUP
- * ({@link Camunda8StartupValidation}): a self-managed adapter without an address uses
- * the address of the local cluster of its release line, and the start warns about it. An inconsistently configured adapter fails the boot (unless it is nowhere
- * first priority and its deployment-failure policy is 'warn'); clients of completely
- * configured adapters are built eagerly.
+ * The set of adapter ids comes from the platform's core properties (the ids of type
+ * {@code camunda8}). The overlay map is only used to look up an id the core already knows.
+ * The connection configuration of every instance is VALIDATED AT STARTUP
+ * ({@link Camunda8StartupValidation}):
+ * <ul>
+ * <li>A self-managed adapter without an address uses the address of the local cluster of
+ * its release line, and the start warns about it.</li>
+ * <li>An adapter with an inconsistent configuration ends the boot. The exception is an
+ * adapter which is nowhere first priority and whose deployment-failure policy is
+ * 'warn'.</li>
+ * <li>The clients of completely configured adapters are built eagerly.</li>
+ * </ul>
  */
 @Slf4j
 @AutoConfiguration
@@ -76,7 +81,7 @@ public class Camunda8ClientAutoConfiguration {
           final var configuration = overlay
               .getAdapters()
               .getOrDefault(adapterId, new Camunda8AdapterConfiguration());
-          // a removed key is refused before anything else, wherever it is set: the
+          // a removed key is refused before anything else, wherever it is set. The
           // workers no longer read it, and silence would hide that from the application
           Camunda8FetchVariables.rejectTheRemovedKey(adapterId, overlay.fetchVariablesKeys(adapterId));
           Camunda8StartupValidation.validateAtStartup(
@@ -91,8 +96,8 @@ public class Camunda8ClientAutoConfiguration {
               "server.port",
               log::warn,
               log::info);
-          // a key at a level which does not resolve it changes nothing and would be
-          // silent, which is worse than a line saying where the key is read
+          // a key at a level which does not read it changes nothing. Saying nothing would
+          // be worse than a line which says where the key is read
           Camunda8Connectors.reportKeysSetAtTaskLevel(
               adapterId,
               overlay.allowConnectorsKeysAtTaskLevel(adapterId),
@@ -109,15 +114,15 @@ public class Camunda8ClientAutoConfiguration {
   }
 
   /**
-   * What this adapter measures on top of the core's meters: the client's own
-   * job counters per worker and the execution slots of every adapter instance.
-   * Micrometer is optional, so the whole configuration is conditional on it - an
-   * application without Micrometer boots unchanged and reports nothing.
+   * What this adapter measures on top of the core's meters: the client's own job counters
+   * per worker and the execution slots of every adapter instance. Micrometer is optional,
+   * so this whole configuration depends on it. An application without Micrometer boots
+   * unchanged and reports nothing.
    */
   @Configuration(proxyBeanMethods = false)
-  // by NAME, not by class literal: the annotation of a nested configuration class is
-  // read reflectively, so a class literal of an absent optional dependency would fail
-  // before the condition is ever evaluated
+  // by NAME, not by class literal. Spring reads the annotation of a nested configuration
+  // class by reflection. A class literal of a missing optional dependency would fail
+  // there, before the condition is ever checked
   @ConditionalOnClass(
       name = "io.micrometer.core.instrument.MeterRegistry")
   public static class Camunda8MetricsConfiguration {

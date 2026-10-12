@@ -63,28 +63,28 @@ import lombok.extern.slf4j.Slf4j;
  * Camunda 8 implementation of the {@link MigratableProcessService}. One instance is
  * created per configured adapter ID (not per adapter type).
  * <p>
- * Camunda 8 is a <b>remote</b>, eventually consistent BPMS: the engine cannot join the
- * application's local database transaction, so every operation which reaches the cluster
- * is routed through the core's outbox as a pair of phases. Which operations this adapter
- * serves, and what it does in each of their phases, is what {@link #phaseOperations()}
- * answers.
+ * Camunda 8 is a <b>remote</b>, eventually consistent BPMS. The engine cannot join the
+ * local database transaction of the application. So every operation which reaches the
+ * cluster goes through the outbox of the core, as a pair of phases.
+ * {@link #phaseOperations()} answers which operations this adapter serves, and what it does
+ * in each of their phases.
  * <ul>
- *   <li>Phase one runs inside the caller's transaction. It must never perform an action
- *       that <i>advances</i> the BPMN process (e.g. creating an instance) - that would
- *       race the still-uncommitted local transaction and, on rollback, leave a ghost
- *       workflow instance behind. It <i>may</i> contact the cluster for a non-advancing
- *       check whose only purpose is to abort the local transaction early when the
- *       phase-two action is already known to be impossible. Completing a service task
- *       does exactly that: it verifies the task still exists by extending its job worker
- *       timeout, and it does so from a pre-commit transaction synchronization, which
- *       keeps the window between the check and the phase-two action short and with it the
- *       number of stale outbox entries. Starting a workflow has nothing to check against
- *       the cluster - an unreachable cluster only makes the phase-two start wait in the
- *       outbox until it is reachable again - so its phase one resolves the aggregate ID
- *       and verifies the adapter is configured.</li>
- *   <li>Phase two runs after the commit and is where the cluster is changed, e.g.
+ *   <li>Phase one runs inside the transaction of the caller. It must never do anything
+ *       that <i>advances</i> the BPMN process (e.g. creating an instance). That would race
+ *       the local transaction, which is not committed yet. On rollback it would leave a
+ *       ghost workflow instance behind. It <i>may</i> contact the cluster for a check which
+ *       advances nothing. The only purpose of that check is to abort the local transaction
+ *       early, if the phase-two action is already known to be impossible. Completing a
+ *       service task does exactly that. It checks that the task still exists by extending
+ *       the timeout of its job. It does so from a pre-commit transaction synchronization.
+ *       That keeps the window between the check and the phase-two action short, and with
+ *       it the number of stale outbox entries. Starting a workflow has nothing to check
+ *       against the cluster. An unreachable cluster only makes the phase-two start wait in
+ *       the outbox until it is reachable again. So its phase one resolves the aggregate ID
+ *       and checks that the adapter is configured.</li>
+ *   <li>Phase two runs after the commit, and there the cluster is changed, e.g.
  *       {@link #createProcessInstance(String, java.util.Map, Object)} for a start. It is
- *       dispatched at-least-once, so it has to survive being run a second time.</li>
+ *       dispatched at least once, so it has to survive being run a second time.</li>
  * </ul>
  *
  * @param <A> The workflow-aggregate type
@@ -99,35 +99,34 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private final Camunda8ClientFactory clientFactory;
 
   /**
-   * The one-time job-lock extension applied by awareness probes and phase-one
-   * checks (the same duration the job worker grants a dormant async task).
+   * The one-time extension of a job lock which awareness probes and phase-one checks
+   * apply. It is the same duration which the job worker grants a dormant async task.
    */
   private final Duration asyncTaskLockRenewal;
 
   /**
-   * Runs phase-one existence checks right before the commit of the workflow aggregate's
-   * transaction (platform-supplied) - minimizes the window between check and
-   * phase two. The platform resolves the runner of the aggregate, so a unit of work the
-   * APPLICATION brought is the one hooked into.
+   * Runs phase-one existence checks right before the commit of the transaction of the
+   * workflow aggregate. The platform supplies it. It keeps the window between the check and
+   * phase two small. The platform resolves the runner of the aggregate. So the check hooks
+   * into a unit of work which the APPLICATION brought.
    */
   private final PreCommitRegistrar preCommitRegistrar;
 
   /**
-   * The core's sync model: which aggregate attributes are shared with
-   * the cluster. Camunda 8 is REMOTE, so its default is {@link AggregateSyncMode#FULL} - a
-   * BPMN expression can only see what VanillaBP pushed as a process variable. May be
-   * <code>null</code> (tests): only the
-   * technical aggregate-ID variable is written then.
+   * The sync model of the core: which aggregate attributes are shared with the cluster.
+   * Camunda 8 is REMOTE, so its default is {@link AggregateSyncMode#FULL}. A BPMN expression
+   * can only see what VanillaBP pushed as a process variable. May be <code>null</code>
+   * (tests). Then only the technical aggregate-ID variable is written.
    */
   private final WorkflowAggregateSync aggregateSync;
 
   /**
    * Builds the process service of one configured adapter id. The platform bean of Spring Boot
-   * or Quarkus is the caller, once per adapter id it found in the configuration.
+   * or Quarkus calls it, once per adapter id it found in the configuration.
    * <p>
-   * Written out rather than generated, because javadoc does not run Lombok: a generated
-   * constructor is missing from the published documentation, which then advertises a no-arg
-   * constructor this class has never had.
+   * Written out, not generated, because javadoc does not run Lombok. A generated
+   * constructor is missing from the published documentation. The documentation then shows
+   * a no-arg constructor which this class never had.
    *
    * @param adapterId The configured adapter id this instance answers for
    * @param clientFactory The clients of that adapter id
@@ -152,18 +151,18 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * How often the probe is repeated while waiting - deliberately not configurable:
-   * the window is what an operator may have to raise, the sampling rate is not.
+   * How often the probe is repeated while waiting. It is not configurable on purpose. An
+   * operator may have to raise the window, but not the sampling rate.
    */
   private static final Duration WORKFLOW_VISIBILITY_PROBE_INTERVAL = Duration
       .ofMillis(250);
 
   /**
-   * Camunda 8 answers awareness probes from its query API, which an exporter feeds
-   * asynchronously: a workflow started moments ago exists in the engine and is not
-   * searchable yet. The core waits this window out where it knows this cluster
-   * holds the workflow, so the everyday "start a workflow, then correlate the
-   * message which lets it continue" works without the application retrying.
+   * Camunda 8 answers awareness probes from its query API, which an exporter fills
+   * asynchronously. A workflow started moments ago exists in the engine, but cannot be
+   * searched yet. The core waits out this window if it knows that this cluster holds the
+   * workflow. So the everyday case "start a workflow, then correlate the message which lets
+   * it continue" works without the application retrying.
    */
   @Override
   public WorkflowVisibilityDelay workflowVisibilityDelay() {
@@ -176,24 +175,24 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * The same window asked for ONE workflow, which is what the core asks.
    * <p>
    * Two cases hide behind the long window, and the engine has already told this adapter
-   * which of them it is in. A workflow which was just STARTED is the case the long window
-   * exists for: the engine holds it and the read model needs up to ten seconds to hear
-   * about it. A workflow the engine no longer holds ended long enough ago to be in that
-   * read model, and what is still on its way there is only the END of it - measured in
-   * hundreds of milliseconds on the newer lines and two seconds on the oldest one, which
-   * is what {@code ended-workflow-visibility-timeout} covers.
+   * which one it is. The long window is there for a workflow which was just STARTED. The
+   * engine holds it, and the read model needs up to ten seconds to hear about it. A workflow
+   * which the engine no longer holds ended long enough ago to be in that read model. Only
+   * its END is still on the way there. That was measured at hundreds of milliseconds on the
+   * newer lines and two seconds on the oldest one. {@code ended-workflow-visibility-timeout}
+   * covers it.
    * <p>
-   * Which of the two this workflow is in comes from the probe of
-   * {@link #awarenessOfWorkflow(WorkflowScope, AggregatePersistenceAware, Object, String)},
-   * which the core ran on this thread immediately before asking: it remembers a workflow
-   * the engine answered <code>404</code> for. Nothing else shortens anything - a probe
-   * which was skipped, which failed, or which said the engine HOLDS the workflow all leave
-   * the long window, because none of them says the workflow is over.
+   * Which case this workflow is in comes from the probe of
+   * {@link #awarenessOfWorkflow(WorkflowScope, AggregatePersistenceAware, Object, String)}.
+   * The core ran it on this thread right before asking. It remembers a workflow for which
+   * the engine answered <code>404</code>. Nothing else makes the window shorter. A probe
+   * which was skipped, which failed, or which said the engine HOLDS the workflow leaves the
+   * long window, because none of them says that the workflow is over.
    * <p>
-   * The short window changes how long the core waits and never WHAT this adapter answers
-   * afterwards. The search below still tells {@link WorkflowAwareness#COMPLETED} from
-   * {@link WorkflowAwareness#UNKNOWN_TO_BPMS}, and an ended workflow read as unknown is
-   * what sends the next operation of a migration to the wrong BPMS.
+   * The short window changes how long the core waits. It never changes WHAT this adapter
+   * answers afterwards. The search below still tells {@link WorkflowAwareness#COMPLETED}
+   * from {@link WorkflowAwareness#UNKNOWN_TO_BPMS}. An ended workflow read as unknown would
+   * send the next operation of a migration to the wrong BPMS.
    *
    * @param workflowId The process instance key, or <code>null</code> where VanillaBP holds
    *          none
@@ -211,7 +210,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * A window as the core reads it: a window of zero or less is no waiting at all.
+   * A window as the core reads it. A window of zero or less means no waiting at all.
    */
   private static WorkflowVisibilityDelay delayOf(
       final Duration window) {
@@ -225,32 +224,32 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * The workflow the engine last answered "I do not hold that" about, on THIS thread.
    * <p>
-   * It is what {@link #workflowVisibilityDelay(String)} reads, and a thread is the right
-   * place for it because the core asks the two questions one after the other on the thread
-   * of the election: it probes, and where the answer is unknown it asks how long to keep
-   * asking. Nothing is cached beyond that - the next probe on this thread writes its own
-   * answer, and an id which is not the one remembered gets the long window.
+   * {@link #workflowVisibilityDelay(String)} reads it. A thread is the right place for it,
+   * because the core asks the two questions one after the other on the thread of the
+   * election. It probes, and if the answer is unknown, it asks how long to keep asking.
+   * Nothing is cached beyond that. The next probe on this thread writes its own answer, and
+   * an id which is not the one remembered gets the long window.
    */
   private final ThreadLocal<String> theEngineHasForgottenThisWorkflow = new ThreadLocal<>();
 
   /**
-   * How deeply the scope hierarchy is walked when a task-scoped push looks for the
-   * scope a task runs in. Ten levels of nested subprocesses are a model nobody reads
-   * any more, and the bound keeps a broken answer of the query API from looping.
+   * How deep the scope hierarchy is walked when a task-scoped push looks for the scope a
+   * task runs in. Nobody can read a model with ten levels of nested subprocesses any more.
+   * And the limit keeps a broken answer of the query API from looping.
    */
   private static final int MAX_SCOPE_DEPTH = 10;
 
   /**
-   * The default of this adapter: everything is shared unless the application
+   * The default of this adapter: everything is shared, unless the application
    * excludes it ({@code @NoSyncWithBPMS}).
    */
   public static final AggregateSyncMode SYNC_MODE = AggregateSyncMode.FULL;
 
   /**
-   * The core's name-clash-avoidance model: translates BPMN process ids,
-   * message names and error codes into what the cluster knows, and decides the
-   * tenant an operation runs in. May be <code>null</code> (tests): identifiers are
-   * passed through and the configured tenant is used, as before.
+   * The name-clash-avoidance model of the core. It translates BPMN process ids, message
+   * names and error codes into what the cluster knows. It decides the tenant an operation
+   * runs in. May be <code>null</code> (tests). Then identifiers are passed through, and
+   * the configured tenant is used, as before.
    */
   private NameClashAvoidanceSupport scoping;
 
@@ -269,16 +268,17 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * What a workflow module's tenant is CONFIGURED as, resolved by the platform modules over
-   * the levels the name may be set at, or <code>null</code> for a module nothing names a
-   * tenant for - then the workflow module id names it. May be <code>null</code> itself
-   * (tests), and then the adapter's own section is the only level.
+   * What the tenant of a workflow module is CONFIGURED as. The platform modules resolve it
+   * over the levels the name may be set at. It is <code>null</code> for a module which no
+   * setting names a tenant for. Then the workflow module id names it. It may be
+   * <code>null</code> itself (tests). Then the section of the adapter is the only level.
    */
   private Function<String, Camunda8ConfiguredTenant> configuredTenants;
 
   /**
-   * Sets the tenant names the application configured - this adapter's own configuration,
-   * unlike the name-clash-avoidance support, which arrives with the collaborators.
+   * Sets the tenant names the application configured. This is the configuration of this
+   * adapter itself, unlike the name-clash-avoidance support, which comes with the
+   * collaborators.
    *
    * @param configuredTenants What a workflow module's tenant is configured as
    */
@@ -290,16 +290,16 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Resolves how long the cluster keeps a message this adapter publishes, per adapter,
-   * workflow module, workflow and message. May be <code>null</code> (tests, and a platform
-   * written before this): the client's own default applies then and VanillaBP sets nothing
-   * on the command.
+   * Resolves how long the cluster keeps a message which this adapter publishes, per
+   * adapter, workflow module, workflow and message. May be <code>null</code> (tests, and a
+   * platform written before this). Then the default of the client applies, and VanillaBP
+   * sets nothing on the command.
    */
   private Camunda8MessageTimeToLiveResolver messageTimeToLiveResolver;
 
   /**
-   * Injected by the platform module after construction, like the scoping next to it - an
-   * optional collaborator rather than a constructor argument, so a test building this
+   * The platform module injects it after construction, like the scoping next to it. It is
+   * an optional collaborator, not a constructor argument. So a test which builds this
    * service by hand does not have to know about it.
    *
    * @param messageTimeToLiveResolver The resolver, or <code>null</code>
@@ -312,8 +312,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The window the cluster keeps the given message in, or <code>null</code> where nothing
-   * configures one.
+   * How long the cluster keeps the given message, or <code>null</code> if nothing
+   * configures it.
    *
    * @param workflowModuleId The workflow module
    * @param bpmnProcessId The BPMN process
@@ -354,7 +354,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The tenant an operation of the given workflow module runs in - see the
+   * The tenant in which an operation of the given workflow module runs. See the
    * name-clash-avoidance mode.
    */
   private String tenantIdOf(
@@ -378,7 +378,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * What Camunda 8 does with that type, so the startup check can say what happens to a value
+   * What Camunda 8 does with that type. So the startup check can say what happens to a value
    * which travels between the application and this BPMS.
    *
    * @param valueType The declared type of the value
@@ -395,15 +395,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The process variables written whenever this adapter talks to the cluster on
-   * behalf of a workflow: the aggregate's shared attributes PLUS - always, no
-   * matter what the sync model says - the technical variable carrying the
-   * aggregate's ID (named after the aggregate's ID property). Camunda 8 has no
+   * The process variables written whenever this adapter talks to the cluster on behalf of
+   * a workflow. These are the shared attributes of the aggregate PLUS the technical
+   * variable which carries the ID of the aggregate (named after its ID property). The ID
+   * variable is always written, whatever the sync model says. Camunda 8 has no
    * business key: that variable is how VanillaBP finds the workflow again.
-   *
    * <p>
-   * Package-private so {@code Camunda8SharedValuesTest} can hold the second half of that
-   * promise without a cluster: an aggregate annotated {@code @NoSyncWithBPMS} shares
+   * Package-private, so {@code Camunda8SharedValuesTest} can hold the second half of that
+   * promise without a cluster. An aggregate annotated {@code @NoSyncWithBPMS} shares
    * nothing, and Camunda 8 has no business key, so losing the ID variable would start a
    * workflow nobody can find again.
    *
@@ -417,7 +416,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
     final var variables = new LinkedHashMap<String, Object>();
     if (aggregatePersistence == null) {
-      // no persistence at hand (e.g. a test driving the SPI directly): neither the
+      // no persistence at hand (e.g. a test which drives the SPI directly). Neither the
       // shared attributes nor the technical ID variable can be determined
       return variables;
     }
@@ -452,11 +451,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * What this adapter does for each operation, in both phases.
    * <p>
-   * Phase one is what a REMOTE cluster can be asked without advancing anything: a job
-   * timeout renewal, an empty user-task update, the model's message names - and it runs
-   * as a pre-commit hook, so the window to the phase-two dispatch stays small. Phase two
-   * sends the command and tolerates what the at-least-once dispatch of the outbox
-   * implies, up to the message deduplication the cluster runs on its own.
+   * Phase one is what a REMOTE cluster can be asked without advancing anything: a renewal
+   * of a job timeout, an empty user-task update, the message names of the model. It runs as
+   * a pre-commit hook, so the window to the phase-two dispatch stays small. Phase two sends
+   * the command. It tolerates the at-least-once dispatch of the outbox, up to the message
+   * deduplication which the cluster runs on its own.
    */
   @Override
   public Map<PhaseOperation, PhaseOperationHandler<A>> phaseOperations() {
@@ -505,10 +504,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   @Override
   public boolean deliversTasksAtLeastOnce() {
 
-    // job workers report the outcome AFTER the local transaction was committed, so a
-    // crash in between makes the cluster hand the same job to a worker again. The
-    // identity across such a redelivery is the JOB KEY, reported by every
-    // invocation context.
+    // job workers report the outcome AFTER the local transaction was committed. So after
+    // a crash in between, the cluster hands the same job to a worker again. The JOB KEY
+    // identifies the job across such a redelivery, and every invocation context reports it.
     return true;
 
   }
@@ -518,13 +516,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final String workflowModuleId,
       final String bpmnProcessId) {
 
-    // asked once per BPMN process at startup, so one search is affordable where the
-    // cluster can serve it at all. Both kinds VanillaBP delivers are jobs: a service
-    // task IS a job, and a Camunda-managed user task reaches the application through
-    // its listener job
+    // asked once per BPMN process at startup, so one search is affordable if the cluster
+    // can serve it at all. Both kinds which VanillaBP delivers are jobs. A service task
+    // IS a job, and a user task managed by Camunda reaches the application through its
+    // listener job
     try {
-      // the TOTAL rather than the page which came back, and one item fetched because
-      // only the number is wanted
+      // the TOTAL, not the page which came back. Only one item is fetched, because only
+      // the number is wanted
       final var found = clientFactory
           .getClient()
           .newJobSearchRequest()
@@ -534,8 +532,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           .join();
       return found.page().totalItems();
     } catch (final Exception e) {
-      // a startup diagnostic, so a cluster which did not answer costs the number and
-      // nothing else
+      // a startup diagnostic. So if the cluster did not answer, only the number is lost
       log
           .debug(
               "Camunda8[{}]: the cluster did not answer how many tasks of '{}' are open",
@@ -553,18 +550,16 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    // the probe is UpdateJobTimeout - a NON-ADVANCING command which doubles as a lock
-    // renewal (the job's lock is set to the renewal window, the same value the worker
-    // granted when the task was left open). Camunda 8 cannot
-    // answer COMPLETED for jobs (a completed job is indistinguishable from a
-    // never-existing one without the eventually-consistent search API), so a
-    // successful "not found" maps to UNKNOWN_TO_BPMS.
+    // the probe is UpdateJobTimeout. It is a NON-ADVANCING command which also renews the
+    // lock. The lock of the job is set to the renewal window, the same value the worker
+    // granted when the task was left open. Camunda 8 cannot answer COMPLETED for jobs.
+    // Without the eventually consistent search API, a completed job looks the same as one
+    // which never existed. So a successful "not found" maps to UNKNOWN_TO_BPMS.
     //
-    // A job key is unique per CLUSTER, so where another adapter id addresses
-    // the same one the probe would answer for its job and extend its lock on the way
-    // (see decision 3 in the repository's DECISIONS.md).
-    // Which scope the key belongs to is asked FIRST there, and nowhere else - the
-    // question costs a query-API round trip.
+    // A job key is unique per CLUSTER. If another adapter id addresses the same cluster,
+    // the probe would answer for its job and extend its lock on the way (see decision 3 in
+    // the repository's DECISIONS.md). So in that case the scope of the key is asked FIRST,
+    // and nowhere else, because the question costs a round trip to the query API.
     if (!belongsToThisAdapter(scope, taskId, false)) {
       return WorkflowAwareness.UNKNOWN_TO_BPMS;
     }
@@ -573,9 +568,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       return WorkflowAwareness.ACTIVE;
     } catch (final Exception e) {
       if (Camunda8Errors.jobAlreadyGone(e)) {
-        // the platform throws on this answer at once, so the rejection which produced it
-        // is said out loud rather than left to a level nobody had turned on - the same
-        // reason answersForTheScopeOf gives for the other branch
+        // the platform throws on this answer at once. So the rejection which caused it is
+        // logged here, not at a level nobody had turned on. answersForTheScopeOf gives the
+        // same reason for the other branch
         log.info(
             "Camunda8[{}]: task '{}' is unknown to the cluster - it refused the probe's "
                 + "UpdateJobTimeout with {}",
@@ -585,10 +580,10 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         return WorkflowAwareness.UNKNOWN_TO_BPMS;
       }
       if (Camunda8Errors.jobIsThereButNotActive(e)) {
-        // the cluster holds the job and refused to move its deadline, which is what it
-        // answers for a job nobody has activated right now. The everyday case is an
-        // asynchronous task whose lock ran out, and the task is alive, so the probe says
-        // so instead of sending the caller into retries
+        // the cluster holds the job and refused to move its deadline. It answers that for a
+        // job which nobody has activated right now. The everyday case is an asynchronous task
+        // whose lock ran out. The task is alive, so the probe says so, and does not send the
+        // caller into retries
         log.debug(
             "Camunda8[{}]: the cluster holds task '{}' but no worker has it activated - it "
                 + "refused the probe's UpdateJobTimeout with {}",
@@ -634,11 +629,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The workflow aggregate whose transaction a phase-one check belongs into.
+   * The workflow aggregate to whose transaction a phase-one check belongs.
    * <p>
-   * The core always hands the aggregate's persistence along; only tests call phase one
-   * without one, and {@code Object.class} then resolves the platform's own runner - which
-   * is what a test without any aggregate persistence has anyway.
+   * The core always hands the persistence of the aggregate along. Only tests call phase
+   * one without one. Then {@code Object.class} resolves the runner of the platform, and a
+   * test without any aggregate persistence has only that one anyway.
    *
    * @param aggregatePersistence The persistence of the call at hand, may be
    *          <code>null</code> in tests
@@ -654,13 +649,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The phase-one contract for remote BPMS: a NON-ADVANCING existence check whose
-   * only purpose is to abort the local transaction early when the task is already
-   * gone. Registered as a PRE-COMMIT synchronization (not run at method-call time)
-   * so the window between check and phase-two dispatch - and therefore the number
-   * of stale outbox entries - stays minimal (the V1 refinement). The check is the
-   * same UpdateJobTimeout used by the awareness probe: it refreshes the dormant
-   * job's lock as a side effect and never advances the process.
+   * The phase-one contract for a remote BPMS: a NON-ADVANCING existence check. Its only
+   * purpose is to abort the local transaction early if the task is already gone. It is
+   * registered as a PRE-COMMIT synchronization, not run when the method is called. So the
+   * window between the check and the phase-two dispatch stays minimal, and with it the
+   * number of stale outbox entries (the V1 refinement). The check is the same
+   * UpdateJobTimeout which the awareness probe uses. It renews the lock of the dormant job
+   * on the side, and it never advances the process.
    */
   private void registerPreCommitExistenceCheck(
       final Class<?> workflowAggregateClass,
@@ -689,12 +684,12 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * What a pre-commit check throws once the cluster has said the task is gone.
    * <p>
-   * The type is the one the SPI documents for exactly this outcome, so an application
-   * catching {@link TaskNotFoundException} catches it here as well - whether the task
-   * turned out to be gone while a BPMS was probed or while this check ran is the
-   * adapter's business, not the caller's. That exception carries a message and nothing
-   * else, so the cluster's own words about the rejection are written to the log before
-   * it is thrown; the awareness probe says them for the same reason.
+   * The type is the one which the SPI documents for exactly this outcome. So an
+   * application which catches {@link TaskNotFoundException} catches it here as well. The
+   * task may have turned out to be gone while a BPMS was probed, or while this check ran.
+   * That is the business of the adapter, not of the caller. The exception carries a
+   * message and nothing else. So the words of the cluster about the rejection are written
+   * to the log before it is thrown. The awareness probe logs them for the same reason.
    *
    * @param taskId The task the cluster no longer knows
    * @param message What the caller reads, including what to do about it
@@ -718,20 +713,21 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * What a <code>404</code> of a user-task command is about, in one sentence for the caller.
    * <p>
-   * The command asks about a USER-TASK key, so its <code>404</code> means "I hold no user task of
-   * that key" and not "the task is over". For a key which really is a user-task key the two are
-   * the same thing. For a JOB key they are not: a user task served by a job worker, which is what
-   * VanillaBP modelled up to its release 1.6.3, has no user-task record in the cluster at all, so
-   * every user-task command answers <code>404</code> however open the task is.
+   * The command asks about a USER-TASK key. So its <code>404</code> means "I hold no user task
+   * of that key", not "the task is over". For a key which really is a user-task key, the two
+   * are the same. For a JOB key they are not. A user task served by a job worker has no
+   * user-task record in the cluster at all. VanillaBP modelled user tasks that way up to its
+   * release 1.6.3. So every user-task command answers <code>404</code>, however open the task
+   * is.
    * <p>
-   * An application meets this while it upgrades. The task ids of version 1 are data it brought
-   * with it, and the ones belonging to that shape of user task are job keys. Saying "completed or
-   * canceled meanwhile" about one of them names the one thing the cluster did not say.
+   * An application meets this while it upgrades. The task ids of version 1 are data it
+   * brought with it, and the ones of that shape of user task are job keys. Saying "completed
+   * or canceled meanwhile" about one of them names the one thing the cluster did not say.
    * <p>
-   * So the job side is asked, once and only here, and what it answers goes into the message. The
-   * caller still gets what it got before, a {@code TaskNotFoundException} respectively
-   * {@code UNKNOWN_TO_BPMS}: what kind of key somebody handed in changes the sentence, not the
-   * outcome.
+   * So the job side is asked, once and only here, and its answer goes into the message. The
+   * caller still gets what it got before: a {@code TaskNotFoundException} or
+   * {@code UNKNOWN_TO_BPMS}. The kind of key somebody handed in changes the sentence, not
+   * the outcome.
    *
    * @param taskId The id the caller named
    * @param whatTheCommandWas What was sent, for the sentence
@@ -748,8 +744,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     }
     final var job = Camunda8UserTaskProbe.theJobTheIndexHoldsFor(clientFactory.getClient(), taskKeyOf(taskId));
     if (job == null) {
-      // the engine has the job and the index has not written it yet, so the message says what is
-      // certain and leaves out the element
+      // the engine has the job, and the index has not written it yet. So the message says what
+      // is certain and leaves out the element
       return ("The id '%s' is a JOB key, not a user-task key: the cluster still holds a job of it, "
           + "so the %s answered 404 about the KEY and says nothing about the task. Which element "
           + "that job belongs to is not in the cluster's index yet. A user task served by a job "
@@ -792,23 +788,23 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Whether the cluster holds a JOB of the given key - the question which decides whether a
-   * <code>404</code> of a user-task command was about the key.
+   * Whether the cluster holds a JOB of the given key. This decides whether a <code>404</code>
+   * of a user-task command was about the key.
    * <p>
-   * It is the ENGINE which is asked, with the <code>UpdateJobTimeout</code> this adapter sends
-   * as its existence check for a service task anyway: <code>404</code> for a key it holds no job
-   * of, a <code>400</code> saying nobody has it activated for one it holds, and an accepted
-   * command for one somebody is holding right now. The index cannot answer it. Measured on
-   * 2026-09-28 against <code>camunda/camunda:8.9.21</code> and
+   * The ENGINE is asked, with the <code>UpdateJobTimeout</code> which this adapter sends as its
+   * existence check for a service task anyway. It answers <code>404</code> for a key it holds
+   * no job of. It answers <code>400</code> ("nobody has it activated") for a key it holds. And
+   * it accepts the command for a job somebody is holding right now. The index cannot answer
+   * this. Measured on 2026-09-28 against <code>camunda/camunda:8.9.21</code> and
    * <code>camunda/camunda:8.10.0-rc1</code> by {@code Camunda8ProbeOfAnOpenUserTaskIT}: this
-   * command was accepted for a job which was open and answered <code>404</code> once that job was
-   * gone, while the job search answered "no job of that key" for the open one and still answered
-   * with the job once it was over.
+   * command was accepted for a job which was open. It answered <code>404</code> once that job
+   * was gone. The job search answered "no job of that key" for the open job, and still
+   * answered with the job once it was over.
    * <p>
-   * What it costs is the one thing worth naming: where a worker of the application holds that job
-   * right now, its deadline is pushed out to <code>async-task-lock-renewal</code>, the same as the
-   * existence check of a service task does. The job of this case is a user task nothing in this
-   * version fetches, so the answer is a <code>400</code> and the cluster writes nothing.
+   * One cost is worth naming. If a worker of the application holds that job right now, its
+   * deadline is pushed out to <code>async-task-lock-renewal</code>, as the existence check of
+   * a service task does. In this case the job is a user task which nothing in this version
+   * fetches. So the answer is a <code>400</code>, and the cluster writes nothing.
    *
    * @param taskId The id the caller named
    * @return Whether a job of that key is there
@@ -820,8 +816,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       updateJobTimeout(taskId);
       return true;
     } catch (final RuntimeException e) {
-      // only an answer which SAYS the cluster holds it counts: an unreachable cluster answers
-      // neither way, and a message claiming a job key from a failed request would be a guess
+      // only an answer which SAYS that the cluster holds it counts. An unreachable cluster
+      // answers neither way. A message which claims a job key from a failed request would be
+      // a guess
       return Camunda8Errors.jobIsThereButNotActive(e);
     }
 
@@ -833,19 +830,19 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String taskId) {
 
-    // the probe is an EMPTY UpdateUserTask - an engine COMMAND rather than a search,
-    // so it answers from the partition instead of waiting for the exporter, and it
-    // never advances the task; it answers NOT_FOUND for gone tasks. Side effect: modeller-defined
-    // 'updating' task listeners fire - documented in the README.
+    // the probe is an EMPTY UpdateUserTask. It is an engine COMMAND, not a search. So it
+    // answers from the partition and does not wait for the exporter. It never advances the
+    // task, and it answers NOT_FOUND for gone tasks. Side effect: 'updating' task listeners
+    // which the modeller defined fire. The README documents this.
     //
-    // A task in the middle of a transition of its own is refused rather than answered,
-    // and a refusal about a task is a task the cluster has, see
-    // Camunda8Errors#refusedAboutAUserTaskItHolds. CREATING is the state to expect here:
-    // the application is notified from the 'creating' listener, so it may ask about a task
-    // the cluster has not finished creating.
+    // A task in the middle of a transition of its own is refused, not answered. And a
+    // refusal about a task means that the cluster has the task, see
+    // Camunda8Errors#refusedAboutAUserTaskItHolds. CREATING is the state to expect here.
+    // The application is notified from the 'creating' listener. So it may ask about a task
+    // which the cluster has not finished creating.
     //
-    // As for service tasks, a user-task key is unique per cluster, and on a
-    // shared one the scope is asked before the task is claimed
+    // As for service tasks, a user-task key is unique per cluster. On a shared cluster the
+    // scope is asked before the task is claimed
     if (!belongsToThisAdapter(scope, taskId, true)) {
       return WorkflowAwareness.UNKNOWN_TO_BPMS;
     }
@@ -885,8 +882,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void updateUserTask(
       final String taskId) {
 
-    // an update carrying ONLY an 'action' (an audit metadatum) is the minimal
-    // valid update - no task attribute changes, nothing advances
+    // an update which carries ONLY an 'action' (an audit metadatum) is the smallest valid
+    // update. No task attribute changes, and nothing advances
     clientFactory
         .getClient()
         .newUpdateUserTaskCommand(taskKeyOf(taskId))
@@ -899,8 +896,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void preflightCompleteUserTask(
       final PhaseOneRequest<A> request) {
 
-    // pre-commit existence check (non-advancing empty update) - same shape as
-    // service tasks, see registerPreCommitExistenceCheck
+    // pre-commit existence check (an empty update which advances nothing). The same shape
+    // as for service tasks, see registerPreCommitExistenceCheck
     preCommitRegistrar.beforeCommit(aggregateClassOf(request.aggregatePersistence()), () -> {
       try {
         updateUserTask(request.taskId());
@@ -913,11 +910,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
               e);
         }
         if (Camunda8Errors.refusedAboutAUserTaskItHolds(e)) {
-          // this check aborts a transaction whose task is GONE, and a task the cluster
-          // refuses a command ABOUT is not gone. The common case is a task the cluster is
-          // still creating: the application was notified from the 'creating' listener of
-          // that very task, so it may answer while the creation is still on the way. The
-          // completion of phase two waits that out, see completeUserTask
+          // this check aborts a transaction whose task is GONE. If the cluster refuses a
+          // command ABOUT a task, the task is not gone. The common case is a task which the
+          // cluster is still creating. The application was notified from the 'creating'
+          // listener of that very task. So it may answer while the creation is still on the
+          // way. The completion of phase two waits that out, see completeUserTask
           log.debug(
               "Camunda8[{}]: the pre-commit check found user task '{}' in a transition of its own "
                   + "- the cluster refused the empty update with {}, which is a task it holds",
@@ -937,11 +934,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
     try {
       final var taskKey = taskKeyOf(request.taskId());
-      // read ONCE and not per attempt: every attempt carries what the caller committed, and
+      // read ONCE, not per attempt. Every attempt carries what the caller committed, and
       // reading the aggregate again would cost a transaction per attempt
       final var variables = variablesOf(request.aggregatePersistence(), request.workflowAggregateId());
-      // the task may still be in CREATING, because the application was notified from the
-      // 'creating' listener of this very task and may have answered in the same breath
+      // the task may still be in CREATING. The application was notified from the
+      // 'creating' listener of this very task, and may have answered right away
       Camunda8CommandRetry
           .sendWhileTheUserTaskIsStillChanging(
               adapterId,
@@ -990,13 +987,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final String taskId,
       final String bpmnProcessId) {
 
-    // No Camunda 8 cluster up to 8.9 offers a command to cancel a Camunda-managed user
-    // task by BPMN error: ThrowError is job-based (a zeebe:userTask has no job), and the
-    // V1 workaround (completing the task with a marker variable evaluated by a listener)
-    // is marked "currently not working" in the V1 adapter itself. The task/execution
-    // listeners of 8.10 are what this needs, so it can only ever arrive on a line built
-    // against 8.10. The message names the line
-    // because that is what the reader has to change to get it.
+    // no Camunda 8 cluster up to 8.9 offers a command to cancel a user task managed by
+    // Camunda by BPMN error. ThrowError is based on jobs, and a zeebe:userTask has no job.
+    // The V1 workaround (completing the task with a marker variable which a listener
+    // evaluates) is marked "currently not working" in the V1 adapter itself. This needs the
+    // task and execution listeners of 8.10. So it can only ever arrive on a line built
+    // against 8.10. The message names the line, because the reader has to change the line
+    // to get it.
     return new UnsupportedOperationException(
         ("Canceling user task '%s' of BPMN process '%s' by BPMN error is not supported by "
             + "the Camunda 8 cluster of release line %s! The engine offers no command for it "
@@ -1015,7 +1012,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       clientFactory
           .getClient()
           .newCompleteCommand(taskKeyOf(request.taskId()))
-          // The aggregate changed before the task was completed - the
+          // the aggregate changed before the task was completed, and the
           // cluster only sees what VanillaBP pushes
           .variables(variablesOf(request.aggregatePersistence(), request.workflowAggregateId()))
           .send()
@@ -1030,8 +1027,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (!Camunda8Errors.jobAlreadyGone(e)) {
         throw e;
       }
-      // stale outbox entry: the job disappeared between the dispatch-time probe
-      // and this command - the at-least-once residual, the entry is consumed
+      // stale outbox entry. The job disappeared between the probe at dispatch time and
+      // this command. This is what remains of at-least-once, and the entry is consumed
       log.warn(
           "Camunda8[{}]: task '{}' is gone - skipping the redelivered phase-two completion",
           adapterId,
@@ -1050,7 +1047,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           // the model's error codes are prefixed too
           .errorCode(scopedIdentifier(request.workflowModuleId(), request.bpmnErrorCode()))
           .errorMessage("canceled via ProcessService#cancelTask")
-          // The error boundary's outgoing path may branch on the
+          // the outgoing path of the error boundary may branch on the
           // aggregate, which the caller changed before canceling the task
           .variables(variablesOf(request.aggregatePersistence(), request.workflowAggregateId()))
           .send()
@@ -1077,13 +1074,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Whether this cluster can be ASKED which workflows it holds.
    * <p>
-   * Normally yes: the deployment ends the boot on a cluster which refuses to be searched,
-   * see decision 20 in the repository's DECISIONS.md. One case survives that, and it is
-   * the reason this reads the probe instead of answering <code>true</code> from a
-   * constant: an adapter which is not the first-priority adapter of its workflow module
-   * and carries <code>deployment-failure: warn</code> boots DEGRADED against such a
-   * cluster. It serves nothing, and the core has to hear that it cannot locate a workflow
-   * before it builds a migration on it.
+   * Normally yes. The deployment ends the boot on a cluster which refuses to be searched,
+   * see decision 20 in the repository's DECISIONS.md. One case survives that. It is the
+   * reason why this reads the probe and does not answer a constant <code>true</code>. An
+   * adapter which is not the first-priority adapter of its workflow module and carries
+   * <code>deployment-failure: warn</code> boots DEGRADED against such a cluster. It serves
+   * nothing. The core has to hear that it cannot locate a workflow before it builds a
+   * migration on it.
    *
    * @return Whether the query API answers
    */
@@ -1102,30 +1099,28 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final AggregatePersistenceAware<A> aggregatePersistence,
       final Object workflowAggregateId) {
 
-    // Zeebe offers NO engine command answering "does an instance for this
-    // aggregate exist" - only the eventually-consistent query API, which is why this
-    // adapter requires a cluster it can search. The search filters by the aggregate-ID
-    // process variable.
+    // Zeebe offers NO engine command which answers "does an instance for this aggregate
+    // exist". There is only the eventually consistent query API. That is why this adapter
+    // needs a cluster it can search. The search filters by the aggregate-ID process
+    // variable.
     //
-    // It does NOT filter by state, although only an ACTIVE instance can be advanced:
-    // an ended workflow is COMPLETED, not UNKNOWN_TO_BPMS. The difference is the whole
-    // point of the two values - "unknown" permits falling back to the next adapter and
-    // is what the viewer/history API reports as WorkflowNotFoundException, while
-    // "completed" says this BPMS is the one which held the workflow. Filtering here
-    // made every read of an ended workflow fail and turned an operation arriving too
-    // late into a lookup failure.
+    // It does NOT filter by state, although only an ACTIVE instance can be advanced. An
+    // ended workflow is COMPLETED, not UNKNOWN_TO_BPMS. That difference is the whole point
+    // of the two values. "Unknown" allows falling back to the next adapter, and the
+    // viewer/history API reports it as WorkflowNotFoundException. "Completed" says that
+    // this BPMS is the one which held the workflow. Filtering here made every read of an
+    // ended workflow fail. And an operation which arrived too late became a lookup failure.
     //
-    // A workflow somebody cancelled is reported as ACTIVE until it has really ended,
-    // and that can be much longer than the search needs. The engine answers 404 to a
-    // second cancellation within milliseconds, but an instance holding a Camunda-managed
-    // user task only terminates once the canceling listener job of that task is
-    // answered. Measured against a cluster of the 8.9 line on 2026-09-25: with that job
-    // answered at once the search stopped reporting the instance after 0,8 to 1,0
-    // seconds, and with nobody answering it the instance was still reported 130 seconds
-    // later and ended half a second after a worker finally took the job. ACTIVE is the
-    // right answer for all of that time - the instance is there, and an operation sent
-    // to it is taken. What is NOT an answer is the engine's 404, which is why nothing
-    // here reads one.
+    // A workflow which somebody cancelled is reported as ACTIVE until it has really ended.
+    // That can take much longer than the search needs. The engine answers 404 to a second
+    // cancellation within milliseconds. But an instance which holds a user task managed by
+    // Camunda only terminates once the canceling listener job of that task is answered.
+    // Measured against a cluster of the 8.9 line on 2026-09-25: with that job answered at
+    // once, the search stopped reporting the instance after 0,8 to 1,0 seconds. With
+    // nobody answering it, the instance was still reported 130 seconds later. It ended half
+    // a second after a worker finally took the job. ACTIVE is the right answer for all of
+    // that time. The instance is there, and an operation sent to it is taken. The 404 of
+    // the engine is NOT an answer, and that is why nothing here reads one.
     try {
       final var found = clientFactory
           .getClient()
@@ -1135,8 +1130,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
                   filter, aggregateIdVariableName(aggregatePersistence), workflowAggregateId))
           .send()
           .join();
-      // On a cluster shared with another adapter id the variable alone finds
-      // the other deployment's instance too - only what THIS adapter deployed counts
+      // on a cluster shared with another adapter id, the variable alone also finds the
+      // instance of the other deployment. Only what THIS adapter deployed counts
       final var mine = found
           .items()
           .stream()
@@ -1151,11 +1146,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
               ? WorkflowAwareness.ACTIVE
               : WorkflowAwareness.COMPLETED;
     } catch (final Exception e) {
-      // a cluster of this adapter can be searched (the deployment refuses one which
-      // cannot), so a search failing here is an outage - never a guess about what the
-      // cluster holds, which in a migration setup would route the operation to the
-      // wrong BPMS. The credentials are named because one which loses its read
-      // permission mid-run arrives here looking exactly like an outage
+      // a cluster of this adapter can be searched, because the deployment refuses one
+      // which cannot. So a search which fails here is an outage. It is never a guess about
+      // what the cluster holds. In a migration setup, a guess would route the operation to
+      // the wrong BPMS. The credentials are named, because credentials which lose their read
+      // permission while the application runs look exactly like an outage here
       log.warn(
           "Camunda8[{}]: could not determine awareness of the workflow of aggregate '{}' - "
               + "reporting BPMS_UNAVAILABLE ({})",
@@ -1169,33 +1164,33 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The same question with the BPMS' own id of the workflow, which is what the election
-   * passes on the paths which WAIT for the read model to catch up.
+   * The same question, with the id which the BPMS itself gives the workflow. The election
+   * passes it on the paths which WAIT for the read model to catch up.
    * <p>
    * <b>What the key buys.</b>
    * Measured on 8.10.0-alpha5, 8.9.19 and 8.8.37: the engine says "this instance exists" 16
-   * to 19 ms after the create was sent, while the search below finds it after 167 to 1324
-   * ms. An extension asking where a workflow started moments ago is therefore answered in
-   * milliseconds instead of sitting out the visibility window.
+   * to 19 ms after the create was sent. The search below finds it after 167 to 1324 ms. So
+   * an extension which asks where a workflow started moments ago gets an answer in
+   * milliseconds. It does not have to sit out the visibility window.
    * <p>
    * <b>The rule which must not be broken.</b>
    * The probe may shorten the YES and nothing else. The engine forgets an instance the
-   * moment it ends, so a key it does not hold covers a completed workflow, a canceled one
-   * and a key which never existed alike - and this method has to tell
-   * {@link WorkflowAwareness#COMPLETED} from {@link WorkflowAwareness#UNKNOWN_TO_BPMS},
-   * because only the second lets the election move on to the next BPMS. So every answer but
-   * "the engine holds it" falls through to the search below, unchanged.
+   * moment it ends. So a key it does not hold may be a completed workflow, a canceled one,
+   * or a key which never existed. This method has to tell {@link WorkflowAwareness#COMPLETED}
+   * from {@link WorkflowAwareness#UNKNOWN_TO_BPMS}, because only the second lets the
+   * election move on to the next BPMS. So every answer except "the engine holds it" falls
+   * through to the search below, unchanged.
    * <p>
-   * A probe which cannot answer at all - a timeout, a broken connection, a cluster which is
-   * not there - is not a 404 and is never read as one. It falls through as well, and the
-   * search then decides, which is what reports {@link WorkflowAwareness#BPMS_UNAVAILABLE}
-   * for a cluster nobody can reach. A mechanism which turned an outage into "unknown" would
-   * empty a migration setup into the next BPMS.
+   * A probe which cannot answer at all (a timeout, a broken connection, a cluster which is
+   * not there) is not a 404 and is never read as one. It falls through as well, and then
+   * the search decides. The search reports {@link WorkflowAwareness#BPMS_UNAVAILABLE} for a
+   * cluster nobody can reach. A mechanism which turned an outage into "unknown" would move
+   * a whole migration setup to the next BPMS.
    * <p>
-   * On a cluster this adapter SHARES with another adapter id nothing is asked at all. An
-   * instance key is unique per cluster and names no scope, and the election hands the same
-   * id to every adapter of its list, so the probe would answer for the other one's instance
-   * and end the election at the wrong adapter.
+   * On a cluster which this adapter SHARES with another adapter id, nothing is asked at
+   * all. An instance key is unique per cluster and names no scope. The election hands the
+   * same id to every adapter of its list. So the probe would answer for the instance of the
+   * other adapter, and end the election at the wrong adapter.
    *
    * @param scope The workflow module and BPMN processes being asked about
    * @param aggregatePersistence The workflow aggregate's persistence support
@@ -1218,23 +1213,23 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Asks the ENGINE whether it holds the given instance, which is a question it answers from
-   * the partition rather than from the index an exporter feeds.
+   * Asks the ENGINE whether it holds the given instance. The engine answers this from the
+   * partition, not from the index which an exporter fills.
    * <p>
    * Which command carries the question is
    * {@link Camunda8InstanceProbe#askTheEngine(io.camunda.client.CamundaClient, long, String, String) per release line}
-   * and follows the business id, see decision 35 in the repository's DECISIONS.md. Both of
-   * them are REFUSED by an instance the engine holds, so the cluster writes no state and an
-   * operator never finds a modification in the history of a workflow nobody modified. The
-   * refusal is the answer:
+   * and follows the business id, see decision 35 in the repository's DECISIONS.md. An
+   * instance which the engine holds REFUSES both commands. So the cluster writes no state,
+   * and an operator never finds a modification in the history of a workflow nobody
+   * modified. The refusal is the answer:
    * <ul>
    * <li>HTTP <code>400</code> - the modification names an element the model does not have,
    * which the engine can only say about an instance it holds;</li>
    * <li>HTTP <code>409</code> - the instance already carries a business id, same thing;</li>
    * <li>anything the command took - the instance is there, whatever the command did.</li>
    * </ul>
-   * A <code>404</code> means the engine does not hold it, which is the answer this method
-   * may not turn into anything, and so is every failure which is not an answer at all.
+   * A <code>404</code> means that the engine does not hold it. This method must not turn that
+   * answer into anything. The same holds for every failure which is not an answer at all.
    *
    * @param scope What the election asked about
    * @param workflowAggregateId The aggregate, which is the business id this adapter writes
@@ -1246,20 +1241,20 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final Object workflowAggregateId,
       final String workflowId) {
 
-    // whatever this probe finds out replaces what it found out last time, so a question
+    // whatever this probe finds out replaces what it found out last time. So a question
     // it does not answer at all leaves nothing behind for the window to read
     theEngineHasForgottenThisWorkflow.remove();
     if ((workflowId == null) || workflowId.isBlank()) {
       return false;
     }
     if (clientFactory.sharesItsCluster()) {
-      // an instance key is unique per CLUSTER and says nothing about which adapter id
-      // deployed the process (see decision 3 in the repository's DECISIONS.md), and the
-      // election hands the same id to every adapter of its list. So on a shared cluster
-      // this probe would answer ACTIVE for the instance of the OTHER adapter id and end
-      // the election at the wrong one. The search below asks that question, and here the
-      // engine cannot be asked it without a round trip which would cost what the probe
-      // saves
+      // an instance key is unique per CLUSTER. It says nothing about which adapter id
+      // deployed the process (see decision 3 in the repository's DECISIONS.md). And the
+      // election hands the same id to every adapter of its list. So on a shared cluster,
+      // this probe would answer ACTIVE for the instance of the OTHER adapter id and end the
+      // election at the wrong one. The search below asks that question. Here the engine
+      // could only be asked it with an extra round trip, and that would cost what the
+      // probe saves
       return false;
     }
     if (aModelOfTheScopeCarriesTheReservedElement(scope)) {
@@ -1269,7 +1264,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     try {
       processInstanceKey = Long.parseLong(workflowId);
     } catch (final NumberFormatException e) {
-      // an instance key of this cluster is a number, so this id belongs to another BPMS
+      // an instance key of this cluster is a number. So this id belongs to another BPMS
       return false;
     }
     try {
@@ -1284,10 +1279,10 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       return true;
     } catch (final Exception e) {
       if (Camunda8Errors.notFound(e)) {
-        // the engine has forgotten this instance, which says nothing about whether the
-        // workflow completed or never existed - the search below is what tells those apart.
-        // What it does say is that nothing is on its way into the read model but the END of
-        // this workflow, which is what the short window of workflowVisibilityDelay waits for
+        // the engine has forgotten this instance. That says nothing about whether the
+        // workflow completed or never existed. The search below tells those apart. But it
+        // does say that only the END of this workflow is still on its way into the read
+        // model. The short window of workflowVisibilityDelay waits for exactly that
         theEngineHasForgottenThisWorkflow.set(workflowId);
         return false;
       }
@@ -1309,8 +1304,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Whether any BPMN process of the scope carries the element id the probe reserved, which
-   * is what keeps the probe away from a workflow it might modify instead of ask about.
+   * Whether any BPMN process of the scope carries the element id which the probe reserved.
+   * That keeps the probe away from a workflow which it might modify instead of ask about.
    */
   private boolean aModelOfTheScopeCarriesTheReservedElement(
       final WorkflowScope scope) {
@@ -1328,11 +1323,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Whether a process instance is over.
    * <p>
-   * Asked this way round on purpose. The client's state enum grows inside a line, and it
-   * reports a state older than the cluster as <code>UNKNOWN_ENUM_VALUE</code>: 8.10 adds
-   * <code>SUSPENDED</code> here, which is a workflow somebody can still act on. Since
-   * {@link WorkflowAwareness#COMPLETED} says the operation comes too late, a state nobody
-   * here knows has to count as running rather than as finished.
+   * Asked this way round on purpose. The state enum of the client grows within a line. A
+   * client older than the cluster reports a new state as <code>UNKNOWN_ENUM_VALUE</code>.
+   * 8.10 adds <code>SUSPENDED</code> here, and somebody can still act on such a workflow.
+   * {@link WorkflowAwareness#COMPLETED} says that the operation comes too late. So a state
+   * which nobody here knows has to count as running, not as finished.
    *
    * @param state The state the query API reports
    * @return Whether the instance reached its end
@@ -1374,18 +1369,18 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * planned.
    * <p>
    * An aggregate may carry a second workflow once its first one ended. Say the first attempt to
-   * dispatch the second start failed before it created anything. A search without a state filter
-   * still finds the first workflow, and counting it would skip the start: the second workflow
-   * would never run. So only an instance whose <code>startDate</code> is at or after
+   * dispatch the second start failed before it created anything. A search without a state
+   * filter still finds the first workflow. Counting it would skip the start, and the second
+   * workflow would never run. So only an instance whose <code>startDate</code> is at or after
    * <code>plannedAt</code> counts.
    * <p>
-   * The <code>startDate</code> comes from the cluster's clock and the moment from the clock of the
-   * node which planned the start. Where the cluster is behind by more than the time between
-   * planning and the first dispatch, this entry's own workflow looks older than the entry, and the
-   * answer is "unknown". That costs a duplicate, the residual the at-least-once contract permits.
-   * The moment is never moved back to allow for the skew, because a moment moved back counts the
-   * first workflow again, and that loses the second one. An instance without a
-   * <code>startDate</code> does not count either, for the same reason.
+   * The <code>startDate</code> comes from the clock of the cluster. The moment comes from the
+   * clock of the node which planned the start. The cluster may be behind by more than the time
+   * between planning and the first dispatch. Then the workflow of this entry looks older than
+   * the entry, and the answer is "unknown". That costs a duplicate, which the at-least-once
+   * contract allows. The moment is never moved back to allow for the clock difference. A moment
+   * moved back counts the first workflow again, and that loses the second one. An instance
+   * without a <code>startDate</code> does not count either, for the same reason.
    *
    * @param scope The workflow module and BPMN processes being asked about
    * @param aggregatePersistence The workflow aggregate's persistence support
@@ -1415,8 +1410,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       return found
           .items()
           .stream()
-          // as in awarenessOfWorkflow: an instance of the other adapter id on
-          // this cluster does not prove that THIS one started the workflow
+          // as in awarenessOfWorkflow: an instance of the other adapter id on this
+          // cluster does not prove that THIS one started the workflow
           .filter(instance -> isInScope(scope, instance.getTenantId(), instance.getProcessDefinitionId()))
           .noneMatch(instance -> startedSince(instance.getStartDate(), plannedAt))
               ? WorkflowAwareness.UNKNOWN_TO_BPMS
@@ -1457,13 +1452,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * was asked about.
    * <p>
    * The scope is the workflow module and the BPMN processes of the CALL, translated into
-   * what the cluster knows them by: the tenant of that module and the SCOPED process
+   * the names the cluster knows: the tenant of that module and the SCOPED process
    * definition ids. Two facts make the comparison necessary, and neither alone would be
-   * enough. Two <code>camunda8</code> adapter ids may address ONE cluster, which is the
-   * supported setup migrating a workflow module from tenants to prefixed identifiers, and
-   * there every key is global. And one adapter id serves several workflow modules, whose
-   * aggregate ids are unique per aggregate type rather than across an application, so
-   * "one of mine" is not the same question as "the one you asked about".
+   * enough. First, two <code>camunda8</code> adapter ids may address ONE cluster. That is
+   * the supported setup for migrating a workflow module from tenants to prefixed
+   * identifiers, and there every key is global. Second, one adapter id serves several
+   * workflow modules. Their aggregate ids are unique per aggregate type, not across an
+   * application. So "one of mine" is not the same question as "the one you asked about".
    *
    * @param scope What the probe was asked about
    * @param tenantId The tenant the cluster reports, possibly {@code <default>}
@@ -1499,23 +1494,23 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Whether the task behind the given key belongs to the scope the probe was asked about
-   * - asked only where another <code>camunda8</code> adapter id
-   * addresses the same cluster, because a key is unique per cluster and the two ids would
-   * otherwise answer for each other's tasks.
+   * Whether the task behind the given key belongs to the scope the probe was asked about.
+   * It is asked only if another <code>camunda8</code> adapter id addresses the same
+   * cluster. A key is unique per cluster, and otherwise the two ids would answer for each
+   * other's tasks.
    * <p>
-   * The answer is a search, which every cluster this adapter serves answers: one which
+   * The answer is a search. Every cluster this adapter serves answers a search. One which
    * does not is refused while the adapter deploys, whether one adapter id addresses it or
-   * two (see {@code Camunda8SearchableClusterCheck}). A task no search knows is left to the
-   * probe itself: it is either gone or not exported yet, and both are answered by the
-   * command which follows.
+   * two (see {@code Camunda8SearchableClusterCheck}). A task which no search knows is left
+   * to the probe itself. It is either gone or not exported yet, and the command which
+   * follows answers both.
    * <p>
-   * <b>Why not always.</b> Where one adapter id owns the cluster, the read would buy very
-   * little for a query-API round trip on every task election: the key of another workflow
-   * module of the same application still addresses the task the operation then acts on,
-   * because completing or cancelling goes by that key, and a key of ANOTHER BPMS is not a
-   * Camunda 8 key at all. The workflow probes, whose answer routes a message or a pushed
-   * aggregate, compare the scope always - there it is free.
+   * <b>Why not always.</b> If one adapter id owns the cluster, the read would buy very
+   * little, for a round trip to the query API on every task election. The key of another
+   * workflow module of the same application still addresses the task the operation then
+   * acts on, because completing or cancelling goes by that key. And a key of ANOTHER BPMS
+   * is not a Camunda 8 key at all. The workflow probes, whose answer routes a message or a
+   * pushed aggregate, always compare the scope. There it costs nothing.
    *
    * @param scope What the probe was asked about
    * @param taskId The task id, which is the job respectively user-task key
@@ -1547,7 +1542,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           job.getProcessDefinitionId());
     } catch (final Exception e) {
       if (Camunda8Errors.jobAlreadyGone(e)) {
-        // not exported yet or gone - the probe's own command answers that
+        // not exported yet, or gone. The command of the probe itself answers that
         return true;
       }
       log.debug(
@@ -1562,16 +1557,16 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Whether the scope the cluster reports for a task is one the probe was asked about, and
-   * where it is not, the line which says why the task is unknown.
+   * Whether the scope which the cluster reports for a task is one the probe was asked
+   * about. If it is not, this writes the line which says why the task is unknown.
    * <p>
-   * <b>Why this is not a DEBUG line.</b> The caller answers UNKNOWN_TO_BPMS on a
-   * <code>false</code>, and the platform turns that into a
-   * {@code WorkflowNotFoundException} at once: a task is an exact question, so there is no
-   * visibility window and no second attempt. A run which ends that way used to leave the
-   * platform's exception and not one word from the adapter, and the next one would have
-   * looked exactly the same. So both values which decided it are collected rather than
-   * filtered away by a level nobody had turned on.
+   * <b>Why this is not a DEBUG line.</b> On <code>false</code>, the caller answers
+   * UNKNOWN_TO_BPMS, and the platform turns that into a {@code WorkflowNotFoundException}
+   * at once. A task is an exact question, so there is no visibility window and no second
+   * attempt. A run which ended that way used to leave only the exception of the platform,
+   * and not one word from the adapter. The next run would have looked exactly the same. So
+   * both values which decided it are kept, not filtered away by a level nobody had turned
+   * on.
    *
    * @param scope What the probe was asked about
    * @param taskId The task id, which is the job respectively user-task key
@@ -1601,8 +1596,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * The comparable form of one scope. The cluster reports {@code <default>} for an
-   * untenanted instance while the adapter has no tenant configured at all, so both are
-   * folded into the same value.
+   * instance without a tenant, while the adapter has no tenant configured at all. So both
+   * are turned into the same value.
    */
   private static String scopeKey(
       final String tenantId,
@@ -1626,13 +1621,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * The name of the process variable holding the workflow-aggregate ID: Camunda 8
    * has no business key, so every lookup of a workflow filters by that variable.
    * <p>
-   * It is ALWAYS derived from the aggregate persistence of the call at hand, never
+   * It is ALWAYS taken from the aggregate persistence of the call at hand, and never
    * remembered between calls. One process service serves every workflow module and
-   * aggregate of its adapter id, so a remembered name would be the one of whichever
-   * aggregate was handled last, which was a defect of this adapter once: the
-   * awareness probe ran before any call carrying a persistence and searched for the
-   * placeholder name, which found nothing on a cluster with secondary storage, so
-   * every operation locating its workflow by the probe failed.
+   * aggregate of its adapter id. So a remembered name would be the one of whichever
+   * aggregate was handled last. That was once a defect of this adapter. The awareness
+   * probe ran before any call which carried a persistence, and it searched for the
+   * placeholder name. That found nothing on a cluster with secondary storage. So every
+   * operation which located its workflow by the probe failed.
    *
    * @param aggregatePersistence The persistence of the aggregate of this call
    * @return The variable name
@@ -1658,13 +1653,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   public boolean isPhaseTwoFailureRepeatable(
       final Throwable failure) {
 
-    // The outbox repeats what a second attempt may fix - a cluster which
-    // is busy, unreachable or lost a conflict. A command the cluster REJECTS looks
-    // the same on every attempt, and so does a task key which is not a number. The
-    // list of those cases lives in Camunda8Errors, next to the job-gone rule.
-    // A start adds two answers to it which mean something else for every other
-    // operation, and it adds them by wrapping its refusal rather than by asking here,
-    // because this method is handed the failure and never the operation
+    // the outbox repeats what a second attempt may fix: a cluster which is busy,
+    // unreachable, or lost a conflict. A command which the cluster REJECTS looks the same
+    // on every attempt, and so does a task key which is not a number. The list of those
+    // cases lives in Camunda8Errors, next to the job-gone rule. A start adds two answers
+    // to it, which mean something else for every other operation. It adds them by wrapping
+    // its refusal, not by asking here, because this method gets the failure and never the
+    // operation
     return !Camunda8Errors.permanentFailure(failure);
 
   }
@@ -1672,18 +1667,17 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Phase one of a message correlation asks the MODEL, not the cluster.
    * <p>
-   * A subscription search exists since the client version this adapter builds
-   * against, and it would be the wrong check: the cluster BUFFERS a message for its
-   * time-to-live, so correlating before the subscription exists is legitimate and a
-   * search would reject exactly that case - besides reading the eventually consistent
-   * secondary storage, whose window the caller would wait out inside their
-   * transaction.
+   * A subscription search exists since the client version this adapter builds against.
+   * But it would be the wrong check. The cluster BUFFERS a message for its time-to-live.
+   * So correlating before the subscription exists is fine, and a search would reject
+   * exactly that case. It would also read the eventually consistent secondary storage,
+   * and the caller would wait out its window inside their transaction.
    * <p>
-   * What can be checked without asking anybody is whether the deployed models of this
-   * workflow module declare the message at all. A name no model knows is a typo or a
-   * renamed message, and phase two would publish it into the void: the cluster accepts
-   * the publication, the TTL passes, nothing ever correlates. So the mistake is
-   * reported where the application made the call.
+   * One thing can be checked without asking anybody: whether the deployed models of this
+   * workflow module declare the message at all. A name which no model knows is a typo or a
+   * renamed message. Phase two would publish it into the void. The cluster accepts the
+   * publication, the TTL passes, and nothing ever correlates. So the mistake is reported
+   * where the application made the call.
    * <p>
    * The check stays silent where its set of models is incomplete: where this
    * application version deployed no process of the workflow module (a workflow still
@@ -1703,12 +1697,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Reports a message name no model of the workflow module declares - reading the
-   * models the CLUSTER holds for the ids this application declares, not only what
-   * this application version deployed, so the verdict does not depend on which
-   * application version deployed the model carrying the name (see decision 21 in
-   * the repository's DECISIONS.md). Where those models cannot be read, the check
-   * stays silent.
+   * Reports a message name which no model of the workflow module declares. It reads the
+   * models the CLUSTER holds for the ids this application declares, not only what this
+   * application version deployed. So the verdict does not depend on which application
+   * version deployed the model which carries the name (see decision 21 in the
+   * repository's DECISIONS.md). If those models cannot be read, the check stays silent.
    *
    * @param workflowModuleId The workflow module of the correlation
    * @param messageName The message name the application passed
@@ -1722,13 +1715,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     final var declaresUndeployedIds = deployedProcesses
         .declaresProcessesNobodyDeployed(workflowModuleId);
     if (deployed.isEmpty() && !declaresUndeployedIds) {
-      // a workflow still running on a definition of a previous version, in a module
-      // this boot deployed nothing for: the declared names are unknown rather than
+      // a workflow which still runs on a definition of a previous version, in a module
+      // for which this boot deployed nothing. The declared names are unknown, not
       // absent
       return;
     }
-    // the models carry the SCOPED names - messages are renamed while deploying - so
-    // the name of the call is scoped the same way the publication scopes it
+    // the models carry the SCOPED names, because messages are renamed while deploying.
+    // So the name of the call is scoped the same way as the publication scopes it
     final var scopedMessageName = scopedIdentifier(workflowModuleId, messageName);
     // the models of the current deployment answer without any request
     final var declaredByThisDeployment = deployed
@@ -1741,8 +1734,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     final var modelsTheClusterHolds = clientFactory.getModelsTheClusterHolds();
     if (modelsTheClusterHolds == null) {
       // no deployment service provided the picture (tests, an adapter which booted
-      // degraded): the models beyond the current deployment cannot be read, so
-      // a module whose ids were not all deployed is answered with silence
+      // degraded). The models beyond the current deployment cannot be read. So for a
+      // module whose ids were not all deployed, the check stays silent
       if (declaresUndeployedIds) {
         return;
       }
@@ -1756,14 +1749,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     var answer = modelsTheClusterHolds.heldFor(workflowModuleId);
     if ((answer instanceof Camunda8ModelsTheClusterHolds.Answer.Known kept) && !kept
         .freshlyRead() && !declaredMessageNamesOf(kept).contains(scopedMessageName)) {
-      // the kept picture may be outdated by another node's deployment (rolling
-      // upgrade), and a refusal may only rest on models read now
+      // the deployment of another node may have made the kept picture outdated (rolling
+      // upgrade). A refusal may only rest on models read now
       answer = modelsTheClusterHolds.heldForAfterReadingAgain(workflowModuleId);
     }
     if (!(answer instanceof Camunda8ModelsTheClusterHolds.Answer.Known known)) {
-      // the cluster could not be asked, so the set of models is incomplete: the
-      // check says nothing rather than refusing a correlation the application may
-      // have made correctly
+      // the cluster could not be asked, so the set of models is incomplete. The check
+      // says nothing. It does not refuse a correlation which the application may have
+      // made correctly
       return;
     }
     final var declared = declaredMessageNamesOf(known);
@@ -1797,8 +1790,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The refusal of {@link #validateMessageIsDeclared}, built where the caller can say
-   * which models were read.
+   * The refusal of {@link #validateMessageIsDeclared}. It is built where the caller can
+   * say which models were read.
    */
   private static IllegalArgumentException undeclaredMessage(
       final String workflowModuleId,
@@ -1827,11 +1820,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The message names a deployed model declares: message catch events (intermediate,
-   * boundary, event-subprocess start) and receive tasks - the same elements
-   * {@code Camunda8TaskWiring#wireMessageSubscriptions} wires a correlation key into.
-   * Message START events are included as well: a start by message goes through
-   * {@code startWorkflowByMessage}, but declaring the name is what matters here.
+   * The message names which a deployed model declares: message catch events
+   * (intermediate, boundary, event-subprocess start) and receive tasks. These are the
+   * same elements into which {@code Camunda8TaskWiring#wireMessageSubscriptions} wires a
+   * correlation key. Message START events are included as well. A start by message goes
+   * through {@code startWorkflowByMessage}, but here only the declared name matters.
    *
    * @param model The model as deployed
    * @return The declared message names
@@ -1856,20 +1849,19 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final PhaseTwoRequest<A> request) {
 
     // correlationKey: the correlation id if given, the aggregate ID otherwise
-    // (V1 semantics; the wired zeebe:subscription evaluates '=<idName>' - a
-    // correlation id requires a model-side subscription on the matching variable).
-    // messageId WHERE A CORRELATION ID EXISTS: the engine then deduplicates a second
-    // publication of the same message for as long as the message time-to-live lasts,
-    // which is a net of its own and a shorter one than VanillaBP's outbox - that one
-    // ends with the dispatch, while this one runs for the TTL (the client's default
-    // hour unless 'message-time-to-live' says otherwise). A repetition inside the TTL
-    // is therefore swallowed by the ENGINE, whatever VanillaBP does, so a repeating
-    // scope has to vary the correlation id. Without a correlation id there is no
-    // messageId either, and an at-least-once redelivery may double-correlate
-    // (documented).
-    // PAYLOAD DOCTRINE: no message CONTENT travels - what does travel is the
-    // aggregate state shared with the BPMS, because the cluster can
-    // only evaluate BPMN expressions against variables it was given.
+    // (V1 semantics). The wired zeebe:subscription evaluates '=<idName>'. A correlation
+    // id needs a subscription in the model on the matching variable.
+    // messageId ONLY IF A CORRELATION ID EXISTS. Then the engine deduplicates a second
+    // publication of the same message for as long as the message time-to-live lasts.
+    // That is a net of its own, separate from the outbox of VanillaBP. The outbox net
+    // ends with the dispatch, while this one lasts for the TTL (one hour by default of
+    // the client, unless 'message-time-to-live' says otherwise). So the ENGINE swallows
+    // a repetition inside the TTL, whatever VanillaBP does. A scope which repeats has to
+    // vary the correlation id. Without a correlation id there is no messageId either, and
+    // an at-least-once redelivery may correlate twice (documented).
+    // PAYLOAD DOCTRINE: no message CONTENT travels. What does travel is the aggregate
+    // state shared with the BPMS, because the cluster can only evaluate BPMN expressions
+    // against variables it was given.
     final var correlationKey = request.correlationId() != null
         ? request.correlationId()
         : String.valueOf(request.workflowAggregateId());
@@ -1884,13 +1876,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       command = command.tenantId(correlationTenantId);
     }
     if (request.correlationId() != null) {
-      // The ACTIVATION belongs in here for the same reason it belongs in VanillaBP's own
-      // idempotency key: three elements of a multi-instance call activity agree in every
+      // the ACTIVATION belongs in here, for the same reason as in the idempotency key of
+      // VanillaBP itself. Three elements of a multi-instance call activity agree in every
       // other part, because a called process is a secondary workflow of the SAME
       // aggregate. Without it they are three operations for the outbox and ONE message
-      // for the cluster, and the two which lose are lost silently. Absent where the
-      // correlation was planned outside any activation, which keeps the id a REST
-      // endpoint produces exactly what it was
+      // for the cluster, and the two which lose are lost silently. It is absent if the
+      // correlation was planned outside any activation. So the id which a REST endpoint
+      // produces stays exactly what it was
       command = command
           .messageId(
               messageIdOf(request.workflowModuleId(), request.bpmnProcessId(), request.workflowAggregateId(),
@@ -1902,9 +1894,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         processWaitingForTheMessage(request.workflowModuleId(), request.bpmnProcessId(), request.messageName()),
         request.messageName());
     if (timeToLive != null) {
-      // per message, because the number buffers AND deduplicates and those two want it
-      // to go in opposite directions. Nothing configured means nothing set: the client's
-      // own default then applies, as it always did
+      // per message, because the number buffers AND deduplicates, and those two want it
+      // to go in opposite directions. If nothing is configured, nothing is set. Then the
+      // default of the client applies, as it always did
       command = command.timeToLive(timeToLive);
     }
     try {
@@ -1923,9 +1915,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (!Camunda8Errors.messageAlreadyPublished(e)) {
         throw e;
       }
-      // the engine deduplicated by messageId. Which of the two it was cannot be told
-      // from here, and the entry counts as consumed either way - repeating the publish
-      // would be refused again
+      // the engine deduplicated by messageId. Which of the two cases it was cannot be
+      // told from here. The entry counts as consumed either way, because repeating the
+      // publish would be refused again
       log.warn(
           """
               Camunda8[{}]: the cluster refused message '{}' (correlation key '{}') for BPMN process \
@@ -1953,14 +1945,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * configured for that message belongs to.
    * <p>
    * A process service belongs to the process at the top, so the correlation names that
-   * process. The event which waits may sit in a called process, though, and whoever configures
-   * the time-to-live of that message writes it under the called process
+   * process. But the event which waits may sit in a called process. Whoever configures the
+   * time-to-live of that message writes it under the called process
    * (<code>workflows.&lt;called process&gt;.messages.&lt;message&gt;</code>). The cluster does
    * not say which subscription will take a message, and it may take one which is published
-   * before anything waits. So the deployed models answer: the process of the call where its own
-   * model waits for the message, otherwise the one other process of the workflow module whose
-   * model does. Where none does, or several others do, the process of the call stays the
-   * answer, as before. See decision 77 in the repository's DECISIONS.md.
+   * before anything waits. So the deployed models answer. It is the process of the call, if
+   * its own model waits for the message. Otherwise it is the one other process of the
+   * workflow module whose model does. If none does, or several others do, the process of
+   * the call stays the answer, as before. See decision 77 in the repository's DECISIONS.md.
    *
    * @param workflowModuleId The workflow module of the correlation
    * @param bpmnProcessId The BPMN process of the call
@@ -1992,9 +1984,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Whether one process of a model waits for a message: a catch event or a receive task of that
-   * process which names it. A file may carry several processes, and only the elements of the
-   * given one count.
+   * Whether one process of a model waits for a message. That is a catch event or a receive
+   * task of that process which names it. A file may carry several processes, and only the
+   * elements of the given one count.
    *
    * @param model The model as deployed
    * @param scopedProcessId The process as the cluster knows it
@@ -2032,23 +2024,23 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The id this adapter hands the cluster for a correlated message, which is what the
-   * cluster deduplicates by for as long as the message lives.
+   * The id which this adapter hands the cluster for a correlated message. The cluster
+   * deduplicates by it for as long as the message lives.
    *
    * <h4>Why it looks like VanillaBP's own key and is not the same thing</h4>
    *
-   * Both are derived from the same values, and they guard different windows: VanillaBP's
-   * key deduplicates the entries which have not been dispatched yet, this one deduplicates
-   * publications inside the message time-to-live. An operation can pass the first net and
-   * be dropped by the second, which is why the adapter says so when the cluster refuses a
-   * publication.
+   * Both are built from the same values, and they guard different windows. The key of
+   * VanillaBP deduplicates the entries which have not been dispatched yet. This one
+   * deduplicates publications inside the message time-to-live. An operation can pass the
+   * first net and be dropped by the second. That is why the adapter says so when the
+   * cluster refuses a publication.
    *
    * <h4>Why the activation is part of it</h4>
    *
-   * A called process is a secondary workflow of the SAME aggregate, so the three elements
+   * A called process is a secondary workflow of the SAME aggregate. So the three elements
    * of a multi-instance call activity agree in module, process, aggregate, message name
-   * and - where it comes from business data - correlation id. Without the activation they
-   * are three operations for the outbox and ONE message for the cluster.
+   * and correlation id, if that comes from business data. Without the activation they are
+   * three operations for the outbox and ONE message for the cluster.
    *
    * @param workflowModuleId The workflow module
    * @param bpmnProcessId The BPMN process
@@ -2084,8 +2076,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * A remote BPMS must not act before the caller's transaction committed: phase one
-   * does nothing, the broadcast happens in phase two through the outbox.
+   * A remote BPMS must not act before the transaction of the caller committed. So phase
+   * one does nothing. The broadcast happens in phase two, through the outbox.
    */
   private void preflightSendSignal(
       final PhaseOneRequest<A> request) {
@@ -2095,9 +2087,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void sendSignal(
       final PhaseTwoRequest<A> request) {
 
-    // no variables travel with a signal, and there is nothing to deduplicate by:
-    // unlike a message, a broadcast carries no correlation key the cluster could
-    // recognize a redelivery from (documented at-least-once residual)
+    // no variables travel with a signal, and there is nothing to deduplicate by. Unlike
+    // a message, a broadcast carries no correlation key from which the cluster could
+    // recognize a redelivery (documented, the rest of at-least-once)
     var command = clientFactory
         .getClient()
         .newBroadcastSignalCommand()
@@ -2120,8 +2112,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void preflightAggregateChanged(
       final PhaseOneRequest<A> request) {
 
-    // a remote BPMS: writing here would show the cluster values of a transaction
-    // which may still roll back - the push happens in phase two
+    // a remote BPMS. Writing here would show the cluster values of a transaction
+    // which may still roll back. The push happens in phase two
 
   }
 
@@ -2141,8 +2133,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           request.aggregatePersistence(),
           request.workflowAggregateId());
       if (processInstanceKey == null) {
-        // at-least-once residual: the workflow ended between the dispatch-time
-        // election and now - there is nothing left to write to
+        // what remains of at-least-once. The workflow ended between the election at
+        // dispatch time and now, so there is nothing left to write to
         log.warn(
             "Camunda8[{}]: no active workflow found for aggregate '{}' - skipping the push of the "
                 + "changed aggregate",
@@ -2174,12 +2166,12 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         ? place.processInstanceKey()
         : flowScopeKeyOf(request.taskId(), taskRow, place);
     if (elementInstanceKey == null) {
-      // the read model does not know the scope, which says nothing about whether the task
-      // is still there: an exporter which stands still knows no task created after it
-      // stopped. The engine is asked only about a task this adapter left open, because the
-      // question shortens the lock of a job a handler may hold right now. Without that row
-      // the push waits for the read model, which knows a completed task as well (see
-      // decision 65 in the repository's DECISIONS.md)
+      // the read model does not know the scope. That says nothing about whether the task
+      // is still there. An exporter which stands still knows no task created after it
+      // stopped. The engine is asked only about a task which this adapter left open,
+      // because the question shortens the lock of a job a handler may hold right now.
+      // Without that row, the push waits for the read model, which knows a completed task
+      // as well (see decision 65 in the repository's DECISIONS.md)
       if (!theAdapterLeftTheTaskOpen(taskRow)) {
         throw scopeNotVisibleYet(request, false);
       }
@@ -2202,8 +2194,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           .getClient()
           .newSetVariablesCommand(elementInstanceKey)
           .variables(variables)
-          // the scope the task RUNS IN - a workflow-wide write would be a lost update
-          // between the iterations of a multi-instance subprocess
+          // the scope the task RUNS IN. A write for the whole workflow would be a lost
+          // update between the iterations of a multi-instance subprocess
           .local(true)
           .send()
           .join();
@@ -2211,9 +2203,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (!Camunda8Errors.notFound(e)) {
         throw e;
       }
-      // a command is answered by the engine, so this 404 is not a read model which is
-      // behind: the scope ended between the search and the write, together with the task.
-      // Repeating would meet the same answer until the entry is blocked
+      // the engine answers a command. So this 404 does not come from a read model which
+      // is behind. The scope ended between the search and the write, together with the
+      // task. Repeating would get the same answer until the entry is blocked
       log.warn(
           "Camunda8[{}]: the scope '{}' of task '{}' of aggregate '{}' ended before the changed "
               + "aggregate could be written into it - skipping the push. The cluster refused it with {}",
@@ -2237,25 +2229,25 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * Pushes the changed aggregate into the process instance the start row of the workflow
    * names, without asking the query API which instance carries the aggregate.
    * <p>
-   * The core hands in that key as {@link PhaseTwoRequest#workflowId()} only where the start
-   * row names THIS adapter, so the key belongs to an instance this adapter created. The engine
-   * answers a command by key, so the push no longer depends on an exporter which may stand
-   * still: the search would not find a workflow started after it stopped, and the push used to
-   * be skipped then. A failing read model may hold an application up but must not lose its
-   * work, see decision 64 in the repository's DECISIONS.md.
+   * The core hands in that key as {@link PhaseTwoRequest#workflowId()} only if the start
+   * row names THIS adapter. So the key belongs to an instance which this adapter created. The
+   * engine answers a command by key. So the push no longer depends on an exporter which may
+   * stand still. The search would not find a workflow started after the exporter stopped, and
+   * then the push used to be skipped. A failing read model may hold an application up, but
+   * must not lose its work, see decision 64 in the repository's DECISIONS.md.
    * <p>
-   * The key is not used on a cluster other adapter ids share. An instance key says nothing
-   * about which adapter id deployed the process, and the search below is what keeps one half
-   * of a migration from writing into the other half's instance. A key which is not a number
-   * belongs to another BPMS and is not used either.
+   * The key is not used on a cluster which other adapter ids share. An instance key says
+   * nothing about which adapter id deployed the process. The search below keeps one half of
+   * a migration from writing into the instance of the other half. A key which is not a
+   * number belongs to another BPMS and is not used either.
    * <p>
-   * A <code>404</code> means the engine holds no such instance any more. The workflow ended,
-   * or the row is about an instance which is gone, so the caller falls back to the search,
-   * which then reports what it finds.
+   * A <code>404</code> means that the engine holds no such instance any more. The workflow
+   * ended, or the row is about an instance which is gone. So the caller falls back to the
+   * search, which then reports what it finds.
    *
    * @param request The push
    * @param variables The values to write
-   * @return The process instance the values were written into, <code>null</code> where the
+   * @return The process instance the values were written into, <code>null</code> if the
    *         caller has to search
    */
   private Long pushedIntoTheInstanceOfTheStartRow(
@@ -2309,16 +2301,17 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * Pushes the changed aggregate into every active called instance below a process instance
    * which continues its aggregate, at any depth.
    * <p>
-   * A called instance gets a copy of the caller's variables when the call activity starts it,
-   * and nothing the caller is told later. So a gateway in a called process decided on the
-   * values of the moment of the call, however often the aggregate was pushed since. A called
-   * instance continues the aggregate where it carries the aggregate's id, which is the variable
-   * the propagation of the call activity hands over. The walk stops at a called process which
-   * does not carry it: what that one calls is not this aggregate's business.
+   * A called instance gets a copy of the variables of the caller when the call activity
+   * starts it. It gets nothing which the caller is told later. So a gateway in a called
+   * process decided on the values at the moment of the call, however often the aggregate was
+   * pushed since. A called instance continues the aggregate if it carries the id of the
+   * aggregate. The propagation of the call activity hands over that variable. The walk stops
+   * at a called process which does not carry it. What that one calls is not the business of
+   * this aggregate.
    * <p>
-   * The called instances are found through the query API. A called instance the exporter has
-   * not reported yet is not found and keeps what it was given at the call. See decision 77 in
-   * the repository's DECISIONS.md.
+   * The called instances are found through the query API. A called instance which the
+   * exporter has not reported yet is not found, and keeps what it was given at the call. See
+   * decision 77 in the repository's DECISIONS.md.
    *
    * @param request The push
    * @param processInstanceKey The instance at the top, which was written already
@@ -2360,7 +2353,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           if (!Camunda8Errors.notFound(e)) {
             throw e;
           }
-          // the called instance ended between the search and the write, which leaves
+          // the called instance ended between the search and the write. So there is
           // nothing in it to tell
           continue;
         }
@@ -2377,11 +2370,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Whether the row of a task says that this adapter left the task open and the application has
-   * not closed it since. Such a task RESTS: no handler holds its job, so asking the engine about
-   * it disturbs nobody. A user task always rests, a service task rests where its method asked
-   * for the task id and left the completion to the application. Why the engine is asked only
-   * about such a task is decision 66 in the repository's DECISIONS.md.
+   * Whether the row of a task says that this adapter left the task open, and the application
+   * has not closed it since. Such a task RESTS. No handler holds its job, so asking the engine
+   * about it disturbs nobody. A user task always rests. A service task rests if its method
+   * asked for the task id and left the completion to the application. Why the engine is
+   * asked only about such a task is decision 66 in the repository's DECISIONS.md.
    *
    * @param taskRow The row of the task, or <code>null</code> where there is none
    * @return Whether the task rests
@@ -2407,19 +2400,20 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Asks the ENGINE whether a task this adapter left open is still there, which the read model
-   * cannot answer: it knows nothing that happened after its exporter stopped.
+   * Asks the ENGINE whether a task which this adapter left open is still there. The read
+   * model cannot answer that. It knows nothing which happened after its exporter stopped.
    * <p>
-   * A user task is asked with the empty <code>UpdateUserTask</code> the awareness probe of a
-   * user task sends. A service task is asked with an <code>UpdateJobTimeout</code> on the job
-   * key, the command the awareness probe of a task sends. Its only effect is that the lock of an
-   * activated job is set to <code>async-task-lock-renewal</code>, which is what the renewal of a
-   * job the adapter left open does anyway. That is why the caller asks only about a task which
-   * rests: the lock of a job a handler holds right now would be cut short.
+   * A user task is asked with the empty <code>UpdateUserTask</code> which the awareness probe
+   * of a user task sends. A service task is asked with an <code>UpdateJobTimeout</code> on
+   * the job key, the command which the awareness probe of a task sends. Its only effect is
+   * that the lock of an activated job is set to <code>async-task-lock-renewal</code>. The
+   * renewal of a job which the adapter left open does that anyway. That is why the caller
+   * asks only about a task which rests. The lock of a job which a handler holds right now
+   * would be cut short.
    * <p>
-   * A <code>404</code> means the cluster holds no such task any more. Any other refusal is a
-   * refusal about a task the cluster HAS. A failure which is no answer of the cluster at all,
-   * an outage, is thrown, and the outbox repeats it like every other outage.
+   * A <code>404</code> means that the cluster holds no such task any more. Any other refusal
+   * is a refusal about a task the cluster HAS. A failure which is no answer of the cluster at
+   * all, an outage, is thrown. The outbox repeats it like every other outage.
    *
    * @param taskId The task ID reported to the application
    * @param taskRow The row of the task, which says its kind
@@ -2452,13 +2446,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * What a task-scoped push throws while the read model does not report the scope of its task
-   * yet: the entry is worth repeating, and the visibility window is the time this adapter says
-   * its read model may need. Where no window is configured, the failure is an ordinary one and
-   * the outbox repeats it with its own backoff, because a window of zero would bring the entry
+   * yet. The entry is worth repeating. The visibility window is the time which this adapter
+   * says its read model may need. If no window is configured, the failure is an ordinary one,
+   * and the outbox repeats it with its own backoff. A window of zero would bring the entry
    * back at once.
    *
    * @param request The push
-   * @param theEngineHoldsTheTask Whether the engine said that it holds the task. Where it was
+   * @param theEngineHoldsTheTask Whether the engine said that it holds the task. If it was
    *          not asked, the message says what is waited for instead
    * @return The failure to throw
    */
@@ -2501,9 +2495,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final AggregatePersistenceAware<A> aggregatePersistence,
       final Object workflowAggregateId) {
 
-    // A failing search is not caught here on purpose. The adapter's cluster can be
-    // searched - the deployment refuses one which cannot - so a failure is an outage, and
-    // an outage of the push is what the outbox entry behind it is retried for
+    // a failing search is not caught here, on purpose. The cluster of the adapter can be
+    // searched, because the deployment refuses one which cannot. So a failure is an
+    // outage. The outbox entry behind the push is retried for exactly such an outage
     final var found = clientFactory
         .getClient()
         .newProcessInstanceSearchRequest()
@@ -2514,8 +2508,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         })
         .send()
         .join();
-    // Writing into the instance of ANOTHER adapter id of this cluster would
-    // put the values of one migration half into the other one
+    // writing into the instance of ANOTHER adapter id of this cluster would put the
+    // values of one half of a migration into the other half
     return found
         .items()
         .stream()
@@ -2531,29 +2525,28 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * embedded subprocess, or the one iteration of a multi-instance embedded subprocess
    * it belongs to.
    * <p>
-   * Not the task's own element instance: in Camunda 8 every element instance is a
-   * variable scope of its own, and one belonging to a task disappears with the task -
-   * values written there would be read by nothing. The scope AROUND the task is what
-   * the rest of that scope evaluates.
+   * Not the element instance of the task itself. In Camunda 8 every element instance is a
+   * variable scope of its own. The one which belongs to a task disappears with the task, so
+   * nothing would read values written there. The rest of the scope AROUND the task reads
+   * them.
    * <p>
-   * A user task which runs directly in one iteration of a multi-instance subprocess is answered
-   * by one search: the variable holding the index of that iteration is a local variable of the
-   * iteration, and the variables a user task sees are reported together with their scope. Every
-   * other task is found as an element instance. Camunda 8 reports no parent for an element
-   * instance, so its scope is found by walking DOWN from the process instance (the query API
-   * filters element instances by their scope) until the task's element instance shows up. A
-   * multi-instance BODY on the way is skipped: it is the technical wrapper around the
-   * instances, not a scope of the model.
+   * A user task which runs directly in one iteration of a multi-instance subprocess is
+   * answered by one search. The variable which holds the index of that iteration is a local
+   * variable of the iteration. And the variables which a user task sees are reported
+   * together with their scope. Every other task is found as an element instance. Camunda 8
+   * reports no parent for an element instance. So its scope is found by walking DOWN from the
+   * process instance until the element instance of the task shows up. The query API filters
+   * element instances by their scope. A multi-instance BODY on the way is skipped. It is the
+   * technical wrapper around the instances, not a scope of the model.
    * <p>
-   * The query API is fed by an exporter, so the task this push belongs to may not be
-   * reported yet. The search is NOT repeated here. This runs in phase two, and phase two
-   * does not wait: where the scope is unknown, the caller asks the engine or gives the
-   * entry back to the outbox with a due time, and the outbox brings it back then. Waiting
-   * here would hold a dispatching thread and a database connection for the whole window.
-   * A scope which is unknown yields <code>null</code>, and the caller then decides whether
-   * the engine may be asked. The process instance is NOT used as a substitute, because
-   * writing there is exactly the lost update between the iterations of a multi-instance
-   * subprocess this scoping exists to prevent.
+   * An exporter fills the query API, so the task of this push may not be reported yet. The
+   * search is NOT repeated here. This runs in phase two, and phase two does not wait. If the
+   * scope is unknown, the caller asks the engine, or gives the entry back to the outbox with
+   * a due time, and the outbox brings it back then. Waiting here would hold a dispatching
+   * thread and a database connection for the whole window. A scope which is unknown yields
+   * <code>null</code>, and the caller then decides whether the engine may be asked. The
+   * process instance is NOT used instead. Writing there is exactly the lost update between
+   * the iterations of a multi-instance subprocess which this scoping is there to prevent.
    *
    * @param taskId The task ID reported to the application
    * @param taskRow The row of the task, or <code>null</code> where there is none
@@ -2577,7 +2570,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       return null;
     }
     final var scopes = scopePathOf(task.processInstanceKey(), task.elementInstanceKey());
-    // innermost first: the scope holding the task, then its own scopes
+    // innermost first: the scope which holds the task, then the scopes around it
     for (final var scope : scopes) {
       if (scope.type() != ElementInstanceType.MULTI_INSTANCE_BODY) {
         return scope.key();
@@ -2606,18 +2599,19 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   /**
    * Where a task runs, read from the row of the task and the model of its process.
    * <p>
-   * The row names the process instance of the task, its element and the version of its process.
-   * Where that version is the one this application deployed, the model says what encloses the
-   * element. An element directly in its process runs in the process instance, and the push can
-   * write there without asking the query API, so it works while the exporter stands still. An
-   * element directly in a multi-instance subprocess runs in one iteration, whose key only the
-   * query API knows. Everything else, and every version this application did not deploy, is
-   * searched for as before: an older model may enclose the element differently. Why the row and
-   * not a search is decision 66 in the repository's DECISIONS.md.
+   * The row names the process instance of the task, its element, and the version of its
+   * process. If that version is the one which this application deployed, the model says what
+   * encloses the element. An element directly in its process runs in the process instance.
+   * The push can write there without asking the query API, so it works while the exporter
+   * stands still. An element directly in a multi-instance subprocess runs in one iteration,
+   * and only the query API knows the key of that iteration. Everything else, and every
+   * version this application did not deploy, is searched for as before, because an older
+   * model may enclose the element differently. Why the row is used and not a search is
+   * decision 66 in the repository's DECISIONS.md.
    *
    * @param workflowModuleId The workflow module of the push
    * @param taskRow The row of the task, or <code>null</code> where there is none
-   * @return Where the task runs, {@link WhereTheTaskRuns#UNKNOWN} where the row and the model
+   * @return Where the task runs, {@link WhereTheTaskRuns#UNKNOWN} if the row and the model
    *         do not say
    */
   private WhereTheTaskRuns whereTheTaskRuns(
@@ -2645,7 +2639,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         return WhereTheTaskRuns.UNKNOWN;
       }
     }
-    // an ad-hoc subprocess runs its elements in an inner instance of its own, so its
+    // an ad-hoc subprocess runs its elements in an inner instance of its own. So its
     // iteration is not the scope of the task
     if ((enclosing instanceof SubProcess subProcess) && !(enclosing instanceof AdHocSubProcess) && (subProcess
         .getLoopCharacteristics() instanceof MultiInstanceLoopCharacteristics)) {
@@ -2656,13 +2650,13 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The iteration a user task runs in, read from the variables the user task sees: the index
-   * variable of the iteration is local to it, so the scope the cluster reports for that variable
-   * is the iteration.
+   * The iteration a user task runs in, read from the variables which the user task sees. The
+   * index variable of the iteration is local to it. So the scope which the cluster reports for
+   * that variable is the iteration.
    *
    * @param taskId The user-task key
    * @param indexVariable The variable holding the index of the enclosing iteration
-   * @return The element instance key of the iteration, or <code>null</code> where the query API
+   * @return The element instance key of the iteration, or <code>null</code> if the query API
    *         does not report it (yet)
    */
   private Long iterationOfTheUserTask(
@@ -2692,14 +2686,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The element instance of a task, from the job behind a job key or from the user task behind
-   * a user-task key. Where no row says which of the two the id is, the job is looked for first.
-   * Both kinds of key are unique within a cluster, so asking the second search after the first
-   * found nothing cannot find somebody else's task.
+   * The element instance of a task. It comes from the job behind a job key, or from the user
+   * task behind a user-task key. If no row says which of the two the id is, the job is looked
+   * for first. Both kinds of key are unique within a cluster. So if the first search found
+   * nothing, the second search cannot find the task of somebody else.
    *
    * @param taskId The task ID reported to the application
    * @param taskRow The row of the task, or <code>null</code> where there is none
-   * @return The task, or <code>null</code> where the query API does not know it (yet)
+   * @return The task, or <code>null</code> if the query API does not know it (yet)
    */
   private TaskInstance elementInstanceOfTheTask(
       final String taskId,
@@ -2737,9 +2731,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The scopes containing the given element instance, innermost first. Walks down
-   * from the process instance, because Camunda 8 reports children of a scope but
-   * never the parent of one.
+   * The scopes which contain the given element instance, innermost first. It walks down
+   * from the process instance, because Camunda 8 reports the children of a scope, but
+   * never its parent.
    *
    * @param processInstanceKey The workflow's process instance
    * @param elementInstanceKey The element instance to find
@@ -2766,7 +2760,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Depth-first walk down the scope hierarchy, collecting the scopes containing the
+   * Depth-first walk down the scope hierarchy. It collects the scopes which contain the
    * wanted element instance.
    *
    * @param scope The scope to look below
@@ -2784,11 +2778,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     if (depth > MAX_SCOPE_DEPTH) {
       return false;
     }
-    // every child of the scope, not the first page of them: a multi-instance over 100
-    // items puts more children into one scope than a search hands out without being
-    // asked, and the task of the 101st iteration would be a task below no scope at all.
-    // Reading stops on the page the wanted element instance is on, because the children
-    // after it are not walked into either
+    // every child of the scope, not only the first page. A multi-instance over 100 items
+    // puts more children into one scope than the default page holds. Then the task of the
+    // 101st iteration would be a task below no scope at all. Reading stops on the page
+    // which holds the wanted element instance, because the children after it are not
+    // walked into either
     final var read = Camunda8SearchPages
         .pagesUntil(
             child -> elementInstanceKey.equals(child.getElementInstanceKey()),
@@ -2837,8 +2831,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The job behind a task ID - a VanillaBP task ID IS the job's key, and the job
-   * knows which element instance and which process instance it belongs to.
+   * The job behind a task ID. A VanillaBP task ID IS the key of the job. The job knows
+   * which element instance and which process instance it belongs to.
    *
    * @param taskId The task ID reported to the application
    * @return The job or <code>null</code> if the query API does not know it
@@ -2861,11 +2855,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void startWorkflowByMessage(
       final PhaseTwoRequest<A> request) {
 
-    // message START events ignore the correlation key; the aggregate-ID variable
-    // is the ONLY variable published (the same technical field a regular start
-    // sets - not message content). messageId is derived from the same values as the
-    // start's idempotency key, so the engine deduplicates a redelivered dispatch within
-    // the message TTL - a net of the cluster's, alongside the outbox' own.
+    // message START events ignore the correlation key. The aggregate-ID variable is the
+    // ONLY variable published. It is the same technical field which a regular start sets,
+    // not message content. messageId is built from the same values as the idempotency key
+    // of the start. So the engine deduplicates a redelivered dispatch within the message
+    // TTL. That is a net of the cluster, next to the net of the outbox.
     try {
       var startCommand = clientFactory
           .getClient()
@@ -2879,18 +2873,18 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (startTenantId != null) {
         startCommand = startCommand.tenantId(startTenantId);
       }
-      // The ADAPTER level only, deliberately: this message starts a workflow, so its
-      // deduplication is wanted for as long as possible and the subscription of a message
-      // START event exists as long as the process is deployed - the buffering half of the
-      // number does not apply here at all. A per-message override meant for a repeating
-      // catch event must not shorten the protection against a double-started workflow
+      // the ADAPTER level only, on purpose. This message starts a workflow, so its
+      // deduplication should last as long as possible. The subscription of a message START
+      // event exists as long as the process is deployed, so the buffering half of the
+      // number does not apply here at all. An override per message, meant for a repeating
+      // catch event, must not shorten the protection against a workflow started twice
       final var startTimeToLive = clientFactory.getConfiguration().getMessageTimeToLive();
       if (startTimeToLive != null) {
         startCommand = startCommand.timeToLive(startTimeToLive);
       }
-      // nothing is reported to request.reportStartedWorkflow here: the answer to a published
-      // message carries the key of the message, not of the instance it started. The key
-      // still gets written down, by the worker of the start event, which reports it as the
+      // nothing is reported to request.reportStartedWorkflow here. The answer to a published
+      // message carries the key of the message, not of the instance it started. The key is
+      // still written down by the worker of the start event. It reports the key as the
       // native instance id of the start it was handed
       startCommand
           .send()
@@ -2907,9 +2901,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (!Camunda8Errors.messageAlreadyPublished(e)) {
         throw e;
       }
-      // a start is different from a correlation: a workflow is started at most once per
-      // aggregate anyway, so a refused start message says the start happened and this
-      // stays an INFO rather than a warning about something possibly lost
+      // a start is different from a correlation. A workflow is started at most once per
+      // aggregate anyway. So a refused start message says that the start happened, and this
+      // stays an INFO, not a warning about something which may be lost
       log.info(
           "Camunda8[{}]: the cluster refused the start message '{}' for aggregate '{}' because a "
               + "message of the same id was published before, within the message time-to-live - the "
@@ -2924,15 +2918,15 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void preflightStart(
       final PhaseOneRequest<A> request) {
 
-    // the aggregate id was validated (non-null, non-blank) once in the core's
-    // MigrationProcessService before phase one is invoked
+    // the MigrationProcessService of the core checked the aggregate id once (not null,
+    // not blank) before phase one is called
 
-    // For starting a workflow there is nothing to check against the cluster in phase
-    // one, so this only verifies the adapter is configured. Phase one runs inside the
-    // caller's DB transaction: it must never advance the process (that races the local
-    // transaction), but it MAY contact the cluster for non-advancing checks that abort
-    // the transaction early - not needed here, since an unavailable cluster just makes
-    // the phase-two start wait in the outbox until it is reachable again.
+    // for starting a workflow, there is nothing to check against the cluster in phase
+    // one. So this only checks that the adapter is configured. Phase one runs inside the
+    // DB transaction of the caller. It must never advance the process, because that races
+    // the local transaction. It MAY contact the cluster for checks which advance nothing
+    // and abort the transaction early. That is not needed here. An unavailable cluster
+    // only makes the phase-two start wait in the outbox until it is reachable again.
     clientFactory.validateConfigured();
 
     log.debug("Validated phase one of starting Camunda 8 workflow '{}' of workflow module '{}' "
@@ -2949,11 +2943,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         request.workflowAggregateId(),
         tenantIdOf(request.workflowModuleId()));
 
-    // the key in the same form a task delivery reports as its workflow id. A started
-    // instance is always the root, so it is the instance the aggregate belongs to, and
-    // nobody has to search the cluster for it while its search index still lags behind.
-    // The version is the one of the process definition, counted the way a job reports
-    // it, so the start and every later delivery of this workflow name the same version
+    // the key in the same form as a task delivery reports its workflow id. A started
+    // instance is always the root, so it is the instance the aggregate belongs to. Nobody
+    // has to search the cluster for it while its search index still lags behind. The
+    // version is the one of the process definition, counted the way a job reports it. So
+    // the start and every later delivery of this workflow name the same version
     request
         .reportStartedWorkflow(
             String.valueOf(started.getProcessInstanceKey()),
@@ -2971,12 +2965,12 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * <p>
    * <b>Idempotency limitation:</b> a crash between a successful create and the removal of
    * the phase-two outbox entry can create the instance twice (at-least-once, duplicates
-   * possible). That residual is accepted rather than pending: a workflow is located by
-   * asking, not by a persistent registry (decision 25 of the platform's DECISIONS.md),
-   * and what narrows the window is the core probing
+   * possible). That rest is accepted, and no fix is pending. A workflow is located by
+   * asking, not by a persistent registry (decision 25 of the platform's DECISIONS.md). The
+   * core makes the window smaller: it probes
    * {@link #awarenessOfWorkflowForRedispatch} before it dispatches a start again. What is
-   * left of it is documented in this repository's README under "Idempotency limitation".
-   * No Camunda-8-side workaround is attempted here.
+   * left is documented in the README of this repository under "Idempotency limitation".
+   * No workaround on the side of Camunda 8 is attempted here.
    *
    * @param bpmnProcessId The BPMN process ID of the workflow to start
    * @param variables The variables the instance is created with
@@ -2993,8 +2987,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Creates the instance in the given tenant - which the name-clash-avoidance mode
-   * decides: the workflow module id under {@code by-adapter}, none under
+   * Creates the instance in the given tenant. The name-clash-avoidance mode decides it:
+   * the workflow module id under {@code by-adapter}, none under
    * {@code use-prefix}/{@code none}.
    *
    * @param bpmnProcessId The BPMN process ID AS THE CLUSTER KNOWS IT
@@ -3019,9 +3013,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     if (tenantId != null && !tenantId.isBlank()) {
       command = command.tenantId(tenantId);
     }
-    // the aggregate's id in the field Operate shows first, where the application asked for
-    // that. Nothing of VanillaBP reads it back, and on a line without the field nothing is
-    // sent, see decision 37 in the repository's DECISIONS.md
+    // the id of the aggregate in the field which Operate shows first, if the application
+    // asked for that. Nothing of VanillaBP reads it back. On a line without the field,
+    // nothing is sent, see decision 37 in the repository's DECISIONS.md
     command = Camunda8BusinessId
         .writeTo(
             command,
@@ -3044,15 +3038,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * What a failed create is thrown on as: the cluster's own failure where another
-   * attempt may still get through, and a {@link Camunda8RefusedStart} where it may not.
+   * What a failed create is thrown as. It is the failure of the cluster itself, if another
+   * attempt may still get through. It is a {@link Camunda8RefusedStart} if it may not.
    * <p>
-   * The wrapping is what carries the OPERATION into the classification, which sees the
-   * failure alone (see {@link Camunda8RefusedStart}), and the message is what an
-   * operator reads next to an outbox entry which will not move again. It names both ways
-   * out without guessing which of them applies: the cluster says "no such process" with
-   * the same code whether a workflow module never reached it or whether it reached
-   * another one.
+   * The wrapping carries the OPERATION into the classification, which only sees the failure
+   * (see {@link Camunda8RefusedStart}). An operator reads the message next to an outbox
+   * entry which will not move again. It names both ways out, without guessing which of them
+   * applies. The cluster says "no such process" with the same code, whether a workflow
+   * module never reached it or reached another one.
    *
    * @param failure What the create command threw
    * @param bpmnProcessId The process id as the cluster knows it
@@ -3080,9 +3073,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
 
   /**
-   * The viewer/history API - see {@link Camunda8WorkflowViewer} for the
-   * two data sources (what this application version deployed vs. the cluster's
-   * query API) and the consistency caveats.
+   * The viewer/history API. See {@link Camunda8WorkflowViewer} for the two data sources
+   * (what this application version deployed, and the query API of the cluster) and for the
+   * limits of consistency.
    */
   private volatile Camunda8WorkflowViewer viewer;
 
@@ -3136,30 +3129,28 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * A VanillaBP task id turned into the key Camunda 8 commands expect - the job's key
-   * for a service task, the user task's key for a user task. Always a decimal number,
-   * which is why the failure is worth a message of its own.
+   * A VanillaBP task id turned into the key which Camunda 8 commands expect: the key of the
+   * job for a service task, the key of the user task for a user task. It is always a decimal
+   * number. That is why the failure is worth a message of its own.
    *
    * <h4>Why this exists</h4>
    *
    * VanillaBP 1 could hand out the same key in HEXADECIMAL
-   * (<code>task-id-as-hex-string</code>, off by default), and an application which
-   * switched it on stored those ids in its own data - a user task it is holding, a
-   * service task waiting for its <code>completeTask</code>. Those ids outlive the
-   * upgrade. Version 2 has no such setting and parses decimally everywhere, so what the
-   * developer got was a bare NumberFormatException naming neither the setting which
-   * produced the number nor the fact that the operation is not retried: a task key which
-   * is not a number is a PERMANENT phase-two failure, so the outbox entry is blocked
-   * after a single attempt.
+   * (<code>task-id-as-hex-string</code>, off by default). An application which switched it
+   * on stored those ids in its own data: a user task it is holding, or a service task which
+   * waits for its <code>completeTask</code>. Those ids outlive the upgrade. Version 2 has no
+   * such setting and parses decimal numbers everywhere. So the developer got a bare
+   * NumberFormatException. It named neither the setting which produced the number, nor the
+   * fact that the operation is not retried. A task key which is not a number is a PERMANENT
+   * phase-two failure, so the outbox entry is blocked after a single attempt.
    * <p>
-   * The classification stays exactly as it was - the NumberFormatException travels as the
-   * cause, which is what {@code Camunda8Errors.permanentFailure} walks the chain for.
-   * Version 2 deliberately does NOT accept hexadecimal ids again: one representation of a
-   * task id is simpler than two, and an application which has them in its data has a
-   * migration of its own, which the message points at.
-   *
+   * The classification stays exactly as it was. The NumberFormatException travels as the
+   * cause, and {@code Camunda8Errors.permanentFailure} walks the chain for it. Version 2 does
+   * NOT accept hexadecimal ids again, on purpose. One form of a task id is simpler than two.
+   * An application which has them in its data has a migration of its own, and the message
+   * points at it.
    * <p>
-   * Package-private so the message can be asserted without a client.
+   * Package-private, so the message can be asserted without a client.
    *
    * @param taskId The task id as the application knows it
    * @return The key
@@ -3185,12 +3176,12 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * Whether a task id reads like one of version 1's hexadecimal ids: not a decimal
-   * number, but a valid hexadecimal one. A hint rather than a claim, which is how the
-   * message states it.
+   * Whether a task id reads like one of the hexadecimal ids of version 1: not a decimal
+   * number, but a valid hexadecimal one. It is a hint, not a claim, and the message says it
+   * that way.
    *
    * @param taskId The task id which failed to parse
-   * @return <code>true</code> where hexadecimal would have worked
+   * @return <code>true</code> if hexadecimal would have worked
    */
   private static boolean looksHexadecimal(
       final String taskId) {

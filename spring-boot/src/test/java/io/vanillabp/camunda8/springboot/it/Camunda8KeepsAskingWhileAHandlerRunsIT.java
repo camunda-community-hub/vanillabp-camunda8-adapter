@@ -23,31 +23,31 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * A CANARY: it watches the Camunda client, not this adapter.
  * <p>
  * A worker has to keep asking the cluster while a job of its own is inside a handler. The
- * client used to schedule the next poll of a worker only once no job of that worker was in
- * a handler any more, so one long handler stopped the whole worker, and the jobs it was
- * subscribed to waited for their lock instead of for a free slot. Camunda answered it as
- * SUPPORT-34723 and shipped the fix in {@code 8.8.37}, {@code 8.9.18} and {@code 8.10.0-rc1},
- * which is what the pins of this repository stand on. The release {@code 8.10.0} carries it as
- * well, measured here and by the bare-client reproduction on 2026-10-01.
+ * client used to schedule the next poll of a worker only when no job of that worker was in a
+ * handler any more. So one long handler stopped the whole worker. The jobs it was subscribed
+ * to waited for their lock, not for a free slot. Camunda handled it as SUPPORT-34723 and
+ * shipped the fix in {@code 8.8.37}, {@code 8.9.18} and {@code 8.10.0-rc1}. The pins of this
+ * repository build on those versions. The release {@code 8.10.0} has the fix as well. This
+ * test and the bare-client reproduction measured it on 2026-10-01.
  * <p>
- * Nothing here proved that before. {@link Camunda8PollWhenASlotIsFreeIT} drives the
- * opposite direction - a worker of an adapter whose every slot is busy must NOT fetch - and
- * a client which never asks again passes that one. So a client bump could undo the fix and
- * every build would stay green while an application on a real cluster went quiet.
+ * Nothing here proved that before. {@link Camunda8PollWhenASlotIsFreeIT} tests the opposite
+ * direction: a worker of an adapter whose every slot is busy must NOT fetch. A client which
+ * never asks again passes that test. So a client bump could undo the fix, and every build
+ * would stay green while an application on a real cluster went quiet.
  * <p>
- * <b>What the setup does.</b> Two execution slots, so one blocked handler leaves a slot
- * free and the adapter's own back pressure lets the worker ask. One job of
- * {@code blockingTask} goes into a handler which stays there. The test then waits out
- * {@code request-timeout}, so the activation request which was parked at the cluster when
- * the slot filled is over and has brought nothing back - that empty poll is the premise,
- * because a job which was already on its way would say nothing about the worker asking
- * again. Only then is the second workflow started, and its job is of the SAME type and
- * therefore of the SAME worker, which is where the defect sat.
+ * <b>What the setup does.</b> Two execution slots, so one blocked handler leaves a slot free.
+ * Then the adapter's own back pressure lets the worker ask. One job of {@code blockingTask}
+ * goes into a handler which stays there. The test then waits out {@code request-timeout}. So
+ * the activation request which was parked at the cluster when the slot filled is over, and it
+ * has brought nothing back. That empty poll is the premise. A job which was already on its way
+ * would say nothing about the worker asking again. Only then does the test start the second
+ * workflow. Its job is of the SAME type and so of the SAME worker. That is where the defect
+ * was.
  * <p>
- * The job timeout is two minutes here, far above the block, so a redelivery of the first
- * job cannot be mistaken for the second one arriving. And the latch the handler counts down
- * is counted only while the first delivery is still inside its slot, so a second job served
- * after the block would leave this test red rather than green.
+ * The job timeout is two minutes here, far above the block. So a redelivery of the first job
+ * cannot be mistaken for the second one arriving. The handler counts the latch down only
+ * while the first delivery is still inside its slot. So a second job served after the block
+ * would leave this test red, not green.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -63,13 +63,13 @@ public class Camunda8KeepsAskingWhileAHandlerRunsIT extends SpringBootTestOnTheS
   static void camunda8PropertiesOfTheAskingTest(
       final DynamicPropertyRegistry registry) {
 
-    // two slots: the blocking handler holds one and leaves one, so nothing of this
-    // adapter's own back pressure stops the worker from asking. With a single slot the
-    // test would measure the back pressure instead of the client
+    // two slots. The blocking handler holds one and leaves one, so this adapter's own back
+    // pressure does not stop the worker from asking. With a single slot the test would
+    // measure the back pressure instead of the client
     registry.add("vanillabp.adapters.c8.worker-threads", () -> "2");
     registry.add("vanillabp.adapters.c8.request-timeout", () -> "PT2S");
-    // the blocking handler holds its job for as long as this test runs, and a redelivery
-    // of that job would look exactly like the second job arriving
+    // the blocking handler holds its job for as long as this test runs. A redelivery of that
+    // job would look exactly like the second job arriving
     registry.add("vanillabp.workflow-modules.test-app.adapters.c8.job-timeout", () -> "PT2M");
 
   }
@@ -81,22 +81,22 @@ public class Camunda8KeepsAskingWhileAHandlerRunsIT extends SpringBootTestOnTheS
   private TransactionTemplate transactionTemplate;
 
   /**
-   * How long the first handler holds its slot at most. The test lets it out itself once it
-   * has its answer, so this is the cap and not the length. Below the two minutes a job is
-   * locked for, so the handler is never inside a job whose lock ran out.
+   * How long the first handler holds its slot at most. The test releases it as soon as it has
+   * its answer, so this is the upper limit and not the length. It is below the two minutes for
+   * which a job is locked. So the handler is never inside a job whose lock ran out.
    */
   private static final long BLOCK_MILLIS = 90_000;
 
   /**
    * How long the activation request which was parked when the slot filled is given to run
-   * out. Above the two seconds of {@code request-timeout}, so the poll which follows the
-   * block really is a poll and not an answer to a request from before it.
+   * out. It is above the two seconds of {@code request-timeout}. So the poll which follows the
+   * block really is a new poll, and not an answer to a request from before the block.
    */
   private static final long UNTIL_A_PARKED_REQUEST_RAN_OUT = 3_000;
 
   /**
-   * How long the second job is given to reach a handler. Generous, because what is measured
-   * is whether the worker asks again at all and not how fast it does.
+   * How long the second job is given to reach a handler. The value is long, because the test
+   * measures whether the worker asks again at all, not how fast it does.
    */
   private static final long THE_SECOND_JOB_ARRIVES_WITHIN = 60;
 
@@ -127,8 +127,8 @@ public class Camunda8KeepsAskingWhileAHandlerRunsIT extends SpringBootTestOnTheS
         "the first job reached its handler, which is where the block begins");
 
     // the request which was parked at the cluster when the slot filled is answered by
-    // whatever appears, and nothing has appeared yet. Waiting it out is what makes the
-    // second job below an answer to a NEW request
+    // whatever appears, and nothing has appeared yet. Waiting it out makes the second job
+    // below an answer to a NEW request
     Thread.sleep(UNTIL_A_PARKED_REQUEST_RAN_OUT);
 
     final var second = transactionTemplate
@@ -138,8 +138,8 @@ public class Camunda8KeepsAskingWhileAHandlerRunsIT extends SpringBootTestOnTheS
     final var servedAgain = WorkerThreadsDockerWorkflowService.BLOCKING_TASK_SERVED_AGAIN_WHILE_BLOCKED
         .await(THE_SECOND_JOB_ARRIVES_WITHIN, TimeUnit.SECONDS);
 
-    // the slot is given back before anything is asserted, so a failing run does not leave
-    // a handler sitting inside its cap for the class which comes next
+    // the slot is given back before anything is asserted. So a failing run does not leave a
+    // handler waiting out its upper limit while the next class runs
     WorkerThreadsDockerWorkflowService.RELEASE_THE_SLOT.countDown();
 
     assertTrue(

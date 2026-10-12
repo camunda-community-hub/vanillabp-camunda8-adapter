@@ -10,20 +10,20 @@ import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeExecutionListeners;
 /**
  * How an instance of this release line says that it was canceled. This is the 8.10 variant.
  * <p>
- * 8.10 is the first line with a {@code cancel} execution listener, and the cluster takes it on
+ * 8.10 is the first line with a {@code cancel} execution listener. The cluster takes it on
  * the PROCESS element and nowhere else. Such a listener fires when an instance is terminated
- * through the API, after every child element has terminated and before the instance reaches
- * its final state, so it reports that the instance is gone. On 8.8 and 8.9 nothing reports
- * that at all, and the variants of this class for those lines say so instead.
+ * through the API. It fires after every child element has terminated and before the
+ * instance reaches its final state. So it reports that the instance is gone. On 8.8 and 8.9
+ * nothing reports that at all, and the variants of this class for those lines say so.
  * <p>
- * Both halves live here because both would fail to compile on an older line:
- * {@code ZeebeExecutionListenerEventType.cancel} is what writes the listener into the model,
- * and {@code ListenerEventType.CANCEL} is what the job of such a listener reports.
+ * Both halves live here, because both would fail to compile on an older line.
+ * {@code ZeebeExecutionListenerEventType.cancel} writes the listener into the model.
+ * {@code ListenerEventType.CANCEL} is what the job of such a listener reports.
  * <p>
- * Public because an extension of this adapter's pipeline writes the same listener, with
- * retries of its own, and a second copy of the rule which decides what a line can do is a
- * rule which will be wrong in one of the two places (see decision 28 in the repository's
- * DECISIONS.md).
+ * The class is public, because an extension of the pipeline of this adapter writes the
+ * same listener, with retries of its own. A second copy of the rule which decides what a
+ * line can do would sooner or later be wrong in one of the two places (see decision 28 in
+ * the repository's DECISIONS.md).
  */
 public final class Camunda8CancelListeners {
 
@@ -46,9 +46,9 @@ public final class Camunda8CancelListeners {
    * Writes the {@code cancel} execution listener of a process into the model.
    *
    * @param listeners The execution listeners of the PROCESS element
-   * @param jobType The job type the listener's job carries
+   * @param jobType The job type the job of the listener carries
    * @param retries What the listener is modelled with, or <code>null</code> for the
-   *          cluster's own default, which is what the end listener next to it uses
+   *          default of the cluster. The end listener next to it uses that default too
    */
   public static void addProcessCancelListener(
       final ZeebeExecutionListeners listeners,

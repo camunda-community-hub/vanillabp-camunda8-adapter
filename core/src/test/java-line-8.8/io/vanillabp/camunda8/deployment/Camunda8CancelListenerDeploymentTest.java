@@ -16,9 +16,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What the deployment writes onto the process element of release line <code>8.8</code>, whose
  * cluster has no <code>cancel</code> execution listener: the end listener and nothing else.
  * <p>
- * What the application gives up by running on this line is not left to be found. The boot
- * names every BPMN process whose cancelation would be reported on a newer line, which is what
- * the last test here holds.
+ * The application is told what it gives up by running on this line, so nobody has to find
+ * it out. The boot names every BPMN process whose cancelation would be reported on a newer
+ * line. The last test here holds that.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CancelListenerDeploymentTest {

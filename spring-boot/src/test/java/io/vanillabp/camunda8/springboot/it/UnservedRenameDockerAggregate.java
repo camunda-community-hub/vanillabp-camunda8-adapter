@@ -10,7 +10,7 @@ import lombok.Setter;
 
 /**
  * The workflow aggregate of {@code Camunda8UnservedUserTaskOfARenamedProcessIT}. It carries
- * nothing but its id, because the user task of that test is served by nobody.
+ * nothing but its id, because nobody serves the user task of that test.
  */
 @Entity
 @Table(name = "C8_UNSERVED_RENAME_AGGREGATE")

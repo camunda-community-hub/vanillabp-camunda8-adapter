@@ -35,11 +35,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * it the way it does.
  * <p>
  * The number used to be the total of one search by process and job type. The index keeps a job
- * after it is over, so that total was every job of that type the process ever had and it never
- * reached zero. What this class pins is the two searches which replaced it and the arithmetic
- * between them. What a cluster really answers to them is
- * {@code Camunda8CountOfOpenUnservedUserTasksIT}, which reads one open and one finished job of
- * the same type in the same process.
+ * after it is over. So that total was every job of that type the process ever had, and it never
+ * reached zero. This class pins the two searches which replaced it, and the arithmetic between
+ * them. {@code Camunda8CountOfOpenUnservedUserTasksIT} holds what a cluster really answers to
+ * them. It reads one open and one finished job of the same type in the same process.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UnservedUserTaskJobsTest {
@@ -68,8 +67,8 @@ public class Camunda8UnservedUserTaskJobsTest {
       answers.add(aSearchAnswering(total));
     }
     when(search.filter(ArgumentMatchers.<Consumer<JobFilter>>any())).thenAnswer(invocation -> {
-      // the filter is built by the production code, on a filter this class can read
-      // afterwards, so what is asserted below is what was really asked for
+      // the production code builds the filter, on a filter this class can read afterwards.
+      // So the assertions below check what was really asked for
       final var filter = mock(JobFilter.class, RETURNS_SELF);
       filtersSent.add(filter);
       invocation.<Consumer<JobFilter>>getArgument(0).accept(filter);

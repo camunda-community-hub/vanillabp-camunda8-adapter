@@ -19,50 +19,51 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * The executor one Camunda 8 adapter instance hands its client, whatever the execution
- * model is. It does two things the client's own executors do not.
+ * The executor which one Camunda 8 adapter instance hands its client, whatever the
+ * execution model is. It does two things which the client's own executors do not do.
  * <p>
- * <b>It keeps the two roles apart.</b> Everything the client SCHEDULES - the poll of every
- * worker, and the opening and re-opening of a job stream - runs on a small pool of platform
- * threads which nothing else uses. Everything the client SUBMITS - the handler invocations -
- * runs on the handling half, which the subclass builds and whose width is the number of
- * execution slots. A handler can therefore never delay the timing, and
- * <code>worker-threads</code> counts handlers running at once rather than threads shared
- * between the handlers and the scheduling of every poll. Why that is done on every release
- * line although only the 8.8 client mixes the two is decision 18 in the repository's
- * DECISIONS.md.
+ * <b>It keeps the two roles apart.</b> Everything the client SCHEDULES runs on a small pool
+ * of platform threads which nothing else uses. That is the poll of every worker, and the
+ * opening and re-opening of a job stream. Everything the client SUBMITS, so the handler
+ * invocations, runs on the handling half. The subclass builds that half, and its width is
+ * the number of execution slots. So a handler can never delay the timing. And
+ * <code>worker-threads</code> counts the handlers which run at once. It does not count
+ * threads which the handlers share with the scheduling of every poll. Why that is done on
+ * every release line, although only the 8.8 client mixes the two, is decision 18 in the
+ * repository's DECISIONS.md.
  * <p>
- * <b>It asks for work only while there is capacity to run it.</b> A scheduled task runs
- * when an execution slot is free and is looked at again a moment later when none is, so an
- * adapter whose slots are all busy stops activating jobs which would then wait in front of
- * the slots, spending the lock they were handed out with. What arrives at
+ * <b>It asks for work only while there is room to run it.</b> A scheduled task runs when
+ * an execution slot is free. If none is free, it is looked at again a moment later. So an
+ * adapter whose slots are all busy stops activating jobs. Such jobs would only wait in
+ * front of the slots and use up the lock they were handed out with. What arrives at
  * {@link #schedule(Runnable, long, TimeUnit)} is the poll of a worker and the lifecycle of a
- * job stream, on all three lines this adapter builds against; nothing which keeps an already
- * activated job alive is scheduled there, so nothing has to be told apart and let through.
- * The lock renewal of a long-running task is sent by the handler itself, on the thread which
- * is already holding a slot.
+ * job stream, on all three lines this adapter builds against. Nothing which keeps an
+ * activated job alive is scheduled there. So nothing has to be told apart and let through.
+ * The handler itself sends the lock renewal of a long-running task, on the thread which
+ * already holds a slot.
  * <p>
- * Two things the gate does not reach. An activation request is a long poll the gateway holds
- * for <code>request-timeout</code> and answers as soon as a job appears, so a request already
- * parked when the last slot filled still brings its batch; what is held back is the asking
- * AGAIN, which is what turns one batch into a queue. And the client tops a worker up directly
- * from the thread on which a handler just finished, which passes no executor - that worker has
- * just freed a slot, so it is the one case where activating more is the point.
+ * The gate does not reach two things. An activation request is a long poll. The gateway
+ * holds it for <code>request-timeout</code> and answers as soon as a job appears. So a
+ * request which was already waiting when the last slot filled still brings its batch. What
+ * is held back is asking AGAIN, which is what turns one batch into a queue. And the client
+ * tops a worker up directly from the thread on which a handler just finished, without any
+ * executor. That worker has just freed a slot. So it is the one case where activating more
+ * is the point.
  */
 public abstract class Camunda8Executor implements ScheduledExecutorService {
 
   /**
-   * How many platform threads do the timing. Two, because the polls of all workers share
-   * them and a scheduled task should not wait for another one which is just being handed
-   * over; nothing runs on them longer than that hand-over.
+   * How many platform threads do the timing. There are two, because the polls of all
+   * workers share them. A scheduled task should not wait for another one which is just
+   * being handed over. Nothing runs on them for longer than that hand-over.
    */
   static final int SCHEDULING_THREADS = 2;
 
   /**
-   * How long a scheduled task waits before it looks for a free execution slot again. Short
-   * enough that the free slot is used rather than idled away, long enough that an adapter
-   * whose slots stay busy does not wake its timing threads all the time. Nothing else pays
-   * for it: the worker whose handler just finished is topped up by the client directly,
+   * How long a scheduled task waits before it looks for a free execution slot again. It is
+   * short enough that the free slot is used and not left idle. It is long enough that an
+   * adapter whose slots stay busy does not wake its timing threads all the time. Nothing
+   * else pays for it. The client tops up the worker whose handler just finished directly,
    * without passing this gate.
    */
   static final long LOOK_FOR_A_SLOT_AGAIN_MILLIS = 100;
@@ -74,15 +75,15 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
   private final int bound;
 
   /**
-   * How many handlers are inside their invocation right now. Counted here rather than read
-   * from the handling half, because the two halves are built differently per execution
-   * model while this number means the same in both.
+   * How many handlers are inside their invocation right now. It is counted here and not
+   * read from the handling half. The two halves are built differently per execution model,
+   * but this number means the same in both.
    */
   private final AtomicInteger handlersRunning = new AtomicInteger();
 
   /**
-   * Builds the shared half every execution model has: the timing threads, the counter of
-   * running handlers, and the bound both models are read against.
+   * Builds the shared half which every execution model has. That is the timing threads,
+   * the counter of running handlers, and the bound which both models are read against.
    *
    * @param adapterId The adapter id, used to name the threads
    * @param bound How many handlers may run at the same time
@@ -117,8 +118,8 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
   }
 
   /**
-   * How many of the {@link #getBound() bound} are free right now - the number a metric or a
-   * test asks for.
+   * How many of the {@link #getBound() bound} are free right now. A metric or a test asks
+   * for this number.
    *
    * @return The free execution slots
    */
@@ -129,9 +130,9 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
   }
 
   /**
-   * How many activated jobs wait for a free slot - the number telling a full application
-   * apart from a busy one. Where they wait differs per execution model, which is why the
-   * subclass answers it.
+   * How many activated jobs wait for a free slot. This number tells a full application
+   * apart from a busy one. Where they wait differs per execution model. So the subclass
+   * answers it.
    *
    * @return The waiting handlers
    */
@@ -150,9 +151,9 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
   }
 
   /**
-   * Takes the execution slot a submitted handler is about to occupy. The handling half of
-   * the platform-thread model is as wide as the bound and therefore needs nothing; the
-   * virtual-thread model has no width of its own and takes a permit here.
+   * Takes the execution slot which a submitted handler is about to use. The handling half
+   * of the platform-thread model is as wide as the bound, so it needs nothing here. The
+   * virtual-thread model has no width of its own, so it takes a permit here.
    *
    * @throws InterruptedException If the executor is going down while the handler waits
    */
@@ -181,8 +182,8 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
       try {
         enterSlot();
       } catch (final InterruptedException e) {
-        // the client is shutting down: the job was never started, so its lock runs
-        // out and the cluster hands it to the next node
+        // the client is shutting down. The job was never started, so its lock runs out
+        // and the cluster hands it to the next node
         Thread.currentThread().interrupt();
         return;
       }
@@ -303,8 +304,8 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
   }
 
   /**
-   * Not gated, unlike the two {@code schedule} methods: holding one run of a repeating task
-   * back would move every run after it, and no client of the supported lines repeats
+   * Not gated, unlike the two {@code schedule} methods. Holding back one run of a repeating
+   * task would move every run after it. And no client of the supported lines repeats
    * anything on this executor anyway.
    */
   @Override
@@ -378,11 +379,11 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
   /**
    * One task the client scheduled, held back while every execution slot is busy.
    * <p>
-   * It is its own future, so a caller which cancels what it scheduled cancels the whole
-   * chain and not only the attempt which happens to be pending - the 8.10 client cancels
-   * the tasks around a job stream that way. Being a {@link CompletableFuture} it also
-   * answers {@code isDone}, {@code isCancelled} and {@code get} about the task rather than
-   * about one attempt at it.
+   * It is its own future. So a caller which cancels what it scheduled cancels the whole
+   * chain, not only the attempt which happens to be pending. The 8.10 client cancels the
+   * tasks around a job stream that way. As a {@link CompletableFuture} it also answers
+   * {@code isDone}, {@code isCancelled} and {@code get} about the task, not about one
+   * attempt at it.
    *
    * @param <V> What the task returns
    */
@@ -403,8 +404,8 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
         final long delay,
         final TimeUnit unit) {
 
-      // the first attempt may already have run and armed the next one, which is the
-      // one a cancel has to reach - so it is not overwritten here
+      // the first attempt may already have run and armed the next one. A cancel has to
+      // reach that one, so it is not overwritten here
       attempt.compareAndSet(null, scheduling.schedule(this, delay, unit));
       return this;
 
@@ -427,8 +428,8 @@ public abstract class Camunda8Executor implements ScheduledExecutorService {
       try {
         attempt.set(scheduling.schedule(this, LOOK_FOR_A_SLOT_AGAIN_MILLIS, TimeUnit.MILLISECONDS));
       } catch (final RejectedExecutionException e) {
-        // the timing half is going down, so there is nobody left to ask the cluster for
-        // work either
+        // the timing half is going down. So nobody is left to ask the cluster for work
+        // either
         cancel(false);
         return;
       }

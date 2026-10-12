@@ -23,17 +23,16 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
 /**
- * What the Quarkus end-to-end tests can see of the running application: a handful of
- * <code>introspect/...</code> endpoints reporting the aggregates, the cluster's state
- * and the adapter's answers, and triggering the {@code ProcessService} operations the
- * tests want to observe.
+ * What the Quarkus end-to-end tests can see of the running application. A handful of
+ * <code>introspect/...</code> endpoints report the aggregates, the cluster's state and the
+ * adapter's answers. Others trigger the {@code ProcessService} operations the tests want
+ * to observe.
  * <p>
- * A prod-mode test runs the application in a forked JVM, so nothing of it can be
- * injected into the test - everything travels through these endpoints. The ones
- * driving VanillaBP open their transaction themselves
- * ({@link UserTransaction}), because what happens inside the
- * caller's transaction and what only after its commit is half of what the tests are
- * about.
+ * A prod-mode test runs the application in a forked JVM. So nothing of it can be injected
+ * into the test, and everything travels through these endpoints. The endpoints which
+ * drive VanillaBP open their transaction themselves ({@link UserTransaction}). Half of
+ * what the tests are about is what happens inside the caller's transaction and what only
+ * happens after its commit.
  */
 @Path("/introspect")
 @Produces(MediaType.APPLICATION_JSON)
@@ -139,8 +138,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * The aggregates of the workflows the CLUSTER started on its own - the
-   * application never creates one of them.
+   * The aggregates of the workflows the CLUSTER started on its own. The application never
+   * creates one of them.
    *
    * @return One "id|processedBy|endedAs" per aggregate
    */
@@ -191,7 +190,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * What the cluster handed a task as variables - the cluster's view of the aggregate.
+   * What the cluster handed a task as variables. This is the cluster's view of the
+   * aggregate.
    *
    * @return The observed variables
    */
@@ -204,8 +204,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * The job timeout and the retry backoff the adapter's overlay resolves for a scope -
-   * the four levels of the configuration model, read from the real configuration.
+   * The job timeout and the retry backoff the adapter's overlay resolves for a scope. It
+   * reads the four levels of the configuration model from the real configuration.
    *
    * @param workflowModuleId The workflow module
    * @param bpmnProcessId The BPMN process
@@ -231,8 +231,8 @@ public class C8E2eIntrospectionController {
   // --- starting workflows ---
 
   /**
-   * Saves an aggregate WITHOUT starting a workflow - what an operation addressing a
-   * workflow nobody started has to answer about.
+   * Saves an aggregate WITHOUT starting a workflow. An operation for a workflow nobody
+   * started has to answer about such an aggregate.
    *
    * @return The aggregate's id
    */
@@ -262,9 +262,9 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * Starts the primary process and rolls the transaction back: neither the aggregate
-   * nor the workflow may survive, because the instance is created by the phase-two
-   * outbox and that outbox record is written in the caller's transaction.
+   * Starts the primary process and rolls the transaction back. Neither the aggregate nor
+   * the workflow may survive. The phase-two outbox creates the instance, and the outbox
+   * record is written in the caller's transaction.
    *
    * @return The aggregate's id
    */
@@ -297,9 +297,9 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * Saves an aggregate and starts one of the workflow service's SECONDARY processes
-   * against the cluster: the injectable process service starts the primary process
-   * only. The aggregate-id variable is what VanillaBP finds the aggregate again by.
+   * Saves an aggregate and starts one of the workflow service's SECONDARY processes at the
+   * cluster. The injectable process service only starts the primary process. VanillaBP
+   * finds the aggregate again by the aggregate-id variable.
    *
    * @param bpmnProcessId The BPMN process to start
    * @param payloadSize The size of an additional variable no BPMN model mentions, or
@@ -322,7 +322,7 @@ public class C8E2eIntrospectionController {
     final var variables = new LinkedHashMap<String, Object>();
     variables.put("id", String.valueOf(aggregateId));
     if (payloadSize != null) {
-      // built here rather than sent in: a payload of that size does not fit into a URL
+      // built here and not sent in, because a payload of that size does not fit into a URL
       variables.put("bigPayload", "x".repeat(payloadSize));
     }
     final var instanceKey = client()
@@ -602,8 +602,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * The definition id is handed in as a query parameter, because it carries the
-   * adapter id and a '#' - which a URL path cannot.
+   * The definition id is handed in as a query parameter. It carries the adapter id and a
+   * '#', and a URL path cannot carry a '#'.
    *
    * @param processDefinitionId The definition
    * @return The BPMN XML as deployed
@@ -621,8 +621,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * Asks the viewer for the XML of a process definition nobody deployed - the guiding
-   * exception of the SPI.
+   * Asks the viewer for the XML of a process definition nobody deployed. The answer is
+   * the guiding exception of the SPI.
    *
    * @param processDefinitionId The unknown definition
    * @return The exception raised
@@ -707,7 +707,7 @@ public class C8E2eIntrospectionController {
 
     final var found = client()
         .newProcessInstanceSearchRequest()
-        // variable values are stored as JSON: a String value is searched WITH its quotes
+        // variable values are stored as JSON, so a String value is searched WITH its quotes
         .filter(filter -> filter.variables(Map.of("id", "\"%s\"".formatted(aggregateId))))
         .send()
         .join()
@@ -743,8 +743,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * The variables of one name of a workflow, as "scopeKey|value" - where a pushed
-   * aggregate landed is read from exactly this.
+   * The variables of one name of a workflow, as "scopeKey|value". The tests read from this
+   * where a pushed aggregate landed.
    *
    * @param processInstanceKey The instance
    * @param name The variable's name
@@ -771,8 +771,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * The element instance a job runs in - the scope a task-scoped push must NOT write
-   * into.
+   * The element instance a job runs in. A task-scoped push must NOT write into this
+   * scope.
    *
    * @param taskId The job key
    * @return The element instance key
@@ -797,8 +797,8 @@ public class C8E2eIntrospectionController {
 
   /**
    * The element a job of the given type waits at, or nothing where the cluster holds no
-   * such job. Asked with the job type as the modeller wrote it, which is what proves that
-   * a connector's job type was not prefixed although the module runs under
+   * such job. The tests ask with the job type as the modeller wrote it. This proves that a
+   * connector's job type was not prefixed, although the module runs under
    * {@code use-prefix}.
    *
    * @param type The job type
@@ -835,7 +835,7 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * Completes a job outside VanillaBP - what a concurrent completion looks like to
+   * Completes a job outside VanillaBP. This is what a concurrent completion looks like to
    * the adapter.
    *
    * @param taskId The job key
@@ -853,8 +853,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * Deploys the second, tagged version of {@code VersionedProcess} while the
-   * application runs - the way another node of a rolling deployment does it.
+   * Deploys the second, tagged version of {@code VersionedProcess} while the application
+   * runs. Another node of a rolling deployment does it the same way.
    */
   @POST
   @Path("/cluster/deploy-version-two")
@@ -869,8 +869,8 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * Whether the query API knows the tagged second version yet - the exporter feeding
-   * it runs behind the deployment.
+   * Whether the query API knows the tagged second version yet. The exporter which feeds
+   * the query API runs behind the deployment.
    *
    * @return <code>true</code> once the tag arrived
    */
@@ -908,9 +908,9 @@ public class C8E2eIntrospectionController {
         .join()
         .items()
         .stream()
-        // the state carries the answer to a lost creation: a task standing in CREATING is
-        // one whose creating listener job was never answered, and the cluster holds the
-        // transition open until somebody does
+        // the state tells whether a creation got lost. A task in state CREATING has a
+        // creating listener job nobody answered. The cluster keeps the transition open
+        // until somebody does
         .map(task -> "%s at '%s' in state %s"
             .formatted(task.getUserTaskKey(), task.getElementId(), task.getState()))
         .toList();
@@ -920,8 +920,8 @@ public class C8E2eIntrospectionController {
   /**
    * What the cluster is waiting for an operator about, for one workflow.
    * <p>
-   * A listener job failed with no retry left IS an incident, so this is where a lost
-   * notification ends when the delivery reached a handler and the handler said no.
+   * A listener job which failed with no retry left IS an incident. So a lost notification
+   * ends here if the delivery reached a handler and the handler said no.
    *
    * @param processInstanceKey The instance
    * @return One line per incident: its type, the element it sits on, the job it belongs
@@ -955,8 +955,8 @@ public class C8E2eIntrospectionController {
    * <p>
    * A notification which never arrives leaves one question open: was the job never
    * offered to the worker, or was it offered and lost on the way? The state answers it.
-   * A job the cluster still holds as <code>CREATED</code> was activatable and nobody
-   * fetched it, while a job which is gone reached somebody.
+   * A job the cluster still holds as <code>CREATED</code> could be activated, and nobody
+   * fetched it. A job which is gone reached somebody.
    * <p>
    * A job in state <code>FAILED</code> raises a second question: who sent the fail
    * command. The error message answers it. This adapter writes a warning first and sends
@@ -994,15 +994,15 @@ public class C8E2eIntrospectionController {
   }
 
   /**
-   * How many characters of an error message an introspection line carries. The error
-   * message of a job the Camunda client failed is a whole stack trace, and all of it
-   * would bury the rest of the line.
+   * How many characters of an error message an introspection line carries. When the
+   * Camunda client fails a job, the error message is a whole stack trace. All of it would
+   * bury the rest of the line.
    */
   private static final int ERROR_MESSAGE_EXCERPT = 400;
 
   /**
-   * An error message of the cluster as one line: the line breaks of a stack trace
-   * collapsed into spaces, and only the beginning of a long one.
+   * An error message of the cluster as one line. The line breaks of a stack trace become
+   * spaces, and a long message is cut after its beginning.
    *
    * @param message What the cluster reported, possibly <code>null</code>
    * @return One line, never <code>null</code>
@@ -1026,9 +1026,9 @@ public class C8E2eIntrospectionController {
   // --- plumbing ---
 
   /**
-   * Runs one {@code ProcessService} call in a transaction of its own - everything
-   * reaching the cluster happens after that transaction committed, so a
-   * rollback has to leave the cluster untouched.
+   * Runs one {@code ProcessService} call in a transaction of its own. Everything which
+   * reaches the cluster happens after that transaction committed. So a rollback has to
+   * leave the cluster untouched.
    *
    * @param aggregateId The aggregate the operation works on
    * @param operation What to call

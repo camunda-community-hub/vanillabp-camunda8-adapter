@@ -22,10 +22,9 @@ import io.vanillabp.integration.spi.PhaseTwoCall;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Phase one of a message correlation asks the deployed models whether they
- * declare the message. A name no model knows would be published into the void - the
- * cluster buffers it until its time-to-live passes, so nothing correlates and nothing
- * fails.
+ * Phase one of a message correlation asks the deployed models whether they declare the
+ * message. A name no model knows would be published into nothing. The cluster buffers it
+ * until its time-to-live passes, so nothing correlates and nothing fails.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8MessageDeclarationTest {
@@ -76,7 +75,7 @@ public class Camunda8MessageDeclarationTest {
     final var configuration = new Camunda8AdapterConfiguration();
     // never contacted: phase one asks the models, not the cluster
     configuration.setRestAddress("http://localhost:1");
-    // no waiting for the exporter in a unit test - the cluster is never contacted
+    // no waiting for the exporter in a unit test, the cluster is never contacted
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     return new Camunda8ClientFactory("c8", configuration);
 
@@ -145,8 +144,8 @@ public class Camunda8MessageDeclarationTest {
   public void withoutDeployedProcessesTheCheckIsSilent() {
 
     final var clientFactory = clientFactory();
-    // a workflow still running on a definition of a PREVIOUS application version: the
-    // declared names are unknown here rather than absent, so correlating must not fail
+    // a workflow still runs on a definition of a PREVIOUS application version. The
+    // declared names are unknown here, not absent, so correlating must not fail
     deploy(clientFactory, "another-module", modelWaitingFor("PaymentReceived"));
 
     assertDoesNotThrow(
@@ -163,9 +162,9 @@ public class Camunda8MessageDeclarationTest {
 
     final var clientFactory = clientFactory();
     deploy(clientFactory, "module", modelWaitingFor("PaymentReceived"));
-    // the old id of a renamed process: the message a waiting workflow needs may be
-    // declared only by a model the cluster holds, so the declared names are unknown
-    // rather than absent
+    // the old id of a renamed process. The message a waiting workflow needs may be
+    // declared only by a model the cluster holds. So the declared names are unknown, not
+    // absent
     clientFactory
         .getDeployedProcesses()
         .recordDeclaredWithoutDeployment("module", "OldProcess");
@@ -179,8 +178,8 @@ public class Camunda8MessageDeclarationTest {
   }
 
   /**
-   * A picture answering from the given models, next to the deployed ones - what the
-   * deployment service assembles from the cluster at runtime.
+   * A picture which answers from the given models, next to the deployed ones. At runtime
+   * the deployment service puts it together from the cluster.
    */
   private static void pictureAnswering(
       final Camunda8ClientFactory clientFactory,
@@ -202,8 +201,8 @@ public class Camunda8MessageDeclarationTest {
     clientFactory
         .getDeployedProcesses()
         .recordDeclaredWithoutDeployment("module", "OldProcess");
-    // the model the cluster still holds under the old id declares the message the
-    // waiting workflow needs - the current deployment does not
+    // the model the cluster still holds under the old id declares the message which the
+    // waiting workflow needs. The current deployment does not
     pictureAnswering(clientFactory, (
         module,
         bpmnProcessId) -> "OldProcess".equals(bpmnProcessId)
@@ -244,8 +243,8 @@ public class Camunda8MessageDeclarationTest {
                 "DeclaredNowhereAtAll", PhaseTwoCall.ARG_CORRELATION_ID, null)));
 
     assertTrue(failure.getMessage().contains("DeclaredNowhereAtAll"), failure.getMessage());
-    // the remedy names the messages of the models the CLUSTER holds, the renamed
-    // process' old model included
+    // the remedy names the messages of the models the CLUSTER holds, including the old
+    // model of the renamed process
     assertTrue(failure.getMessage().contains("RenameContinue"), failure.getMessage());
     assertTrue(failure.getMessage().contains("PaymentReceived"), failure.getMessage());
 
@@ -298,8 +297,8 @@ public class Camunda8MessageDeclarationTest {
             new Aggregate("agg-1"), PhaseOperations.args(PhaseTwoCall.ARG_MESSAGE_NAME,
                 "RenameContinue", PhaseTwoCall.ARG_CORRELATION_ID, null)));
 
-    // another node deploys a version declaring a new message - the kept picture
-    // does not carry it, so refusing from the kept picture would be wrong
+    // another node deploys a version which declares a new message. The kept picture does
+    // not carry it, so refusing from the kept picture would be wrong
     whatTheClusterHolds
         .set(
             java.util.List.of(
@@ -347,7 +346,7 @@ public class Camunda8MessageDeclarationTest {
             new Camunda8DeployedProcesses.DeployedProcess(
                 "module", "CalledProcess", "2251799813685250", 1, modelWaitingFor("DocumentsArrived")));
 
-    // the message waits in a called process - same aggregate, other BPMN process
+    // the message waits in a called process: same aggregate, other BPMN process
     assertDoesNotThrow(
         () -> PhaseOperations.phaseOne(serviceOf(clientFactory),
             PhaseOperation.CORRELATE_MESSAGE, "module", "Process", persistence(),

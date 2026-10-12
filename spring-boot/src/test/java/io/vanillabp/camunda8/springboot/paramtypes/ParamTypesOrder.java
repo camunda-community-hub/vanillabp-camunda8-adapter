@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 
 /**
  * The nested value of the parameter-types integration test. Its members travel inside one
- * object variable, so what a handler reads out of them is what the cluster's JSON says
- * rather than what the aggregate's own types say.
+ * object variable. So a handler reads what the cluster's JSON says, not what the aggregate's
+ * own types say.
  */
 public class ParamTypesOrder {
 

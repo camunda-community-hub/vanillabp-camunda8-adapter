@@ -22,14 +22,14 @@ public class LeaseDockerAggregate {
   private Long id;
 
   /**
-   * Which run of the handler wrote here last, so the test can say whose values the
-   * workflow continued with.
+   * Which run of the handler wrote here last. So the test can say whose values the workflow
+   * continued with.
    */
   private String writtenBy;
 
   /**
-   * Set by the <code>&#64;WorkflowEnded</code> method, which only runs once a completion
-   * was accepted.
+   * Set by the <code>&#64;WorkflowEnded</code> method, which only runs after a completion was
+   * accepted.
    */
   private String endedAs;
 

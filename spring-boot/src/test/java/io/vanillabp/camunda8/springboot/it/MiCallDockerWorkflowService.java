@@ -12,9 +12,9 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the decomposition test. Three BPMN processes on one workflow
- * aggregate, which is what a call activity is for here: the models are split, the business
- * case is not. Each task writes down what it was told about the iteration it runs in, and
- * every one of those iterations belongs to a process further out.
+ * aggregate. That is what a call activity is for here: the models are split, the business
+ * case is not. Each task writes down what it was told about the iteration it runs in. Every
+ * one of those iterations belongs to a process further out.
  */
 @Service
 @WorkflowService(

@@ -14,12 +14,13 @@ import io.camunda.client.CamundaClient;
 import io.camunda.client.api.search.enums.ProcessInstanceState;
 
 /**
- * Says after a run whether every piece of work ended exactly once. Reads the database of
- * the stopped application and the read model of the cluster, which has caught up by then.
+ * Says after a run whether every piece of work ended exactly once. It reads the database of
+ * the stopped application and the read model of the cluster. By then the read model has
+ * caught up.
  * <p>
- * Arguments: the H2 file without its suffix, the REST address of the cluster, and
- * optionally the start and the end of the disturbance in epoch milliseconds, which splits
- * the workflows into those started before, during and after it.
+ * Arguments: the H2 file without its suffix and the REST address of the cluster. Optional:
+ * the start and the end of the disturbance in epoch milliseconds. They split the workflows
+ * into those started before, during and after the disturbance.
  */
 public final class Check895 {
 

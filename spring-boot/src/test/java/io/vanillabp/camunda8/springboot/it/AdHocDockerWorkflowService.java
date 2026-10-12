@@ -13,10 +13,10 @@ import io.vanillabp.spi.service.WorkflowTask;
  * The workflow service of the ad-hoc subprocess integration test.
  *
  * <p>
- * Every activity inside the element is an ordinary task with an ordinary method behind it,
- * and there is deliberately no method for the subprocess itself: the element is not a task
- * of the application, and which of the three activities run is decided by what
- * {@code startWorkflow} was handed.
+ * Every activity inside the element is an ordinary task with an ordinary method behind it.
+ * There is no method for the subprocess itself, on purpose. The element is not a task of
+ * the application. What {@code startWorkflow} was handed decides which of the three
+ * activities run.
  * </p>
  */
 @Service

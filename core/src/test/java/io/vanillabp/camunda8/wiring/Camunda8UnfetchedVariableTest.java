@@ -32,10 +32,10 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * What happens when a delivery is asked for a variable its worker did not fetch. The
- * adapter cannot tell that case apart from a variable which is genuinely absent,
- * and both a <code>null</code> aggregate id and a <code>null</code>
- * <code>&#64;TaskParam</code> would be a loss nothing reports - so both fail the delivery
- * and name the fetch list. Neither names a key which asks for more, because there is none.
+ * adapter cannot tell that case apart from a variable which is really absent. A
+ * <code>null</code> aggregate id and a <code>null</code> <code>&#64;TaskParam</code> would
+ * both be a loss which nothing reports. So both fail the delivery and name the fetch list.
+ * Neither names a key which asks for more, because there is none.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UnfetchedVariableTest {

@@ -25,28 +25,27 @@ import io.vanillabp.integration.test.utils.delivery.TaskDeliveryLogReader;
 import io.vanillabp.integration.test.utils.delivery.TaskDeliveryLogReader.Delivery;
 
 /**
- * A REDELIVERY of a task VanillaBP already processed, against a real Camunda 8
- * cluster: it must not run the <code>&#64;WorkflowTask</code> method again.
+ * A REDELIVERY of a task which VanillaBP already processed, against a real Camunda 8
+ * cluster. It must not run the <code>&#64;WorkflowTask</code> method again.
  * <p>
- * Forcing a redelivery of a task whose result the cluster already learned is impossible -
- * the cluster would have to lose a completion. What can be forced is the case of an
- * asynchronous task: a <code>&#64;TaskId</code> method leaves the job open, the adapter
- * renews its lock for <code>async-task-lock-renewal</code>, and once that window passes
- * the cluster hands the very same job out again. This test therefore runs with a renewal
- * window of two seconds and waits several of those windows out: the handler must have run
- * exactly once, every further delivery being answered from the record VanillaBP wrote in
- * the handler's own transaction.
+ * A test cannot force a redelivery of a task whose result the cluster already learned. The
+ * cluster would have to lose a completion. It can force the case of an asynchronous task. A
+ * <code>&#64;TaskId</code> method leaves the job open. The adapter renews its lock for
+ * <code>async-task-lock-renewal</code>. Once that window passes, the cluster hands the very
+ * same job out again. So this test runs with a renewal window of two seconds and waits
+ * several of those windows out. The handler must have run exactly once. The record which
+ * VanillaBP wrote in the handler's own transaction answers every further delivery.
  * <p>
- * The second half of the arrangement is the retention of the delivery records, set
- * to ten seconds here, well below the runtime of this test and five renewal
- * windows wide. That is the relation which matters - the window has to sit
- * clearly below the retention, because the record is what answers the redelivery which
- * renews the lock. A configuration violating it does not even boot.
+ * The second half of the setup is the retention of the delivery records. It is set to ten
+ * seconds here. That is well below the runtime of this test and five renewal windows wide.
+ * This relation matters: the window has to be clearly shorter than the retention, because
+ * the record answers the redelivery which renews the lock. A configuration which breaks this
+ * rule does not even boot.
  * <p>
- * The cluster and the delivery log are both here, so what a record CARRIES is asserted
- * here too: the element id of the BPMN element and the process instance key. Both are read
- * out of the table rather than out of the invocation context, because a value only the
- * context knows is the defect that assertion is about.
+ * The cluster and the delivery log are both here. So this class also asserts what a record
+ * CARRIES: the element id of the BPMN element and the process instance key. Both are read
+ * from the table, not from the invocation context. That assertion is about the defect of a
+ * value which only the context knows.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -56,11 +55,11 @@ import io.vanillabp.integration.test.utils.delivery.TaskDeliveryLogReader.Delive
         "spring.config.name=camunda8-it",
         // the open job's lock expires after two seconds, so the cluster redelivers it
         "vanillabp.adapters.c8.async-task-lock-renewal=PT2S",
-        // five renewal windows: the record has to answer every one of them
+        // five renewal windows. The record has to answer every one of them
         "vanillabp.delivery.retention=PT10S",
-        // deliberately far away from the number above: the delivery log has to read its
-        // own retention, and against a real cluster this is where reading the outbox one
-        // would show
+        // far away from the number above, on purpose. The delivery log has to read its own
+        // retention. If it read the retention of the outbox, it would show here, against a
+        // real cluster
         "vanillabp.outbox.retention=P7D"
     })
 public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedCluster {
@@ -122,13 +121,13 @@ public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedClust
   @DisplayName("A job the cluster hands out again does not run the handler a second time")
   public void redeliveredJobsSkipTheHandler() throws Exception {
 
-    // the core logs every skipped redelivery - the proof that the cluster really
-    // handed the job out again (an unnoticed redelivery and none at all would look
-    // the same on the aggregate)
+    // the core logs every skipped redelivery. That proves the cluster really handed the job
+    // out again (an unnoticed redelivery and no redelivery at all would look the same on the
+    // aggregate)
     final var skippedDeliveries = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
     skippedDeliveries.start();
-    // a repeated delivery is answered from the core's delivery records, which is where
-    // the message about it comes from
+    // the core's delivery records answer a repeated delivery, so the message about it comes
+    // from there
     final var coreLogger = (ch.qos.logback.classic.Logger) LoggerFactory
         .getLogger(DeliveryRecords.class);
     coreLogger.addAppender(skippedDeliveries);
@@ -142,7 +141,7 @@ public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedClust
           .remove("asyncTask:"
               + aggregateId);
 
-      // AsyncProcess parks at a @TaskId task: the job stays open and its lock expires
+      // AsyncProcess parks at a @TaskId task. The job stays open, and its lock expires
       // after the configured two seconds
       clientFactoryRegistry
           .getFactory("c8")
@@ -159,11 +158,11 @@ public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedClust
           60000,
           "the asynchronous task to be invoked once");
 
-      // the delivery was recorded in the handler's transaction, with the outcome the
-      // adapter reports again on every redelivery. Awaited, not asserted right away: the
-      // counter above is incremented INSIDE the handler, while the record is written
-      // after it returned and becomes visible with the commit - reading it immediately is
-      // a race the test lost on a CI runner
+      // the delivery was recorded in the handler's transaction, with the outcome which the
+      // adapter reports again on every redelivery. The test waits for it and does not
+      // assert it right away. The counter above goes up INSIDE the handler. The record is
+      // written after the handler returned, and it becomes visible with the commit. Reading
+      // it immediately is a race, and the test lost it on a CI runner
       awaitUntil(
           () -> asyncTaskDeliveriesOf(aggregateId)
               .stream()
@@ -171,7 +170,7 @@ public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedClust
           30000,
           "the delivery of the asynchronous task to be recorded as pending completion");
 
-      // wait out several lock windows - each expiry hands the job out again
+      // wait out several lock windows. Each expiry hands the job out again
       awaitUntil(
           () -> messagesOf(skippedDeliveries)
               .stream()
@@ -207,8 +206,8 @@ public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedClust
         .getId());
 
     // AsyncProcess parks at a @TaskId task, so the record of its delivery is written and
-    // stays. Its element id and its job type differ, which is what makes the two fields
-    // tell apart here
+    // stays. Its element id and its job type differ, so the test can tell the two fields
+    // apart here
     final var processInstance = clientFactoryRegistry
         .getFactory("c8")
         .getClient()

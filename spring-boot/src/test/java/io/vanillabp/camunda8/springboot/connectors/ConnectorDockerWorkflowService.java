@@ -10,8 +10,8 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the connector integration test. It serves the task BEHIND the
- * connector element and nothing else: the connector's own job type belongs to a runtime
- * this project does not run, and there is deliberately no method for it.
+ * connector element and nothing else. The connector's own job type belongs to a runtime which
+ * this project does not run. There is no method for it, on purpose.
  */
 @Service
 @WorkflowService(

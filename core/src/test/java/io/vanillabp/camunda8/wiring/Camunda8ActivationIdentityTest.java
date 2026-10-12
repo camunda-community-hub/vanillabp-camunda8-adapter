@@ -29,15 +29,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * The two identities this adapter reports about one delivery, and why they are two. The
- * core asks for both and uses them for opposite purposes: the DELIVERY identity has to
- * stay equal while the cluster hands the same job out again, so a repeated delivery is
- * answered from its record; the ACTIVATION identity has to differ between two activations
- * of one element, so the correlations two multi-instance siblings plan do not share an
- * idempotency key.
+ * core asks for both and uses them for opposite purposes. The DELIVERY identity has to stay
+ * equal while the cluster hands the same job out again, so a repeated delivery is answered
+ * from its record. The ACTIVATION identity has to differ between two activations of one
+ * element, so the correlations two multi-instance siblings plan do not share an idempotency
+ * key.
  * <p>
- * On Camunda 8 the job key would satisfy both today, which is exactly why this is pinned:
- * the element instance key is the honest answer to the second question, and a job created
- * a second time for ONE element must never read as a new element.
+ * On Camunda 8 the job key would satisfy both today. That is exactly why this is pinned.
+ * The element instance key is the honest answer to the second question. And a job created a
+ * second time for ONE element must never read as a new element.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ActivationIdentityTest {
@@ -49,8 +49,8 @@ public class Camunda8ActivationIdentityTest {
   private final Camunda8Drain drain = new Camunda8Drain("c8", "test-module");
 
   /**
-   * Delivers one job through the adapter and answers the context the core was handed,
-   * which is the boundary this adapter is tested at.
+   * Delivers one job through the adapter and answers the context the core was handed. This
+   * adapter is tested at that boundary.
    */
   private TaskInvocationContext deliveredContext(
       final ActivatedJob job) {
@@ -135,8 +135,8 @@ public class Camunda8ActivationIdentityTest {
   public void asecondJobOfOneElementKeepsTheActivation() {
 
     // the cluster creates a job per activation, and it can create another one for the
-    // same element instance - an incident resolved, a task completed and re-entered by
-    // the model. The delivery is new, the element instance is not
+    // same element instance. For example after an incident was resolved, or when the model
+    // completes a task and enters it again. The delivery is new, the element instance is not
     final var firstJob = deliveredContext(job(4711L, 100L));
     final var secondJob = deliveredContext(job(4999L, 100L));
 
@@ -175,8 +175,8 @@ public class Camunda8ActivationIdentityTest {
     final var context = deliveredListenerContext(listenerJob);
 
     assertEquals("200", context.getActivationId());
-    // the listener job is the delivery: creation and cancellation of one user task are
-    // two deliveries with two outcomes, and one activation of one element
+    // the listener job is the delivery. Creation and cancellation of one user task are two
+    // deliveries with two outcomes, and one activation of one element
     assertEquals("5011", context.getDeliveryId());
 
   }

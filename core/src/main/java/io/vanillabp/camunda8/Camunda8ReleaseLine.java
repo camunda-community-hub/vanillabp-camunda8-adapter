@@ -6,21 +6,21 @@ import java.util.Properties;
 /**
  * The release line this build of the adapter belongs to.
  * <p>
- * The adapter is published once per line, e.g. <code>2.1.0-8.9</code>, because Camunda
- * promises a client only against clusters of its own version and newer: the client a build
- * was compiled against is the lowest cluster version that build accepts. A line therefore
- * carries every VanillaBP fix to users who cannot upgrade their cluster yet, and the newest
- * line carries what only the newest cluster can do.
+ * The adapter is published once per line, e.g. <code>2.1.0-8.9</code>. Camunda promises a
+ * client only against clusters of its own version and newer. So the client a build was
+ * compiled against is the lowest cluster version that build accepts. A line therefore brings
+ * every VanillaBP fix to users who cannot upgrade their cluster yet. The newest line brings
+ * what only the newest cluster can do.
  * <p>
  * The line reaches the runtime for MESSAGES, not for behaviour. What the adapter does
- * follows what the cluster answers, never what the build believes, which is why nothing
- * here decides anything. A message saying "this cluster cannot do X" is easier to act on
- * when it also names the line the application is running.
+ * follows what the cluster answers, never what the build believes. That is why nothing here
+ * decides anything. A message saying "this cluster cannot do X" is easier to act on when it
+ * also names the line the application is running.
  * <p>
- * The values are filtered into the adapter's version descriptor
- * <code>META-INF/vanillabp/adapter-camunda8.properties</code> by the Maven build, from the
- * properties the active line profile selects. Where they cannot be read the answer is
- * <code>unknown</code>: this must never break an application, a custom build included.
+ * The Maven build filters the values into the version descriptor of the adapter,
+ * <code>META-INF/vanillabp/adapter-camunda8.properties</code>. It takes them from the
+ * properties the active line profile selects. Where they cannot be read, the answer is
+ * <code>unknown</code>. This must never break an application, not even one with a custom build.
  * <p>
  * Why this adapter is released once per Camunda minor, built from one source tree, is decision 11
  * in the repository's DECISIONS.md.
@@ -38,7 +38,7 @@ public final class Camunda8ReleaseLine {
   }
 
   /**
-   * The Camunda 8 minor this build belongs to, which is the lowest cluster version it
+   * The Camunda 8 minor this build belongs to. It is the lowest cluster version the build
    * accepts.
    *
    * @return The line, e.g. <code>8.9</code>, or <code>unknown</code> where the descriptor was
@@ -70,8 +70,8 @@ public final class Camunda8ReleaseLine {
         properties.load(descriptor);
       }
     } catch (IOException e) {
-      // an unreadable descriptor means unknown, never a failure: the line is used in
-      // messages only
+      // an unreadable descriptor means unknown, never a failure. The line is used in
+      // messages only.
     }
     return properties;
 

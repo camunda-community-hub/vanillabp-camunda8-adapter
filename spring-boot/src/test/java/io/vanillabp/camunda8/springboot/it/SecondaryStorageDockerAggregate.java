@@ -11,10 +11,9 @@ import lombok.Setter;
 /**
  * JPA workflow aggregate of the secondary-storage integration test.
  * <p>
- * Its ID attribute is deliberately NOT named <code>id</code>: the
- * aggregate-ID process variable is named after it, so a probe deriving that name
- * from anywhere else searches for something the cluster does not have and reports
- * every workflow as unknown.
+ * Its ID attribute is NOT named <code>id</code>, on purpose. The aggregate-ID process
+ * variable is named after it. A probe which derives that name from anywhere else searches
+ * for something the cluster does not have, and it reports every workflow as unknown.
  */
 @Entity
 @Table(name = "C8_SECONDARY_STORAGE_AGGREGATE")

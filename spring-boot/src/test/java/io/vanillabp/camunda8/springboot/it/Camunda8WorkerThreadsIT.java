@@ -27,15 +27,15 @@ import io.vanillabp.integration.health.VanillaBpHealthIndicator;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Execution slots against a real Camunda 8 cluster: a handler which
- * blocks must not delay the job of another worker of the same adapter.
+ * Execution slots against a real Camunda 8 cluster: a handler which blocks must not delay
+ * the job of another worker of the same adapter.
  * <p>
- * The defect this guards against, turned into a test. The client's own default is
- * ONE execution thread, and that one thread runs every handler invocation AND the poll
- * scheduling of every worker of the client, so a blocking handler stopped the adapter
- * from asking the cluster for work at all. The spike measured 8013 ms of delay for an
- * unrelated job with one thread and 13 ms with four; this test asserts the property
- * rather than the number, because a cluster in a build has its own latencies.
+ * This test guards against a defect. The client's own default is ONE execution thread.
+ * That one thread runs every handler invocation AND the poll scheduling of every worker of
+ * the client. So a blocking handler stopped the adapter from asking the cluster for work at
+ * all. The spike measured 8013 ms of delay for an unrelated job with one thread, and 13 ms
+ * with four. This test asserts the property, not the number, because a cluster in a build
+ * has its own latencies.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -106,11 +106,11 @@ public class Camunda8WorkerThreadsIT extends SpringBootTestOnTheSharedCluster {
         .execute(status -> quickWorkflowService.startWorkflow().getId());
     assertNotNull(quick);
 
-    // the wait is a generous guard against a job which never came; what says that the
-    // second worker was not held up is the flag below, which the quick handler sets from
-    // what it found. A wait as long as the block would carry that claim itself, and on a
-    // machine carrying several builds it would report a stopped JVM as a worker which
-    // waited
+    // the long wait is only a safety margin against a job which never came. The flag below
+    // says that the second worker was not held up. The quick handler sets it from what it
+    // found. With a wait as long as the block, the wait would have to prove that itself.
+    // And on a machine which runs several builds, it would report a stopped JVM as a worker
+    // which waited
     assertTrue(
         WorkerThreadsDockerWorkflowService.QUICK_SERVED
             .await(30, TimeUnit.SECONDS),
@@ -125,12 +125,12 @@ public class Camunda8WorkerThreadsIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("the cluster reports itself to the metrics and to the health endpoint")
   public void theClusterIsMeasuredAndReported() throws Exception {
 
-    // the meters of this adapter, bound by hand: this application has no Actuator, which
-    // is what applies MeterBinder beans in a real one
+    // the meters of this adapter, bound by hand. In a real application, Actuator applies
+    // MeterBinder beans. This application has no Actuator
     final var registry = new SimpleMeterRegistry();
     metrics.bindTo(registry);
 
-    // the slot gauges are there as soon as the client exists - the adapter owns the
+    // the slot gauges are there as soon as the client exists. The adapter owns the
     // executor in this mode too, so all three of them say something
     Assertions.assertEquals(
         4.0,
@@ -152,7 +152,7 @@ public class Camunda8WorkerThreadsIT extends SpringBootTestOnTheSharedCluster {
             .gauge(),
         "and how many jobs wait for one");
 
-    // a job which really travelled through the cluster: the client counts it before
+    // a job which really travelled through the cluster. The client counts it before
     // VanillaBP sees anything of it
     final var quick = transactionTemplate
         .execute(status -> quickWorkflowService.startWorkflow().getId());
@@ -162,8 +162,8 @@ public class Camunda8WorkerThreadsIT extends SpringBootTestOnTheSharedCluster {
             .await(30, TimeUnit.SECONDS),
         "the quick handler was delivered");
 
-    // the tag carries the job type the WORKER subscribes to, which is the scoped one
-    // wherever name-clash avoidance prefixes it (here 'test-app__QuickProcess__quickTask')
+    // the tag carries the job type which the WORKER subscribes to. Where name-clash
+    // avoidance prefixes it, that is the scoped one (here 'test-app__QuickProcess__quickTask')
     final var activated = registry
         .find(Camunda8Metrics.JOBS_ACTIVATED)
         .counters()

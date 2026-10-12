@@ -14,8 +14,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * The key <code>fetch-variables</code> was removed in version 2.0. An application which still
- * sets it does not start, and the message names every key which sets it and says what applies
- * instead. The start ends before the adapter talks to a cluster, so this test needs none.
+ * sets it does not start. The message names every key which sets it, and says what applies
+ * instead. The start ends before the adapter talks to a cluster. So this test needs no
+ * cluster.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8RemovedFetchVariablesTest {

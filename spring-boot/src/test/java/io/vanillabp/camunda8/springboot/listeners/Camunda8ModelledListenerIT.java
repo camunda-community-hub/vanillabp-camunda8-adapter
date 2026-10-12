@@ -21,20 +21,20 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Whether a listener somebody modelled is really served on a real cluster while
  * {@code allow-listeners} is on for its process.
  * <p>
- * A cluster is what this needs and nothing else would do. The cluster creates a job per
- * listener, a worker has to be subscribed to the listener's job type for the workflow to move at
- * all, and the workflow module runs under {@code name-clash-avoidance: use-prefix} - so the job
- * type the cluster knows carries the module and the process, while the methods below are named
- * after what the modeller typed. Without a cluster nothing proves that the prefix and its way
- * back meet.
+ * This needs a cluster, and nothing else would do. The cluster creates a job per listener. A
+ * worker has to subscribe to the listener's job type, or the workflow does not move at all.
+ * The workflow module runs under {@code name-clash-avoidance: use-prefix}. So the job type the
+ * cluster knows carries the module and the process. The methods below are named after what
+ * the modeller typed. Only a cluster proves that the prefix and its way back fit together.
  * <p>
  * The scenario brings its own application, its own configuration file and its own resources
- * location, see {@link ListenerTestApplication}: a model carrying a listener does not deploy
- * without the key, so no other integration test of this module may see it.
+ * location. See {@link ListenerTestApplication}. A model with a listener does not deploy
+ * without the key. So no other integration test of this module may see it.
  * <p>
- * The model has a gateway behind the service task which reads a flag only the task's
- * <code>end</code> listener sets. That is the second thing a cluster is needed for: whether what
- * a listener method wrote into the workflow aggregate really reaches the process instance.
+ * The model has a gateway behind the service task. It reads a flag which only the task's
+ * <code>end</code> listener sets. That is the second reason for a cluster. It shows whether
+ * what a listener method wrote into the workflow aggregate really reaches the process
+ * instance.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).

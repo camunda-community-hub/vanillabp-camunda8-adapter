@@ -43,19 +43,19 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * The startup check for old process versions asks the catalog about every version older
  * than the one the boot deployed: how many workflows still run on it, which tasks its model
  * has and which identifiers that model declares. All of them are addressed by the cluster's
- * process definition key, and finding that key used to be a search of its own - so a process
- * with fifty versions behind it paid a hundred searches nobody could see, on top of the one
- * search which had already brought every key back. The two questions about one version's
- * MODEL share the fetch of it, so a version costs one XML request however many of them are
- * put.
+ * process definition key. Finding that key used to be a search of its own. So a
+ * process with fifty versions behind it paid a hundred searches nobody could see, on top of
+ * the one search which had already brought every key back. The two questions about the MODEL
+ * of one version share its fetch. So a version costs one XML request, however many questions
+ * are put.
  * <p>
  * The deployment asks one more thing, once per workflow module: which of its identifiers the
- * cluster already held. That is one definition search for every BPMN process of the module
- * together, plus one search per DMN decision, and neither number grows with the history of
- * the application.
+ * cluster already held. That is one definition search for all BPMN processes of the module
+ * together, plus one search per DMN decision. Neither number grows with the history of the
+ * application.
  * <p>
- * One question the deployment answers reaches no cluster at all: whether two workflow modules
- * are separated is the tenant each of them would be deployed to, and that comes out of
+ * One question the deployment answers reaches no cluster at all. Whether two workflow modules
+ * are separated depends on the tenant each of them would be deployed to, and that comes out of
  * configuration.
  * <p>
  * Decision 13 in the repository's DECISIONS.md is what this holds: a request to the
@@ -70,8 +70,8 @@ public class Camunda8StartupQuestionCostTest {
   private static final String PROCESS = "TestProcess";
 
   /**
-   * How many versions the cluster holds - enough that a request per version is a
-   * different number from a request per process.
+   * How many versions the cluster holds. Enough that a request per version is a different
+   * number from a request per process.
    */
   private static final int VERSIONS = 4;
 
@@ -154,8 +154,8 @@ public class Camunda8StartupQuestionCostTest {
         .mapToObj(Camunda8StartupQuestionCostTest::definition)
         .toList();
 
-    // the cluster answers a definition search with everything it holds for the process,
-    // and a search naming ONE version with that version - the second is the case of a
+    // the cluster answers a definition search with everything it holds for the process. It
+    // answers a search naming ONE version with that version. The second is the case of a
     // version another node deployed after the list was read
     final var askedFor = new int[]{
         0
@@ -244,9 +244,9 @@ public class Camunda8StartupQuestionCostTest {
   }
 
   /**
-   * What the startup check does per BPMN process: it asks for the versions once and then
-   * asks three questions about every older one - how many workflows run on it, which tasks
-   * its model has and which identifiers that model declares.
+   * What the startup check does per BPMN process. It asks for the versions once. Then it asks
+   * three questions about every older one: how many workflows run on it, which tasks its model
+   * has and which identifiers that model declares.
    */
   private void whatAStartAsks() {
 
@@ -291,7 +291,7 @@ public class Camunda8StartupQuestionCostTest {
   @DisplayName("A version the search did not hold is looked up once, not once per question")
   public void aVersionDeployedLaterIsLookedUpOnce() {
 
-    // a version another cluster node deployed after the search ran: the cluster has to be
+    // a version another cluster node deployed after the search ran. The cluster has to be
     // asked for it, and asked once
     versions.activeInstanceCountOf(MODULE, PROCESS, "7");
     versions.tasksOfVersion(MODULE, PROCESS, "7");
@@ -408,8 +408,8 @@ public class Camunda8StartupQuestionCostTest {
 
     versions.deployedVersionsOf(MODULE, PROCESS);
 
-    // the mocked cluster answers with an EMPTY page and a total of seven, which is what
-    // an instance search looks like when only the number is wanted
+    // the mocked cluster answers with an EMPTY page and a total of seven. That is what an
+    // instance search looks like when only the number is wanted
     assertEquals(
         7L,
         versions.activeInstanceCountOf(MODULE, PROCESS, "1"),

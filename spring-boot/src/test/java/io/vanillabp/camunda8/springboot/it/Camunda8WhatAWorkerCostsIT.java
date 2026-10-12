@@ -33,33 +33,33 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * that cut holds is a question about a price nobody had measured, and this is the price.
  * <p>
  * <b>How it is measured.</b> Workers are opened in batches against the shared cluster, with
- * the raw client and job types nothing ever produces, so nothing but the worker itself is in
- * the reading. Three readings are taken - before any worker, after the first batch and after
- * the second - and what is reported is the SLOPE between two readings rather than a total:
- * the fixed cost of a client (its executor, its connection pool, the objects it keeps) is in
- * every reading alike and would otherwise be counted as a worker.
+ * the raw client and job types which nothing ever produces. So nothing but the worker itself
+ * is in the reading. There are three readings: before any worker, after the first batch and
+ * after the second. The report shows the SLOPE between two readings, not a total. The fixed
+ * cost of a client (its executor, its connection pool, the objects it keeps) is the same in
+ * every reading. Otherwise it would be counted as a worker.
  * <p>
- * Each reading is taken once every worker has settled, which is one {@code request-timeout}
- * after the batch was opened plus a margin: a worker costs a connection because it keeps an
- * activation request open, and a worker whose first request has not gone out yet costs
- * nothing yet.
+ * Each reading is taken once every worker has settled. That is one {@code request-timeout}
+ * after the batch was opened, plus a margin. A worker costs a connection because it keeps an
+ * activation request open. A worker whose first request has not gone out yet costs nothing
+ * yet.
  * <ul>
  * <li><b>Connections</b> are the established TCP sockets of this network namespace whose
  * remote port is the cluster's REST port, read from {@code /proc/net/tcp} and
- * {@code /proc/net/tcp6}. That port belongs to this one container, and no second application
+ * {@code /proc/net/tcp6}. That port belongs to this one container. No second application
  * talks to it while a class of this module runs.</li>
- * <li><b>Threads</b> are what the JVM reports, which is the honest way round: the client
- * runs every worker on the executor it was handed, so the expected slope is zero and a
- * number above zero would be the news.</li>
- * <li><b>Heap</b> is what is used after a full collection, which is an indication and not an
- * accounting - a JVM under a test runner has other things in it.</li>
+ * <li><b>Threads</b> are what the JVM reports. That is the honest way to count them. The
+ * client runs every worker on the executor it was handed. So the expected slope is zero, and
+ * a number above zero would be the news.</li>
+ * <li><b>Heap</b> is what is used after a full collection. It is a rough guide, not an exact
+ * count, because a JVM under a test runner has other things in it.</li>
  * </ul>
- * The numbers this produced are in the README, section "Connecting to a Camunda 8 cluster",
- * with the machine they were taken on.
+ * The README has the numbers which this produced, together with the machine they were taken
+ * on, in the section "Connecting to a Camunda 8 cluster".
  * <p>
- * It asserts almost nothing, on purpose. A measurement which fails a build on a machine
- * being slower than the one it was written on stops being read. What it does hold is the one
- * property the sizing rests on: a worker costs a CONNECTION, so the workers of an
+ * It asserts almost nothing, on purpose. People stop reading a measurement which fails a
+ * build because a machine is slower than the one it was written on. It only holds the one
+ * property which the sizing rests on: a worker costs a CONNECTION. So the workers of an
  * application have to fit into its pool.
  * <p>
  * The class is skipped when Docker is unavailable
@@ -70,27 +70,27 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
 
   /**
-   * How many workers each batch opens. Fifty is well above the noise of a single connection
-   * and well below the pool below, so neither reading is taken at a limit.
+   * How many workers each batch opens. Fifty is well above the noise of a single connection,
+   * and well below the pool below. So no reading is taken at a limit.
    */
   private static final int WORKERS_PER_BATCH = 50;
 
   /**
-   * The pool this measurement gives its client. Far above the two batches, because a worker
-   * which has to wait for a connection is a worker which does not hold one, and the slope
-   * would then measure the pool rather than the worker.
+   * The pool which this measurement gives its client. It is far above the two batches. A
+   * worker which has to wait for a connection does not hold one. Then the slope would measure
+   * the pool, not the worker.
    */
   private static final int MAX_HTTP_CONNECTIONS = 300;
 
   /**
-   * How long a worker's activation request waits at the cluster. The client's own default,
-   * written down because the settling time below is derived from it.
+   * How long a worker's activation request waits at the cluster. It is the client's own
+   * default. It is written down because the settling time below is derived from it.
    */
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
   /**
-   * How long a batch is given to settle before it is read: one {@code request-timeout} for
-   * the first round of requests to be answered plus half of one for the next to be out.
+   * How long a batch is given to settle before it is read: one {@code request-timeout} until
+   * the first round of requests is answered, plus half of one until the next round is out.
    */
   private static final Duration UNTIL_A_BATCH_HOLDS_ITS_CONNECTIONS = Duration.ofSeconds(15);
 
@@ -104,8 +104,8 @@ public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
 
     try (final var client = client()) {
 
-      // the client has talked to the cluster once before the baseline is taken, so what it
-      // keeps open for an ordinary command is part of the baseline and not of the slope
+      // the client has talked to the cluster once before the baseline is taken. So what it
+      // keeps open for an ordinary command is part of the baseline, not of the slope
       client.newTopologyRequest().send().join();
 
       final var withoutWorkers = readingNow(client, "no worker at all");
@@ -134,8 +134,8 @@ public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
 
       report(reporter, measured);
 
-      // the one property the sizing rests on, and the only thing this class fails a build
-      // over: a worker holds a connection of the client's pool for as long as it is open
+      // the one property which the sizing rests on, and the only thing over which this class
+      // fails a build: a worker holds a connection of the client's pool while it is open
       final var connectionsPerWorker = (double) (afterTheSecondBatch.connections() - withoutWorkers
           .connections()) / (2 * WORKERS_PER_BATCH);
       assertTrue(
@@ -209,8 +209,8 @@ public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
               client
                   .newWorker()
                   .jobType("whatAWorkerCosts-%d-%d".formatted(Integer.valueOf(batch), Integer.valueOf(i)))
-                  // nothing ever produces these job types, so no handler of this class ever
-                  // runs and what is measured is a worker which waits
+                  // nothing ever produces these job types. So no handler of this class ever
+                  // runs, and the test measures a worker which waits
                   .handler((
                       jobClient,
                       job) -> {
@@ -228,8 +228,8 @@ public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
       final CamundaClient client,
       final String what) throws InterruptedException {
 
-    // twice, because the first collection makes objects reachable for the second one, and
-    // a heap figure taken between the two is neither of the two
+    // twice, because the first collection makes objects reachable for the second one. A
+    // heap figure taken between the two is neither of the two
     System.gc();
     TimeUnit.MILLISECONDS.sleep(200);
     System.gc();
@@ -241,12 +241,12 @@ public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * The established TCP sockets of this network namespace whose remote port is the one the
-   * cluster answers REST on.
+   * The established TCP sockets of this network namespace whose remote port is the one on
+   * which the cluster answers REST.
    * <p>
-   * Read from {@code /proc}, because neither the client nor the JVM publishes the size of
-   * that pool. The port is the one Testcontainers mapped for this cluster, so nothing but
-   * this JVM is on the other end of it.
+   * They are read from {@code /proc}, because neither the client nor the JVM publishes the
+   * size of that pool. Testcontainers mapped the port for this cluster. So nothing but this
+   * JVM is on the other end of it.
    *
    * @return How many sockets there are
    */
@@ -259,8 +259,8 @@ public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
 
   /**
    * Counts the ESTABLISHED lines of one of the kernel's socket tables whose remote port is
-   * the one asked for. The columns are {@code sl local_address rem_address st ...}, the
-   * addresses are {@code hex:hex} and the state {@code 01} is ESTABLISHED.
+   * the one asked for. The columns are {@code sl local_address rem_address st ...}. The
+   * addresses are {@code hex:hex}, and the state {@code 01} is ESTABLISHED.
    */
   private static int countIn(
       final String table,
@@ -301,8 +301,8 @@ public class Camunda8WhatAWorkerCostsIT extends TestOnTheSharedCluster {
 
   /**
    * Puts the measurement where it can be read after a build: into the test report of the
-   * runner respectively an IDE, and into a file of its own, because the console output of a
-   * test which passes is suppressed.
+   * runner or of an IDE, and into a file of its own. The console output of a test which
+   * passes is suppressed.
    *
    * @param reporter The JUnit reporter
    * @param measured What was read, one line per reading

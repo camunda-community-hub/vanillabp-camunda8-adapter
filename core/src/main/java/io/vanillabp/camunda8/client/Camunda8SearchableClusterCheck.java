@@ -6,28 +6,27 @@ package io.vanillabp.camunda8.client;
  *
  * <h2>Why the requirement is checked at all</h2>
  *
- * Because everything VanillaBP asks about a running workflow is a search. Finding a
- * workflow by its aggregate's id is one, and so is every question of the viewer and of
- * the version catalog. A cluster started without secondary storage answers none of them,
- * and neither does a cluster whose credentials may not read what the adapter asks for.
- * The adapter used to carry a second behaviour per question for that state, which bought
- * no capability and cost a message and a test each - see decision 20 in the repository's
+ * Everything VanillaBP asks about a running workflow is a search. Finding a workflow by the
+ * id of its aggregate is one. So is every question of the viewer and of the version
+ * catalog. A cluster started without secondary storage answers none of them. Neither does
+ * a cluster whose credentials may not read what the adapter asks for. The adapter used to
+ * have a second behaviour per question for that state. It gave no capability, and each one
+ * cost a message and a test, see decision 20 in the repository's
  * DECISIONS.md.
  *
  * <h2>Why it is asked here and not among the configuration checks</h2>
  *
- * Because it asks the CLUSTER. {@link Camunda8StartupValidation} reads properties and can
- * therefore run before anything is reachable; this question needs a cluster which
- * answers at all, which is what the start waits for
- * ({@link Camunda8ClusterWait}). Asking earlier would mean ending the boot of an
- * application whose cluster was merely booting alongside it, which {@link Camunda8QueryApi}
- * deliberately refuses to conclude.
+ * Because it asks the CLUSTER. {@link Camunda8StartupValidation} reads properties, so it
+ * can run before anything is reachable. This question needs a cluster which answers at
+ * all, and the start waits for that ({@link Camunda8ClusterWait}). Asking earlier would end
+ * the boot of an application whose cluster was only booting at the same time.
+ * {@link Camunda8QueryApi} refuses, on purpose, to draw that conclusion.
  *
  * <h2>What is NOT reported</h2>
  *
  * An unreachable cluster. The capability comes from the remembered answer of
- * {@link Camunda8QueryApi}, which stays open where the probe could not reach the cluster,
- * so only a cluster which actually refused a search ends a boot here.
+ * {@link Camunda8QueryApi}. That answer stays open where the probe could not reach the
+ * cluster. So only a cluster which really refused a search ends a boot here.
  */
 public final class Camunda8SearchableClusterCheck {
 
@@ -39,10 +38,10 @@ public final class Camunda8SearchableClusterCheck {
    *
    * @param adapterId The adapter ID
    * @param queryApi The remembered answer of this adapter instance's cluster
-   * @throws IllegalStateException If the cluster refuses to be searched - naming the
-   *           adapter, both reasons a cluster has for refusing, what to do about each of
-   *           them, what the adapter cannot do without a search, and the policy which
-   *           lets a non-primary adapter boot degraded anyway
+   * @throws IllegalStateException If the cluster refuses to be searched. The message names
+   *           the adapter, both reasons a cluster has for refusing, what to do about each of
+   *           them, what the adapter cannot do without a search, and the policy which lets a
+   *           non-primary adapter boot degraded anyway
    */
   public static void requireAClusterWhichCanBeSearched(
       final String adapterId,

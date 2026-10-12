@@ -19,12 +19,12 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the drain of one workflow module does while the application goes down.
- * The two halves are tested separately here - the waiting, and the rule which keeps a
+ * What the drain of one workflow module does while the application goes down. The two
+ * halves are tested separately here. One is the waiting. The other is the rule which keeps a
  * failure of the shutdown from being reported as a failure of the application.
  * <p>
- * The shutdown waits for a second thing beside the handlers, the workers reporting
- * themselves closed, and the line the drain writes can only say what this adapter knows.
+ * Besides the handlers, the shutdown waits for a second thing: the workers which report
+ * themselves closed. The line the drain writes can only say what this adapter knows.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8DrainTest {
@@ -35,8 +35,8 @@ public class Camunda8DrainTest {
   @DisplayName("A drain with nothing in flight and released workers returns immediately")
   public void anEmptyDrainReturnsImmediately() {
 
-    // the same reading as in the test of a grace of zero below: one question to the
-    // workers is a drain which returned on its first look, and no clock has to say it
+    // read as in the test of a grace of zero below. One question to the workers means the
+    // drain returned on its first look, and no clock has to say it
     final var workersAsked = new AtomicInteger();
     assertTrue(drain.awaitQuiet(Duration.ofSeconds(20), 2, () -> {
       workersAsked.incrementAndGet();
@@ -123,10 +123,10 @@ public class Camunda8DrainTest {
 
     drain.jobStarted(4711L, "task", "someTask", "TestProcess");
 
-    // waiting means asking the workers again on every poll, so the number of questions
-    // is what says whether anything waited. A clock would say it worse: a machine
-    // carrying several builds stops this JVM for seconds at a time, and a stopped JVM
-    // looks exactly like a drain which waited
+    // waiting means asking the workers again on every poll. So the number of questions
+    // says whether anything waited. A clock would say it worse. A machine which runs
+    // several builds stops this JVM for seconds at a time, and a stopped JVM looks exactly
+    // like a drain which waited
     final var workersAsked = new AtomicInteger();
     assertFalse(drain.awaitQuiet(Duration.ZERO, 1, () -> {
       workersAsked.incrementAndGet();
@@ -275,8 +275,8 @@ public class Camunda8DrainTest {
   }
 
   /**
-   * What the drain logged while the action ran (this module configures no appender, so
-   * the events are collected rather than read off the console).
+   * What the drain logged while the action ran. This module configures no appender, so the
+   * events are collected instead of read off the console.
    */
   private List<ch.qos.logback.classic.spi.ILoggingEvent> eventsOf(
       final Runnable action) {

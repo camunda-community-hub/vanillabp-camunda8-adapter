@@ -8,42 +8,41 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Element;
 
 /**
- * What the POM of a module promises the application which resolves it, read back out of the
- * file the build wrote.
+ * What the POM of a module promises the application which resolves it. It is read back
+ * out of the file the build wrote.
  * <p>
- * A Camunda 8 adapter is published once per release line, and the POM is what puts a Camunda
- * client on an application's classpath. So the POM is where a line keeps or breaks its
- * promise, and in September 2026 it broke it: every line asked for the client of the current
- * GA line, because the published POM was a copy of the source POM and the client version
- * stood in a property only a profile of ours sets. The flatten plugin's <code>oss</code> mode
- * ended that, and an assertion like this one is what keeps it ended.
+ * A Camunda 8 adapter is published once per release line. The POM puts a Camunda client on
+ * an application's classpath. So the POM is where a line keeps or breaks its promise. In
+ * September 2026 it broke it: every line asked for the client of the current GA line. The
+ * published POM was a copy of the source POM, and the client version was in a property
+ * which only one of our profiles sets. The <code>oss</code> mode of the flatten plugin fixed
+ * that, and an assertion like this one keeps it fixed.
  * <p>
- * The promise is the same in every repository which builds a Camunda 8 adapter, and so is the
- * way to check it, which is why this class sits here instead of in a test class each
- * repository copies. A copy drifts, and the whole value of this check is that it still runs
- * in two years. What differs is the artifact being checked and the versions expected of it,
- * and that is what the parameters are for. Each repository keeps its own test methods with
- * its own names and calls these assertions from them.
+ * The promise is the same in every repository which builds a Camunda 8 adapter, and so is
+ * the way to check it. This is why this class sits here, and not in a test class which each
+ * repository copies. A copy drifts, and this check is only worth something if it still runs
+ * in two years. What differs is the artifact under check and the versions expected of it.
+ * The parameters cover that. Each repository keeps its own test methods with its own names
+ * and calls these assertions from them.
  * <p>
  * A build whose version does not carry the release line should say which run a failure came
  * from, see {@link #inTheRun(String)}.
  * <p>
- * The POM is read from disk rather than derived, because deriving it would repeat the
- * reasoning the mistake was made in.
+ * The POM is read from disk, not derived. Deriving it would repeat the reasoning which
+ * led to the mistake.
  * <p>
- * This module is published per release line, so this class travels with the line an
- * application compiles against. A change here reaches another repository with the next
- * snapshot of this line and not before.
+ * This module is published per release line. So this class comes with the line an
+ * application compiles against. A change here only reaches another repository with the
+ * next snapshot of this line.
  * <p>
- * It is a module of its own, and not part of 'test-support', because that one starts
- * containers and would put Testcontainers on the test classpath of a module which only wants
- * to read a file. The two are never wanted together: a module asks either for a cluster or
- * for this.
+ * It is a module of its own, not part of 'test-support'. That module starts containers. It
+ * would put Testcontainers on the test classpath of a module which only wants to read a
+ * file. Nobody needs the two together: a module asks either for a cluster or for this.
  */
 public final class PublishedPom {
 
   /**
-   * The POM which is installed and deployed for a module, written by the flatten plugin into
+   * The POM which is installed and deployed for a module. The flatten plugin writes it into
    * the module's own directory, which is the working directory of its tests.
    */
   private static final Path FILE = Path.of(".flattened-pom.xml");
@@ -60,13 +59,13 @@ public final class PublishedPom {
   }
 
   /**
-   * Names the run these assertions belong to, and every failure message repeats it.
+   * Names the run these assertions belong to. Every failure message repeats it.
    * <p>
-   * A message names the coordinate of the artifact, and in a build whose version carries the
-   * release line that coordinate already says which line was meant. Where the version is
-   * plain, as it is in a pull request build, it says nothing, and a reader of a red build has
-   * to guess which of several lines produced it. This module cannot fill the gap itself: it
-   * knows the line it was built for, not the line the caller is testing.
+   * A message names the coordinate of the artifact. In a build whose version carries the
+   * release line, that coordinate already says which line was meant. Where the version is
+   * plain, as in a pull request build, it says nothing. A reader of a red build then has to
+   * guess which of several lines produced it. This module cannot fill the gap itself. It
+   * knows the line it was built for, not the line the caller tests.
    *
    * @param run Whatever identifies this run to somebody reading its failure, e.g. the release
    *          line and the client version the build selected
@@ -112,8 +111,8 @@ public final class PublishedPom {
   }
 
   /**
-   * Asserts that the published POM asks for exactly the given version of one dependency,
-   * which for the Camunda client is the client the build was compiled against.
+   * Asserts that the published POM asks for exactly the given version of one dependency.
+   * For the Camunda client, that is the client the build was compiled against.
    *
    * @param groupId The group of the dependency, e.g. <code>io.camunda</code>
    * @param artifactId The dependency, e.g. <code>camunda-client-java</code>
@@ -152,9 +151,9 @@ public final class PublishedPom {
    * Asserts that the published POM hands an application nothing of ours to inherit: no parent
    * and no <code>dependencyManagement</code>.
    * <p>
-   * Both are read when an application resolves its dependencies, and both would hand it
-   * versions this repository picked for its own build, which is the build of the newest line.
-   * What one line needs is no business of another line's users.
+   * An application reads both when it resolves its dependencies. Both would hand it versions
+   * this repository picked for its own build, and that is the build of the newest line. What
+   * one line needs does not concern the users of another line.
    *
    * @return This, so a test can ask for more than one promise
    * @throws AssertionError If either is back
@@ -185,12 +184,12 @@ public final class PublishedPom {
    * Asserts that the published POM names the repository it was built from, with nothing
    * appended to the addresses.
    * <p>
-   * Maven hands a child the parent's <code>url</code> and all three <code>scm</code> elements
-   * with the child's own name appended, so an artifact ends up advertising an address like
-   * <code>https://github.com/someone/some-adapter/some-adapter</code>, which is no page. The
-   * four <code>inherit.append.path</code> attributes in the parent POM switch that off. Every
-   * artifact then names the repository root, which is one address for all of them and
-   * survives a module being renamed or moved.
+   * Maven hands a child the parent's <code>url</code> and all three <code>scm</code>
+   * elements, with the child's own name appended. So an artifact ends up with an address
+   * like <code>https://github.com/someone/some-adapter/some-adapter</code>, and there is no
+   * page there. The four <code>inherit.append.path</code> attributes in the parent POM
+   * switch that off. Every artifact then names the repository root. That is one address for
+   * all of them, and it still works when a module is renamed or moved.
    *
    * @param repository The repository the artifacts are built from, without a trailing slash,
    *          e.g.
@@ -240,11 +239,10 @@ public final class PublishedPom {
   /**
    * Asserts that the published POM says nothing about where we deploy.
    * <p>
-   * A <code>distributionManagement</code> names the registry the maintainers publish to,
-   * which a user of the artifact can neither use nor act on, and on an artifact which later
-   * sits on Maven Central it points a reader somewhere else entirely. The source POM keeps
-   * it, because that is where the deploy reads it, and the flatten plugin takes it out of
-   * what is published.
+   * A <code>distributionManagement</code> names the registry the maintainers publish to. A
+   * user of the artifact can do nothing with it. On an artifact which later sits on Maven
+   * Central, it points a reader somewhere else entirely. The source POM keeps it, because
+   * the deploy reads it there. The flatten plugin takes it out of what is published.
    *
    * @return This, so a test can ask for more than one promise
    * @throws AssertionError If it is in the published POM
@@ -265,8 +263,8 @@ public final class PublishedPom {
   }
 
   /**
-   * The artifact this POM is published for, named the way a failure message can act on, and
-   * with the run appended where the caller named one. See {@link #inTheRun(String)}.
+   * The artifact this POM is published for, named in a way a failure message can use. If
+   * the caller named a run, the run is appended. See {@link #inTheRun(String)}.
    */
   private String coordinate() {
 
@@ -305,8 +303,8 @@ public final class PublishedPom {
   }
 
   /**
-   * Notes one address which is not the one expected, so a run reports all of them at once
-   * rather than the first.
+   * Notes one address which is not the expected one. So a run reports all of them at once,
+   * not only the first.
    */
   private static void appendWhereWrong(
       final StringBuilder wrong,
@@ -329,8 +327,8 @@ public final class PublishedPom {
 
   /**
    * A direct child element of the given one, or {@code null} where it has none of that name.
-   * Direct, because a POM repeats names: 'url' stands under the project, under every license
-   * and inside 'scm'.
+   * Only direct children, because a POM repeats names: 'url' is under the project, under
+   * every license and inside 'scm'.
    */
   private static Element child(
       final Element parent,

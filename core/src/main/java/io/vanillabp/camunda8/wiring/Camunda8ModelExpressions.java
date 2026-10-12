@@ -17,31 +17,32 @@ import io.vanillabp.integration.adapter.spi.expressions.ExpressionPlace;
 import io.vanillabp.integration.adapter.spi.expressions.ModelExpression;
 
 /**
- * The expressions one BPMN process reads the workflow's data with, as the core is told
- * about them: the element they sit in, the place inside that element and the text FEEL
- * evaluates.
+ * The expressions with which one BPMN process reads the data of the workflow, in the form
+ * the core gets them: the element they sit in, the place inside that element and the text
+ * FEEL evaluates.
  * <p>
  * FEEL marks an expression with a leading <code>=</code>, and everything after it is the
- * expression. So a value without that sign is a value and nothing is reported about it: a
- * timer written as <code>PT1H</code> and a collection written as a JSON list are what the
- * modeller meant, not something the cluster evaluates.
+ * expression. So a value without that sign is just a value, and nothing is reported about
+ * it. A timer written as <code>PT1H</code> and a collection written as a JSON list are what
+ * the modeller meant. The cluster does not evaluate them.
  * <p>
- * Read are the places a modeller puts a data read into and which this cluster has: the
- * condition of a sequence flow, the definition of a timer, the collection and the
+ * This reads the places where a modeller puts a data read, as far as this cluster has
+ * them: the condition of a sequence flow, the definition of a timer, the collection and the
  * completion condition of a multi-instance element, and the correlation key of a message.
- * The correlation key is the one place Camunda 7 has not got, because this cluster
- * correlates a message by a value the model names.
+ * Camunda 7 has no correlation key, because there the cluster does not correlate a message
+ * by a value the model names. This cluster does.
  * <p>
  * Three places of the list the core keeps do not exist here. Camunda 8 deploys no
- * conditional event, no standard loop and no multi-instance cardinality, so a model
- * carrying one of them never reaches this adapter. What is left out on purpose is what the
- * cluster resolves for itself: the job type of a task, the process of a call activity, the
- * decision of a business rule task, the form of a user task. Those name a target rather
- * than reading data, and a getter on the workflow aggregate is no answer for them.
+ * conditional event, no standard loop and no multi-instance cardinality. So a model
+ * carrying one of them never reaches this adapter. Left out on purpose is what the cluster
+ * resolves for itself: the job type of a task, the process of a call activity, the
+ * decision of a business rule task, the form of a user task. Those name a target and do not
+ * read data. A getter on the workflow aggregate is no answer for them.
  * <p>
- * Asked while the model is still the modeller's. This adapter writes a correlation key of
- * its own into a message which carries none and input mappings into a multi-instance
- * element, so a later reading would report VanillaBP's own expressions as the modeller's.
+ * This is asked while the model is still as the modeller wrote it. This adapter writes a
+ * correlation key of its own into a message which carries none. It also writes input
+ * mappings into a multi-instance element. So a later reading would report the expressions
+ * of VanillaBP as the ones of the modeller.
  */
 public final class Camunda8ModelExpressions {
 
@@ -64,8 +65,8 @@ public final class Camunda8ModelExpressions {
       return List.of();
     }
     final var expressions = new ArrayList<ModelExpression>();
-    // a condition expression belongs to a sequence flow here and to nothing else, since
-    // this cluster has no conditional event to put one on
+    // a condition expression belongs to a sequence flow here and to nothing else. This
+    // cluster has no conditional event to put one on.
     model
         .getModelElementsByType(ConditionExpression.class)
         .stream()
@@ -75,7 +76,7 @@ public final class Camunda8ModelExpressions {
             elementIdOf(condition),
             ExpressionPlace.SEQUENCE_FLOW_CONDITION,
             condition.getTextContent()));
-    // a timer holds its definition in a child element, and a model names one of the three
+    // a timer holds its definition in a child element. A model names one of the three.
     model
         .getModelElementsByType(TimerEventDefinition.class)
         .stream()
@@ -105,9 +106,9 @@ public final class Camunda8ModelExpressions {
             elementIdOf(condition),
             ExpressionPlace.MULTI_INSTANCE_COMPLETION_CONDITION,
             condition.getTextContent()));
-    // the correlation key sits on the MESSAGE, which belongs to the file rather than to
-    // the process, so the catch elements of this process are what leads to it. The element
-    // named is the one waiting, because that is what a modeller searches their model for
+    // the correlation key sits on the MESSAGE. The message belongs to the file and not to
+    // the process. So the catch elements of this process lead to it. The element named is
+    // the one waiting, because a modeller searches their model for that one.
     Camunda8TaskWiring
         .messageCatchElementsOf(model, bpmnProcessId)
         .forEach(catchElement -> {
@@ -165,7 +166,7 @@ public final class Camunda8ModelExpressions {
   }
 
   /**
-   * Whether the element sits inside the given process - a file may hold several.
+   * Whether the element sits inside the given process. A file may hold several.
    */
   private static boolean belongsTo(
       final ModelElementInstance element,
@@ -181,8 +182,8 @@ public final class Camunda8ModelExpressions {
   }
 
   /**
-   * The ID of the element itself or of the closest ancestor having one - a condition
-   * expression carries no ID, its sequence flow does, and a
+   * The ID of the element itself or of the closest ancestor having one. A condition
+   * expression carries no ID, but its sequence flow does. And a
    * <code>zeebe:loopCharacteristics</code> sits two elements below its activity.
    */
   private static String elementIdOf(

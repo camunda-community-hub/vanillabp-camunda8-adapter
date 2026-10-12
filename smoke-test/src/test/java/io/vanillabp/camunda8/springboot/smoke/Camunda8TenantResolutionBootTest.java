@@ -14,12 +14,12 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Where the Spring binding reads <code>tenant-id</code>. The name is resolved per workflow
- * module, with the adapter's section as the fallback, and the key it was read from travels
- * with it because a message about a tenant has to quote the line the developer wrote.
+ * module, and the adapter's section is the fallback. The key it was read from travels with
+ * it, because a message about a tenant has to quote the line which the developer wrote.
  * <p>
- * Two workflow modules sharing a BPMN process id depend on this: one name for the whole
- * adapter puts both into one tenant, and a name for one of them is how the application gives
- * that module a scope of its own.
+ * Two workflow modules which share a BPMN process id depend on this. One name for the whole
+ * adapter puts both into one tenant. A name for one of them gives that module a scope of its
+ * own.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8TenantResolutionBootTest {

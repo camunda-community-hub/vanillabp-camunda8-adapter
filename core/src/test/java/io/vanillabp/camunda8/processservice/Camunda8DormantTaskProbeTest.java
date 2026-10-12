@@ -27,11 +27,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A task whose job waits in the queue is a task the cluster HOLDS.
  * <p>
- * An asynchronous task keeps its job locked for <code>async-task-lock-renewal</code>, and
- * when that hour passes the cluster puts the job back into the queue until a worker takes it
- * again. A probe arriving in that gap is refused with HTTP <code>400</code> respectively
- * gRPC <code>INVALID_ARGUMENT</code>, which used to fall through to
- * {@link WorkflowAwareness#BPMS_UNAVAILABLE} and sent the caller into retries for a task
+ * An asynchronous task keeps its job locked for <code>async-task-lock-renewal</code>. When
+ * that hour passes, the cluster puts the job back into the queue until a worker takes it
+ * again. A probe which arrives in that gap is refused with HTTP <code>400</code> or gRPC
+ * <code>INVALID_ARGUMENT</code>. That used to fall through to
+ * {@link WorkflowAwareness#BPMS_UNAVAILABLE}, and it sent the caller into retries for a task
  * which was perfectly alive.
  * <p>
  * Measured on 8.8.37, 8.9.19 and 8.10.0-alpha5 with the same answer on all three lines, for
@@ -109,7 +109,7 @@ public class Camunda8DormantTaskProbeTest {
   private Camunda8ProcessService<?> aService() {
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
@@ -146,7 +146,7 @@ public class Camunda8DormantTaskProbeTest {
   }
 
   /**
-   * A cluster's REST answer, as the client hands it on.
+   * A REST answer of a cluster, as the client hands it on.
    */
   private static ProblemException problem(
       final int status,

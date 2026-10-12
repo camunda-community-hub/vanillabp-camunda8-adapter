@@ -8,12 +8,12 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the name-clash test. Nothing is started here: what the test
- * measures is what the DEPLOYMENT reports about a process id the cluster already held, so
- * the one task exists to make the model an ordinary one.
+ * The workflow service of the name-clash test. Nothing is started here. The test measures
+ * what the DEPLOYMENT reports about a process id which the cluster already held. The one
+ * task only exists to make the model an ordinary one.
  * <p>
- * A bean only under the profile of its own test, because every test of this module boots the
- * same application and the process of this one is deployed by none of the others.
+ * It is a bean only under the profile of its own test. Every test of this module boots the
+ * same application, and none of the others deploys the process of this one.
  */
 @Service
 @Profile("name-clash")

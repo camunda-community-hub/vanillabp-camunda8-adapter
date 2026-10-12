@@ -17,13 +17,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import jakarta.inject.Inject;
 
 /**
- * That a booting Quarkus application really hands the adapter the collection point its
- * findings go into.
+ * Checks that a booting Quarkus application really hands the adapter the place where it
+ * collects its findings.
  * <p>
- * What the adapter puts in there is tested where each check is. What is tested here is the
- * wiring, because its failure is quiet: a deployment service without the collection point
- * writes its findings into the log instead of the block at the end of the start, and both
- * are one line, so nobody reading a boot log would see the difference.
+ * What the adapter puts in there is tested next to each check. This tests the wiring, because
+ * it fails quietly. A deployment service without the collection point writes its findings into
+ * the log, not into the block at the end of the start. Both are one line. So nobody who reads
+ * a boot log would see the difference.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8StartupReportTest {

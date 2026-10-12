@@ -14,9 +14,9 @@ import io.vanillabp.integration.health.VanillaBpHealthIndicator;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the health endpoint of a Spring Boot application says about a Camunda 8
- * cluster which is configured but not there. No Docker and no cluster: the address points
- * at a port nothing listens on, which is exactly the situation the endpoint exists for.
+ * What the health endpoint of a Spring Boot application says about a Camunda 8 cluster which
+ * is configured but not there. No Docker and no cluster. The address points at a port nothing
+ * listens on. The endpoint exists for exactly this situation.
  * <p>
  * The counterpart - an adapter which is not configured at all - is asserted by
  * {@link Camunda8AdapterDiscoveryTest}, whose application has no address configured.

@@ -9,9 +9,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the connector integration test. The flag is set by the task
- * BEHIND the connector element, so it stays false for as long as nothing serves the
- * connector.
+ * JPA workflow aggregate of the connector integration test. The task BEHIND the connector
+ * element sets the flag. So it stays false as long as nothing serves the connector.
  */
 @Entity
 @Table(name = "C8_CONNECTOR_AGGREGATE")

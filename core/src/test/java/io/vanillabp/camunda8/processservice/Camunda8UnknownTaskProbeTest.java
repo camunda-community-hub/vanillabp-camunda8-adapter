@@ -37,16 +37,16 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * Why a task probe answered <code>UNKNOWN_TO_BPMS</code>, in the log.
  * <p>
- * A task is an exact question, so the platform turns that answer into a
+ * A task is an exact question. So the platform turns that answer into a
  * <code>WorkflowNotFoundException</code> at once, with no visibility window and no second
  * attempt. One red run of the release line 8.8 left exactly that exception and not a word
- * from the adapter, and the two branches which can produce the answer are told apart by
- * nothing else: the job was found in ANOTHER scope, or the cluster refused the probe's
- * command as a job it no longer has.
+ * from the adapter. Nothing else tells apart the two branches which can produce the answer.
+ * Either the job was found in ANOTHER scope, or the cluster refused the command of the probe
+ * because it no longer has the job.
  * <p>
- * Both branches say so at INFO now, naming the key and the values which decided it. What the
- * probe ANSWERS is unchanged, which is why every test here asserts the answer next to the
- * line.
+ * Both branches say so at INFO now, and they name the key and the values which decided it.
+ * What the probe ANSWERS is unchanged. That is why every test here asserts the answer next to
+ * the line.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8UnknownTaskProbeTest {
@@ -58,7 +58,7 @@ public class Camunda8UnknownTaskProbeTest {
   private final CamundaClient client = mock(CamundaClient.class);
 
   /**
-   * A process service whose cluster is addressed by a second adapter id, which is when the
+   * A process service whose cluster is addressed by a second adapter id. In that case the
    * probe asks the query API which scope a key belongs to.
    */
   private Camunda8ProcessService<?> aServiceSharingItsCluster() {
@@ -80,9 +80,9 @@ public class Camunda8UnknownTaskProbeTest {
       final boolean shared) {
 
     final var configuration = new Camunda8AdapterConfiguration();
-    // an address nothing ever contacts - every request of this test meets the mock above
+    // nothing ever contacts this address, every request of this test meets the mock above
     configuration.setRestAddress("http://localhost:1");
-    // no waiting for the exporter in a unit test - the cluster is never contacted
+    // no waiting for the exporter in a unit test, the cluster is never contacted
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     final var clientFactory = new Camunda8ClientFactory("c8", configuration) {
 
@@ -206,7 +206,7 @@ public class Camunda8UnknownTaskProbeTest {
     @SuppressWarnings("unchecked")
     final SearchResponse<Job> found = mock(SearchResponse.class);
     Mockito.lenient().when(found.items()).thenReturn(List.of(job));
-    // the future is built BEFORE the stubbing which returns it - mocking inside a
+    // the future is built BEFORE the stubbing which returns it. Mocking inside a
     // when(...) leaves Mockito with an unfinished stubbing
     final var answer = future(found);
     Mockito.lenient().when(search.send()).thenReturn(answer);

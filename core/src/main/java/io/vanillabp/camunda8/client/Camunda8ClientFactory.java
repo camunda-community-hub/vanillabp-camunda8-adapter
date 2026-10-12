@@ -21,22 +21,21 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Builds and owns the single {@link CamundaClient} of one Camunda 8 adapter instance
- * (adapter ID). One factory exists <b>per adapter ID</b> (not per adapter type)
- * because the same BPMS type may be configured multiple times for a BPMS migration.
+ * (adapter ID). There is one factory <b>per adapter ID</b>, not per adapter type. The
+ * same BPMS type may be configured several times for a BPMS migration.
  * <p>
- * The client is built EAGERLY at construction time (i.e. at application startup) if
- * the connection configuration is complete - configuration defects surface at boot,
- * not first at runtime (see {@link Camunda8StartupValidation}). Building the client
- * neither opens a connection nor contacts the cluster - that happens only when the
- * first command is sent. The factory is closed on {@link #close()} (called on
- * application shutdown by the platform bean lifecycle).
+ * The client is built EAGERLY in the constructor, so at application startup, if the
+ * connection configuration is complete. So a configuration defect shows up at boot and
+ * not first at runtime (see {@link Camunda8StartupValidation}). Building the client does
+ * not open a connection and does not contact the cluster. That happens only when the
+ * first command is sent. The platform bean lifecycle calls {@link #close()} on
+ * application shutdown.
  * <p>
- * A self-managed adapter without an address gets a client too: it talks to the address
- * of the local cluster of its release line. An application whose SaaS
- * adapter is configured incompletely may still boot under the degraded 'warn' policy: no
- * client is built then, and
- * {@link #getClient()} fails as a runtime BACKSTOP with a message naming the missing
- * properties (see {@link Camunda8AdapterConfiguration#validate(String)}).
+ * A self-managed adapter without an address gets a client too. It talks to the address
+ * of the local cluster of its release line. An application whose SaaS adapter is not
+ * configured completely may still boot under the degraded 'warn' policy. Then no client
+ * is built, and {@link #getClient()} fails as a runtime BACKSTOP. Its message names the
+ * missing properties (see {@link Camunda8AdapterConfiguration#validate(String)}).
  * <p>
  * Why the factory closes workers which never reached the module lifecycle before it closes the
  * client is decision 6 in the repository's DECISIONS.md.
@@ -50,18 +49,18 @@ public class Camunda8ClientFactory implements AutoCloseable {
   private final String adapterId;
 
   /**
-   * The bound configuration of this adapter instance - read by the process service where
-   * a command needs an adapter-level setting the four-level resolution deliberately does
-   * not apply to.
+   * The bound configuration of this adapter instance. The process service reads it where
+   * a command needs a setting of the adapter level. The four-level resolution is left out
+   * for such a setting on purpose.
    */
   @Getter
   private final Camunda8AdapterConfiguration configuration;
 
   /**
-   * The per-adapter-id record of what this application version deployed, which the
-   * viewer API serves from. It lives here because the factory is the one object BOTH
-   * the deployment service (which fills it) and the process service (which reads
-   * it) already receive per adapter id on both platforms.
+   * The record of what this application version deployed, one per adapter id. The viewer
+   * API answers from it. It lives here because the factory is the one object which BOTH
+   * services already receive per adapter id, on both platforms. The deployment service
+   * fills the record, and the process service reads it.
    */
   @Getter
   private final Camunda8DeployedProcesses deployedProcesses = new Camunda8DeployedProcesses();
@@ -76,20 +75,20 @@ public class Camunda8ClientFactory implements AutoCloseable {
   private final Camunda8QueryApi queryApi;
 
   /**
-   * Which models the cluster holds for the BPMN process ids the application declares -
-   * here for the same reason as the record above: the deployment service assembles it,
-   * because only it can read its cluster, and the process service's message check
-   * reads it. <code>null</code> until the deployment service provided it (tests, and
-   * an adapter which booted degraded): the checks reading it then fall back to
-   * staying silent wherever a model outside the current deployment could carry the
+   * Which models the cluster holds for the BPMN process ids the application declares. It
+   * lives here for the same reason as the record above. The deployment service puts it
+   * together, because only that service can read its cluster. The message check of the
+   * process service reads it. It is <code>null</code> until the deployment service
+   * provided it (in tests, and for an adapter which booted degraded). Then the checks which
+   * read it stay silent wherever a model outside the current deployment could hold the
    * answer.
    */
   @Getter
   private volatile io.vanillabp.camunda8.deployment.Camunda8ModelsTheClusterHolds modelsTheClusterHolds;
 
   /**
-   * Hands over the picture of what the cluster holds, called by the deployment
-   * service while it is created.
+   * Hands over the picture of what the cluster holds. The deployment service calls this
+   * while it is created.
    *
    * @param modelsTheClusterHolds The picture
    */
@@ -103,9 +102,9 @@ public class Camunda8ClientFactory implements AutoCloseable {
   private CamundaClient client;
 
   /**
-   * Builds the factory of one configured adapter id. The registry does this once per id, and
-   * everything the id cannot live without is resolved here so a bad value fails the boot
-   * rather than the first workflow.
+   * Builds the factory of one configured adapter id. The registry does this once per id.
+   * Everything the id cannot work without is resolved here. So a bad value fails the boot
+   * and not the first workflow.
    *
    * @param adapterId The configured adapter id
    * @param configuration The section the application wrote for that id
@@ -117,30 +116,31 @@ public class Camunda8ClientFactory implements AutoCloseable {
     this.adapterId = adapterId;
     this.configuration = configuration;
     this.queryApi = new Camunda8QueryApi(adapterId, this::getClient);
-    // how this adapter runs what it delivers - resolved before anything is built, so an
-    // unusable number fails the boot with a guiding message instead of being inherited
+    // how this adapter runs what it delivers. It is resolved before anything is built. So
+    // a number which cannot be used fails the boot with a guiding message, and nothing
+    // built later inherits it
     this.executionModel = configuration.executionModel(adapterId);
-    // and how it proves who it is - checked here for the same reason: credentials which
-    // cannot be built are a boot failure, not a surprise on the first command
+    // and how it proves who it is. This is checked here for the same reason. Credentials
+    // which cannot be built fail the boot, and not as a surprise on the first command
     configuration.validateAuthentication(adapterId);
-    // eager: configuration defects surface at startup, not first at runtime; a degraded
-    // adapter builds no client and fails on first use instead (backstop)
+    // eager, so configuration defects show up at startup and not first at runtime. A
+    // degraded adapter builds no client and fails on first use instead (backstop)
     if (configuration.missingConnectionProperties().isEmpty()) {
       this.authentication = Camunda8Authentication.of(adapterId, configuration, System::getenv);
       this.client = build();
     } else {
-      // there is no cluster to authenticate against yet, and a SaaS adapter without its
-      // client id cannot even build a provider - the missing connection keys are the
-      // message that boot has to give
+      // there is no cluster to authenticate against yet. A SaaS adapter without its client
+      // id cannot even build a provider. The message the boot has to give is about the
+      // missing connection keys
       this.authentication = null;
     }
 
   }
 
   /**
-   * Validates that the adapter instance is configured without building the client or
-   * contacting the cluster. Used by phase one of starting a workflow (which runs inside
-   * the caller's database transaction and must not do any remote call).
+   * Validates that the adapter instance is configured. It does not build the client and
+   * does not contact the cluster. Phase one of starting a workflow uses it. That phase runs
+   * inside the caller's database transaction and must not make any remote call.
    *
    * @throws IllegalStateException If a required connection property is missing
    */
@@ -151,18 +151,18 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * Whether the cluster was already waited for - the wait belongs to the adapter instance
-   * and not to a workflow module, so the second module of an application finds the question
-   * answered.
+   * Whether the cluster was already waited for. The wait belongs to the adapter instance
+   * and not to a workflow module. So the second module of an application finds the
+   * question answered.
    */
   private final AtomicBoolean clusterWaitedFor = new AtomicBoolean();
 
   /**
-   * Waits ONCE for this adapter instance's cluster to answer, before the first round of the
-   * start which decides anything is made (see {@link Camunda8ClusterWait}).
+   * Waits ONCE for the cluster of this adapter instance to answer. This happens before the
+   * start makes its first round which decides anything (see {@link Camunda8ClusterWait}).
    * <p>
-   * An adapter which booted degraded has no client and therefore no cluster
-   * to wait for; the guiding failure of {@link #getClient()} stays the answer there.
+   * An adapter which booted degraded has no client, so there is no cluster to wait for.
+   * There the guiding failure of {@link #getClient()} stays the answer.
    *
    * @throws IllegalStateException If the cluster did not answer within
    *           <code>startup-wait</code>, or answered something a repetition cannot change
@@ -177,8 +177,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * Whether {@link #close()} was called: a dispatch racing the shutdown must not
-   * use a client which is about to be closed.
+   * Whether {@link #close()} was called. A dispatch which races the shutdown must not use
+   * a client which is about to be closed.
    */
   private volatile boolean closed = false;
 
@@ -198,8 +198,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
               .formatted(adapterId));
     }
     if (client == null) {
-      // backstop for adapters which booted degraded - throws with a
-      // guiding message naming the missing properties
+      // backstop for adapters which booted degraded. It throws with a guiding message
+      // which names the missing properties
       configuration.validate(adapterId);
     }
     return client;
@@ -228,9 +228,9 @@ public class Camunda8ClientFactory implements AutoCloseable {
           addressOrLocalCluster(configuration.getRestAddress(), configuration.restAddressInUse()),
           addressOrLocalCluster(configuration.getGrpcAddress(), configuration.grpcAddressInUse()),
           configuration.isPreferRestOverGrpc(), authentication.describe());
-      // both addresses are always set, because the client's own defaults point at 0.0.0.0
-      // and at port 8080 on every line, which is not where the local cluster of every line
-      // answers; an environment variable of the client still overrules them
+      // both addresses are always set. On every line the client's own defaults point at
+      // 0.0.0.0 and at port 8080, and that is not where the local cluster of every line
+      // answers. An environment variable of the client still overrules them
       builder = CamundaClient
           .newClientBuilder()
           .preferRestOverGrpc(configuration.isPreferRestOverGrpc())
@@ -254,9 +254,9 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * What the startup line says about an address: the configured one, or the address of the
-   * local cluster marked as such, so the line never shows <code>null</code> where the client
-   * talks to a real address.
+   * What the startup line says about an address. It is the configured one, or the address
+   * of the local cluster, marked as such. So the line never shows <code>null</code> where
+   * the client talks to a real address.
    */
   private static String addressOrLocalCluster(
       final String configured,
@@ -269,26 +269,26 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * The resolved execution model of this adapter instance - what the startup line names
-   * and what decides whether the {@link #executor} is a
+   * The resolved execution model of this adapter instance. The startup line names it. It
+   * decides whether the {@link #executor} is a
    * {@link Camunda8VirtualThreadExecutor} or a {@link Camunda8PlatformThreadExecutor}.
    */
   @Getter
   private final Camunda8ExecutionModel executionModel;
 
   /**
-   * How this adapter instance authenticates: the resolved method, the provider handed to
-   * the client, and the message said once when the cluster refuses a request.
-   * <code>null</code> while the connection configuration is incomplete, where no client
-   * was built either.
+   * How this adapter instance authenticates. It holds the resolved method, the provider
+   * handed to the client, and the message given once when the cluster refuses a request.
+   * It is <code>null</code> while the connection configuration is incomplete. Then no
+   * client was built either.
    */
   @Getter
   private final Camunda8Authentication authentication;
 
   /**
-   * The executor the client runs its workers on, in both execution models: the adapter
-   * supplies it rather than letting the client build one, so the scheduling of the polls
-   * and the running of the handlers are separate on every release line.
+   * The executor the client runs its workers on, in both execution models. The adapter
+   * supplies it, so the client does not build one. That keeps the scheduling of the polls
+   * and the running of the handlers apart on every release line.
    */
   @Getter
   private Camunda8Executor executor;
@@ -300,8 +300,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
         ? new Camunda8VirtualThreadExecutor(adapterId, executionModel.slots())
         : new Camunda8PlatformThreadExecutor(adapterId, executionModel.slots());
     // which builder methods take it differs per release line, see Camunda8JobExecutors.
-    // 'numJobWorkerExecutionThreads' is deliberately not set: it sizes the pool the
-    // client would build for itself, and there is none once it is handed one
+    // 'numJobWorkerExecutionThreads' is not set on purpose. It sizes the pool the client
+    // would build for itself, and the client builds none once it is handed one
     Camunda8JobExecutors.install(builder, executor);
     startWatchingTheSlots();
 
@@ -309,16 +309,16 @@ public class Camunda8ClientFactory implements AutoCloseable {
 
   /**
    * Watches whether the execution slots of this adapter id are all held by handlers which
-   * are not coming back. <code>null</code> for an adapter which booted without a
-   * connection, where there is no executor to watch either.
+   * are not coming back. It is <code>null</code> for an adapter which booted without a
+   * connection. There is no executor to watch then either.
    */
   @Getter
   private Camunda8SlotWatch slotWatch;
 
   private void startWatchingTheSlots() {
 
-    // a factory which builds its client a second time builds a second executor, and the
-    // watch of the first one would keep a thread and read an executor nothing uses
+    // a factory which builds its client a second time builds a second executor. The watch
+    // of the first one would keep a thread and read an executor which nothing uses
     if (slotWatch != null) {
       slotWatch.close();
     }
@@ -335,8 +335,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
 
   /**
    * What every workflow module of this adapter id has inside a handler right now. The
-   * drains hold it per module, and the slots are shared by all of them, so the watch of
-   * the slots reads them together.
+   * drains hold it per module. All modules share the slots, so the watch of the slots
+   * reads them together.
    *
    * @return The deliveries whose handler is running, across all workflow modules
    */
@@ -354,9 +354,9 @@ public class Camunda8ClientFactory implements AutoCloseable {
   private void applyWorkerDefaults(
       final CamundaClientBuilder builder) {
 
-    // set on the CLIENT rather than on every worker: the worker builder inherits the
-    // client's defaults, and an environment variable can then still overrule what was
-    // configured - which is the escape hatch reportEnvironmentOverrides makes visible
+    // set on the CLIENT and not on every worker. The worker builder inherits the client's
+    // defaults. Then an environment variable can still overrule what was configured. That
+    // is the way out which reportEnvironmentOverrides makes visible
     builder.defaultJobWorkerMaxJobsActive(configuration.resolvedMaxJobsActive(adapterId));
     if (configuration.getPollInterval() != null) {
       builder.defaultJobPollInterval(configuration.getPollInterval());
@@ -395,9 +395,9 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * Hands the client the credentials provider of this adapter instance - or, where the
-   * method is <code>none</code> and the environment carries credentials, hands it none,
-   * so the client keeps building the provider it always built from those variables (see
+   * Hands the client the credentials provider of this adapter instance. If the method is
+   * <code>none</code> and the environment carries credentials, it hands the client none.
+   * Then the client keeps building the provider it always built from those variables (see
    * {@link Camunda8Authentication}).
    */
   private void applyAuthentication(
@@ -411,10 +411,10 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * The four numbers which together are the sizing decision of an adapter instance, in
-   * one line, because none of them appeared anywhere before: how the handlers run, how
-   * many may run at once, how many jobs one worker holds while they do, and how long a
-   * delivered job stays locked meanwhile.
+   * The four numbers which together make the sizing of an adapter instance, in one line.
+   * None of them was shown anywhere before. They say how the handlers run, how many may
+   * run at once, how many jobs one worker holds while they run, and how long a delivered
+   * job stays locked meanwhile.
    */
   private void reportSizing() {
 
@@ -458,14 +458,14 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * The other <code>camunda8</code> adapter ids addressing the SAME cluster,
-   * told by {@link Camunda8ClientFactoryRegistry} at startup. Empty for the ordinary
-   * application with one Camunda 8 adapter.
+   * The other <code>camunda8</code> adapter ids which address the SAME cluster.
+   * {@link Camunda8ClientFactoryRegistry} sets them at startup. The list is empty for the
+   * usual application with one Camunda 8 adapter.
    * <p>
-   * What it decides: keys are unique per cluster and not per tenant or prefix, so where
-   * this list is not empty an awareness probe has to find out which scope a key belongs
-   * to before it claims the task. That answer costs a search, which is why it is only paid
-   * where two ids can actually be confused.
+   * What it decides: keys are unique per cluster, not per tenant or prefix. So if this list
+   * is not empty, an awareness probe has to find out which scope a key belongs to before it
+   * claims the task. That answer costs a search. So it is only paid where two ids can
+   * really be confused.
    */
   private List<String> adapterIdsSharingTheCluster = List.of();
 
@@ -491,8 +491,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * Whether this adapter id shares its cluster, which is what makes a name clash between two
-   * ids possible in the first place.
+   * Whether this adapter id shares its cluster. Only then is a name clash between two ids
+   * possible at all.
    *
    * @return Whether another <code>camunda8</code> adapter id addresses the same cluster
    */
@@ -504,25 +504,26 @@ public class Camunda8ClientFactory implements AutoCloseable {
 
   /**
    * How the factory stops the workers of one workflow module on a path which did not
-   * reach {@code stopWorkflowProcessing}. Implemented by the deployment
-   * service, which owns the workers and the drain, and by every EXTENSION which opened
-   * workers of its own for that module.
+   * reach {@code stopWorkflowProcessing}. The deployment service implements it, because it
+   * owns the workers and the drain. So does every EXTENSION which opened workers of its own
+   * for that module.
    */
   @FunctionalInterface
   public interface WorkflowModuleShutdown {
 
     /**
-     * Closes the workers of that workflow module and waits for it the way the ordinary
-     * shutdown does. Has to be idempotent: the module may stop itself a moment later.
+     * Closes the workers of that workflow module and waits for it, as the ordinary
+     * shutdown does. It has to be idempotent, because the module may stop itself a moment
+     * later.
      */
     void stopWorkflowProcessing();
 
   }
 
   /**
-   * What a registered hook is removed by. Closing it removes THAT hook and no other, which
-   * is what lets several of them share one workflow module: the adapter stopping its own
-   * workers does not deregister an extension whose workers are still open.
+   * What removes a registered hook. Closing it removes THAT hook and no other. This lets
+   * several hooks share one workflow module. When the adapter stops its own workers, it
+   * does not deregister an extension whose workers are still open.
    */
   @FunctionalInterface
   public interface WorkflowModuleShutdownRegistration extends AutoCloseable {
@@ -539,20 +540,20 @@ public class Camunda8ClientFactory implements AutoCloseable {
    * The workflow modules of this adapter instance whose workers are open right now, and per
    * module the hooks which close them, in registration order.
    * <p>
-   * The workers of a module are closed before its client, and on the ordinary path
-   * that is the order the platform's lifecycle produces. This map is
-   * what makes the promise hold on EVERY path: whatever is left in it when the client
-   * goes down is stopped here first, and the operator is told that a hook was missing.
-   * Order matters more than it looks: an activation request which is parked
-   * at the cluster when its client is closed stays parked, and a job created within the
-   * request timeout afterwards waits for its lock instead of reaching the next worker.
+   * The workers of a module are closed before its client. On the ordinary path, the
+   * lifecycle of the platform gives that order. This map makes the promise hold on EVERY
+   * path. Whatever is left in it when the client goes down is stopped here first, and the
+   * operator is told that a hook was missing. The order matters more than it seems. An
+   * activation request which waits at the cluster when its client is closed keeps waiting
+   * there. A job created within the request timeout after that waits for its lock, and
+   * does not reach the next worker.
    * <p>
-   * A module holds MORE THAN ONE hook because an extension opens workers of the same module
-   * on the same client, and a single slot meant the second registration overwrote the first.
-   * The hooks of a module run in REVERSE registration order, which puts the workers opened
-   * last down first: the adapter registers while workflow processing starts and every
-   * extension registers after it, so an extension's workers are closed before the adapter's
-   * and the client is closed under none of them.
+   * A module holds MORE THAN ONE hook, because an extension opens workers of the same
+   * module on the same client. With a single slot, the second registration overwrote the
+   * first. The hooks of a module run in REVERSE registration order, so the workers opened
+   * last go down first. The adapter registers while workflow processing starts, and every
+   * extension registers after it. So the workers of an extension are closed before the
+   * adapter's, and the client is closed under none of them.
    */
   private final Map<String, List<WorkflowModuleShutdown>> openWorkflowModules = new LinkedHashMap<>();
 
@@ -606,22 +607,23 @@ public class Camunda8ClientFactory implements AutoCloseable {
   /**
    * The workers which are open on the client of this adapter id, whoever opened them.
    * <p>
-   * They live here for the reason the deployed processes and the drains do: the factory is
-   * the one object per adapter id which the deployment service, the process service and an
-   * EXTENSION all already hold. Every one of these workers holds a connection of the same
-   * pool while it waits for work, so the number which counts is the number over all of them
-   * and not the number one workflow module opened (see {@link Camunda8WorkerConnections}).
+   * They live here for the same reason as the deployed processes and the drains. The
+   * factory is the one object per adapter id which the deployment service, the process
+   * service and an EXTENSION all already hold. Each of these workers holds a connection of
+   * the same pool while it waits for work. So the number which counts is the number over
+   * all of them, not the number one workflow module opened (see
+   * {@link Camunda8WorkerConnections}).
    * <p>
    * A worker which is CLOSED gave its connection back, so it leaves the count again. It is
-   * dropped while the workers are counted rather than by a hook of its own, because a
-   * worker is closed on more paths than it is opened on: the module which stops, the
-   * backstop below, and an extension closing its own.
+   * dropped while the workers are counted, not by a hook of its own. A worker is closed on
+   * more paths than it is opened on: the module which stops, the backstop below, and an
+   * extension which closes its own.
    */
   private final List<JobWorker> openWorkers = new LinkedList<>();
 
   /**
-   * Takes a worker which just opened on this client into that count, and lets the check
-   * which reads it run.
+   * Adds a worker which just opened on this client to that count. Then it runs the check
+   * which reads the count.
    * <p>
    * Called by {@link Camunda8Workers#open(io.camunda.client.api.worker.JobWorkerBuilderStep1.JobWorkerBuilderStep3, Camunda8ClientFactory)},
    * which is how every worker of the adapter and of an extension reaches this client.
@@ -654,21 +656,21 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * What is asked after a worker opened on this client. Provided by the deployment service
-   * of this adapter id, which holds the check and the place its finding goes to; until it
-   * does, and in a test building a factory of its own, a worker which opens is counted and
-   * nothing else happens.
+   * What is asked after a worker opened on this client. The deployment service of this
+   * adapter id provides it, because it holds the check and the place its finding goes to.
+   * Until then, and in a test which builds a factory of its own, a worker which opens is
+   * counted and nothing else happens.
    */
   private volatile Runnable openWorkerCheck = () -> {
   };
 
   /**
-   * Hands over what runs after a worker opened, called by the deployment service while it
+   * Hands over what runs after a worker opened. The deployment service calls this while it
    * is created.
    * <p>
-   * This is how a worker an EXTENSION opens long after the start is held against the
-   * connection pool as well: it opens through {@link Camunda8Workers}, which brings it
-   * here, and here is where the check of the adapter hangs.
+   * This way a worker which an EXTENSION opens long after the start is checked against the
+   * connection pool as well. It opens through {@link Camunda8Workers}, which brings it
+   * here. And here is where the check of the adapter hangs.
    *
    * @param openWorkerCheck What to run once a worker opened
    */
@@ -681,31 +683,32 @@ public class Camunda8ClientFactory implements AutoCloseable {
 
   /**
    * What each workflow module of this adapter id has in flight, and whether it is going
-   * down - one drain per module, created on first use.
+   * down. There is one drain per module, created on first use.
    * <p>
-   * It lives here for the reason the deployed processes and the query-api answer do: the
-   * factory is the one object per adapter id which the deployment service, the process
+   * It lives here for the same reason as the deployed processes and the query-api answer.
+   * The factory is the one object per adapter id which the deployment service, the process
    * service and an EXTENSION all already hold. A listener job of an extension has to take
-   * part in the same drain as the adapter's own, otherwise a shutdown closes the client
-   * while its handler runs and the job it was serving buys an incident.
+   * part in the same drain as the adapter's own jobs. Otherwise a shutdown closes the
+   * client while its handler runs, and the job it was serving ends in an incident.
    */
   private final Map<String, Camunda8Drain> drains = new ConcurrentHashMap<>();
 
   /**
    * How long a job of this adapter id stays locked for its worker, resolved over the four
    * levels of the adapter's configuration (task &gt; workflow &gt; workflow module &gt;
-   * adapter). Provided by the platform module which binds that configuration, which is the
-   * only place able to read it.
+   * adapter). The platform module which binds that configuration provides it. It is the
+   * only place which can read it.
    * <p>
-   * It lives here for the reason the deployed processes and the query-api answer do: the
-   * factory is the one object per adapter id which the deployment service, the process
-   * service and an EXTENSION all already hold. An extension opening a worker of its own on
-   * this cluster asks it what lock to use, so a workflow module which raised the adapter's
-   * job timeout raised it for that worker too. Building a second reader of the same keys is
-   * how the two start disagreeing.
+   * It lives here for the same reason as the deployed processes and the query-api answer.
+   * The factory is the one object per adapter id which the deployment service, the process
+   * service and an EXTENSION all already hold. An extension which opens a worker of its
+   * own on this cluster asks it what lock to use. So a workflow module which raised the
+   * adapter's job timeout raised it for that worker too. A second reader of the same keys
+   * is how the two would start to disagree.
    * <p>
-   * Before the platform provided one - a unit test, an adapter which booted degraded -
-   * it answers {@link Camunda8JobTimeoutResolver#DEFAULT_JOB_TIMEOUT} for everything.
+   * Until the platform provided one, it answers
+   * {@link Camunda8JobTimeoutResolver#DEFAULT_JOB_TIMEOUT} for everything. That is the case
+   * in a unit test and for an adapter which booted degraded.
    */
   private volatile Camunda8JobTimeoutResolver jobTimeoutResolver = (
       workflowModuleId,
@@ -713,8 +716,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
       taskDefinition) -> Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT;
 
   /**
-   * Hands over the resolver of this adapter id, called by the platform module while the
-   * adapter's beans are created.
+   * Hands over the resolver of this adapter id. The platform module calls this while the
+   * beans of the adapter are created.
    *
    * @param jobTimeoutResolver The resolver reading this adapter's configuration
    */
@@ -753,11 +756,11 @@ public class Camunda8ClientFactory implements AutoCloseable {
   /**
    * Gives a workflow module which starts processing a drain which is NOT shutting down.
    * <p>
-   * A module may be started again after it was stopped - a test, and a platform which
-   * restarts its lifecycle beans - and the drain of the previous run stays shut down
-   * forever. Its handlers would then leave every job to its lock, so the new run gets one of
-   * its own. Called by the adapter while workflow processing starts, before any worker of
-   * that run is opened.
+   * A module may be started again after it was stopped. A test does that, and so does a
+   * platform which restarts its lifecycle beans. The drain of the previous run stays shut
+   * down forever. Its handlers would then leave every job to its lock. So the new run gets
+   * a drain of its own. The adapter calls this while workflow processing starts, before any
+   * worker of that run is opened.
    *
    * @param workflowModuleId The workflow module starting its workers
    * @return The fresh drain the new workers register their deliveries in
@@ -789,10 +792,10 @@ public class Camunda8ClientFactory implements AutoCloseable {
   }
 
   /**
-   * The backstop: a workflow module which never reached
-   * {@code stopWorkflowProcessing} is stopped here, before the client goes down, and the
-   * missing hook is named. The client is still open at this point, so the module's
-   * handlers can finish and its workers can be released the ordinary way.
+   * The backstop. A workflow module which never reached {@code stopWorkflowProcessing} is
+   * stopped here, before the client goes down, and the missing hook is named. The client is
+   * still open at this point. So the handlers of the module can finish, and its workers
+   * can be released the ordinary way.
    */
   private void closeWorkersOfModulesWhichDidNotStop() {
 
@@ -813,8 +816,8 @@ public class Camunda8ClientFactory implements AutoCloseable {
         Camunda8AdapterConfiguration.propertyKey(adapterId, "request-timeout"),
         Camunda8AdapterConfiguration.propertyKey(adapterId, "job-timeout"));
     pending.forEach(entry -> {
-      // reverse registration order: what was opened last goes down first, so an
-      // extension's workers are closed before the adapter's
+      // reverse registration order: what was opened last goes down first. So the workers
+      // of an extension are closed before the adapter's
       final var hooks = new LinkedList<>(entry.getValue());
       Collections.reverse(hooks);
       hooks.forEach(hook -> {

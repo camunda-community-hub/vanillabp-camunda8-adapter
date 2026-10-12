@@ -32,22 +32,22 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * What the existence probe answers while an instance is still terminating.
  * <p>
- * A cancellation is not the end of an instance. An instance carrying a Camunda-managed user
- * task waits for the {@code canceling} listener job of that task, and the engine answers
- * {@code 404} to a SECOND cancellation of such an instance within milliseconds - measured on
- * 2026-09-25 at 24 ms, while the instance was still alive 130 seconds later. So one command
- * saying "gone" says nothing about the instance being over.
+ * A cancellation is not the end of an instance. An instance which carries a Camunda-managed
+ * user task waits for the {@code canceling} listener job of that task. The engine answers
+ * {@code 404} to a SECOND cancellation of such an instance within milliseconds. Measured on
+ * 2026-09-25: 24 ms, while the instance was still alive 130 seconds later. So when one command
+ * says "gone", that says nothing about whether the instance is over.
  * <p>
- * The existence probe is a different command, a modification the engine refuses for an
- * instance it holds, and decisions 35 and 38 rest on the sentence that its {@code 404} means
- * gone. Whether the probe has the same hole was never measured, and this class measures it:
- * the probe is sent inside the window in which the {@code canceling} job is unanswered, and
- * again after the job was answered, and both answers are written down.
+ * The existence probe is a different command: a modification which the engine refuses for an
+ * instance it holds. Decisions 35 and 38 rest on the sentence that its {@code 404} means gone.
+ * Nobody had measured whether the probe has the same hole. This class measures it. It sends the
+ * probe inside the window in which the {@code canceling} job is not answered. It sends it again
+ * after the job was answered. Both answers are written down.
  * <p>
- * Nothing of VanillaBP is in the way. The model is deployed with the raw client and carries
- * a {@code canceling} listener of a job type no worker of this repository subscribes to, so
- * no application can close the window by accident. The test answers that job itself at the
- * end, which is what leaves the shared cluster the way it found it.
+ * Nothing of VanillaBP is in the way. The model is deployed with the raw client. It carries a
+ * {@code canceling} listener of a job type which no worker of this repository subscribes to.
+ * So no application can close the window by accident. The test answers that job itself at the
+ * end, so it leaves the shared cluster the way it found it.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -58,7 +58,7 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
 
   /**
    * The job type of the {@code canceling} listener. Nothing in this repository subscribes to
-   * it, which is what holds the window open for as long as the measurement needs it.
+   * it. That holds the window open for as long as the measurement needs it.
    */
   private static final String CANCELING_JOB_TYPE = "theCancelingJobNobodyAnswers";
 
@@ -93,15 +93,15 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
       """.formatted(PROCESS_ID, CANCELING_JOB_TYPE);
 
   /**
-   * How long the measurement holds the {@code canceling} job without answering it. Long
-   * enough to take every reading below and to be sure the window is not a race against a
-   * lock which ran out.
+   * How long the measurement holds the {@code canceling} job without answering it. It is long
+   * enough to take every reading below. And it is long enough that the window is no race
+   * against a lock which ran out.
    */
   private static final Duration THE_WINDOW_IS_HELD_OPEN_FOR = Duration.ofMinutes(2);
 
   /**
-   * How often the probe is repeated inside the window, so the answer read is the answer the
-   * engine keeps giving rather than the one it happened to give first.
+   * How often the probe is repeated inside the window. So the test reads the answer which the
+   * engine keeps giving, not the one it happened to give first.
    */
   private static final int READINGS_INSIDE_THE_WINDOW = 5;
 
@@ -136,13 +136,13 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
           .send()
           .join();
 
-      // held rather than answered: from here on the instance waits for a job this test is
-      // sitting on, so the window below is as wide as the measurement needs and not as
-      // wide as a cluster happens to make it
+      // held, not answered. From here on, the instance waits for a job which this test holds.
+      // So the window below is as wide as the measurement needs, and not as wide as a
+      // cluster happens to make it
       final var cancelingJob = awaitTheCancelingJob(client);
 
-      // what a SECOND cancellation says, which is the answer story 604 measured and the
-      // reason this class exists
+      // what a SECOND cancellation says. Story 604 measured this answer, and it is the reason
+      // why this class exists
       measured
           .add("a second cancellation inside the window: "
               + whatTheClusterAnswered(() -> client.newCancelInstanceCommand(instanceKey).send().join()));
@@ -158,7 +158,7 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
       }
 
       // and the user-task probe of decision 38, in the same window and about the very task
-      // the instance is waiting for
+      // which the instance waits for
       measured
           .add("the user-task probe inside the window: "
               + whatTheClusterAnswered(
@@ -179,9 +179,9 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
       report(reporter, measured);
 
       // What the assertions hold the cluster to. The probe may not say "gone" about an
-      // instance the engine is still holding, because decisions 35 and 38 read that 404 as
-      // "the workflow is over" and a terminating instance is not over: it still hands out
-      // the listener job its user task waits for
+      // instance which the engine still holds. Decisions 35 and 38 read that 404 as "the
+      // workflow is over". A terminating instance is not over: it still hands out the
+      // listener job which its user task waits for
       measured
           .stream()
           .filter(reading -> reading.startsWith("the existence probe inside the window"))
@@ -208,8 +208,9 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
   }
 
   /**
-   * What the cluster answered, as one phrase - the code of the transport it arrived on for a
-   * refusal, and the word this repository uses for a command the cluster carried out.
+   * What the cluster answered, as one phrase. For a refusal, it is the code of the transport
+   * it arrived on. For a command which the cluster carried out, it is the word this
+   * repository uses for that.
    *
    * @param command What is sent
    * @return What came back
@@ -252,8 +253,8 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
   }
 
   /**
-   * Waits until the cluster reports the user task of that instance, which is what makes the
-   * cancellation below a cancellation of an instance which really carries one.
+   * Waits until the cluster reports the user task of that instance. So the cancellation below
+   * cancels an instance which really carries one.
    */
   private static void awaitTheUserTask(
       final CamundaClient client,
@@ -299,8 +300,8 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
   }
 
   /**
-   * Takes the {@code canceling} listener job and keeps it, so the instance waits for this
-   * test rather than for a timeout.
+   * Takes the {@code canceling} listener job and keeps it. So the instance waits for this
+   * test, not for a timeout.
    */
   private static ActivatedJob awaitTheCancelingJob(
       final CamundaClient client) throws InterruptedException {
@@ -341,8 +342,8 @@ public class Camunda8ProbeWhileAnInstanceTerminatesIT extends TestOnTheSharedClu
 
   /**
    * Puts the measurement where it can be read after a build: into the test report of the
-   * runner respectively an IDE, and into a file of its own, because the console output of a
-   * test which passes is suppressed.
+   * runner or of an IDE, and into a file of its own. The console output of a test which
+   * passes is suppressed.
    *
    * @param reporter The JUnit reporter
    * @param measured What the cluster answered, one line per reading

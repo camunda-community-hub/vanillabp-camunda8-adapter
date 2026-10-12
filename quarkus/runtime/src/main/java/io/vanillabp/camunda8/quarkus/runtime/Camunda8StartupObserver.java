@@ -7,10 +7,10 @@ import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Instance;
 
 /**
- * Forces the {@link Camunda8ClientFactoryRegistry} to be built on application startup:
- * configuration is validated AT STARTUP, never first at runtime (a VanillaBP core
- * principle) - without this observer the CDI producer would run lazily on first use
- * and a configuration defect would surface only when the first workflow is started.
+ * Makes sure the {@link Camunda8ClientFactoryRegistry} is built when the application starts.
+ * A VanillaBP core principle: the configuration is validated AT STARTUP, never first at
+ * runtime. Without this observer, the CDI producer would run lazily on first use. A
+ * defect in the configuration would then only show when the first workflow starts.
  */
 @ApplicationScoped
 public class Camunda8StartupObserver {

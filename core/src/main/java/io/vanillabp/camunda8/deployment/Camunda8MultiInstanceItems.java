@@ -16,16 +16,15 @@ import io.vanillabp.camunda8.wiring.Camunda8MultiInstance;
  * <p>
  * A multi-instance element tells a handler three things: which round it is in, how many
  * rounds there are, and the item of the round. This engine walks a collection, so the first
- * two are always there. The item is the variable the model names in the
- * <code>inputElement</code> of its <code>zeebe:loopCharacteristics</code>, and a model may
- * name none: the cluster then hands each instance its entry of the collection under no name
- * at all, so a <code>&#64;MultiInstanceElement</code> for that element reads
- * <code>null</code> while the workflow runs.
+ * two are always there. The item is the variable which the model names in the
+ * <code>inputElement</code> of its <code>zeebe:loopCharacteristics</code>. A model may name
+ * none. Then the cluster hands each instance its entry of the collection under no name at all.
+ * So a <code>&#64;MultiInstanceElement</code> for that element reads <code>null</code> while the
+ * workflow runs.
  * <p>
- * Such a model is legitimate on its own, and so is a handler which reads the index and the
- * total only. What nobody means is the two together, which is why the refusal needs both
- * halves: this adapter reads the BPMN, and the core answers which elements a handler wants
- * the item of.
+ * Such a model is fine on its own. So is a handler which reads only the index and the total.
+ * Nobody means the two together. That is why the refusal needs both halves. This adapter reads
+ * the BPMN, and the core answers which elements a handler wants the item of.
  */
 public final class Camunda8MultiInstanceItems {
 
@@ -36,11 +35,11 @@ public final class Camunda8MultiInstanceItems {
    * The IDs of the multi-instance elements enclosing the given BPMN element which name no
    * <code>inputElement</code>.
    * <p>
-   * Read off the chain this deployment just recorded. Asked while one process is wired, that
-   * chain holds the elements of the process itself and nothing else: the levels a CALLER
-   * contributes are linked only once every process of the workflow module is wired. Those are
-   * judged then, by {@link #inheritedElementsWithoutAnItem}. A method in the called process
-   * asks for the item by the caller's element id, so the caller's own model cannot answer that
+   * Read off the chain which this deployment just recorded. This is asked while one process is
+   * wired. At that time the chain holds only the elements of the process itself. The levels a
+   * CALLER adds are linked only once every process of the workflow module is wired.
+   * {@link #inheritedElementsWithoutAnItem} judges them then. A method in the called process
+   * asks for the item by the caller's element id. So the caller's own model cannot answer that
    * question.
    *
    * @param registry The chains recorded while deploying
@@ -66,10 +65,9 @@ public final class Camunda8MultiInstanceItems {
    * The multi-instance elements of the CALLERS of a process which enclose the given BPMN
    * element and name no <code>inputElement</code>.
    * <p>
-   * Only what the call sites contribute, so nothing found by
-   * {@link #elementsWithoutAnItem} while the process itself was wired is found a second time.
-   * Asked once the call graph of the workflow module is linked, and before anything is sent to
-   * the cluster.
+   * Only what the call sites add. So nothing which {@link #elementsWithoutAnItem} found while
+   * the process itself was wired is found a second time. This is asked once the call graph of the
+   * workflow module is linked, and before anything is sent to the cluster.
    *
    * @param registry The chains recorded while deploying, with the call graph linked
    * @param bpmnProcessId The called process' ID as the CLUSTER will know it (the SCOPED ID)
@@ -169,15 +167,15 @@ public final class Camunda8MultiInstanceItems {
   }
 
   /**
-   * The elements of one finding as the message names them, ending in the verb which agrees
-   * with their number - so the sentence around it reads as one sentence either way.
+   * The elements of one finding as the message names them. The text ends in the verb which
+   * agrees with their number. So the sentence around it reads right either way.
    */
   private static String described(
       final Collection<String> elementIds,
       final Map<String, String> callers) {
 
-    // an element of a caller is named with its process: the reader has two models in front of
-    // them, and the handler's own one does not hold it
+    // an element of a caller is named with its process. The reader has two models in front of
+    // them, and the model of the handler does not hold this element
     final var named = elementIds
         .stream()
         .map(elementId -> callers.containsKey(elementId)

@@ -17,10 +17,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Where the Spring binding reads <code>allow-listeners</code>, and what it says about a value
  * written at a level it does not read.
  * <p>
- * The same three levels and the same most-specific-wins rule as
- * <code>allow-connectors</code>, deliberately: two keys about what a model may contain,
- * reaching different levels, would be the worse answer. The Camunda 7 adapter reads the very
- * same three for the very same key.
+ * The same three levels and the same most-specific-wins rule as <code>allow-connectors</code>,
+ * on purpose. Two keys about what a model may contain should not reach different levels. The
+ * Camunda 7 adapter reads the same three levels for the same key.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8AllowListenersBootTest {

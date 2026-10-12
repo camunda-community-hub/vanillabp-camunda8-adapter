@@ -13,9 +13,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * Both roles reach the client of the 8.9 line, which asks for them separately.
  * <p>
- * This is what the line-specific installer is for, so it is asserted per line: a client
- * given only a scheduling executor would build a pool of its own for the handlers, and the
- * bound the adapter promises would hold for nothing.
+ * This is what the line-specific installer is for, so it is asserted per line. A client
+ * which gets only a scheduling executor would build a pool of its own for the handlers. Then
+ * the bound the adapter promises would hold for nothing.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8JobExecutorsTest {

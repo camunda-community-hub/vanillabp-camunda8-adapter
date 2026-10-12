@@ -44,82 +44,85 @@ import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 /**
  * A test of this module which runs against the one cluster the module starts.
  * <p>
- * Every class here used to bring a cluster of its own. They all run in the same JVM - one
- * fork per module is what Failsafe does - so one container can serve all of them, and the
- * module starts one cluster instead of some thirty. The container is started when the first
- * class asks for its address and it is never stopped, see
- * {@link ClusterUnderTest#sharedCluster()}.
+ * Every class here used to bring a cluster of its own. They all run in the same JVM, because
+ * Failsafe uses one fork per module. So one container can serve all of them, and the module
+ * starts one cluster instead of some thirty. The container starts when the first class asks
+ * for its address, and it is never stopped. See {@link ClusterUnderTest#sharedCluster()}.
  * <p>
  * The price is what the cluster remembers. All classes of this module deploy the same files
- * under the same workflow module id, so the cluster holds one set of definitions rather than
- * one per class, and Camunda 8 answers a file it already holds with the version it already
- * has. What a class leaves RUNNING is the part which needs doing something about: prefixed
- * job types are the same for every class, so the workers of the class running next would
- * activate the jobs of a workflow nobody is waiting for any more, and look for a workflow
- * aggregate their own database never held. That is why everything still running is ended after
- * EVERY test, the guard {@link WhatAClassLeftRunning} looks once more after every class, and
- * every class starts by ending what is still running. The first narrows the window in which
- * one test can spoil the next, the second names the class which left something, and the third
- * catches what the search had not shown yet.
+ * under the same workflow module id. So the cluster holds one set of definitions, not one per
+ * class. Camunda 8 answers a file it already holds with the version it already has. The real
+ * problem is what a class leaves RUNNING. Prefixed job types are the same for every class. So
+ * the workers of the next class would activate the jobs of a workflow nobody waits for any
+ * more. They would then look for a workflow aggregate which their own database never held.
+ * This is why there are three cleanups:
+ * <ul>
+ * <li>Everything still running is ended after EVERY test. This keeps the window small in
+ * which one test can spoil the next.</li>
+ * <li>The guard {@link WhatAClassLeftRunning} looks once more after every class. It names the
+ * class which left something.</li>
+ * <li>Every class starts by ending what is still running. This catches what the search had
+ * not shown yet.</li>
+ * </ul>
  * <p>
  * What the cluster remembers also decides what a class can FIND on it. A search which names
- * nothing answers with ONE page, oldest entry first, and that page has a ceiling. Measured on
- * 2026-10-01 against {@code camunda/camunda:8.10.0}: this module's cluster held 106 process
- * definitions halfway through a run, a search naming nothing answered with 100 of them, and the
- * two deployed last were not among those 100. An explicit {@code page(limit(1000))} answered
- * with all 106, which is what the searches below rely on.
+ * nothing answers with ONE page, oldest entry first, and that page has a limit. Measured on
+ * 2026-10-01 against {@code camunda/camunda:8.10.0}: halfway through a run, this module's
+ * cluster held 106 process definitions. A search naming nothing answered with 100 of them,
+ * and the two deployed last were missing. An explicit {@code page(limit(1000))} answered with
+ * all 106. The searches below rely on that.
  * <p>
- * So a class names what it is asking about in the filter instead of keeping the entries of an
- * unnamed page whose id ends the right way. A class running late in the module finds nothing of
- * its own that way, and the failure reads like an exporter which never caught up.
- * {@code Camunda8OldProcessVersionsIT} spent two raised deadlines on exactly that.
+ * So a class names what it asks about in the filter. It does not take an unnamed page and
+ * keep the entries whose id ends the right way. A class running late in the module finds
+ * nothing of its own that way, and the failure looks like an exporter which never caught up.
+ * {@code Camunda8OldProcessVersionsIT} raised its deadlines twice because of exactly that.
  * <p>
  * What a class reads and what it cancels are two different things. The workflows come from the
- * search, which answers out of the secondary storage, and the cancellation goes to the engine.
- * A class which only sent its cancellations went on while the engine still held them, and that
- * cost a whole nightly run.
+ * search, which answers out of the secondary storage. The cancellation goes to the engine. A
+ * class which only sent its cancellations went on while the engine still held the workflows.
+ * That cost a whole nightly run.
  * <p>
- * A cancellation the engine took is not an instance which ended, and that is the second half of
- * the cleanup. An instance carrying a Camunda-managed user task waits for the
- * <code>canceling</code> listener job of that task before it terminates, and while no
- * application runs nobody answers that job. Measured against a cluster of the 8.9 line on
- * 2026-09-25: the engine answered <code>404</code> to a second cancellation 24 ms after the
- * first one, the instance was still reported as running 130 seconds later, and it ended 0,5
- * seconds after a worker took the listener job. That is where the "a minute after the
- * cancellation" of the earlier measurement came from - not from a search lagging behind. So
- * this cleanup answers those listener jobs itself, and only then is the cluster free of what
- * the class before it left.
+ * The second half of the cleanup: a cancellation the engine accepted is not an instance which
+ * ended. An instance with a Camunda-managed user task waits for the <code>canceling</code>
+ * listener job of that task before it terminates. While no application runs, nobody answers
+ * that job. Measured against a cluster of the 8.9 line on 2026-09-25: the engine answered
+ * <code>404</code> to a second cancellation 24 ms after the first one. The instance was still
+ * reported as running 130 seconds later. It ended 0,5 seconds after a worker took the listener
+ * job. So the "a minute after the cancellation" of the earlier measurement came from this, and
+ * not from a slow search. This is why the cleanup answers those listener jobs itself. Only then
+ * is the cluster free of what the class before left.
  * <p>
- * The search is still the slower of the two, by about a second. A test which looks a workflow
- * up by a variable therefore binds its search to a process of its own, rather than trusting
- * that what comes back belongs to it.
+ * The search is still slower than the engine, by about a second. So a test which looks up a
+ * workflow by a variable limits its search to a process of its own. It does not trust that
+ * whatever comes back belongs to it.
  * <p>
- * Two kinds of test keep a cluster of their own, and each of them says so where it stands.
- * One needs the cluster CONFIGURED differently, with authentication switched on, which makes
- * it a different thing under test. The other needs a cluster which has never seen its model,
- * because the cluster acts on a deployment once and never again: a timer start event fires
- * for the first deployment of its version and for no later one. Both declare a
- * {@code @Container} field, the way every class here did before.
+ * Two kinds of test keep a cluster of their own, and each of them says so in its own javadoc.
+ * One needs the cluster CONFIGURED differently, with authentication switched on. That makes it
+ * a different thing under test. The other needs a cluster which has never seen its model,
+ * because the cluster acts on a deployment only once. A timer start event fires for the first
+ * deployment of its version and for no later one. Both declare a {@code @Container} field, the
+ * way every class here did before.
  * <p>
  * <b>Why this module configures {@code max-http-connections}.</b> The adapter opens one worker
- * per process and kind, and each of them holds a REST activation request open. The Camunda
- * client caps its pool at 100 connections by default, the same number in the 8.8, 8.9 and 8.10
- * clients. This module deploys 35 processes, which is 85 workers on the GA lines and 115 on
- * 8.10, where a cancel listener per process comes on top. Above the cap the surplus workers
- * take turns, and whatever one of them is waiting for arrives a whole {@code request-timeout}
- * late. Measured on 2026-09-26 with {@code Camunda8RestartDeliveryIT} at 115 workers on
- * {@code camunda/camunda:8.10.0-rc1}: 10412 ms with the client's 100 and 215 ms with the 256
- * {@code camunda8-it.yaml} now sets. The same line with the 92 workers this module opened
- * before the start-event listener of story 653 answers in 184 ms, and 8.10 held to the 85
- * workers of the GA lines drains cleanly, so it is the number of workers against the size of
- * the pool and not the version of the client. The setting lives in the YAML without a comment
- * beside it because Spotless formats these files through Jackson, which drops comments.
+ * per process and kind, and each worker keeps a REST activation request open. By default the
+ * Camunda client allows at most 100 connections in its pool. The 8.8, 8.9 and 8.10 clients
+ * use the same number. This module deploys 35 processes. That is 85 workers on the GA lines,
+ * and 115 on 8.10, which adds a cancel listener per process. Above the limit, the extra
+ * workers take turns. Whatever one of them waits for then arrives a whole
+ * {@code request-timeout} late. Measured on 2026-09-26 with {@code Camunda8RestartDeliveryIT}
+ * at 115 workers on {@code camunda/camunda:8.10.0-rc1}: 10412 ms with the client's 100, and
+ * 215 ms with the 256 which {@code camunda8-it.yaml} now sets. The same line answers in 184 ms
+ * with the 92 workers this module had before the start-event listener of story 653. And 8.10
+ * drains cleanly when it is held to the 85 workers of the GA lines. So the cause is the number
+ * of workers against the size of the pool, not the version of the client. The YAML has no
+ * comment next to the setting, because Spotless formats these files through Jackson, and
+ * Jackson drops comments.
  * <p>
- * A user task left between two of its states is what the cleanup below watches hardest for,
- * and it is worth knowing why. Such a task holds a listener job which stays activatable, and
- * the first worker of that job type in the next class is served it. The 8.10 alphas could not
- * end such a task at all, which is why the preview line once excluded every test creating one;
- * {@code 8.10.0-rc1} hands the jobs out and the exclusions are gone.
+ * The cleanup below watches hardest for a user task left between two of its states. Such a
+ * task holds a listener job which stays activatable. The first worker of that job type in the
+ * next class gets it. The 8.10 alphas could not end such a task at all. That is why the preview
+ * line once excluded every test which created one. {@code 8.10.0-rc1} hands out the jobs, and
+ * the exclusions are gone.
  */
 @Testcontainers(disabledWithoutDocker = true)
 @ExtendWith(TestOnTheSharedCluster.WhatAClassLeftRunning.class)
@@ -144,17 +147,18 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * Takes everything the class before left on the shared cluster away from this one, before
-   * the application of this class boots.
+   * Ends everything the class before left on the shared cluster. This runs before the
+   * application of this class boots.
    * <p>
-   * JUnit calls it after the extensions of the class and before the first test instance is
-   * built, which is when Spring loads the test's context. So by the time this runs, the
-   * application of the class before is closed and this class has not opened a worker yet.
+   * JUnit calls it after the extensions of the class, and before it builds the first test
+   * instance. Spring loads the test's context only when that instance is built. So when this
+   * runs, the application of the class before is closed, and this class has not opened a
+   * worker yet.
    * <p>
-   * Since every test ends what it left and {@link WhatAClassLeftRunning} looks once more after
-   * the class, this normally finds nothing. It stays because the search lags behind the
-   * engine: a workflow started just before a class closed can be invisible to both of them and
-   * turn up only here.
+   * Every test ends what it left, and {@link WhatAClassLeftRunning} looks once more after the
+   * class. So this normally finds nothing. It stays because the search lags behind the engine.
+   * A workflow started just before a class closed can be invisible to both of them. It then
+   * turns up only here.
    *
    * @param whichClassThisIs The class taking the cluster over, for the message a cleanup
    *          which cannot finish writes about the class before it
@@ -176,14 +180,14 @@ public abstract class TestOnTheSharedCluster {
    * Ends whatever the test which just finished left running, before the next test of the same
    * class starts.
    * <p>
-   * A class used to be cleaned up only when the NEXT class took the cluster over, so one test
-   * which left a user task open could poison every class after it. The class which then failed
+   * A class used to be cleaned up only when the NEXT class took the cluster over. So one test
+   * which left a user task open could break every class after it. The class which then failed
    * was never the one which caused it. Ending everything after each test makes that window
-   * one test wide. It is not airtight: the search answers out of the exporter and lags behind
-   * the engine, so a workflow the test started a moment ago can still be invisible here.
+   * one test wide. It is not airtight. The search answers out of the exporter and lags behind
+   * the engine. So a workflow the test started a moment ago can still be invisible here.
    * {@link WhatAClassLeftRunning} is the second look.
    * <p>
-   * The application of the class is still running while this runs, so its own workers may
+   * The application of the class is still running while this runs. So its own workers may
    * answer a <code>canceling</code> listener job before this cleanup does. Either answer ends
    * the workflow.
    * <p>
@@ -231,10 +235,10 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * Says that the tests of a class build on each other: a later test needs a workflow an
-   * earlier one started. Such a class is cleaned up once, after its last test, instead of after
-   * every test. A class carrying it orders its tests with {@code @TestMethodOrder}, because
-   * that order is what the scenario relies on.
+   * Says that the tests of a class build on each other. A later test needs a workflow which an
+   * earlier one started. Such a class is cleaned up once, after its last test, not after every
+   * test. A class with this annotation orders its tests with {@code @TestMethodOrder}, because
+   * the scenario relies on that order.
    */
   @Retention(RetentionPolicy.RUNTIME)
   @Target(ElementType.TYPE)
@@ -246,14 +250,14 @@ public abstract class TestOnTheSharedCluster {
    * it is still running.
    * <p>
    * It runs after the application of the class is closed. JUnit registers the extensions of a
-   * superclass before those of a subclass and calls them back in reverse order after the
-   * class, so Spring has closed the context of the class (it is {@code @DirtiesContext}) by
-   * the time this looks. What it finds was left by an application on its way down, or by a
-   * test whose cleanup the search did not catch up with. Either way the class to read is this
-   * one, and the message says so. Before this guard, the same leftover failed the NEXT class
-   * in its setup, which named a class that had done nothing wrong.
+   * superclass before those of a subclass. After the class, it calls them back in reverse
+   * order. So Spring has closed the context of the class (it is {@code @DirtiesContext}) by
+   * the time this looks. What it finds was left by an application on its way down. Or it was
+   * left by a test whose cleanup ran before the search caught up. Either way this class is the
+   * one to read, and the message says so. Before this guard, the same leftover failed the NEXT
+   * class in its setup. That named a class which had done nothing wrong.
    * <p>
-   * What it finds is ended before the class fails, so the class after it still gets a clean
+   * What it finds is ended before the class fails. So the class after it still gets a clean
    * cluster.
    */
   static class WhatAClassLeftRunning implements AfterAllCallback {
@@ -263,7 +267,7 @@ public abstract class TestOnTheSharedCluster {
         final ExtensionContext context) {
 
       if (whyTheClusterCannotBeHandedOver != null) {
-        // a cleanup already gave up and said why; the next class says it again
+        // a cleanup already gave up and said why. The next class says it again
         return;
       }
       final var whoLeftIt = context
@@ -328,15 +332,15 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * The class whose leftovers the next cleanup takes away, so a cleanup which cannot finish
-   * names it instead of leaving the reader to work out the order of the classes.
+   * The class whose leftovers the next cleanup ends. A cleanup which cannot finish names it.
+   * So the reader does not have to work out the order of the classes.
    */
   private static String classWhichRanBefore = "the class before";
 
   /**
    * Why the cluster can serve no further class, once one cleanup has found that out. Every
-   * class after that fails at once with the same sentence rather than sitting out its own
-   * minute for an answer which cannot change.
+   * class after that fails at once with the same sentence. It does not wait its own minute for
+   * an answer which cannot change.
    */
   private static String whyTheClusterCannotBeHandedOver;
 
@@ -346,21 +350,21 @@ public abstract class TestOnTheSharedCluster {
    * <p>
    * The search finds what to end. It does NOT decide when the cleanup is done, because it
    * answers out of the exporter and lags behind the engine. An earlier version stopped once the
-   * user-task search was empty, and it could stop before a task it had just cancelled showed up
-   * as <code>CANCELING</code>. The worker of the next application was then served that task's
-   * <code>canceling</code> listener job, for a workflow aggregate in a database which had died
-   * with the class before. So each workflow found is asked for by its key until it reports an
-   * end state of its own, and until then this answers every listener job of this adapter which
-   * belongs to one of these workflows.
+   * user-task search was empty. It could stop before a task it had just cancelled showed up as
+   * <code>CANCELING</code>. The worker of the next application then got that task's
+   * <code>canceling</code> listener job. The job was for a workflow aggregate in a database
+   * which had died with the class before. So this asks for each workflow found by its key,
+   * until the workflow reports an end state of its own. Until then, this answers every
+   * listener job of this adapter which belongs to one of these workflows.
    * <p>
-   * An instance carrying a Camunda-managed user task terminates only once the
-   * <code>canceling</code> listener job of that task is answered, and while no application
-   * runs nobody answers it. Measured on 2026-09-25 against <code>8.10.0-alpha5</code> and
-   * <code>8.9.21</code>: 130 seconds after the cancellation the instance was still alive, and
-   * it ended 0.52 seconds after a worker took the job.
+   * An instance with a Camunda-managed user task terminates only once the
+   * <code>canceling</code> listener job of that task is answered. While no application runs,
+   * nobody answers it. Measured on 2026-09-25 against <code>8.10.0-alpha5</code> and
+   * <code>8.9.21</code>: 130 seconds after the cancellation the instance was still alive. It
+   * ended 0.52 seconds after a worker took the job.
    * <p>
-   * A child of a call activity is not cancelled: the engine refuses to cancel one, and
-   * cancelling its parent ends it anyway, so it goes with the parent.
+   * A child of a call activity is not cancelled. The engine refuses to cancel one. Cancelling
+   * its parent ends it anyway, so it goes with the parent.
    *
    * @param whoLeftIt The class or test the leftovers belong to, for the message where this
    *          gives up
@@ -386,8 +390,8 @@ public abstract class TestOnTheSharedCluster {
               cancel(client, workflow.getProcessInstanceKey(), refusals);
               toEnd.put(workflow.getProcessInstanceKey(), workflow.getProcessDefinitionKey());
             });
-        // a task between two states belongs to a workflow which is ending already, possibly
-        // a child the search above passed over. Its workflow is waited for the same way
+        // a task between two states belongs to a workflow which is ending already. It may be a
+        // child, which the search above skips. This waits for its workflow the same way
         userTasksBetweenTwoStates(client)
             .forEach(task -> toEnd.putIfAbsent(task.getProcessInstanceKey(), task.getProcessDefinitionKey()));
         answerTheListenerJobsOf(client, toEnd);
@@ -412,22 +416,22 @@ public abstract class TestOnTheSharedCluster {
   /**
    * Waits until the search knows every workflow the engine had started when this was called.
    * <p>
-   * A test which starts a workflow and ends a moment later leaves a workflow the search does
-   * not show yet. A cleanup which searched at once missed it, and it then ran on into the next
-   * test. Measured on 2026-10-06 against {@code camunda/camunda:8.10.0}: a test of
-   * {@code Camunda8InboundIdempotencyIT} ended 12 ms after creating its workflow, the cleanup
-   * found nothing, and the guard after the class found the workflow still running.
+   * A test which starts a workflow and ends a moment later leaves a workflow which the search
+   * does not show yet. A cleanup which searched at once missed it. The workflow then ran on
+   * into the next test. Measured on 2026-10-06 against {@code camunda/camunda:8.10.0}: a test
+   * of {@code Camunda8InboundIdempotencyIT} ended 12 ms after creating its workflow. The
+   * cleanup found nothing, and the guard after the class found the workflow still running.
    * <p>
-   * So this starts a workflow of its own, of a process which ends where it starts, and waits
-   * until that workflow reports its end when asked for by its key. The cluster of this module
-   * runs one partition, which is the default of the image, its keys grow with every workflow
-   * started and its exporter writes in that order. So once the end of this marker is in the
+   * So this starts a workflow of its own, of a process which ends where it starts. Then it asks
+   * for that workflow by its key until the workflow reports its end. The cluster of this module
+   * runs one partition, which is the default of the image. Its keys grow with every workflow
+   * started, and its exporter writes in that order. So once the end of this marker is in the
    * search, every workflow started before it is there as well.
    * <p>
-   * The END is waited for, not only the marker. On line 8.8, whose cluster exports to
-   * Elasticsearch, the marker could be read while still running, and the guard after the class
-   * then found the marker itself, in six classes of one run on 2026-10-06. The lines
-   * whose storage sits in the cluster's own database never showed that.
+   * This waits for the END of the marker, not only for the marker. On line 8.8 the cluster
+   * exports to Elasticsearch. There the marker could be read while it was still running. The
+   * guard after the class then found the marker itself, in six classes of one run on
+   * 2026-10-06. The lines whose storage sits in the cluster's own database never showed that.
    *
    * @param client The client of the test
    */
@@ -454,9 +458,9 @@ public abstract class TestOnTheSharedCluster {
     final var deadline = System.currentTimeMillis() + SEARCHABLE_WITHIN.toMillis();
     while (true) {
       try {
-        // the end of the marker, not only the marker: a storage which writes the start of a
-        // workflow before its end, which the Elasticsearch of line 8.8 does, would otherwise
-        // let the search report the marker itself as running
+        // the end of the marker, not only the marker. The Elasticsearch of line 8.8 writes the
+        // start of a workflow before its end. Otherwise the search could report the marker
+        // itself as running
         if (client
             .newProcessInstanceGetRequest(marker)
             .send()
@@ -502,11 +506,11 @@ public abstract class TestOnTheSharedCluster {
   /**
    * Whether one workflow reports an end state of its own.
    * <p>
-   * This asks for the instance by its key rather than searching, so the answer is about this
-   * workflow and nothing else. It still comes out of the secondary storage, which writes an
-   * end only after the engine reached it. So an end reported here is an end the engine is past.
-   * A key the storage does not know yet is a workflow which is not over, because it was found
-   * by a search of the same storage.
+   * This asks for the instance by its key and does not search. So the answer is about this
+   * workflow and nothing else. The answer still comes out of the secondary storage. That
+   * storage writes an end only after the engine reached it. So an end reported here is an end
+   * the engine is past. A key which the storage does not know yet is a workflow which is not
+   * over. The key came from a search of the same storage, after all.
    *
    * @param client The client of the test
    * @param processInstanceKey The workflow
@@ -534,9 +538,9 @@ public abstract class TestOnTheSharedCluster {
   /**
    * The user tasks the cluster holds between two of their states.
    * <p>
-   * Each of them waits for a listener job of this adapter's own, and each of those jobs is
-   * activatable until somebody answers it. The search is how a child workflow's task is
-   * found, whose workflow the search for running roots passes over.
+   * Each of them waits for a listener job of this adapter. Each of those jobs stays
+   * activatable until somebody answers it. This search also finds the task of a child
+   * workflow. The search for running root workflows skips such a child.
    *
    * @param client The client of the test
    * @return What the cluster still has to be told about
@@ -549,8 +553,8 @@ public abstract class TestOnTheSharedCluster {
             .newUserTaskSearchRequest()
             .filter(filter -> filter
                 .state(state -> state.in(UserTaskState.CREATING, UserTaskState.CANCELING)))
-            // one page for the whole module: a class leaves a handful of user tasks behind,
-            // and a second page would be a loop against a storage which is still filling up
+            // one page for the whole module. A class leaves only a few user tasks behind. A
+            // second page would mean a loop against a storage which is still filling up
             .page(page -> page.limit(1000))
             .send()
             .join()
@@ -559,17 +563,17 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * Answers the listener jobs of this adapter which belong to the workflows being ended, the
-   * way the worker of the application would have done.
+   * Answers the listener jobs of this adapter which belong to the workflows being ended. It
+   * does what the worker of the application would have done.
    * <p>
-   * The job types come from the models of those workflows, read once per process definition,
-   * and not from a search. That is the point: a task the search does not show yet has its
-   * job type in the model all the same. Every listener in the model whose job type carries this
-   * adapter's prefix counts, the <code>canceling</code> listener of a user task as well as a
-   * listener the engine runs when a workflow is cancelled.
+   * The job types come from the models of those workflows, not from a search. Each model is
+   * read once per process definition. That is the point: a task which the search does not show
+   * yet still has its job type in the model. Every listener in the model counts if its job type
+   * carries this adapter's prefix. That is the <code>canceling</code> listener of a user task,
+   * and also a listener which the engine runs when a workflow is cancelled.
    * <p>
    * A job of such a type which belongs to a workflow NOT being ended is handed back at once,
-   * with the retries it had. While the application of a class runs, that is a job of a
+   * with the retries it had. While the application of a class runs, such a job belongs to a
    * workflow its test started a moment ago, which the search did not show yet.
    *
    * @param client The client of the test
@@ -585,8 +589,8 @@ public abstract class TestOnTheSharedCluster {
         .distinct()
         .flatMap(processDefinitionKey -> listenerJobTypesOf(client, processDefinitionKey).stream())
         .distinct()
-        // all job types are asked at once: each request waits its timeout where no job is
-        // there, and a model of this module carries up to twenty such types
+        // all job types are asked at once. Each request waits its timeout if no job is there,
+        // and a model of this module has up to twenty such types
         .map(jobType -> client
             .newActivateJobsCommand()
             .jobType(jobType)
@@ -685,9 +689,9 @@ public abstract class TestOnTheSharedCluster {
   private static final Duration THE_CLEANUP_HOLDS_A_JOB_FOR = Duration.ofSeconds(10);
 
   /**
-   * How long the cleanup waits for a job of a listener type. Short, because the cleanup asks
-   * again on its next round anyway, and every round pays this wait once per job type that has
-   * no job at the moment.
+   * How long the cleanup waits for a job of a listener type. It is short, because the cleanup
+   * asks again on its next round anyway. And every round pays this wait once for each job type
+   * which has no job at the moment.
    */
   private static final Duration ASKING_FOR_A_LEFTOVER_JOB_ANSWERS_WITHIN = Duration.ofMillis(200);
 
@@ -729,9 +733,9 @@ public abstract class TestOnTheSharedCluster {
   }
 
   /**
-   * Appends what one cleanup cost to a file of the module's build directory, one line per
-   * test: the class, the test, the milliseconds and how many workflows it ended. It is how the
-   * price of cleaning up after every test is read off a run.
+   * Appends what one cleanup cost to a file in the module's build directory. It writes one line
+   * per test: the class, the test, the milliseconds and how many workflows it ended. With it you
+   * can read off a run what the cleanup after every test costs.
    *
    * @param test The test which just finished
    * @param ended How many workflows the cleanup ended
@@ -757,7 +761,7 @@ public abstract class TestOnTheSharedCluster {
           StandardOpenOption.CREATE,
           StandardOpenOption.APPEND);
     } catch (final IOException notWritten) {
-      // the cost is a reading for a person, and a test does not fail over it
+      // the cost is only for a person to read. A test does not fail over it
     }
 
   }
@@ -765,32 +769,32 @@ public abstract class TestOnTheSharedCluster {
   private static final Path WHERE_THE_COST_IS_WRITTEN = Path.of("target", "shared-cluster-cleanup.csv");
 
   /**
-   * How long the cleanup may take to get the cluster free of the class before. Generous rather
-   * than measured: the ordinary round ends at once, and what this number decides is when a
-   * leftover nothing can end fails the class instead of being handed on.
+   * How long the cleanup may take to get the cluster free of the class before. The value is
+   * generous, not measured. The ordinary round ends at once. This number only decides when a
+   * leftover which nothing can end fails the class, instead of being handed on.
    */
   private static final Duration THE_ENGINE_LETS_GO_WITHIN = Duration.ofSeconds(60);
 
   /**
    * How long an activation request of a client which was already closed can still be parked
-   * at the cluster. Such a request is a long poll, closing the client does not cancel it, and
-   * a job created while it is parked is activated into it and answered by nobody until its
+   * at the cluster. Such a request is a long poll. Closing the client does not cancel it. A
+   * job created while it is parked is activated into it. Nobody answers that job until its
    * lock expires.
    * <p>
-   * It is the <code>request-timeout</code> the applications of this module run with, and the
-   * yaml files of this module set it to the same five seconds. The client's own default is ten,
-   * and that is what this module used to pay twice per class: once here, and once more in the
-   * drain of the class before, which cannot report its workers closed until their parked
-   * requests come back. Measured on 2026-09-25 with the default: 281,9 seconds of waiting here
-   * across twenty-nine classes, in a module which took 985 seconds.
+   * It is the <code>request-timeout</code> the applications of this module run with. The yaml
+   * files of this module set it to the same five seconds. The client's own default is ten. This
+   * module used to pay those ten seconds twice per class. It paid once here, and once more in
+   * the drain of the class before. That drain cannot report its workers closed until their
+   * parked requests come back. Measured on 2026-09-25 with the default: 281,9 seconds of
+   * waiting here across twenty-nine classes, in a module which took 985 seconds.
    * <p>
-   * Five seconds is above the second below which the adapter calls the value unusable, and
-   * above what this module's commands need on a developer machine, where its deployment of
-   * nineteen files took under a second. Two seconds were tried first and the build runner
-   * missed them: on 2026-09-25 the deployment of that same module answered with
+   * The adapter calls a value below one second unusable, and five seconds is above that. It is
+   * also above what this module's commands need on a developer machine. There the deployment
+   * of nineteen files took under a second. Two seconds were tried first, and they were too
+   * short for the build runner. On 2026-09-25 the deployment of that same module answered with
    * <code>SocketTimeoutException: 2000 MILLISECONDS</code> on line 8.8, in a job which passes
    * with five. A runner is slower than the machine a measurement is taken on, and this value
-   * has to hold for both. A class which gives its applications a longer window says so with
+   * has to work on both. A class which gives its applications a longer window says so with
    * {@link #aRequestOfThisClassCanBeParkedFor(Duration)}.
    */
   private static final Duration WHAT_THIS_MODULE_CONFIGURES = Duration.ofSeconds(5);
@@ -805,16 +809,16 @@ public abstract class TestOnTheSharedCluster {
    * Waits until an activation request of the class before cannot be parked at the cluster any
    * more.
    * <p>
-   * The drain of a workflow module waits for the cluster to release its workers, so an
-   * ordinary shutdown leaves no such request. One which ran out of its grace does, and the
-   * class after it is what pays: its first job is activated into that request and comes back
-   * only when its lock expires. The cluster cannot be asked about it, and nothing but time
-   * closes it, so this waits the window out.
+   * The drain of a workflow module waits for the cluster to release its workers. So an
+   * ordinary shutdown leaves no such request. A drain which ran out of its grace period does
+   * leave one, and the class after it pays. Its first job is activated into that request. The
+   * job comes back only when its lock expires. The cluster cannot be asked about such a
+   * request, and only time closes it. So this waits the window out.
    * <p>
-   * The window is measured from the start of the cleanup above rather than from the moment
-   * the class before closed its client, which is earlier: JUnit has run every callback of
-   * that class by the time this class begins. So the wait is at least as long as it has to
-   * be, and the cleanup above pays for the part of it which it took.
+   * The window is measured from the start of the cleanup above. The class before closed its
+   * client earlier than that, because JUnit has run every callback of that class by the time
+   * this class begins. So the wait is at least as long as it has to be. The time the cleanup
+   * above took counts as part of it.
    *
    * @param theCleanupStartedAt When this class began taking the cluster over, in nanoseconds
    * @throws InterruptedException Where the wait is interrupted
@@ -843,12 +847,12 @@ public abstract class TestOnTheSharedCluster {
   private static Duration aParkedRequestOfTheClassBeforeLivesAtMost = WHAT_THIS_MODULE_CONFIGURES;
 
   /**
-   * Says that a request of THIS class can be parked longer than the module configures, so the
-   * class after it waits that window out instead of the short one.
+   * Says that a request of THIS class can be parked longer than the module configures. So the
+   * class after it waits out that window, not the short one.
    * <p>
-   * A class calls it from a {@code @BeforeAll} of its own, which JUnit runs after the one
-   * above. The window is read at the start of the next class and set back to the module's
-   * value there, so it is never carried further than one class.
+   * A class calls it from a {@code @BeforeAll} of its own. JUnit runs that after the one above.
+   * The next class reads the window when it starts, and sets it back to the module's value. So
+   * the window never carries over further than one class.
    *
    * @param window The <code>request-timeout</code> this class gives its applications
    */
@@ -872,8 +876,8 @@ public abstract class TestOnTheSharedCluster {
         () -> client
             .newProcessInstanceSearchRequest()
             .filter(filter -> filter.state(ProcessInstanceState.ACTIVE))
-            // one page for the whole module: a class leaves a handful of workflows behind,
-            // and a second page would be a loop against a storage which is still filling up
+            // one page for the whole module. A class leaves only a few workflows behind. A
+            // second page would mean a loop against a storage which is still filling up
             .page(page -> page.limit(1000))
             .send()
             .join()
@@ -888,11 +892,11 @@ public abstract class TestOnTheSharedCluster {
   /**
    * What the cluster answers with, retried while it refuses to answer at all.
    * <p>
-   * The class which starts the container is the one which meets a cluster whose search is
-   * not up yet: it is ready to take a deployment before it is ready to be asked what it
-   * holds. Every class after that meets a cluster which has been answering for a while, so a
-   * refusal which outlasts the retries is a broken search rather than a cold one, and it
-   * ends the class instead of leaving the workflows of an earlier one running.
+   * Only the class which starts the container meets a cluster whose search is not up yet. The
+   * cluster takes a deployment before it can answer what it holds. Every class after that
+   * meets a cluster which has been answering for a while. So a refusal which outlasts the
+   * retries means a broken search, not one which is still starting. It ends the class, so the
+   * workflows of an earlier class are not left running.
    *
    * @param <T> What the search brings back
    * @param search The search to run
@@ -934,11 +938,11 @@ public abstract class TestOnTheSharedCluster {
   /**
    * Cancels one workflow.
    * <p>
-   * A <code>404</code> means the engine takes no cancellation for this key, which is either a
-   * workflow that is over or one which is terminating already. Neither says that it is over,
-   * which is why the caller asks the workflow itself afterwards. Every other refusal is kept
-   * for the message a caller writes where it gives up, because a cancellation refused for some
-   * other reason is what a red run has to be able to read.
+   * A <code>404</code> means the engine takes no cancellation for this key. Either the workflow
+   * is over, or it is terminating already. So a <code>404</code> does not say that it is over.
+   * This is why the caller asks the workflow itself afterwards. Every other refusal is kept for
+   * the message the caller writes when it gives up. A red run has to show a cancellation which
+   * was refused for some other reason.
    *
    * @param client The client of the test
    * @param processInstanceKey The workflow to cancel

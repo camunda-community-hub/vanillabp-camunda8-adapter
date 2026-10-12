@@ -11,19 +11,19 @@ import io.quarkus.test.QuarkusExtensionTest;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Proves the platform's runtime deployment pipeline drives the Camunda 8
- * adapter on Quarkus: a BPMN resource below the configured
- * <code>resources-location</code> is read and parsed
- * ({@code readBpmn}/{@code prepareBpmn}/{@code wireBpmn}) and its deployment is
- * attempted at boot. No cluster is available (the configured REST address points to
- * a closed port), so {@code deployResources} fails - and since the adapter is the
- * first-priority adapter, the boot is aborted with the adapter's guiding message.
- * That failure IS the assertion: without the pipeline the application would boot
- * without ever contacting the (non-existing) cluster. The application configures
- * <code>startup-wait: PT0S</code>, because the closed port of this test stays closed and the
- * start would otherwise spend the default ten minutes finding that out. A real-cluster deployment is
- * covered by the Spring Boot module's Docker-based {@code Camunda8DeploymentAndStartIT}
- * (the deployment logic is shared {@code core} code) - see the README.
+ * Proves that the platform's runtime deployment pipeline drives the Camunda 8 adapter on
+ * Quarkus. A BPMN resource below the configured <code>resources-location</code> is read and
+ * parsed ({@code readBpmn}/{@code prepareBpmn}/{@code wireBpmn}). Its deployment is attempted
+ * at boot. No cluster is available, because the configured REST address points to a closed
+ * port. So {@code deployResources} fails. The adapter is the first-priority adapter, so the boot
+ * is aborted with the adapter's guiding message. That failure IS the assertion. Without the
+ * pipeline, the application would boot without ever contacting the (missing) cluster.
+ * <p>
+ * The application configures <code>startup-wait: PT0S</code>. The closed port of this test
+ * stays closed, and the start would otherwise spend the default ten minutes to find that out.
+ * The Spring Boot module's Docker-based {@code Camunda8DeploymentAndStartIT} covers a
+ * deployment to a real cluster. The deployment logic is shared {@code core} code. See the
+ * README.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8DeploymentPipelineTest {
@@ -62,7 +62,7 @@ public class Camunda8DeploymentPipelineTest {
 
   @Test
   public void deploymentPipelineReachesTheAdapter() {
-    // the assertion happens on the startup exception (assertException above)
+    // the assertion is on the startup exception (assertException above)
   }
 
 }

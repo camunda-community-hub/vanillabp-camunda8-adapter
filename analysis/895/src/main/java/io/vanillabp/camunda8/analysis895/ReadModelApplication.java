@@ -5,9 +5,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * The application of analysis 895: one workflow with a service task, a task left open, a
- * user task, a message and a timer, and a driver which keeps starting and advancing such
- * workflows while the cluster's read model is taken away. Run by {@code bin/run.sh}.
+ * The application of analysis 895. It has one workflow with a service task, a task left
+ * open, a user task, a message and a timer. A driver keeps starting such workflows and
+ * moving them on while the cluster's read model is taken away. {@code bin/run.sh} runs
+ * it.
  */
 @SpringBootApplication
 @EnableScheduling

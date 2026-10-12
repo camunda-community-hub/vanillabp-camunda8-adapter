@@ -20,54 +20,54 @@ import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Consumes USER-task lifecycle listener jobs: the V1-compatible
+ * Consumes USER-task lifecycle listener jobs. The V1-compatible
  * <code>zeebe:taskListener</code>s added at deployment deliver <code>creating</code>
  * (→ {@link TaskEvent.Event#CREATED}) and <code>canceling</code>
- * (→ {@link TaskEvent.Event#CANCELED}) as NORMAL JOBS consumed by this handler.
- * A user task without a notified <code>&#64;WorkflowTask</code> method is skipped: the
+ * (→ {@link TaskEvent.Event#CANCELED}) as NORMAL JOBS, and this handler consumes them.
+ * A user task without a notified <code>&#64;WorkflowTask</code> method is skipped. The
  * startup let it through only where the application marked it as served by something
- * else, a form or a task list say. A method never completes the user task on return - completion arrives via
- * <code>ProcessService#completeUserTask</code> with the USER-TASK KEY reported as
- * <code>&#64;TaskId</code>.
+ * else, for example a form or a task list. A method never completes the user task on
+ * return. The completion arrives through <code>ProcessService#completeUserTask</code>,
+ * with the USER-TASK KEY reported as <code>&#64;TaskId</code>.
  * <p>
- * Listener jobs GATE the task lifecycle and are therefore ALWAYS completed -
- * including deliveries without a handler. A failing notification fails the
- * listener job with no retries left, whatever the model says, so the first failure raises
- * the incident for the operator (notification defects must not be silently lost) - unless the
- * workflow module is SHUTTING DOWN, where the job is left to its lock instead:
- * a notification cut off by a restart is not a notification defect, and an incident would
- * be raised for something nobody did wrong. Both commands this handler sends back are
- * repeated where the cluster rejected them for backpressure, which matters here
- * more than anywhere else: with no retries left, a rejected failure would be an incident
- * the cluster's load produced.
+ * Listener jobs GATE the task lifecycle. So they are ALWAYS completed, also deliveries
+ * without a handler. A failing notification fails the listener job with no retries left,
+ * whatever the model says. So the first failure raises the incident for the operator,
+ * because notification defects must not be silently lost. The exception is a workflow
+ * module which is SHUTTING DOWN. There the job is left to its lock instead. A notification
+ * cut off by a restart is not a notification defect, and an incident would be raised for
+ * something nobody did wrong. Both commands this handler sends back are repeated where the
+ * cluster rejected them for backpressure. That matters here more than anywhere else. With
+ * no retries left, a rejected failure would be an incident caused by the load of the
+ * cluster.
  * <p>
- * The model carries one retry all the same, and the two are not the same number. The
- * modelled one is what a gateway gives back when it could not hand the activated batch to
- * the request it was activated for, and a job with none left dies of that lost delivery
- * instead of coming back
- * ({@code Camunda8TaskWiring#ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST}). The one
+ * The model carries one retry all the same, and the two are not the same number. A gateway
+ * gives back the modelled one when it could not hand the activated batch to the request it
+ * was activated for. A job with none left dies of that lost delivery and does not come back
+ * ({@code Camunda8TaskWiring#ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST}). The number
  * this handler sends is what a notification which really failed has left, and that is
  * none.
  * <p>
  * <b>The listener completion carries NO variables</b> (see decision 1 in the
- * repository's DECISIONS.md), and on these jobs it could not carry any: the cluster answers a
- * TASK-listener completion with a variables payload with INVALID_ARGUMENT, saying the payload
- * is not supported yet and naming its issue 23702.
- * Even if it were supported it would not be sent here. Unlike a service-task job - whose completion is the moment the process advances
- * past the task, so a gateway right behind it needs the new values - a listener job
- * only gates a lifecycle transition of a user task that stays in the cluster:
+ * repository's DECISIONS.md). On these jobs it could not carry any. The cluster answers a
+ * TASK-listener completion with a variables payload with INVALID_ARGUMENT. It says the
+ * payload is not supported yet and names its issue 23702. Even if it were supported, it
+ * would not be sent here. A service-task job is different. Its completion is the moment
+ * the process moves past the task, so a gateway right behind it needs the new values. A
+ * listener job only gates a lifecycle transition of a user task which stays in the
+ * cluster:
  * <ul>
- * <li><code>creating</code>: nothing downstream is evaluated yet. The aggregate
- * state reaches the cluster at the next real sync point - the completion of that
- * very user task ({@code ProcessService#completeUserTask}), which DOES push all
- * shared values;</li>
- * <li><code>canceling</code>: the task is being removed - the path taken is decided
- * by whatever canceled it (an interrupting event, or
- * {@code ProcessService#cancelUserTask}), not by this job.</li>
+ * <li><code>creating</code>: nothing downstream is evaluated yet. The aggregate state
+ * reaches the cluster at the next real sync point. That is the completion of that very
+ * user task ({@code ProcessService#completeUserTask}), which DOES push all shared
+ * values.</li>
+ * <li><code>canceling</code>: the task is being removed. Whatever canceled it decides the
+ * path taken (an interrupting event, or {@code ProcessService#cancelUserTask}), not this
+ * job.</li>
  * </ul>
- * A listener notification is also OPTIONAL: pushing variables from a path an
- * application may not even implement would make the cluster's view depend on
- * whether a notification handler exists.
+ * A listener notification is also OPTIONAL. An application may not even implement it. If
+ * variables were pushed from that path, the view of the cluster would depend on whether a
+ * notification handler exists.
  */
 @Slf4j
 public class Camunda8UserTaskListenerHandler implements JobHandler {
@@ -79,21 +79,21 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
   private final WorkflowTaskInvoker workflowTaskInvoker;
 
   /**
-   * Translates the identifiers the cluster reports back into the plain ones - a no-op
-   * unless the workflow module uses prefixes. May be
+   * Translates the identifiers the cluster reports back into the plain ones. It does
+   * nothing unless the workflow module uses prefixes. May be
    * <code>null</code> (tests).
    */
   private final NameClashAvoidanceSupport scoping;
 
   /**
-   * Which multi-instance elements enclose the user task - a user task may
-   * be multi-instance like any other activity. May be <code>null</code> (tests).
+   * Which multi-instance elements enclose the user task. A user task may be
+   * multi-instance like any other activity. May be <code>null</code> (tests).
    */
   private final Camunda8MultiInstance.Registry multiInstanceRegistry;
 
   /**
    * What the workflow module has in flight, and whether it is going down.
-   * Never <code>null</code> - a handler built without one (tests) gets a drain of its
+   * Never <code>null</code>. A handler built without one (tests) gets a drain of its
    * own, which never shuts down.
    */
   private final Camunda8Drain drain;
@@ -104,8 +104,8 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
   static final String KIND = "user-task listener";
 
   /**
-   * What this worker asked the cluster for - a listener job carries these
-   * variables and no others. Never <code>null</code>; a handler built without one
+   * What this worker asked the cluster for. A listener job carries these
+   * variables and no others. Never <code>null</code>. A handler built without one
    * (tests) sees every variable.
    */
   private final Camunda8FetchVariables.Selection fetchVariables;
@@ -123,12 +123,12 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
    *
    * @param adapterId The adapter whose worker delivers here
    * @param workflowModuleId The workflow module the subscribed user tasks belong to
-   * @param workflowTaskInvoker The core's runtime entry point
-   * @param scoping Translates the cluster's identifiers back, or <code>null</code>
+   * @param workflowTaskInvoker The runtime entry point of the core
+   * @param scoping Translates the identifiers of the cluster back, or <code>null</code>
    * @param multiInstanceRegistry Which multi-instance elements enclose the user task, or
    *          <code>null</code> for no iteration
-   * @param drain What the workflow module has in flight, or <code>null</code> for a drain of
-   *          this handler's own which never shuts down
+   * @param drain What the workflow module has in flight, or <code>null</code> for a drain
+   *          of its own, which never shuts down
    * @param fetchVariables What the worker asked for, or <code>null</code> for every variable
    * @param openTaskProbe What asks the cluster about the other open tasks of the workflow, or
    *          <code>null</code> to ask nothing
@@ -167,22 +167,22 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
     final var bpmnProcessId = NameClashAvoidanceSupport
         .plainProcessId(scoping, workflowModuleId, job.getBpmnProcessId(), adapterId);
     final var event = whatHappenedToTheTask(job);
-    // the USER-TASK KEY is the @TaskId - it completes the task later via
-    // ProcessService#completeUserTask (V1-compatible decimal representation)
+    // the USER-TASK KEY is the @TaskId. It completes the task later through
+    // ProcessService#completeUserTask (V1-compatible decimal representation).
     final var userTaskKey = job.getUserTask() != null
         ? String.valueOf(job.getUserTask().getUserTaskKey())
         : String.valueOf(job.getKey());
-    // the listener job type is '<marker><external form reference>', and the form
-    // reference is the task definition - prefixed like any other one
+    // the listener job type is '<marker><external form reference>'. The form reference
+    // is the task definition, prefixed like any other one.
     final var scopedTaskDefinition = job
         .getType()
         .substring(Camunda8TaskWiring.TASKDEFINITION_USERTASK_ZEEBE.length());
     final var taskDefinition = NameClashAvoidanceSupport
         .plainTaskDefinition(scoping, workflowModuleId, bpmnProcessId, scopedTaskDefinition, adapterId);
 
-    // what the application was told about this user task, written by the work below and
-    // read once the cluster has the answer to this listener job. It stays empty where no
-    // notification happened at all
+    // what the application was told about this user task. The work below writes it. It
+    // is read once the cluster has the answer to this listener job. It stays empty where
+    // no notification happened at all.
     final var theNotification = new AtomicReference<TaskInvocationContext>();
 
     Camunda8ListenerJobs
@@ -194,8 +194,8 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
             KIND,
             taskDefinition,
             bpmnProcessId,
-            // a notification which failed has no attempt left, whatever the model says: the
-            // failure IS the incident and there is no next attempt a backoff could delay
+            // a notification which failed has no attempt left, whatever the model says. The
+            // failure IS the incident, and there is no next attempt a backoff could delay.
             () -> Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT,
             () -> {
               if (event == null) {
@@ -260,13 +260,13 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
             },
             () -> {
               // the creation or the cancelation of a user task is a wake-up of its workflow
-              // like any other, so the other tasks the core believes are open in it are
-              // looked at here too. AFTER the listener job was answered and not inside the
-              // work: on a 'creating' listener the completion of that job is what ends
-              // state CREATING, and until it reaches the partition the cluster refuses the
-              // completion the application may have sent for this very task. It still runs
-              // inside the drain of this workflow module, so a shutdown waits for it
-              // instead of closing the client under it
+              // like any other. So the other tasks which the core believes are open in it
+              // are looked at here too. This happens AFTER the listener job was answered,
+              // not inside the work. On a 'creating' listener, the completion of that job
+              // ends state CREATING. Until it reaches the partition, the cluster refuses
+              // the completion which the application may have sent for this very task. It
+              // still runs inside the drain of this workflow module. So a shutdown waits
+              // for it and does not close the client under it.
               final var wakeUp = theNotification.get();
               if ((openTaskProbe != null) && (wakeUp != null)) {
                 openTaskProbe.reportWhatTheClusterNoLongerHas(bpmnProcessId, wakeUp);
@@ -277,14 +277,14 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
 
   /**
    * What happened to the user task, as the SPI tells the cases apart. This handler serves
-   * the two task listeners the deployment adds, and those deliver <code>creating</code>
-   * and <code>canceling</code>.
+   * the two task listeners the deployment adds. Those deliver <code>creating</code> and
+   * <code>canceling</code>.
    * <p>
-   * Every other event is answered with <code>null</code> instead of with one of the two.
-   * The client's event types grow inside a line: 8.10 adds <code>CANCEL</code> beside
-   * <code>CANCELING</code>, and a client older than the cluster reports an event it does
+   * Every other event is answered with <code>null</code>, not with one of the two. The
+   * event types of the client grow inside a line. 8.10 adds <code>CANCEL</code> beside
+   * <code>CANCELING</code>. And a client older than the cluster reports an event it does
    * not know as <code>UNKNOWN_ENUM_VALUE</code>. Reading such a job as a creation would
-   * tell the application about a task it never got, so the caller completes the job
+   * tell the application about a task it never got. So the caller completes the job
    * without notifying anybody instead.
    *
    * @param job The listener job
@@ -384,8 +384,8 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
     @Override
     public String getProcessVersion() {
 
-      // the version of the deployed process definition this job belongs to - the
-      // cluster ships it with every job, so nothing has to be queried
+      // the version of the deployed process definition this job belongs to. The
+      // cluster ships it with every job, so nothing has to be queried.
       return String.valueOf(job.getProcessDefinitionVersion());
 
     }
@@ -400,8 +400,8 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
     @Override
     public String getBpmnElementId() {
 
-      // the user task element the listener fired for - the element of the model, not the
-      // listener job's type
+      // the user task element the listener fired for. It is the element of the model, not
+      // the type of the listener job.
       return job.getElementId();
 
     }
@@ -409,7 +409,7 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
     @Override
     public String getWorkflowId() {
 
-      // the process instance key of the cluster - what Operate is searched by
+      // the process instance key of the cluster. Operate is searched by it.
       return String.valueOf(job.getProcessInstanceKey());
 
     }
@@ -427,7 +427,7 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
       // this handler serves the listeners of a user task and nothing else, so the id above
       // is a user-task key. The cluster takes it back through UpdateUserTask and
       // CompleteUserTask. The job commands of the same cluster find nothing under a
-      // user-task key, and saying exactly that is what the record is read for
+      // user-task key. The record is read to say exactly that.
       return TaskKind.USER_TASK;
 
     }
@@ -442,10 +442,10 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
     @Override
     public String getDeliveryId() {
 
-      // the listener job's key: the notification of one user-task event is one job,
-      // redelivered under the same key until the cluster learns the result.
-      // The user-task key would be the wrong choice - creation and cancellation of the
-      // same user task share it, and they are two deliveries with two outcomes
+      // the key of the listener job. The notification of one user-task event is one job.
+      // It is delivered again under the same key until the cluster learns the result.
+      // The user-task key would be the wrong choice. Creation and cancellation of the
+      // same user task share it, and they are two deliveries with two outcomes.
       return String.valueOf(job.getKey());
 
     }
@@ -453,9 +453,9 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
     @Override
     public String getActivationId() {
 
-      // the element instance of the user task, which is what an activation means - and
-      // here the sharing the delivery id had to avoid is right: creation and
-      // cancellation happen within ONE activation of one element
+      // the element instance of the user task, which is what an activation means. Here
+      // the sharing which the delivery id had to avoid is right. Creation and
+      // cancellation happen within ONE activation of one element.
       return String.valueOf(job.getElementInstanceKey());
 
     }

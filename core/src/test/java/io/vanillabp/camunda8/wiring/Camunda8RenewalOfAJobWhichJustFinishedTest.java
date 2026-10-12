@@ -40,8 +40,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * application which completes the task in between closes the job first, and the cluster
  * refuses the renewal. A main build met that race against a real cluster: HTTP 400,
  * "Expected to update the timeout of job with key ..., but it is not active". The test
- * forces the race instead of waiting for it. The cluster's answer comes from a mock, and
- * the handler has to go on as if the renewal had gone through, because there was nothing
+ * forces the race instead of waiting for it. The cluster's answer comes from a mock.
+ * The handler has to go on as if the renewal had gone through, because there was nothing
  * left to renew.
  */
 @ExtendWith(SuppressOutputExtension.class)

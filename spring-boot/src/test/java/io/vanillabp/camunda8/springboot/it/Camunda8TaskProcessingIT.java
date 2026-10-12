@@ -61,16 +61,16 @@ import io.vanillabp.spi.process.TaskNotFoundException;
  * throwing handler's aggregate changes committed;</li>
  * <li>technical exception - job failed with decremented retries, local
  * transaction rolled back;</li>
- * <li>{@code @TaskId} - the returned-but-uncompleted job's lock is renewed
- * (async-task-lock-renewal), so the handler is NOT re-invoked within the test
- * horizon although the task's job timeout is 2s;</li>
+ * <li>{@code @TaskId} - the handler returns without completing the job, and the job's lock
+ * is renewed (async-task-lock-renewal). So the handler is NOT invoked again while the test
+ * watches, although the task's job timeout is 2s;</li>
  * <li>the job timeout resolves through all four configuration levels from the
  * real application configuration;</li>
  * <li>a {@code retryBackoff} task header in the model decides the backoff of its own
  * element, without a new process version and without configuration;</li>
- * <li>the start of a workflow leaves its process instance key in the delivery log, in the
- * form a delivery of its tasks names it and with the version of the process definition,
- * whether it was started directly or by message;</li>
+ * <li>the start of a workflow leaves its process instance key in the delivery log, together
+ * with the version of the process definition. It uses the form in which a delivery of its
+ * tasks names the key. This holds for a direct start and for a start by message;</li>
  * <li>a message passed to {@code startWorkflowByMessage} which starts another process is
  * refused.</li>
  * </ul>
@@ -87,11 +87,11 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   /**
    * How long a wait may go on before it says out loud what it is still missing.
    * <p>
-   * A minute of a runner printing nothing is what made the lost user-task notification
-   * unreadable afterwards: the deadline's message says what the state was at the END, and
-   * nothing says whether it had been that way from the first second or moved once and
-   * then stopped. A line every quarter minute turns the wait into a record. It costs
-   * nothing in a green run, where no wait ever reaches it.
+   * A minute in which a runner printed nothing made the lost user-task notification
+   * impossible to read afterwards. The deadline's message says what the state was at the
+   * END. Nothing says whether it had been that way from the first second, or whether it
+   * moved once and then stopped. A line every quarter minute turns the wait into a record.
+   * It costs nothing in a green run, where no wait ever gets that far.
    */
   private static final long PROGRESS_INTERVAL_MS = 15_000;
 
@@ -149,11 +149,11 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("completeTask of a task this cluster never had fails at once, not after the visibility window")
   public void completeUnknownTaskFailsWithoutWaiting() {
 
-    // the workflow was started through this adapter, so the election has a hint for it
+    // the workflow was started through this adapter, so the election has a hint for it,
     // and the adapter reports a visibility window of ten seconds. That window is for a
-    // WORKFLOW the query API has not caught up with; a job key is asked of the engine
-    // itself (UpdateJobTimeout), which answers exactly - so this must not wait for it
-    // (decision 27 of the platform's DECISIONS.md)
+    // WORKFLOW which the query API has not caught up with. A job key is asked of the engine
+    // itself (UpdateJobTimeout), and the engine answers exactly. So this must not wait for
+    // the window (decision 27 of the platform's DECISIONS.md)
     final var aggregateId = start("TaskProcess");
 
     final var startedAt = System.nanoTime();
@@ -188,10 +188,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   /**
    * Waits for a condition and, if it never becomes true, says what it saw while waiting.
    * <p>
-   * A message holding nothing but its own description is what makes a timeout in a
-   * runner unreadable: the run is gone, and "the notification never came" leaves every
-   * explanation open. So the caller of a wait which can go red on a machine nobody
-   * watches hands over a second supplier, and that one is asked once, at the deadline.
+   * A message which holds nothing but its own description makes a timeout in a runner
+   * impossible to read. The run is gone, and "the notification never came" leaves every
+   * explanation open. So the caller of a wait which can go red on a machine nobody watches
+   * hands over a second supplier. The wait asks it once, at the deadline.
    *
    * @param condition What is waited for
    * @param timeoutMillis How long to wait
@@ -243,10 +243,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   /**
    * What the timeout appends to its message, or nothing.
    * <p>
-   * Reading the state can run into the same trouble the wait did, and a diagnosis which
-   * fails must not replace the timeout it was written to explain. An assertion error is
-   * caught next to the exceptions, because reading the state may go through code which
-   * asserts rather than throws.
+   * Reading the state can run into the same trouble as the wait. A diagnosis which fails
+   * must not replace the timeout it was written to explain. An assertion error is caught
+   * together with the exceptions, because reading the state may go through code which
+   * asserts instead of throwing.
    *
    * @param whatWasSeen The state at the deadline
    * @return The sentence to append
@@ -282,9 +282,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * Waits for the row the start of a workflow leaves behind, and checks that its workflow id
-   * is the process instance key a delivered task of the same workflow names, and its process
-   * version the version that task names.
+   * Waits for the row which the start of a workflow leaves behind. Then it checks two things.
+   * Its workflow id is the process instance key which a delivered task of the same workflow
+   * names. And its process version is the version which that task names.
    *
    * @param aggregateId The workflow aggregate this test started
    * @param bpmnProcessId The process the workflow was started of
@@ -293,8 +293,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
       final Object aggregateId,
       final String bpmnProcessId) throws InterruptedException {
 
-    // the row is written after the transaction of the start committed, so it is awaited
-    // rather than read right away
+    // the row is written after the transaction of the start committed. So the test waits
+    // for it and does not read it right away
     final var started = new AtomicReference<List<Delivery>>(List.of());
     awaitUntil(
         () -> {
@@ -307,8 +307,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     assertEquals(1, started.get().size(), "one row per workflow of one aggregate");
     final var workflowId = started.get().getFirst().workflowId();
 
-    // a task of that workflow names its workflow through the invocation context. Both
-    // land in the same column, so the two have to be the same text for the same instance
+    // a task of that workflow names its workflow through the invocation context. Both end
+    // up in the same column, so the two have to be the same text for the same instance
     final var delivered = new AtomicReference<Delivery>();
     awaitUntil(
         () -> {
@@ -325,7 +325,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         "a task of the started workflow to be delivered under process instance key '%s'".formatted(workflowId),
         () -> deliveryLog().deliveries().toString());
 
-    // the same holds for the version of the process definition: the start and the task
+    // the same holds for the version of the process definition. The start and the task
     // write it into the same column, and a reader compares the two
     final var startedOn = workflowStartsOf(aggregateId, bpmnProcessId)
         .getFirst()
@@ -381,13 +381,13 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The events the handlers reported into the aggregate, a repetition of the same event
-   * collapsed into its first occurrence.
+   * The events which the handlers reported into the aggregate. A repetition of the same
+   * event is collapsed into its first occurrence.
    * <p>
-   * Camunda 8 delivers at least once. The core drops the repetition carrying the same job
-   * key and nothing drops one carrying a new one, so an assertion about WHICH events
-   * reached the aggregate must not turn red over how often one of them did. How often is
-   * what the inbound-idempotency test measures.
+   * Camunda 8 delivers at least once. The core drops a repetition which carries the same
+   * job key. Nothing drops one which carries a new job key. So an assertion about WHICH
+   * events reached the aggregate must not turn red over how often one of them did. The
+   * inbound-idempotency test measures how often.
    *
    * @param aggregateId The aggregate the events were reported into
    * @return The reported events in the order they arrived
@@ -407,22 +407,22 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
   /**
    * Everything the CREATED notification of a user task depends on, in one line: what the
-   * handler wrote into the aggregate, how often it ran at all, which workflow it was
-   * about - the one this test started, since a test starts exactly one - and what the
-   * cluster holds for that workflow.
+   * handler wrote into the aggregate, how often it ran at all, which workflow it was about,
+   * and what the cluster holds for that workflow. The workflow is the one this test
+   * started, since a test starts exactly one.
    * <p>
-   * The cluster's half is the one which was missing when this wait ran into its minute
-   * on a runner: the application's half says the notification never came, and it says
-   * that whether the listener job was never created, was created and never handed to a
-   * worker, or was handed over and failed. Those are three different defects.
+   * The cluster's half was missing when this wait ran out of its minute on a runner. The
+   * application's half says that the notification never came. It says so in three cases:
+   * the listener job was never created, or it was created and never handed to a worker, or
+   * it was handed over and failed. Those are three different defects.
    * <p>
-   * The cluster is asked three questions rather than one. The job says what became of the
+   * The cluster is asked three questions, not one. The job says what became of the
    * delivery. The user task says whether the cluster ever got past <code>CREATING</code>.
-   * The incident says whether the instance is now waiting for an operator. A red run which
-   * answers all three is readable without a second one.
+   * The incident says whether the instance now waits for an operator. A red run which
+   * answers all three can be read without a second run.
    * <p>
-   * What the cluster made of the listener job in detail is in its own log, and the
-   * process instance key is the string to look for there.
+   * The cluster's own log has the details of what it made of the listener job. Search
+   * there for the process instance key.
    *
    * @param aggregateId The aggregate the notification is awaited for
    * @return What a timeout should report
@@ -447,30 +447,29 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The jobs the cluster holds for the workflow this test started, as one sentence.
+   * The jobs which the cluster holds for the workflow this test started, as one sentence.
    * <p>
-   * A listener job which is there and waiting says the cluster did its part; nothing at
-   * all says the user task was never created or its listener never became a job. The
-   * answer comes from the search API, which is eventually consistent, so "no job at all"
-   * is a strong hint rather than a proof - and a hint is what a timeout has none of
-   * today.
+   * A listener job which is there and waiting says that the cluster did its part. No job at
+   * all says that the user task was never created, or that its listener never became a
+   * job. The answer comes from the search API, which is eventually consistent. So "no job
+   * at all" is a strong hint, not a proof. Without this line, a timeout has no hint at all.
    * <p>
    * <b>Why the retries, the worker and the error message are in here.</b> A job in state
-   * <code>FAILED</code> was failed by a command somebody sent, and on 2026-09-18 a red run
-   * showed one without saying who sent it. Only three senders exist, and what they leave on
-   * the job is different for each of them:
+   * <code>FAILED</code> was failed by a command which somebody sent. On 2026-09-18 a red run
+   * showed one without saying who sent it. Only three senders exist, and each of them
+   * leaves something different on the job:
    * <ul>
-   * <li>this adapter, in {@code Camunda8ListenerJobs.completeOrFail}: a warning naming the
-   * job stands in the log right before it, and the error message is one line of the shape
+   * <li>this adapter, in {@code Camunda8ListenerJobs.completeOrFail}: a warning which names
+   * the job stands in the log right before it. The error message is one line of the shape
    * <code>type: message</code>;</li>
    * <li>the Camunda client, for anything thrown out of a job handler before that method
-   * takes over: the error message is a whole stack trace. The retries do not tell the two
-   * apart any more, because a user-task listener is written into the model with one and
-   * both of them leave zero;</li>
+   * takes over: the error message is a whole stack trace. The retries no longer tell the
+   * two apart. A user-task listener is written into the model with one retry, and both
+   * senders leave zero;</li>
    * <li>the Camunda client again, when the worker had no execution slot for the job: the
-   * retries are unchanged and the error message says that the worker had no capacity and
-   * returned the job. That one needs <code>stream-enabled</code>, which no test here
-   * switches on.</li>
+   * retries are unchanged, and the error message says that the worker had no capacity and
+   * returned the job. That needs <code>stream-enabled</code>, which no test here switches
+   * on.</li>
    * </ul>
    *
    * @return What the cluster holds, or why it could not be asked
@@ -510,13 +509,13 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The user tasks the cluster holds for the workflow this test started, with the state
-   * each one is in.
+   * The user tasks which the cluster holds for the workflow this test started, with the
+   * state of each one.
    * <p>
-   * A task standing in <code>CREATING</code> is the other half of a failed
-   * <code>creating</code> listener job: the cluster is holding the transition open and
-   * waits for an answer nobody is going to send. Without this line a reader cannot tell
-   * that case from a task the cluster never began to create.
+   * A task in <code>CREATING</code> is the other half of a failed <code>creating</code>
+   * listener job. The cluster holds the transition open and waits for an answer which nobody
+   * is going to send. Without this line, a reader cannot tell that case from a task which
+   * the cluster never began to create.
    *
    * @return What the cluster holds, or why it could not be asked
    */
@@ -547,9 +546,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   /**
    * What the cluster is waiting for an operator about, for the workflow this test started.
    * <p>
-   * A listener job failed with no retry left IS an incident, so this line says whether the
-   * delivery ended there. It also names the job the incident belongs to, which is the link
-   * back to the job list above.
+   * A listener job which failed with no retry left IS an incident. So this line says whether
+   * the delivery ended there. It also names the job which the incident belongs to. That is
+   * the link back to the job list above.
    *
    * @return What the cluster holds, or why it could not be asked
    */
@@ -583,10 +582,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * How many characters of an error message a diagnosis carries. A stack trace is the
-   * error message of a job the Camunda client failed, and printing all of it would bury
-   * the rest of the line. The first few hundred characters hold the exception and the
-   * frames which name the class, which is what tells the senders apart.
+   * How many characters of an error message a diagnosis carries. A stack trace is the error
+   * message of a job which the Camunda client failed. Printing all of it would bury the rest
+   * of the line. The first few hundred characters hold the exception and the frames which
+   * name the class. That is what tells the senders apart.
    */
   private static final int ERROR_MESSAGE_EXCERPT = 400;
 
@@ -640,8 +639,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("The message time-to-live resolves through all four levels, message first")
   public void messageTimeToLiveResolvesThroughAllFourLevels() {
 
-    // message level (most specific) - a catch event whose message may legitimately repeat
-    // every minute, which is what a per-message override is for
+    // message level (most specific). A catch event whose message may repeat every minute,
+    // for good reason. A per-message override is for exactly this
     assertEquals(
         Duration.ofMinutes(1),
         overlay.messageTimeToLiveFor("test-app", "TaskProcess", "OfferRequested", "c8"));
@@ -657,7 +656,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     assertEquals(
         Duration.ofHours(6),
         overlay.messageTimeToLiveFor("unknown-module", "SomeProcess", "SomeMessage", "c8"));
-    // a task name is not a message name: the two most specific levels are different maps
+    // a task name is not a message name. The two most specific levels are different maps
     assertEquals(
         Duration.ofHours(4),
         overlay.messageTimeToLiveFor("test-app", "TaskProcess", "happyTask", "c8"));
@@ -688,7 +687,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     assertEquals(
         Duration.ofSeconds(30),
         overlay.retryBackoffFor("unknown-module", "SomeProcess", "someTask", "c8"));
-    // and the answer names the one level a 'retryBackoff' task header meets as an equal
+    // and the answer names the one level which a 'retryBackoff' task header meets as an
+    // equal
     assertTrue(
         overlay.configuredRetryBackoffFor("test-app", "TaskProcess", "happyTask", "c8").perTask(),
         "'happyTask' configures a backoff of its own");
@@ -705,9 +705,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     final var aggregateId = transactionTemplate.execute(status -> repository
         .save(new TaskDockerAggregate())
         .getId());
-    // a variable the BPMN model does not mention anywhere: no input mapping declares it,
-    // no script writes it - the workflow was started with it, which is all the cluster
-    // knows about it
+    // a variable which the BPMN model does not mention anywhere. No input mapping declares
+    // it, and no script writes it. The workflow was started with it, and that is all the
+    // cluster knows about it
     final var bigPayload = "x".repeat(32768);
     lastStartedInstanceKey = workflowServiceClient()
         .newCreateInstanceCommand()
@@ -729,10 +729,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         "the declared @TaskParam is fetched for the first task as well");
 
     // the SECOND task configures nothing either, and its worker asks the cluster for
-    // 'bigPayload': the core scanned the name off the method while wiring,
-    // so the derivation covers what the application reads instead of what the model
-    // happens to declare. How SHORT that list is has its own tests in the core module -
-    // here the point is that the value arrives
+    // 'bigPayload'. The core read the name off the method while wiring. So the derived list
+    // covers what the application reads, not what the model happens to declare. The core
+    // module has its own tests for how SHORT that list is. Here the point is that the value
+    // arrives
     awaitUntil(
         () -> invocations("fetchDerivedTask", aggregateId) >= 1,
         60000,
@@ -741,9 +741,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         bigPayload.length(),
         TaskDockerWorkflowService.OBSERVED_VARIABLES.get("derivedPayloadLength"),
         "the variable stands in no model and no property was set - the annotation alone brought it");
-    // the THIRD task is served by a method wired to the ELEMENT id: its job type is a
-    // name no method of the workflow service carries, so the core knows this handler by
-    // the element alone. The worker has to ask the cluster for 'bigPayload' all the same
+    // a method wired to the ELEMENT id serves the THIRD task. Its job type is a name which
+    // no method of the workflow service carries. So the core knows this handler by the
+    // element alone. The worker still has to ask the cluster for 'bigPayload'
     awaitUntil(
         () -> invocations("fetchByElementId", aggregateId) >= 1,
         60000,
@@ -774,9 +774,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         60000,
         "the failing job to be delivered");
 
-    // FailProcess is configured with 'retry-backoff: PT5S': without it the cluster hands
-    // the job out again within milliseconds, which is what used to burn all three retries
-    // before the cause of the failure had any chance to pass
+    // FailProcess is configured with 'retry-backoff: PT5S'. Without it the cluster hands the
+    // job out again within milliseconds. That used to use up all three retries before the
+    // cause of the failure had any chance to pass
     Thread.sleep(3000);
     assertEquals(
         1,
@@ -807,8 +807,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     final var aggregateId = transactionTemplate.execute(status -> repository
         .save(new TaskDockerAggregate())
         .getId());
-    // a model which brings its own backoff is what an application arriving from version 1
-    // has, and keeping that value must not cost it a new process version
+    // an application which comes from version 1 has a model which brings its own backoff.
+    // Keeping that value must not cost it a new process version
     startSecondaryProcess("ModelledBackoffProcess", aggregateId);
 
     awaitUntil(
@@ -821,10 +821,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         60000,
         "the failing job to be handed out again");
 
-    // the element models PT12S while its workflow configures PT1S, so the distance
-    // between two deliveries is what says which of the two the cluster was given. The
-    // long value is the modelled one on purpose: a busy cluster can stretch a gap but
-    // never shorten it, so this assertion cannot go red on a slow machine
+    // the element models PT12S, while its workflow configures PT1S. So the distance between
+    // two deliveries says which of the two the cluster was given. The modelled value is the
+    // long one on purpose. A busy cluster can stretch a gap but never shorten it, so this
+    // assertion cannot go red on a slow machine
     final var times = TaskDockerWorkflowService.INVOCATION_TIMES
         .get("modelledBackoffFails:"
             + aggregateId);
@@ -875,8 +875,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         .getId());
     startSecondaryProcess("RetryProcess", aggregateId);
 
-    // the first delivery fails (job failed, local TX rolled back) - Camunda 8
-    // redelivers; the second delivery converges and the process ends
+    // the first delivery fails (job failed, local TX rolled back). Camunda 8 delivers it
+    // again. The second delivery converges, and the process ends
     awaitUntil(
         () -> {
           final var results = results(aggregateId);
@@ -889,8 +889,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         invocations("retryTask", aggregateId) >= 2,
         "expected a second delivery but saw "
             + invocations("retryTask", aggregateId));
-    // exactly one 'retried' in the results: the second delivery converged
-    // idempotently, the first delivery's mutation was rolled back
+    // exactly one 'retried' in the results. The second delivery converged idempotently,
+    // and the change of the first delivery was rolled back
     assertEquals("retried", results(aggregateId));
 
   }
@@ -902,8 +902,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     final var aggregateId = transactionTemplate.execute(status -> {
       final var aggregate = new TaskDockerAggregate();
       final var saved = repository.save(aggregate);
-      // start FailProcess directly via the adapter's client (the injectable
-      // ProcessService starts the primary process only)
+      // FailProcess is started directly via the adapter's client (the injectable
+      // ProcessService starts only the primary process)
       return saved.getId();
     });
     // start FailProcess through a fresh aggregate + direct client call
@@ -915,7 +915,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         60000,
         "the failing job to be retried");
 
-    // the handler's mutation never became visible (local rollback per attempt)
+    // the handler's change never became visible (local rollback per attempt)
     assertNull(results(aggregateId));
 
   }
@@ -929,17 +929,17 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         .getId());
     startSecondaryProcess("AsyncProcess", aggregateId);
 
-    // the job key the handler reports is written by its COMMIT, so the wait has to end
-    // at the commit as well. The invocation counter is raised by the first statement of
-    // the handler and is therefore true a few milliseconds earlier, while the aggregate
-    // in the database still carries no task id at all
+    // the COMMIT of the handler writes the job key which the handler reports. So the wait
+    // has to end at the commit as well. The first statement of the handler raises the
+    // invocation counter. So the counter is true a few milliseconds earlier, while the
+    // aggregate in the database still carries no task id at all
     awaitUntil(
         () -> repository.findById(aggregateId).map(TaskDockerAggregate::getTaskId).orElse(null) != null,
         60000,
         "the async task to commit its job key");
 
-    // the task's job timeout is PT2S - without the dormancy lock extension the
-    // job would be redelivered within this horizon
+    // the task's job timeout is PT2S. Without the lock renewal of a dormant task, the job
+    // would be delivered again within this time
     Thread.sleep(8000);
     assertEquals(
         1,
@@ -969,8 +969,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
       workflowService.completeAsyncTask(aggregate, aggregate.getTaskId());
     });
 
-    // phase two completes the job through the outbox after the commit; the cluster
-    // is asked about that job DIRECTLY, with a command rather than the eventually
+    // phase two completes the job through the outbox after the commit. The test asks the
+    // cluster about that job DIRECTLY, with a command and not with the eventually
     // consistent search API
     final var taskId = repository.findById(aggregateId).orElseThrow().getTaskId();
     awaitUntil(
@@ -1034,10 +1034,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         .send()
         .join();
 
-    // the delivery record still says this adapter holds an open task, so the call
-    // reaches the adapter rather than a probe, and the pre-commit check is what meets
-    // the cluster's 404. The transaction is aborted, and the caller reads the type the
-    // SPI documents for a task no BPMS knows any more
+    // the delivery record still says that this adapter holds an open task. So the call
+    // reaches the adapter and not a probe, and the pre-commit check meets the cluster's
+    // 404. The transaction is aborted, and the caller gets the type which the SPI documents
+    // for a task no BPMS knows any more
     Assertions.assertThrows(
         TaskNotFoundException.class,
         () -> transactionTemplate.executeWithoutResult(status -> {
@@ -1050,11 +1050,11 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   /**
    * The same stale completion, on a PRIMARY process.
    * <p>
-   * The platform elects the adapter from the delivery record before it probes any BPMS, and
-   * it looks for that record under every BPMN process id the workflow service serves. Every
-   * parking process of this class's own workflow service is a secondary one, so the test
-   * above asks only the longer of those two lookups. This one asks the short one, with the
-   * fixture whose PRIMARY process parks in a {@code @TaskId} task.
+   * The platform elects the adapter from the delivery record before it probes any BPMS. It
+   * looks for that record under every BPMN process id which the workflow service serves.
+   * Every parking process of this class's own workflow service is a secondary one. So the
+   * test above only tests the longer of those two lookups. This one tests the short one,
+   * with the fixture whose PRIMARY process parks in a {@code @TaskId} task.
    */
   @Test
   @DisplayName("A stale completion of a primary process's task raises the same exception")
@@ -1090,8 +1090,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         .getId());
     startSecondaryProcess("UserTaskProcess", aggregateId);
 
-    // the creating listener job notified the optional handler with the USER-TASK
-    // key as @TaskId
+    // the creating listener job notified the optional handler, with the USER-TASK key as
+    // @TaskId
     awaitUntil(
         () -> {
           final var aggregate = repository.findById(aggregateId).orElseThrow();
@@ -1108,14 +1108,14 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
       workflowService.completeUserTask(aggregate, taskId);
     });
 
-    // the cluster is asked about that user task DIRECTLY, with a command rather than
+    // the test asks the cluster about that user task DIRECTLY, with a command and not with
     // the eventually consistent search API
     awaitUntil(
         () -> theClusterNoLongerKnowsTheUserTask(taskId),
         60000,
         "the user task to be completed through the outbox");
-    // completing a user task is not an event of its own: what the aggregate holds is the
-    // creation the listener reported and the word this test wrote before completing
+    // completing a user task is not an event of its own. The aggregate holds the creation
+    // which the listener reported, and the word which this test wrote before completing
     assertEquals(
         List.of("usertask-created", "approving"),
         reportedEventsWithoutRepetitions(aggregateId),
@@ -1178,17 +1178,17 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
           final var aggregate = repository.findById(aggregateId).orElseThrow();
           workflowService.cancelUserTask(aggregate, taskId, "SOME_ERROR");
         }));
-    // the message names the release line the application runs, not a fixed version:
-    // that is what a reader has to change to get the operation
+    // the message names the release line which the application runs, not a fixed version.
+    // A reader has to change the line to get the operation
     assertTrue(
         exception.getMessage().contains("release line "
             + Camunda8ReleaseLine.id()) && exception.getMessage().contains("8.10"),
         "expected the guiding explanation naming the release line and where the operation arrives, but got: "
             + exception.getMessage());
 
-    // the user task is completed before the test ends. An open Camunda-managed user task
-    // left on the shared cluster is cancelled by the cleanup, and the canceling listener
-    // job of that cancellation is one more thing which can reach the wrong application
+    // the user task is completed before the test ends. The cleanup cancels an open
+    // Camunda-managed user task left on the shared cluster. The canceling listener job of
+    // that cancellation is one more thing which can reach the wrong application
     transactionTemplate.executeWithoutResult(status -> {
       final var aggregate = repository.findById(aggregateId).orElseThrow();
       workflowService.completeUserTask(aggregate, taskId);
@@ -1204,8 +1204,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("User-task edge cases: silent task, awareness, gone-task tolerance")
   public void userTaskEdgeCases() throws Exception {
 
-    // a user task WITHOUT a handler: the creating listener job is completed
-    // without a notification and the process continues to wait at the user task
+    // a user task WITHOUT a handler. The creating listener job is completed without a
+    // notification, and the process keeps waiting at the user task
     final var silentAggregateId = transactionTemplate.execute(status -> repository
         .save(new TaskDockerAggregate())
         .getId());
@@ -1216,7 +1216,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     final var c8ProcessService = (Camunda8ProcessService<TaskDockerAggregate>) applicationContext
         .getBean("Camunda8_ProcessService_c8");
 
-    // gone user task: awareness UNKNOWN, phase two tolerated as warned no-op
+    // gone user task: awareness UNKNOWN, and phase two is accepted as a no-op with a warning
     assertEquals(
         WorkflowAwareness.UNKNOWN_TO_BPMS,
         c8ProcessService.awarenessOfUserTask(SCOPE, silentAggregateId, "1"));
@@ -1224,7 +1224,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         () -> PhaseOperations.phaseTwo(c8ProcessService, PhaseOperation.COMPLETE_USER_TASK,
             "test-app", "SilentUserTaskProcess", null, silentAggregateId,
             PhaseOperations.args(PhaseTwoCall.ARG_TASK_ID, "1")));
-    // gone SERVICE task phase two is equally tolerated
+    // phase two of a gone SERVICE task is accepted the same way
     Assertions.assertDoesNotThrow(
         () -> PhaseOperations.phaseTwo(c8ProcessService, PhaseOperation.COMPLETE_TASK,
             "test-app", "SilentUserTaskProcess", null, silentAggregateId,
@@ -1235,15 +1235,14 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
             PhaseOperations.args(PhaseTwoCall.ARG_TASK_ID, "1",
                 PhaseTwoCall.ARG_BPMN_ERROR_CODE, "ERR")));
 
-    // and the silent task itself: the creating listener job was completed without a
+    // and the silent task itself. The creating listener job was completed without a
     // notification, so the process is parked at the user task. Nothing inside the
-    // application can say that - no handler of this test ever ran for it - so the
-    // cluster is asked, which is what the pause this test used to end with only hoped
-    // for.
-    // The state is what is waited for, not the mere existence of the task. A task whose
-    // creating listener job was never delivered stands in CREATING, and the search
-    // answers with it just the same, so a test which only asked whether the search names
-    // it passed in exactly the case it was written for
+    // application can say that, because no handler of this test ever ran for it. So the
+    // test asks the cluster. The pause which this test used to end with only hoped for it.
+    // The test waits for the state, not for the mere existence of the task. A task whose
+    // creating listener job was never delivered stands in CREATING, and the search answers
+    // with it just the same. So a test which only asked whether the search names the task
+    // passed in exactly the case it was written for
     awaitUntil(
         () -> userTaskStatesOf(silentInstanceKey).equals(List.of(UserTaskState.CREATED)),
         60000,
@@ -1259,7 +1258,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
   /**
    * The BPMN process whose user-task listener job this test answers itself. It lies outside the
-   * resources location of the test application, so no workflow module deploys it and no worker
+   * resources location of the test application. So no workflow module deploys it, and no worker
    * subscribes to its listener job type.
    */
   private static final String LOST_DELIVERY_PROCESS = "LostDeliveryProcess";
@@ -1272,8 +1271,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     try (final var file = getClass().getResourceAsStream("/lost-delivery/lost-delivery.bpmn")) {
       model = Bpmn.readModelFromStream(file);
     }
-    // the adapter writes the lifecycle listeners into the file, so what is deployed here is
-    // the model a deployment really produces rather than one written to pass this test
+    // the adapter writes the lifecycle listeners into the file. So the model deployed here
+    // is the one a deployment really produces, not one written to pass this test
     final var userTasks = Camunda8TaskWiring
         .userTasksOf(model, LOST_DELIVERY_PROCESS, "test-app", "lost-delivery.bpmn");
     final var listenerJobType = userTasks.getFirst().listenerJobType();
@@ -1295,9 +1294,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
       final var lost = activateOneJob(listenerJobType, Duration.ofSeconds(30));
       assertEquals(1, lost.getRetries(), "the deployed listener carries one attempt");
 
-      // what a gateway does with a batch it could not hand to the request it activated it
-      // for: it fails the job back with the retries the job had and asks for no backoff.
-      // With none the job would die here and the user task would stand in CREATING
+      // what a gateway does with a batch which it could not hand to the request it activated
+      // the batch for. It fails the job back with the retries the job had, and asks for no
+      // backoff. With no retries left, the job would die here and the user task would stand
+      // in CREATING
       Camunda8JobLease
           .withToken(
               workflowServiceClient()
@@ -1311,7 +1311,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
       final var offeredAgain = activateOneJob(listenerJobType, Duration.ofSeconds(30));
       assertEquals(lost.getKey(), offeredAgain.getKey(), "the same listener job was offered again");
 
-      // and it still gates the task: answering it is what ends the state CREATING
+      // and it still holds the task back. Answering it ends the state CREATING
       Camunda8JobLease
           .withToken(
               workflowServiceClient().newCompleteCommand(offeredAgain.getKey()),
@@ -1340,10 +1340,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   /**
    * What the cluster says about the user tasks of an instance.
    * <p>
-   * The state is the answer and the mere presence of a task is not. A user task whose
+   * The state is the answer, not the mere presence of a task. A user task whose
    * {@code creating} listener job was never handed to a worker stands in
-   * {@link UserTaskState#CREATING}, and the search names it there as readily as it names a
-   * task which has arrived.
+   * {@link UserTaskState#CREATING}. The search names it there just as it names a task which
+   * has arrived.
    *
    * @param processInstanceKey The instance
    * @return The state of each user task of that instance
@@ -1364,8 +1364,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * What went wrong with an instance, as the cluster reports it. An empty list is how a
-   * test says that a job was consumed rather than left in an incident.
+   * What went wrong with an instance, as the cluster reports it. With an empty list, a test
+   * says that a job was consumed and not left in an incident.
    *
    * @param processInstanceKey The instance
    * @return One message per incident
@@ -1414,12 +1414,12 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
   /**
    * How long the handler is watched after it ran once, before a second delivery counts as
-   * one which never came. Three seconds, against the milliseconds a job created at the
-   * cluster needs to reach a worker whose activation request is already parked there.
+   * one which never came. Three seconds, while a job created at the cluster needs
+   * milliseconds to reach a worker whose activation request is already parked there.
    * <p>
-   * It is a guard and not a budget anybody has to be faster than: what is asserted
-   * afterwards is a count which did not grow, so a machine which leaves this JVM without a
-   * turn only makes the silence longer.
+   * It is a safety margin, not a budget which anybody has to beat. The test asserts
+   * afterwards that a count did not grow. So a machine which leaves this JVM without a turn
+   * only makes the silence longer.
    */
   private static final long UNTIL_A_SECOND_DELIVERY_WOULD_HAVE_ARRIVED = 3000;
 
@@ -1431,8 +1431,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         .save(new TaskDockerAggregate())
         .getId());
     startSecondaryProcess("MessageProcess", aggregateId);
-    // the instance has to wait at the catch event before anything is published to it,
-    // and the query API knowing it says so: the exporter is behind the partition, never
+    // the instance has to wait at the catch event before anything is published to it. The
+    // query API knowing it says so, because the exporter is behind the partition, never
     // ahead of it
     awaitTheQueryApiKnowingTheStartedInstance(aggregateId);
 
@@ -1441,8 +1441,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         .getBean("Camunda8_ProcessService_c8");
 
     // simulate an at-least-once redelivery of the SAME phase-two dispatch (same
-    // correlation id -> same messageId): the second publish is rejected by the
-    // engine and tolerated as the documented no-op
+    // correlation id -> same messageId). The engine rejects the second publish, and the
+    // adapter accepts that as the documented no-op
     PhaseOperations.phaseTwo(c8ProcessService, PhaseOperation.CORRELATE_MESSAGE,
         "test-app", "MessageProcess", null, aggregateId,
         PhaseOperations.args(PhaseTwoCall.ARG_MESSAGE_NAME, "C8PaymentReceived",
@@ -1452,11 +1452,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         PhaseOperations.args(PhaseTwoCall.ARG_MESSAGE_NAME, "C8PaymentReceived",
             PhaseTwoCall.ARG_CORRELATION_ID, "pay-1"));
 
-    // the correlation id 'pay-1' matches no subscription of this instance, so neither
-    // publication may ever reach the handler. What says so is the count at the end of
-    // this test rather than this line: the matching correlation below adds exactly one
-    // invocation, and a publication which had fired after all would show up there as a
-    // second one
+    // the correlation id 'pay-1' matches no subscription of this instance. So neither
+    // publication may ever reach the handler. The count at the end of this test proves it,
+    // not this line. The matching correlation below adds exactly one invocation. A
+    // publication which had fired after all would show up there as a second one
     assertEquals(
         0,
         invocations("c8MessageArrived", aggregateId),
@@ -1479,15 +1478,15 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
   /**
    * How long a test waits for the cluster to forget an expired message id. See the
-   * measurement where it is used: expiry is swept on the cluster's own interval, so this
-   * is not the time-to-live plus a margin.
+   * measurement where it is used. The cluster removes expired ids on its own interval, so
+   * this is not the time-to-live plus a margin.
    */
   private static final long SWEEP_TOLERANCE_MILLIS = 75_000;
 
   /**
-   * Collects what the adapter logged while a test ran, which is where the cluster's
-   * refusal of a duplicated message id becomes visible - the publication itself is
-   * tolerated as a no-op, so nothing else about it is observable.
+   * Collects what the adapter logged while a test ran. The cluster's refusal of a
+   * duplicated message id becomes visible only there. The publication itself is accepted
+   * as a no-op, so nothing else about it can be observed.
    */
   private ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> watchTheAdapter() {
 
@@ -1514,11 +1513,11 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("Two activations of one element publish two messages, one activation publishes one")
   public void theActivationTellsSiblingsApartInTheClustersOwnNet() throws Exception {
 
-    // The cluster deduplicates by the message id this adapter derives, and for a
-    // multi-instance call activity everything else about the three correlations is equal:
-    // a called process is a secondary workflow of the SAME aggregate. Without the
-    // activation the cluster keeps one of them and drops the rest, which VanillaBP cannot
-    // see and cannot fix from its own side
+    // The cluster deduplicates by the message id which this adapter derives. For a
+    // multi-instance call activity, everything else about the three correlations is equal,
+    // because a called process is a secondary workflow of the SAME aggregate. Without the
+    // activation, the cluster keeps one of them and drops the rest. VanillaBP cannot see
+    // that and cannot fix it from its own side
     final var aggregateId = transactionTemplate.execute(status -> repository
         .save(new TaskDockerAggregate())
         .getId());
@@ -1547,8 +1546,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
           "two activations are two messages for the cluster: "
               + watcher.list);
 
-      // and the guarantee that must not cost: the same activation twice - an
-      // at-least-once redelivery of one entry - is still ONE message
+      // and the guarantee which must not get lost: the same activation twice is still ONE
+      // message. That is an at-least-once redelivery of one entry
       PhaseOperations.phaseTwo(c8ProcessService, PhaseOperation.CORRELATE_MESSAGE,
           "test-app", "MessageProcess", null, aggregateId,
           PhaseOperations.args(PhaseTwoCall.ARG_MESSAGE_NAME, "C8PaymentReceived",
@@ -1570,10 +1569,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("Past the message time-to-live the cluster accepts the same message id again")
   public void theTimeToLiveDecidesHowLongTheClustersNetLasts() throws Exception {
 
-    // The other half of what the number does: it is the window a message id deduplicates
-    // in, and this application shortens it to two seconds for THIS message
+    // The other half of what the number does. It is the window in which a message id
+    // deduplicates. This application shortens it to two seconds for THIS message
     // ('vanillabp.workflow-modules.test-app.workflows.MessageProcess.messages.C8PaymentReceived').
-    // A repetition inside the window is refused, the same one after it is a new message
+    // A repetition inside the window is refused. The same one after it is a new message
     assertEquals(
         Duration.ofSeconds(2),
         overlay.messageTimeToLiveFor("test-app", "MessageProcess", "C8PaymentReceived", "c8"),
@@ -1601,12 +1600,12 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
       assertEquals(1, refusals(watcher), "inside the window the second one is refused: "
           + watcher.list);
 
-      // Wait the window out. The number is not "the TTL plus a margin": the cluster
-      // sweeps expired message ids on an interval of its own rather than at the moment
-      // they expire, so a two-second TTL is NOT forgotten two seconds later. Measured on
-      // camunda/camunda:8.9.16 on 2026-08-27: still refused 5 s after the TTL, accepted
-      // 75 s after it. That floor is the reason the wiki tells nobody to shorten this
-      // number in order to get a short deduplication window - it does not work
+      // Wait the window out. The number is not "the TTL plus a margin". The cluster removes
+      // expired message ids on an interval of its own, not at the moment they expire. So a
+      // two-second TTL is NOT forgotten two seconds later. Measured on camunda/camunda:8.9.16
+      // on 2026-08-27: still refused 5 s after the TTL, accepted 75 s after it. Because of
+      // this lower limit, the wiki tells nobody to shorten this number to get a short
+      // deduplication window. It does not work
       Thread.sleep(SWEEP_TOLERANCE_MILLIS);
       PhaseOperations.phaseTwo(c8ProcessService, PhaseOperation.CORRELATE_MESSAGE,
           "test-app", "MessageProcess", null, aggregateId,
@@ -1644,9 +1643,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         60000,
         "the message start event to start the instance");
 
-    // the answer to a published message names the message and not the instance it started.
-    // The key reaches the log anyway, through the worker of the message start event, and it
-    // has to be the one a task of that instance names
+    // the answer to a published message names the message, not the instance it started.
+    // The key reaches the log anyway, through the worker of the message start event. It has
+    // to be the key which a task of that instance names
     assertTheStartLeftTheKeyOfItsWorkflow(aggregateId, "MessageStartProcess");
 
   }
@@ -1655,10 +1654,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("startWorkflowByMessage refuses a message which starts another process")
   public void startWorkflowByMessageRefusesTheMessageOfAnotherProcess() {
 
-    // 'C8OrderPlaced' starts MessageStartProcess. Publishing it names no process, so the
+    // 'C8OrderPlaced' starts MessageStartProcess. Publishing it names no process. So the
     // cluster would start that process for the aggregate of TaskProcess, and the start
-    // would be written down under the wrong process. The core refuses it before phase one,
-    // from the message names this adapter read out of the model
+    // would be written down under the wrong process. The core refuses it before phase one.
+    // It uses the message names which this adapter read out of the model
     final var refused = assertThrows(
         RuntimeException.class,
         () -> transactionTemplate.execute(status -> {
@@ -1703,8 +1702,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     final var aggregateId = transactionTemplate.execute(status -> repository
         .save(new TaskDockerAggregate())
         .getId());
-    // the instance is started with the aggregate-ID variable ONLY - everything the
-    // gateway evaluates has to be pushed by the completion of 'syncTask'
+    // the instance is started with the aggregate-ID variable ONLY. The completion of
+    // 'syncTask' has to push everything which the gateway evaluates
     startSecondaryProcess("SyncProcess", aggregateId);
 
     awaitUntil(
@@ -1715,13 +1714,13 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         60000,
         "SyncProcess to pass the FEEL gateway");
 
-    // the exclusive gateway's FEEL condition '=approved = true' branched on the
-    // value the @WorkflowTask method produced - without the push it would have
-    // taken the default (rejected) flow
+    // the exclusive gateway's FEEL condition '=approved = true' branched on the value which
+    // the @WorkflowTask method produced. Without the push it would have taken the default
+    // (rejected) flow
     assertEquals("sync-task|sync-approved", results(aggregateId));
 
-    // what the cluster delivered to the task behind the gateway proves what was
-    // pushed: the shared attributes, but never a @NoSyncWithBPMS one
+    // what the cluster delivered to the task after the gateway proves what was pushed: the
+    // shared attributes, but never a @NoSyncWithBPMS one
     assertEquals("true", TaskDockerWorkflowService.OBSERVED_VARIABLES.get("approved"));
     assertEquals("sync-task", TaskDockerWorkflowService.OBSERVED_VARIABLES.get("results"));
     assertEquals(
@@ -1735,10 +1734,10 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
       final String bpmnProcessId,
       final Long aggregateId) {
 
-    // secondary processes are started directly against the cluster carrying the
-    // aggregate-ID variable - exactly what VanillaBP's start writes. The name-clash
-    // avoidance mode of these tests is 'use-prefix', so the CLUSTER knows the process
-    // under its prefixed id
+    // secondary processes are started directly at the cluster, with the aggregate-ID
+    // variable. That is exactly what VanillaBP's start writes. The name-clash avoidance
+    // mode of these tests is 'use-prefix', so the CLUSTER knows the process under its
+    // prefixed id
     lastStartedInstanceKey = workflowServiceClient()
         .newCreateInstanceCommand()
         .bpmnProcessId("test-app__"
@@ -1755,14 +1754,14 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   private Camunda8ClientFactoryRegistry clientFactoryRegistry;
 
   /**
-   * Waits until the query API answers with the instance the test just started against the
+   * Waits until the query API answers with the instance which the test just started at the
    * cluster.
    * <p>
-   * A correlation taking the platform's path asks this adapter first whether it knows the
-   * workflow, and the adapter answers that from a search for the aggregate-ID variable.
-   * The platform waits the visibility window out for the workflows it started itself, and
-   * an instance created directly against the cluster is not one of those, so waiting for
-   * the export is the fixture's job here rather than something this test measures.
+   * A correlation which takes the platform's path first asks this adapter whether it knows
+   * the workflow. The adapter answers that from a search for the aggregate-ID variable. The
+   * platform waits the visibility window out for the workflows it started itself. An
+   * instance created directly at the cluster is not one of those. So here the fixture waits
+   * for the export, and this test does not measure it.
    */
   private void awaitTheQueryApiKnowingTheStartedInstance(
       final Long aggregateId) throws InterruptedException {
@@ -1771,7 +1770,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     awaitUntil(
         () -> workflowServiceClient()
             .newProcessInstanceSearchRequest()
-            // variable values are stored as JSON: a String value is searched WITH its quotes
+            // variable values are stored as JSON, so a String value is searched WITH its quotes
             .filter(filter -> filter.variables(Map.of("id", "\"%s\"".formatted(aggregateId))))
             .send()
             .join()
@@ -1787,12 +1786,12 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   /**
    * Whether the cluster has forgotten the job, asked with an engine COMMAND.
    * <p>
-   * A completion which travelled through the outbox is over when the job is gone, and a
-   * test which wants to know that has two ways to ask. The search API answers from the
-   * exporter, which is why these tests avoid it. An UpdateJobTimeout is answered from the
-   * partition, exactly, and it advances nothing: while the job is there it renews the lock
-   * the adapter renews anyway, and once the job is gone the cluster refuses it with a 404.
-   * That refusal is the answer this waits for.
+   * A completion which travelled through the outbox is over when the job is gone. A test
+   * which wants to know that has two ways to ask. The search API answers from the exporter,
+   * so these tests avoid it. The partition answers an UpdateJobTimeout exactly, and the
+   * command moves nothing forward. While the job is there, it renews the lock which the
+   * adapter renews anyway. Once the job is gone, the cluster refuses it with a 404. This
+   * waits for that refusal.
    *
    * @param taskId The job key the handler reported
    * @return Whether the cluster refused the command because the job is gone
@@ -1817,9 +1816,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The same question about a user task, asked with the command the adapter's own
-   * awareness probe uses: an update carrying nothing but an audit action changes no
-   * attribute, and a user task which is over answers it with a 404.
+   * The same question about a user task, asked with the command which the adapter's own
+   * awareness probe uses. An update which carries nothing but an audit action changes no
+   * attribute. A user task which is over answers it with a 404.
    *
    * @param taskId The user-task key the creating listener reported
    * @return Whether the cluster refused the command because the user task is gone
@@ -1847,13 +1846,14 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   @DisplayName("A task whose job waits in the queue is a task the cluster still holds")
   public void aJobInTheQueueIsNotAnOutage() throws Exception {
 
-    // An asynchronous task keeps its job locked for async-task-lock-renewal, and when
-    // that window passes the cluster puts the job back into the queue until a worker
-    // takes it again. A probe arriving in that gap is refused, and it used to be refused
-    // in a way the adapter read as an outage - for a task which is perfectly alive.
+    // An asynchronous task keeps its job locked for async-task-lock-renewal. When that
+    // window passes, the cluster puts the job back into the queue until a worker takes it
+    // again. A probe which arrives in that gap is refused. It used to be refused in a way
+    // which the adapter read as an outage, for a task which is perfectly alive.
     //
-    // The gap is made here rather than waited for: a model this application serves no
-    // method of, so nobody re-activates the job while the test looks at it.
+    // The test makes the gap and does not wait for it. It uses a model for which this
+    // application has no method. So nobody activates the job again while the test looks at
+    // it.
     final var jobType = "dormant-"
         + System.nanoTime();
     final var model = Bpmn
@@ -1881,7 +1881,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     // the job as the cluster hands it out, with a lock of one second
     final var jobKey = activateOne(jobType, Duration.ofSeconds(1));
 
-    // and now the case an application meets: the lock runs out and the job goes back
+    // and now the case which an application meets. The lock runs out, and the job goes back
     // into the queue. Nobody serves this job type, so nothing takes it from there
     Thread.sleep(3000);
 
@@ -1890,9 +1890,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         c8ProcessService.awarenessOfTask(SCOPE, "irrelevant", String.valueOf(jobKey)),
         "a task whose lock ran out is still a task the cluster holds");
 
-    // what makes the assertion above mean something: the job really was in the queue
-    // while it was probed. The probe is refused in that state, so it moved nothing, and
-    // no worker of this application serves the type
+    // this gives the assertion above its meaning: the job really was in the queue while it
+    // was probed. The probe is refused in that state, so it moved nothing. And no worker of
+    // this application serves the type
     assertEquals(
         jobKey,
         activateOne(jobType, Duration.ofSeconds(30)),
@@ -1901,8 +1901,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * Activates one job of the given type and answers its key, waiting for the cluster to
-   * offer one at all.
+   * Activates one job of the given type and returns its key. It waits until the cluster
+   * offers one at all.
    */
   private long activateOne(
       final String jobType,
@@ -1913,9 +1913,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * Activates one job of the given type and answers the job itself, waiting for the cluster
-   * to offer one at all. A caller which needs more of the job than its key - what it carries,
-   * how many attempts it has left - reads it from here.
+   * Activates one job of the given type and returns the job itself. It waits until the
+   * cluster offers one at all. A caller which needs more of the job than its key reads it
+   * from here: what it carries, and how many attempts it has left.
    *
    * @param jobType The job type to ask for
    * @param lock How long the activation locks the job
@@ -1928,8 +1928,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     final var activated = new AtomicReference<ActivatedJob>();
     awaitUntil(
         () -> {
-          // 'job-lease: use' is configured here, and a leased job is never handed to an
-          // activation which does not ask for one
+          // 'job-lease: use' is configured here. A leased job is never handed to an
+          // activation which does not ask for a lease
           final var jobs = Camunda8JobLease
               .leaseTheActivation(
                   workflowServiceClient()

@@ -16,9 +16,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The grace period an adapter instance grants its handlers while the
- * application goes down - its default, and what the boot says about a value which cannot
- * do what it promises.
+ * The grace period an adapter instance gives its handlers while the application goes down.
+ * This test holds its default, and what the boot says about a value which cannot do what it
+ * promises.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ShutdownGraceTest {
@@ -113,8 +113,8 @@ public class Camunda8ShutdownGraceTest {
   @DisplayName("The default grace is held against a raised request timeout as well")
   public void theDefaultGraceBelowARaisedRequestTimeoutWarns() {
 
-    // nothing configured for the grace: the application runs on the twenty seconds of the
-    // default, and a request timeout of thirty outlasts them just as a written grace would
+    // nothing configured for the grace, so the application runs on the default of twenty
+    // seconds. A request timeout of thirty seconds outlasts them, just as with a written grace
     final var configuration = new Camunda8AdapterConfiguration();
     configuration.setRequestTimeout(Duration.ofSeconds(30));
 

@@ -14,9 +14,9 @@ import io.vanillabp.spi.service.WorkflowTask;
 
 /**
  * The workflow service of the test which lets a boundary event take one of two open tasks
- * away. Both tasks are asynchronous, so the workflow holds both at once, and the method of
- * the one which is taken away subscribes to both events - which is what makes the derived
- * cancelation visible to the application.
+ * away. Both tasks are asynchronous, so the workflow holds both at once. The method of the
+ * one which is taken away subscribes to both events. That makes the derived cancelation
+ * visible to the application.
  */
 @Service
 @WorkflowService(
@@ -25,9 +25,9 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class OtherOpenTasksDockerWorkflowService {
 
   /**
-   * What the application heard about the task the boundary event took away, keyed by
-   * aggregate id - read by the test next to the aggregate, so a notification arriving after
-   * the aggregate was read is still seen.
+   * What the application heard about the task which the boundary event took away, keyed by
+   * aggregate id. The test reads it next to the aggregate. So a notification which arrives
+   * after the aggregate was read is still seen.
    */
   public static final Map<String, String> WHAT_HAPPENED = new ConcurrentHashMap<>();
 
@@ -56,9 +56,9 @@ public class OtherOpenTasksDockerWorkflowService {
   }
 
   /**
-   * The task an interrupting boundary event takes away. Zeebe tells no worker about a job it
-   * removed, so the CANCELED this method hears is derived by VanillaBP at the next wake-up
-   * of the same workflow.
+   * The task which an interrupting boundary event takes away. Zeebe tells no worker about a
+   * job it removed. So VanillaBP derives the CANCELED which this method hears, at the next
+   * wake-up of the same workflow.
    */
   @WorkflowTask(taskDefinition = "theTaskTakenAway")
   public void theTaskTakenAway(
@@ -76,9 +76,9 @@ public class OtherOpenTasksDockerWorkflowService {
   }
 
   /**
-   * The task which stays open. Its lock runs out while the test waits, the cluster hands
-   * its job to the worker again, and that redelivery is the wake-up which looks at the
-   * other task.
+   * The task which stays open. Its lock runs out while the test waits, and the cluster hands
+   * its job to the worker again. That redelivery is the wake-up which looks at the other
+   * task.
    */
   @WorkflowTask(taskDefinition = "theTaskStayingOpen")
   public void theTaskStayingOpen(

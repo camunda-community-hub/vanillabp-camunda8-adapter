@@ -25,11 +25,11 @@ import io.vanillabp.spi.process.WorkflowElementHistory;
  * The viewer/history API against a real Camunda 8 cluster:
  * <ul>
  * <li>process definitions and BPMN XML come from what THIS application version deployed,
- * carrying the cluster's real process definition key and version - a round trip the
- * adapter can spare itself even where the cluster would answer, and one it could not
- * answer consistently right after a deployment;</li>
- * <li>the element history comes from the cluster, which is what the adapter requires a
- * searchable one for.</li>
+ * with the cluster's real process definition key and version. The adapter can save itself
+ * that round trip even where the cluster would answer. And the cluster could not answer it
+ * consistently right after a deployment;</li>
+ * <li>the element history comes from the cluster. The adapter requires a searchable cluster
+ * for that.</li>
  * </ul>
  */
 @ExtendWith(SuppressOutputExtension.class)
@@ -99,8 +99,8 @@ public class Camunda8ViewerApiIT extends SpringBootTestOnTheSharedCluster {
 
     final var aggregate = startWorkflow();
 
-    // the exporter feeds the search the history is read by, so the elements arrive a
-    // moment after the workflow does
+    // the history is read from the search, and the exporter feeds the search. So the
+    // elements arrive a moment after the workflow does
     final var deadline = System.currentTimeMillis() + 240_000;
     var history = processService.getWorkflowHistory(aggregate, null);
     while ((history == null) || (history.elementsHistory() == null) || history

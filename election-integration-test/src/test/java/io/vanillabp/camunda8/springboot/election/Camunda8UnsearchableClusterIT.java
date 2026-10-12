@@ -19,20 +19,19 @@ import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * A real cluster which refuses to be searched, and what an application configured against
- * it does: it does not come up, and the message says why and what to change.
+ * A real cluster which refuses to be searched, and what an application configured against it
+ * does. It does not come up, and the message says why and what to change.
  * <p>
- * The mocked counterpart pins the message
- * ({@code Camunda8SearchableClusterCheckTest} of the core module). What only a container
- * can prove is that a cluster really answers a search with the HTTP 403 the refusal is
- * recognised by, because that code is the whole of the predicate and the cluster owns it.
- * This is therefore the one cluster in the suites which is still a broker alone.
+ * The mocked counterpart pins the message ({@code Camunda8SearchableClusterCheckTest} of the
+ * core module). Only a container can prove that a cluster really answers a search with HTTP
+ * 403. The refusal is recognised by that code. The code is the whole check, and the cluster
+ * owns it. So this is the one cluster in the suites which is still a broker alone.
  * <p>
- * The second cluster of this class is the migration setup the way out is for: an
- * application whose FIRST adapter has a searchable cluster and whose second one, the old
- * BPMS, still sits on a cluster which refuses. That one carries
- * <code>deployment-failure: warn</code>, so the application boots and the old BPMS is what
- * stays behind rather than the whole start.
+ * The second cluster of this class is for the migration setup which the way out is meant
+ * for. The application's FIRST adapter has a searchable cluster. Its second adapter, the old
+ * BPMS, still sits on a cluster which refuses. That one has
+ * <code>deployment-failure: warn</code>. So the application boots, and only the old BPMS stays
+ * behind, not the whole start.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -43,9 +42,9 @@ public class Camunda8UnsearchableClusterIT {
   static final GenericContainer<?> BROKER_ALONE = ClusterUnderTest.clusterWhichRefusesSearches();
 
   /**
-   * The cluster of the adapter which IS first priority in the warn test below - the
-   * application has to come up for that test to say anything, and it only comes up if its
-   * primary adapter has a cluster it can search.
+   * The cluster of the adapter which IS first priority in the warn test below. The
+   * application has to come up, or that test says nothing. It only comes up if its primary
+   * adapter has a cluster which it can search.
    */
   @Container
   static final GenericContainer<?> SEARCHABLE_CLUSTER = ClusterUnderTest.cluster();
@@ -139,8 +138,8 @@ public class Camunda8UnsearchableClusterIT {
                 "--vanillabp.prioritized-adapters[1]=c8-plain"));
 
     // two ids on one such cluster used to have a refusal of their own, about keys which
-    // cannot be mapped to a scope. It became unreachable when one id stopped being
-    // enough, and an unreachable check whose message is the better one is a trap
+    // cannot be mapped to a scope. That check could no longer be reached once one id was no
+    // longer enough. A check which cannot be reached, but has the better message, is a trap
     final var message = refusalIn(failure);
     assertNotNull(message, "the boot failed with the refusal of the check");
     assertTrue(
@@ -174,9 +173,9 @@ public class Camunda8UnsearchableClusterIT {
             "--vanillabp.adapters.c8-plain.grpc-address="
                 + grpcAddress(BROKER_ALONE),
             "--vanillabp.adapters.c8-plain.deployment-failure=warn",
-            // the second half of the way out, and the core asks for it in a message of its
-            // own: an adapter which deployed nothing cannot answer the election either, so
-            // routing by list order has to be accepted deliberately rather than by accident
+            // the second half of the way out. The core asks for it in a message of its own.
+            // An adapter which deployed nothing cannot answer the election either. So routing
+            // by list order has to be accepted on purpose, not by accident
             "--vanillabp.workflow-modules.election-app.election.guessing-adapters=ACCEPTED",
             "--vanillabp.prioritized-adapters[0]=c8-prefix",
             "--vanillabp.prioritized-adapters[1]=c8-plain");
@@ -225,10 +224,10 @@ public class Camunda8UnsearchableClusterIT {
                 "--vanillabp.prioritized-adapters[0]=c8-prefix",
                 "--vanillabp.prioritized-adapters[1]=c8-plain"));
 
-    // the deployment warned rather than failing, and the core then refused the SETUP: an
-    // adapter reporting that it cannot locate a workflow is what a migration must not be
-    // built on unquestioned. This is why 'canLocateWorkflows' reads the probe instead of
-    // answering true from a constant now that the requirement exists
+    // the deployment warned and did not fail. The core then refused the SETUP. A migration
+    // must not be built, unquestioned, on an adapter which reports that it cannot locate a
+    // workflow. Now that this requirement exists, 'canLocateWorkflows' reads the probe and
+    // does not answer true from a constant
     final var message = messageContaining(failure, "cannot ask their BPMS whether it holds a workflow");
     assertTrue(
         message.contains("cannot ask their BPMS whether it holds a workflow"),

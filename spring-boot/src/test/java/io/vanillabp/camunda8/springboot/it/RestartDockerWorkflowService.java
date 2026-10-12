@@ -12,9 +12,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow of the restart-delivery integration test: nothing but a task
- * which says when it was reached, so the test can measure how long the first job of a
- * workflow started right after a restart takes to arrive.
+ * The workflow of the restart-delivery integration test. It has nothing but a task which
+ * says when it was reached. So the test can measure how long the first job of a workflow
+ * started right after a restart takes to arrive.
  */
 @Service
 @WorkflowService(
@@ -28,14 +28,14 @@ public class RestartDockerWorkflowService {
   public static volatile CountDownLatch SERVED = new CountDownLatch(1);
 
   /**
-   * When the handler was reached, in nanoseconds of the JVM's clock - the measurement
-   * this test exists for.
+   * When the handler was reached, in nanoseconds of the JVM's clock. This test exists for
+   * this measurement.
    */
   public static final AtomicLong SERVED_AT = new AtomicLong();
 
   /**
-   * Puts the shared observations back to their initial state - called by the test which
-   * uses them, so nothing an application left behind reaches the next one.
+   * Puts the shared observations back to their initial state. The test which uses them calls
+   * it, so nothing which an application left behind reaches the next one.
    */
   public static void reset() {
 

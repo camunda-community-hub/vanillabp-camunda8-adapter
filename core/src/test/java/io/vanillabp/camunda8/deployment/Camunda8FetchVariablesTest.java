@@ -30,10 +30,9 @@ import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What a worker of this adapter asks the cluster for. The derivation has to be
- * COMPLETE: a variable missing from the list is a variable the handler simply does not
- * see any more, and nothing fails to say so. The cases below are the ones the adapter
- * reads a variable in.
+ * What a worker of this adapter asks the cluster for. The derivation has to be COMPLETE. The
+ * handler simply does not see a variable which is missing from the list, and nothing fails
+ * to say so. The cases below are the ones in which the adapter reads a variable.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8FetchVariablesTest {
@@ -42,7 +41,7 @@ public class Camunda8FetchVariablesTest {
 
   /**
    * Two processes of one workflow module, whose tasks share the task definition
-   * <code>approve</code> - so ONE worker serves both.
+   * <code>approve</code>. So ONE worker serves both.
    */
   private static final String TWO_PROCESSES = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -65,8 +64,8 @@ public class Camunda8FetchVariablesTest {
       """;
 
   /**
-   * A task nested in a multi-instance subprocess, itself multi-instance - the case which
-   * makes the fetch list depend on the ELEMENT rather than on the process.
+   * A task nested in a multi-instance subprocess, and multi-instance itself. In this case the
+   * fetch list depends on the ELEMENT, not on the process.
    */
   private static final String NESTED_MULTI_INSTANCE = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -94,8 +93,8 @@ public class Camunda8FetchVariablesTest {
       """;
 
   /**
-   * What a model hands to its own tasks and computes for itself - the four constructs
-   * which declare a variable in Camunda 8.
+   * What a model hands to its own tasks and computes for itself: the four constructs which
+   * declare a variable in Camunda 8.
    */
   private static final String DECLARING_MODEL = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -137,15 +136,15 @@ public class Camunda8FetchVariablesTest {
 
   /**
    * A deployment service whose core answers the given aggregate-ID variable per BPMN
-   * process and the given <code>&#64;TaskParam</code> names per task definition - the two
-   * questions the derivation asks it.
+   * process, and the given <code>&#64;TaskParam</code> names per task definition. These are
+   * the two questions the derivation asks it.
    */
   private Camunda8DeploymentService deploymentService(
       final Function<String, String> aggregateIdNames,
       final Function<String, List<String>> taskParameters) {
 
-    // decomposition is what a call activity of these models is for, so both processes are
-    // served by one workflow service as long as the core knows them at all
+    // a call activity of these models is there for decomposition. So one workflow service
+    // serves both processes, as long as the core knows them at all
     return deploymentService(
         aggregateIdNames,
         taskParameters,
@@ -158,8 +157,8 @@ public class Camunda8FetchVariablesTest {
 
   /**
    * The same, with the core's answer about the workflow aggregate of a called process
-   * spelled out - the one which decides whether a call activity is decomposition or the
-   * start of a business case of its own.
+   * spelled out. That answer decides whether a call activity is decomposition or the start
+   * of a business case of its own.
    */
   private Camunda8DeploymentService deploymentService(
       final Function<String, String> aggregateIdNames,
@@ -215,8 +214,8 @@ public class Camunda8FetchVariablesTest {
   }
 
   /**
-   * Runs the deployment pipeline up to <code>wireBpmn</code>, which is what fills the
-   * multi-instance registry the derivation reads.
+   * Runs the deployment pipeline up to <code>wireBpmn</code>. That fills the multi-instance
+   * registry the derivation reads.
    */
   private Camunda8ProcessingContext wire(
       final Camunda8DeploymentService deploymentService,
@@ -421,8 +420,8 @@ public class Camunda8FetchVariablesTest {
   @DisplayName("a method wired by the element id contributes its parameters too")
   public void theParametersOfAnIdWiredMethodAreFetched() {
 
-    // a method carrying @WorkflowTask(id = ...) is known to the core by the element and
-    // by nothing else, so the job type answers nothing about it
+    // the core knows a method with @WorkflowTask(id = ...) by the element and by nothing
+    // else. So the job type answers nothing about it
     final var deploymentService = deploymentService(
         bpmnProcessId -> "id",
         key -> "ApproveLoan".equals(key)
@@ -554,8 +553,8 @@ public class Camunda8FetchVariablesTest {
         "start-event",
         "start",
         Camunda8FetchVariables.Selection.everything());
-    // a worker naming no list is what a Camunda 8 worker does by default, so 'all' has
-    // nothing to say to the builder
+    // by default a Camunda 8 worker names no list. So 'all' has nothing to say to the
+    // builder
     Mockito.verifyNoMoreInteractions(builder);
 
   }
@@ -601,8 +600,8 @@ public class Camunda8FetchVariablesTest {
   }
 
   /**
-   * Decomposition: the multi-instance subprocess is in the CALLER, the task asking for its
-   * iteration is in the called process.
+   * Decomposition: the multi-instance subprocess is in the CALLER, and the task which asks for
+   * its iteration is in the called process.
    */
   private static final String CALLER_AND_CALLED = """
       <?xml version="1.0" encoding="UTF-8"?>

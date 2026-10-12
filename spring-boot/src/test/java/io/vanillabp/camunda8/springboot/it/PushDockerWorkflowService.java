@@ -13,12 +13,12 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the aggregateChanged integration test: every process parks in
- * an asynchronous task, so the test can push into the workflow's scope, into the scope of
- * ONE instance of a multi-instance activity, and into the scope of a subprocess whose task
- * the read model does not know yet. Two more processes park in a user task, directly in the
- * process and in each iteration of a multi-instance subprocess, because the id of a user task
- * is no job key.
+ * The workflow service of the aggregateChanged integration test. Every process parks in an
+ * asynchronous task. So the test can push into the workflow's scope, into the scope of ONE
+ * instance of a multi-instance activity, and into the scope of a subprocess whose task the
+ * read model does not know yet. Two more processes park in a user task: directly in the
+ * process, and in each iteration of a multi-instance subprocess. They exist because the id
+ * of a user task is no job key.
  */
 @Service
 @WorkflowService(
@@ -33,9 +33,9 @@ import io.vanillabp.spi.service.WorkflowTask;
 public class PushDockerWorkflowService {
 
   /**
-   * The user tasks created so far, comma-separated per aggregate id. Kept here and not in the
-   * aggregate: the two iterations of the multi-instance process are notified at the same time,
-   * and a failed notification of a user task is an incident rather than a retry.
+   * The user tasks created so far, comma-separated per aggregate id. They are kept here and
+   * not in the aggregate. The two iterations of the multi-instance process are notified at
+   * the same time. And a failed notification of a user task is an incident, not a retry.
    */
   public static final Map<Long, String> USER_TASK_IDS = new ConcurrentHashMap<>();
 
@@ -61,9 +61,9 @@ public class PushDockerWorkflowService {
   }
 
   /**
-   * Saves an aggregate without starting a workflow - the multi-instance process is
-   * started against the cluster by the test (the injectable process service starts
-   * the primary process only).
+   * Saves an aggregate without starting a workflow. The test starts the multi-instance
+   * process directly at the cluster (the injectable process service starts only the primary
+   * process).
    *
    * @return The saved aggregate
    */
@@ -110,9 +110,9 @@ public class PushDockerWorkflowService {
   }
 
   /**
-   * Completes the parked task of the PRIMARY process, which is what
-   * {@code Camunda8TaskProcessingIT} needs a primary process for: a stale completion has
-   * to raise the same exception there as on a secondary one.
+   * Completes the parked task of the PRIMARY process. {@code Camunda8TaskProcessingIT} needs
+   * a primary process for this: a stale completion has to raise the same exception there as
+   * on a secondary one.
    *
    * @param aggregateId The aggregate's id
    * @param taskId The parked task
@@ -130,7 +130,7 @@ public class PushDockerWorkflowService {
       final PushDockerAggregate aggregate,
       @TaskId final String taskId) {
 
-    // parks the workflow: the instance stays in the cluster
+    // parks the workflow. The instance stays in the cluster
     aggregate.setTaskIds(taskId);
 
   }

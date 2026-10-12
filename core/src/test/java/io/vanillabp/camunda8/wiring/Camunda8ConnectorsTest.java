@@ -24,9 +24,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Which elements of a model this application stops serving once connectors are allowed, and
  * which it keeps serving whatever the model carries.
  * <p>
- * Every case is asserted together with the element next to it which must NOT be affected:
- * the property is an escape hatch for single elements, and one which reached further than
- * the marker would silently unwire tasks the application does serve.
+ * Every case is asserted together with the element next to it which must NOT be affected.
+ * The property is an escape hatch for single elements. If it reached further than the
+ * marker, it would silently unwire tasks the application does serve.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ConnectorsTest {
@@ -41,7 +41,7 @@ public class Camunda8ConnectorsTest {
   }
 
   /**
-   * The same model with a freely chosen prefix and namespace for the zeebe extensions - a
+   * The same model with a freely chosen prefix and namespace for the zeebe extensions. A
    * diagram written by a tool which aliases the namespace looks exactly like this.
    */
   private static BpmnModelInstance model(
@@ -63,8 +63,8 @@ public class Camunda8ConnectorsTest {
   }
 
   /**
-   * A connector service task next to an ordinary one, which is the shape every case below
-   * needs: the ordinary task is what proves the rule did not reach too far.
+   * A connector service task next to an ordinary one. Every case below needs this shape:
+   * the ordinary task proves that the rule did not reach too far.
    */
   private static final String A_CONNECTOR_AND_AN_ORDINARY_TASK = """
           <bpmn:serviceTask id="Activity_Fetch" zeebe:modelerTemplate="io.camunda.connectors.HttpJson.v2">

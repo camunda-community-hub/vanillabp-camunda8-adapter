@@ -39,16 +39,16 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskInvoker;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The one question this adapter answers for the core's check of the other open tasks of a
+ * The one question this adapter answers when the core checks the other open tasks of a
  * workflow: does the cluster still have this task.
  * <p>
- * Three answers and not two. Only "gone" produces a cancelation, so an answer which cannot
- * tell a refusal from an outage has to say so - reading a hiccup as "gone" would report every
- * open task of a workflow as canceled whenever the cluster stumbles.
+ * Three answers, not two. Only "gone" produces a cancelation. So an answer which cannot tell
+ * a refusal from an outage has to say so. Reading a hiccup as "gone" would report every open
+ * task of a workflow as canceled whenever the cluster stumbles.
  * <p>
- * Two commands carry the question and the order of them is the point: the ENGINE is asked
- * about the process instance first, because a 404 there answers every record of that workflow
- * at once, and only a task of an instance which is still running is asked about on its own.
+ * Two commands carry the question, and their order is the point. The ENGINE is asked about
+ * the process instance first, because a 404 there answers every record of that workflow at
+ * once. Only a task of an instance which is still running is asked about on its own.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8OpenTaskProbeTest {
@@ -70,8 +70,8 @@ public class Camunda8OpenTaskProbeTest {
   private final Camunda8AdapterConfiguration configuration = new Camunda8AdapterConfiguration();
 
   /**
-   * The engine holds the instance, which is the everyday answer: every test below which is
-   * about a TASK starts from there, so what it reads is the task's own answer.
+   * The engine holds the instance, which is the everyday answer. Every test below which is
+   * about a TASK starts from there. So what it reads is the task's own answer.
    */
   private void theEngineHoldsTheInstance() {
 
@@ -108,7 +108,7 @@ public class Camunda8OpenTaskProbeTest {
   @DisplayName("A job waiting in the queue is still there, not gone")
   public void aJobInTheQueueIsStillThere() {
 
-    // the cluster HAS the job and no worker has it activated right now, which is what an
+    // the cluster HAS the job, and no worker has it activated right now. That is what an
     // asynchronous task whose lock ran out looks like
     theEngineHoldsTheInstance();
     theClusterRefusesTheJobTimeoutUpdate(problem(400, "INVALID_ARGUMENT", "but it is not active"));
@@ -146,8 +146,8 @@ public class Camunda8OpenTaskProbeTest {
   @DisplayName("One user task in a model no longer costs its service tasks their cancelation")
   public void theRefusalIsPerRecordAndNotPerProcess() {
 
-    // the cluster answers NOT_FOUND for the service task because its job is gone, and the
-    // user task is not asked about at all while the key is off
+    // the cluster answers NOT_FOUND for the service task, because its job is gone. The user
+    // task is not asked about at all while the key is off
     theEngineHoldsTheInstance();
     theClusterRefusesTheJobTimeoutUpdate(notFoundOverRest());
     final var handedToTheCore = whatTheCoreWasHanded(aModuleWithAUserTask());
@@ -216,8 +216,8 @@ public class Camunda8OpenTaskProbeTest {
   public void aRecordOfAnotherWorkflow() {
 
     // the core reads the open tasks OF ONE WORKFLOW, so this cannot happen. If it ever
-    // does, every answer below would be read against the model of the wake-up's process,
-    // and the element the instance probe reserves is checked against that model
+    // does, every answer below would be read against the model of the wake-up's process.
+    // The element the instance probe reserves is checked against that model
     theEngineHoldsTheInstance();
     theClusterTakesTheJobTimeoutUpdate();
     final var handedToTheCore = whatTheCoreWasHanded(aModuleWhere(SERVICE_TASK, KindOfTask.A_JOB));
@@ -354,8 +354,8 @@ public class Camunda8OpenTaskProbeTest {
   }
 
   /**
-   * The probe the core is handed for one wake-up, which is where the memory of what the
-   * engine answered about an instance lives.
+   * The probe the core is handed for one wake-up. It remembers what the engine answered
+   * about an instance.
    */
   private OpenTaskProbe whatTheCoreWasHanded(
       final BiFunction<String, String, KindOfTask> module) {
@@ -376,8 +376,8 @@ public class Camunda8OpenTaskProbeTest {
   }
 
   /**
-   * The delivery this check rides in on. It names the workflow, which is what says which
-   * instance the records the core hands over belong to.
+   * The delivery this check rides in on. It names the workflow, and so it says which instance
+   * the records the core hands over belong to.
    */
   private static TaskInvocationContext aWakeUpOfTheWorkflow() {
 
@@ -508,8 +508,8 @@ public class Camunda8OpenTaskProbeTest {
   }
 
   /**
-   * What the engine answers the instance probe with. Both of its refusals mean the instance
-   * is there, which is what makes the command a question.
+   * What the engine answers to the instance probe. Both of its refusals mean the instance is
+   * there. That makes the command a question.
    */
   private void theEngineRefusesTheModificationWith(
       final RuntimeException rejection) {

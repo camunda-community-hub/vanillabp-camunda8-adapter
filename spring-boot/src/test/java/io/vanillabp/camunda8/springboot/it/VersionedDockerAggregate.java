@@ -22,8 +22,8 @@ public class VersionedDockerAggregate {
   private Long id;
 
   /**
-   * Which <code>&#64;WorkflowTask</code> method served the task - the version of the
-   * deployed process definition decides it.
+   * Which <code>&#64;WorkflowTask</code> method served the task. The version of the deployed
+   * process definition decides it.
    */
   private String servedBy;
 

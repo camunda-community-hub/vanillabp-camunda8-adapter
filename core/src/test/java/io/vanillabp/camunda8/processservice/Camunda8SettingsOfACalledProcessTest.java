@@ -47,9 +47,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * called process waits for, and a push of the changed aggregate.
  * <p>
  * The operations are called on the process service of the process at the top, so the request
- * names that process. What waits in a called process belongs to the called process, though. A
- * time-to-live configured for a message is read under the process whose model waits for it, and
- * a push reaches the called instances which continue the aggregate.
+ * names that process. But what waits in a called process belongs to the called process. A
+ * time-to-live configured for a message is read under the process whose model waits for it.
+ * And a push reaches the called instances which continue the aggregate.
  * <p>
  * The cluster is played by mocks.
  */

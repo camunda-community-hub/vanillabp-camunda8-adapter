@@ -11,14 +11,13 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the event-subprocess integration test: the workflow waits at a
- * timer catch event it never reaches the end of, because an event subprocess takes it
- * over.
+ * The workflow service of the event-subprocess integration test. The workflow waits at a
+ * timer catch event, and it never gets past it, because an event subprocess takes it over.
  * <p>
  * The event subprocess starts on a timer of its own, and that start event is the point of
- * this test. The application serves it with no method at all: it starts no workflow, so
- * the boot must not ask for one, and the aggregate the task below is handed is the one
- * this service created.
+ * this test. The application serves it with no method at all. It starts no workflow, so the
+ * boot must not ask for a method. The task below is handed the aggregate which this service
+ * created.
  */
 @Service
 @WorkflowService(

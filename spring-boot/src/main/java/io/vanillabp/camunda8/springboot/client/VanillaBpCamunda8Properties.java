@@ -23,20 +23,23 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 
 /**
  * The Camunda 8 adapter's OVERLAY of the shared <code>vanillabp.*</code> configuration
- * tree: the adapter's connection settings live at the canonical per-adapter location
- * <code>vanillabp.adapters.&lt;id&gt;.*</code> (keys documented in
- * {@link Camunda8AdapterConfiguration}: <code>mode</code>, <code>rest-address</code>,
+ * tree. The adapter's connection settings live where every adapter keeps them, at
+ * <code>vanillabp.adapters.&lt;id&gt;.*</code>. {@link Camunda8AdapterConfiguration}
+ * documents the keys: <code>mode</code>, <code>rest-address</code>,
  * <code>grpc-address</code>, <code>prefer-rest-over-grpc</code>, <code>tenant-id</code>,
  * <code>cluster-id</code>, <code>region</code>, <code>client-id</code>,
  * <code>client-secret</code>, and the <code>auth.*</code> block of
- * {@link Camunda8AuthConfiguration}). A second {@code @ConfigurationProperties} class over
- * the same prefix coexists with the platform's binding of the core model; keys unknown to
- * either view are ignored by the JavaBean binding.
+ * {@link Camunda8AuthConfiguration}.
  * <p>
- * The adapter-id set is NEVER derived from this overlay map - it always comes from the
- * platform's core properties ({@code adapterTypes()} filtered by type
- * {@code camunda8}); the overlay is a per-known-id lookup only (environment-variable
- * overrides can materialize phantom map entries in the overlay).
+ * This is a second {@code @ConfigurationProperties} class over the same prefix. It lives
+ * next to the platform's binding of the core model. The JavaBean binding ignores keys which
+ * one of the two views does not know.
+ * <p>
+ * The set of adapter ids is NEVER taken from this overlay map. It always comes from the
+ * platform's core properties ({@code adapterTypes()} filtered by type {@code camunda8}).
+ * The overlay is only used to look up an id the core already knows. The reason: overrides
+ * by environment variables can create map entries in the overlay for ids which do not
+ * exist.
  */
 @ConfigurationProperties("vanillabp")
 public class VanillaBpCamunda8Properties {
@@ -49,9 +52,9 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * The adapter sections of the shared tree, keyed by adapter ID - only the
-   * Camunda 8 connection keys are modeled here (bound directly onto the
-   * platform-neutral {@link Camunda8AdapterConfiguration}).
+   * The adapter sections of the shared tree, keyed by adapter ID. Only the Camunda 8
+   * connection keys are modeled here. They are bound directly onto the
+   * platform-neutral {@link Camunda8AdapterConfiguration}.
    */
   private Map<String, Camunda8AdapterConfiguration> adapters = Map.of();
 
@@ -79,16 +82,20 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * The workflow-module sections of the shared tree - the overlay mirrors the
-   * levels of the most-specific-wins resolution of scope-specific adapter keys
-   * (task &gt; workflow &gt; workflow-module &gt; adapter), currently:
-   * <code>job-timeout</code> and <code>retry-backoff</code>.
-   * <code>message-time-to-live</code> resolves the same way
-   * with a MESSAGE as its most specific level instead of a task, and
-   * <code>allow-connectors</code> the same way with the workflow as its most specific
-   * level. <code>tenant-id</code> is here as well, with the workflow module as its ONLY
-   * level below the adapter: a tenant id is an attribute of the deployment, and this
-   * adapter deploys once per workflow module.
+   * The workflow-module sections of the shared tree. The overlay has the same levels as
+   * the resolution of the scope-specific adapter keys, where the most specific level wins
+   * (task &gt; workflow &gt; workflow-module &gt; adapter). These keys are resolved like
+   * this:
+   * <ul>
+   * <li><code>job-timeout</code> and <code>retry-backoff</code>, over all four levels.</li>
+   * <li><code>message-time-to-live</code>, with a MESSAGE instead of a task as the most
+   * specific level.</li>
+   * <li><code>allow-connectors</code> and <code>allow-listeners</code>, with the workflow
+   * as the most specific level.</li>
+   * <li><code>tenant-id</code>, with the workflow module as the ONLY level below the
+   * adapter. A tenant id belongs to the deployment, and this adapter deploys once per
+   * workflow module.</li>
+   * </ul>
    */
   private Map<String, ModuleOverlay> workflowModules = Map.of();
 
@@ -116,8 +123,8 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves the job timeout for a task with most-specific-wins semantics across
-   * the four levels; falls back to the adapter-level value and finally the
+   * Resolves the job timeout for a task over the four levels. The most specific level
+   * wins. Without a value at a scope level, the adapter level counts, and without that the
    * default.
    *
    * @param workflowModuleId The workflow module the task belongs to
@@ -147,8 +154,9 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves the backoff of a FAILED job with the same most-specific-wins semantics;
-   * falls back to the adapter-level value and finally the default of ten seconds.
+   * Resolves the backoff of a FAILED job in the same way: the most specific level wins.
+   * Without a value at a scope level, the adapter level counts, and without that the
+   * default of ten seconds.
    *
    * @param workflowModuleId The workflow module the task belongs to
    * @param bpmnProcessId The BPMN process the task belongs to
@@ -168,10 +176,10 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * The same answer, plus the one thing a BPMN model can argue with: whether the TASK
-   * level is where the value comes from. A task header
-   * {@value io.vanillabp.camunda8.wiring.Camunda8RetryBackoffHeader#HEADER_NAME} says as
-   * much about one task as that level does and beats every level above it.
+   * The same answer, plus whether the value comes from the TASK level. A BPMN model can
+   * only compete with that level. A task header
+   * {@value io.vanillabp.camunda8.wiring.Camunda8RetryBackoffHeader#HEADER_NAME} is as
+   * specific as the task level and beats every level above it.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -206,9 +214,9 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * The Camunda 8 tenant configured for one workflow module of one adapter id: the module's
-   * own name where it has one, the adapter's otherwise. What the mode then makes of it is the
-   * adapter's business.
+   * The Camunda 8 tenant configured for one workflow module of one adapter id. It is the
+   * module's own tenant name if it has one, otherwise the adapter's. What the mode then
+   * does with it is up to the adapter.
    *
    * @param adapterId The adapter ID
    * @param workflowModuleId The workflow module ID
@@ -265,10 +273,10 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves the time-to-live of a published message with most-specific-wins semantics,
-   * where the MOST specific level is the message rather than a task; falls back to the
-   * adapter-level value and finally to <code>null</code>, which leaves the command alone
-   * and lets the client's own default apply.
+   * Resolves the time-to-live of a published message. The most specific level wins, and
+   * here the MOST specific level is the message, not a task. Without a value at a scope
+   * level, the adapter level counts. Without that the result is <code>null</code>: the
+   * command stays as it is, and the client's own default applies.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process ID
@@ -299,10 +307,10 @@ public class VanillaBpCamunda8Properties {
 
   /**
    * The <code>adapters.&lt;id&gt;</code> sections of the three levels below the adapter for
-   * a MESSAGE, most specific first. Separate from
+   * a MESSAGE, most specific first. This is separate from
    * {@link #scopedKeysMostSpecificFirst} because the most specific level is a different
-   * map: a message is not a task, and giving it the task level would make an override
-   * meant for one apply to the other.
+   * map. A message is not a task. If a message used the task level, a value meant for one
+   * would also apply to the other.
    */
   private Stream<Camunda8ScopedKeys> messageScopedKeysMostSpecificFirst(
       final String workflowModuleId,
@@ -394,10 +402,10 @@ public class VanillaBpCamunda8Properties {
 
   /**
    * Resolves whether an element built from an element template is left to the runtime which
-   * owns it, over THREE levels rather than four: workflow, workflow module, adapter, the
-   * most specific configured value winning in both directions. Which is the deliberate
-   * difference to version 1, whose primitive booleans let a more specific level turn the
-   * flag on and never off.
+   * owns it. There are THREE levels here, not four: workflow, workflow module, adapter. The
+   * most specific configured value wins, both for on and for off. This is a deliberate
+   * difference to version 1. Its primitive booleans let a more specific level turn the flag
+   * on, but never off.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID
@@ -442,9 +450,9 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * Every <code>allow-connectors</code> this configuration puts at TASK level, fully
-   * spelled out - the level which does not resolve this key, and where saying so is the
-   * only thing the boot can do about it.
+   * Every <code>allow-connectors</code> this configuration puts at TASK level, as full
+   * keys. This key is not read at the task level. All the boot can do about it is say
+   * so.
    *
    * @param adapterId The adapter ID
    * @return The keys found, in configuration order
@@ -478,9 +486,9 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves whether the listeners somebody modelled are served, over the three levels
-   * <code>allow-connectors</code> is read at and with the same most-specific-wins rule in
-   * both directions.
+   * Resolves whether the listeners somebody modelled are served. It uses the three levels
+   * of <code>allow-connectors</code> and the same rule: the most specific value wins, both
+   * for on and for off.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID
@@ -525,8 +533,8 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * Every <code>allow-listeners</code> this configuration puts at TASK level, fully spelled
-   * out - the level which does not resolve this key.
+   * Every <code>allow-listeners</code> this configuration puts at TASK level, as full keys.
+   * This key is not read at the task level.
    *
    * @param adapterId The adapter ID
    * @return The keys found, in configuration order
@@ -561,7 +569,7 @@ public class VanillaBpCamunda8Properties {
 
   /**
    * The <code>adapters.&lt;id&gt;</code> sections of the three levels below the adapter,
-   * most specific first - what every scope-specific key is resolved through.
+   * most specific first. Every scope-specific key is resolved through them.
    */
   private Stream<Camunda8ScopedKeys> scopedKeysMostSpecificFirst(
       final String workflowModuleId,
@@ -727,9 +735,8 @@ public class VanillaBpCamunda8Properties {
 
     /**
      * Whether an element built from an element template is left to the runtime which owns
-     * it. A {@code Boolean} rather than a primitive, because unset has to be told apart
-     * from {@code false}: this is what lets a workflow module switch OFF what the adapter
-     * switched on.
+     * it. It is a {@code Boolean} and not a primitive, because "not set" must differ from
+     * {@code false}. This lets a workflow module switch OFF what the adapter switched on.
      */
     private Boolean allowConnectors;
 
@@ -790,9 +797,10 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * The Camunda 8 keys of one workflow module's adapter section: the scoped keys every level
-   * has, plus the tenant, which only a workflow module may override because a tenant id is an
-   * attribute of the deployment this adapter makes per workflow module.
+   * The Camunda 8 keys of one workflow module's adapter section. These are the scoped keys
+   * every level has, plus the tenant. Only a workflow module may override the tenant. A
+   * tenant id belongs to the deployment, and this adapter deploys once per workflow
+   * module.
    */
   public static class Camunda8ModuleScopedKeys extends Camunda8ScopedKeys {
 
@@ -804,7 +812,7 @@ public class VanillaBpCamunda8Properties {
     }
 
     /**
-     * The Camunda 8 tenant this workflow module is deployed into, overriding the name the
+     * The Camunda 8 tenant this workflow module is deployed into. It overrides the name the
      * adapter section gives every module of this application.
      */
     private String tenantId;
@@ -973,8 +981,8 @@ public class VanillaBpCamunda8Properties {
     }
 
     /**
-     * The message sections of this workflow - the most specific level of the keys which
-     * are about a MESSAGE rather than about a task.
+     * The message sections of this workflow. They are the most specific level of the keys
+     * which are about a MESSAGE and not about a task.
      */
     private Map<String, MessageOverlay> messages = Map.of();
 
@@ -1004,8 +1012,8 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * The Camunda 8 adapter's view of one message section - the most specific level for a
-   * key about a published message.
+   * The Camunda 8 adapter's view of one message section. It is the most specific level for
+   * a key about a published message.
    */
   public static class MessageOverlay {
 
@@ -1047,7 +1055,7 @@ public class VanillaBpCamunda8Properties {
   }
 
   /**
-   * The Camunda 8 adapter's view of one task section - the MOST specific level.
+   * The Camunda 8 adapter's view of one task section. It is the MOST specific level.
    */
   public static class TaskOverlay {
 

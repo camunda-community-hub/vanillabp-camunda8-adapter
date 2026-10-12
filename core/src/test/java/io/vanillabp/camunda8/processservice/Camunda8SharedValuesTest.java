@@ -18,8 +18,8 @@ import io.vanillabp.integration.spi.AggregatePersistenceAware;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What travels to the cluster on behalf of a workflow - the Camunda 8 twin of the
- * Process-Engine-API adapter's {@code PeaSharedValuesTest}.
+ * What travels to the cluster on behalf of a workflow. It is the Camunda 8 twin of
+ * {@code PeaSharedValuesTest} of the Process-Engine-API adapter.
  * <p>
  * {@code WorkflowAggregateSync} promises two things which nothing held here: the
  * workflow-aggregate's ID is never one of the shared values, and the technical variable
@@ -31,7 +31,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * exercised.
  * <p>
  * The third case pins the sharing default: {@link AggregateSyncMode#FULL} for every
- * adapter, so a model reads the same attributes wherever it runs.
+ * adapter. So a model reads the same attributes wherever it runs.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8SharedValuesTest {
@@ -42,7 +42,7 @@ public class Camunda8SharedValuesTest {
   private record Aggregate(String id) {
   }
 
-  /** What the aggregate's persistence answers - the ID, its name, nothing else. */
+  /** What the persistence of the aggregate answers: the ID, its name, nothing else. */
   private static AggregatePersistenceAware<Aggregate> persistence(
       final Aggregate aggregate) {
 
@@ -74,7 +74,7 @@ public class Camunda8SharedValuesTest {
 
   }
 
-  /** A sync model answering the given values, recording which default it was asked with. */
+  /** A sync model which answers the given values and records the default it was asked with. */
   private static class RecordingSync implements WorkflowAggregateSync {
 
     private final Map<String, Object> values;
@@ -107,7 +107,7 @@ public class Camunda8SharedValuesTest {
   }
 
   /**
-   * A service which never contacts the cluster: what is asserted here is the map built
+   * A service which never contacts the cluster. This test asserts the map which is built
    * before any command is sent.
    */
   private static Camunda8ProcessService<Aggregate> serviceSharing(
@@ -115,7 +115,7 @@ public class Camunda8SharedValuesTest {
 
     final var configuration = new Camunda8AdapterConfiguration();
     configuration.setRestAddress("http://localhost:1");
-    // no waiting for the exporter in a unit test - the cluster is never contacted
+    // no waiting for the exporter in a unit test, the cluster is never contacted
     configuration.setWorkflowVisibilityTimeout(Duration.ZERO);
     return new Camunda8ProcessService<>(
         "c8", new Camunda8ClientFactory("c8", configuration), Duration

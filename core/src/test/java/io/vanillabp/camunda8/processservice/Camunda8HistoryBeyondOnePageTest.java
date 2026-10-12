@@ -43,19 +43,20 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.process.WorkflowElementHistory;
 
 /**
- * The history of a workflow which has MORE element instances than one page holds - a
- * multi-instance over a long list, or a loop which ran often.
+ * The history of a workflow which has MORE element instances than one page holds. For
+ * example a multi-instance over a long list, or a loop which ran often.
  * <p>
- * A history is the whole workflow or it is misleading. The elements come back in the order
- * they started, so a search answering one page hands out the BEGINNING of the workflow, and
- * nothing in the answer says that it stopped there: the viewer shows a workflow which looks
- * finished at an element the engine left long ago. The incidents are read the same way,
- * where a message missing from the history reads as an element which ran cleanly.
+ * A history is the whole workflow, or it is misleading. The elements come back in the order
+ * they started. So a search which answers one page hands out the BEGINNING of the workflow,
+ * and nothing in the answer says that it stopped there. The viewer then shows a workflow
+ * which looks finished at an element the engine left long ago. The incidents are read the
+ * same way. There, a message missing from the history reads as an element which ran
+ * cleanly.
  * <p>
- * The cluster is played by the searches, one page per call. Which page the adapter asked
- * for is not read off the call, because the type the client passes the page lambda differs
- * between the release lines this adapter is built from - what is measured is how many pages
- * it asked for and what the history is made of.
+ * The searches play the cluster, one page per call. The test does not read off the call
+ * which page the adapter asked for. The type the client passes to the page lambda differs
+ * between the release lines this adapter is built from. So the test measures how many pages
+ * the adapter asked for and what the history is made of.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8HistoryBeyondOnePageTest {
@@ -71,8 +72,8 @@ public class Camunda8HistoryBeyondOnePageTest {
       """;
 
   /**
-   * How many iterations the multi-instance of this workflow ran, which is what takes one
-   * workflow past the 100 of a page.
+   * How many iterations the multi-instance of this workflow ran. They take one workflow past
+   * the 100 of a page.
    */
   private static final int ITERATIONS = 150;
 

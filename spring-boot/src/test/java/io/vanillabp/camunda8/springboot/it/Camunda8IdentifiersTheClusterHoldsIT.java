@@ -17,32 +17,33 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * A BPMN process id which somebody ELSE deployed into the cluster first, against a real
- * cluster: a foreign application's file is deployed under the id this workflow module is
- * about to deploy, and the start has to say so.
+ * cluster. A foreign application's file is deployed under the id which this workflow module
+ * is about to deploy. The start has to say so.
  * <p>
  * Only a cluster can answer this. The adapter asks the definition search what is held under
- * the ids of the module, tells its own deployment from the answer by the resource the
- * cluster recorded, and the core words the warning out of what comes back - three steps of
- * which none can be faked without also faking the answer they are about.
+ * the ids of the module. It tells its own deployment apart by the resource which the cluster
+ * recorded. The core writes the warning from what comes back. None of these three steps can
+ * be faked without also faking the answer they are about.
  * <p>
- * The mode is <code>none</code>, which is the one this matters most in and the one a cluster
- * without multi-tenancy has to use: nothing is prefixed, no tenant separates anybody, so the
- * id the application deploys is the id the other deployment already holds. Under
+ * The mode is <code>none</code>. It matters most in this mode, and a cluster without
+ * multi-tenancy has to use it. Nothing is prefixed, and no tenant separates anybody. So the
+ * id which the application deploys is the id which the other deployment already holds. Under
  * <code>use-prefix</code> the same case needs the other application to have picked our
- * workflow module id as well, and under <code>by-adapter</code> to deploy into our tenant.
+ * workflow module id as well. Under <code>by-adapter</code> it needs the other application
+ * to deploy into our tenant.
  * <p>
- * What the adapter can NOT do here is prove the holder is somebody else, because a cluster
- * records no owner - and the message says that in so many words. That sentence is part of
- * what is asserted: a reader who cannot tell a certainty from a guess learns to ignore both.
+ * The adapter can NOT prove here that the holder is somebody else, because a cluster records
+ * no owner. The message says exactly that. That sentence is part of what is asserted. A
+ * reader who cannot tell a certainty from a guess learns to ignore both.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
 public class Camunda8IdentifiersTheClusterHoldsIT extends TestOnTheSharedCluster {
 
   /**
-   * What another application deployed under the process id this test's workflow module uses:
-   * a model of its own, from a file of its own, and with nothing in it this application
-   * serves.
+   * What another application deployed under the process id which this test's workflow module
+   * uses. It is a model of its own, from a file of its own, and nothing in it is served by
+   * this application.
    */
   private static final String THE_PROCESS_ID_OF_ANOTHER_APPLICATION = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -93,9 +94,9 @@ public class Camunda8IdentifiersTheClusterHoldsIT extends TestOnTheSharedCluster
   /**
    * Deploys the other application's file and waits until a SEARCH answers with it.
    * <p>
-   * The wait is the point: what the adapter reads is the query API, which the export pipeline
-   * fills behind the deployment by an unknown amount. A boot which ran before it caught up
-   * would find nothing and report nothing, which is a green test about nothing.
+   * The wait is the point. The adapter reads the query API. The export pipeline fills it some
+   * unknown time after the deployment. A boot which ran before it caught up would find
+   * nothing and report nothing. That would be a green test about nothing.
    */
   private static void stageTheOtherApplicationsDeployment() throws Exception {
 
@@ -157,9 +158,9 @@ public class Camunda8IdentifiersTheClusterHoldsIT extends TestOnTheSharedCluster
                 + restAddress(),
             "--vanillabp.adapters.c8.grpc-address="
                 + grpcAddress(),
-            // the mode the clash needs: nothing is prefixed and no tenant separates the two
-            // deployments, which is what a cluster without multi-tenancy leaves an
-            // application with
+            // the mode which the clash needs. Nothing is prefixed and no tenant separates the
+            // two deployments. A cluster without multi-tenancy leaves an application only
+            // this mode
             "--vanillabp.adapters.c8.name-clash-avoidance=none",
             "--vanillabp.workflow-modules.test-app.adapters.c8.resources-location=classpath*:name-clash");
 

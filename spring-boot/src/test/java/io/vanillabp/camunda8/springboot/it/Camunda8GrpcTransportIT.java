@@ -24,31 +24,32 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * A job really arrives over gRPC.
  * <p>
- * This adapter offers {@code prefer-rest-over-grpc: false} and until now nothing here had
- * ever seen a job come in that way. The reason is the cluster the other tests use: it runs
- * with {@code CAMUNDA_SECURITY_AUTHENTICATION_UNPROTECTEDAPI=true}, which unprotects REST and
- * leaves gRPC without an identity, so a gRPC activation there answers with an empty list and
- * a gRPC command is refused with {@code PERMISSION_DENIED}. On a cluster which authenticates,
- * which is what a self-managed or a SaaS installation is, the transport works - and that is
- * what this test holds.
+ * This adapter offers {@code prefer-rest-over-grpc: false}. Until this test, nothing here had
+ * ever seen a job come in that way. The reason is the cluster which the other tests use. It
+ * runs with {@code CAMUNDA_SECURITY_AUTHENTICATION_UNPROTECTEDAPI=true}. That unprotects REST
+ * and leaves gRPC without an identity. So a gRPC activation there answers with an empty list,
+ * and a gRPC command is refused with {@code PERMISSION_DENIED}. On a cluster which
+ * authenticates, the transport works. A self-managed or a SaaS installation is such a cluster.
+ * This test holds that the transport works there.
  * <p>
  * Two jobs, because they travel different paths through the gateway: a plain service task job
  * and the job of a user-task {@code creating} listener. The second one is why this test was
  * written at all. The REST gateway of the 8.10 alpha drops the whole activate-jobs batch when
- * it meets a listener job whose event carries no action header, which is what
- * camunda/camunda#58193 is, and {@code creating} is one of the two events that hits. Over gRPC
- * it arrives, measured on 2026-09-19 at 342 ms against {@code camunda/camunda:8.10.0-alpha5}.
+ * it meets a listener job whose event carries no action header. That is
+ * camunda/camunda#58193, and {@code creating} is one of the two events it hits. Over gRPC the
+ * job arrives. It was measured on 2026-09-19 at 342 ms against
+ * {@code camunda/camunda:8.10.0-alpha5}.
  * <p>
  * That is history since {@code 8.10.0-rc1}, which hands a {@code creating} job out over REST
- * as well. What this class still proves is the transport itself, which is why it stayed.
+ * as well. This class still proves the transport itself, so it stayed.
  * <p>
- * Nothing is recommended by it. The switch is per adapter instance rather than per job type,
- * no other traffic of this repository has ever been proven on that transport, and the
+ * It does not recommend anything. The switch is per adapter instance, not per job type. No
+ * other traffic of this repository has ever been proven on that transport. And the
  * regression it would work around is fixed upstream. The README says the same in prose.
  * <p>
- * The cluster is this class's own, while the other tests of this module share one. The
- * shared one leaves gRPC without an identity, which is the very gap described above, so
- * this test needs a cluster configured differently rather than a cluster to itself.
+ * This class has a cluster of its own. The other tests of this module share one. The shared
+ * one leaves gRPC without an identity, which is the very gap described above. So this test
+ * needs a cluster with a different configuration. It does not need a cluster just for itself.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -133,8 +134,8 @@ public class Camunda8GrpcTransportIT {
           .send()
           .join();
 
-      // the second one is the reason for this test: this is the event the REST gateway of
-      // the 8.10 alpha drops, and the transport is the whole difference
+      // the second one is the reason for this test. The REST gateway of the 8.10 alpha drops
+      // this event, and the transport is the whole difference
       final var listenerJob = awaitTheJob(client, LISTENER_JOB_TYPE);
       assertEquals("GrpcUserTask", listenerJob.getElementId());
       client
@@ -148,8 +149,8 @@ public class Camunda8GrpcTransportIT {
 
   /**
    * The adapter's own client factory, configured the way an installation would configure it
-   * for gRPC. Built through the adapter rather than with the plain client builder, because
-   * what has never been proven is the adapter's gRPC configuration and not the client's.
+   * for gRPC. It is built through the adapter and not with the plain client builder. Nobody
+   * had proven the adapter's gRPC configuration. The client's own was never in doubt.
    */
   private static Camunda8ClientFactory grpcFactory() {
 
@@ -160,8 +161,8 @@ public class Camunda8GrpcTransportIT {
             + CAMUNDA.getHost()
             + ":"
             + CAMUNDA.getMappedPort(26500));
-    // the REST address is still configured: a deployment and the searches travel REST on
-    // every line, and an installation which speaks gRPC to the brokers configures both
+    // the REST address is still configured. A deployment and the searches go over REST on
+    // every line. So an installation which speaks gRPC to the brokers configures both
     configuration
         .setRestAddress("http://"
             + CAMUNDA.getHost()
@@ -174,8 +175,8 @@ public class Camunda8GrpcTransportIT {
   }
 
   /**
-   * The job, activated directly rather than through a worker, so what the test reads is the
-   * answer of the activation request itself.
+   * The job, activated directly and not through a worker. So the test reads the answer of the
+   * activation request itself.
    */
   private static ActivatedJob awaitTheJob(
       final CamundaClient client,

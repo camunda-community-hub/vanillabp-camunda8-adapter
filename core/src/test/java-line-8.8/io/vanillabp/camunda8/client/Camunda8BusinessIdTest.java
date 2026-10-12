@@ -19,11 +19,11 @@ import io.camunda.client.api.command.CreateProcessInstanceCommandStep1;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * An instance of this line carries no business id, and the adapter says so rather than
- * sending a field the cluster answers with 400.
+ * An instance of this line carries no business id. The adapter says so instead of sending a
+ * field which the cluster answers with 400.
  * <p>
- * The point of asserting it per line is the configuration key: an application which moves
- * between lines carries one configuration, so the key is accepted here, changes nothing, and
+ * It is asserted per line because of the configuration key. An application which moves
+ * between lines carries one configuration. So the key is accepted here, changes nothing, and
  * the boot writes one line about it.
  */
 @ExtendWith(SuppressOutputExtension.class)

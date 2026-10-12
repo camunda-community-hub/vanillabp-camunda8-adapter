@@ -22,21 +22,20 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * A CANARY: it watches the cluster, not this adapter.
  * <p>
  * Decision 30 says what a called process is told about the iterations of its caller, and where
- * it stops. Three properties of Camunda 8 decide where that line can run, and all three were
- * measured rather than read. A fourth decides what a push of a changed aggregate has to write
- * (decision 77). A measurement says what was true on one day, so it is asserted
- * here instead, with hand-written models and the raw client, so nothing of VanillaBP is in the
- * way.
+ * it stops. Three properties of Camunda 8 decide where that line can run. All three were
+ * measured, not read in the documentation. A fourth decides what a push of a changed aggregate
+ * has to write (decision 77). A measurement says what was true on one day. So this class
+ * asserts it instead, with hand-written models and the raw client, so nothing of VanillaBP is
+ * in the way.
  * <ul>
- * <li>An input mapping of a call activity reaches the CALLED instance, and whether the called
- * process is named statically or by a FEEL expression makes no difference to that. It is
- * therefore the one place a deployment can write something for a call activity whose process
- * is only known while it runs.</li>
+ * <li>An input mapping of a call activity reaches the CALLED instance. It makes no difference
+ * whether the called process is named statically or by a FEEL expression. So it is the one
+ * place where a deployment can write something for a call activity whose process is only
+ * known while it runs.</li>
  * <li>It reaches the called instance even with
  * <code>propagateAllParentVariables="false"</code>, where no variable of the caller arrives.
- * That is the reason decision 30 leaves such a call activity alone rather than writing a
- * mapping there: the modeller switched the caller's context off, and a mapping would hand it
- * over anyway.</li>
+ * That is why decision 30 leaves such a call activity alone and writes no mapping there. The
+ * modeller switched the caller's context off, and a mapping would hand it over anyway.</li>
  * <li>What a mapping wrote travels through a SECOND call activity below it, and the mapping
  * there can extend the list it holds. Without that, anything handed down this way would reach
  * exactly one level.</li>
@@ -48,13 +47,13 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * <p>
  * Measured on 2026-10-01 against <code>camunda/camunda:8.8.40</code>, <code>8.9.21</code> and
  * <code>8.10.0-rc3</code>, which answered identically. The fourth was measured on 2026-10-09
- * against <code>camunda/camunda:8.10.0</code>. A red run here is news about Camunda
- * rather than a defect of this repository, and each message says what to do with the news.
+ * against <code>camunda/camunda:8.10.0</code>. A red run here is news about Camunda, not a
+ * defect of this repository. Each message says what to do with the news.
  * <p>
- * What this canary deliberately does NOT hold is how big such a list may get. The cluster
- * refused one of roughly two megabytes with an incident naming <code>MAX_MESSAGE_SIZE</code>,
- * and that number belongs to a cluster's configuration rather than to anything this repository
- * promises. It is written down in the README instead.
+ * On purpose, this canary does NOT check how big such a list may get. The cluster refused a
+ * list of about two megabytes with an incident naming <code>MAX_MESSAGE_SIZE</code>. That
+ * number belongs to a cluster's configuration, not to anything this repository promises. It
+ * is written down in the README instead.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -64,14 +63,15 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8CallActivityVariablesCanaryIT extends TestOnTheSharedCluster {
 
   /**
-   * The variable every model here writes with an input mapping of its call activity. Named
-   * after what the adapter uses it for, so a reader of a cluster's variables finds this class.
+   * The variable which every model here writes with an input mapping of its call activity. Its
+   * name says what the adapter uses it for. So a reader of a cluster's variables finds this
+   * class.
    */
   private static final String WHAT_THE_MAPPING_WRITES = "theCanarysParents";
 
   /**
-   * What a caller passes as an ordinary process variable, to tell the two ways a value can
-   * reach a called instance apart.
+   * What a caller passes as an ordinary process variable. It tells apart the two ways in which
+   * a value can reach a called instance.
    */
   private static final String WHAT_THE_CALLER_HOLDS = "theCanarysCallerVariable";
 
@@ -135,8 +135,8 @@ public class Camunda8CallActivityVariablesCanaryIT extends TestOnTheSharedCluste
               "<zeebe:calledElement processId=\"TheCanarysOpenChild\" />",
               mapping));
 
-      // the positive half first: with the propagation left alone, BOTH values arrive, so the
-      // assertion below is about the attribute and not about a value which was never there
+      // the positive half first. With the propagation left alone, BOTH values arrive. So the
+      // assertion below is about the attribute, not about a value which was never there
       final var withPropagation = awaitTheChildsJob(
           client,
           "TheCanarysOpenCaller",
@@ -247,7 +247,7 @@ public class Camunda8CallActivityVariablesCanaryIT extends TestOnTheSharedCluste
           .send()
           .join()
           .getProcessInstanceKey();
-      // the job of the called instance exists once it can be activated, so the call happened
+      // the job of the called instance can be activated, so the call happened
       final var firstLook = activateTheJob(client, "theCanarysLateChild");
       assertEquals("before the call", firstLook.getVariablesAsMap().get(WHAT_THE_CALLER_HOLDS));
 
@@ -310,8 +310,9 @@ public class Camunda8CallActivityVariablesCanaryIT extends TestOnTheSharedCluste
   }
 
   /**
-   * The expression the adapter injects, reduced to what this canary needs: it appends one entry
-   * naming the caller, and it tolerates the first call, where the variable does not exist.
+   * The expression which the adapter injects, cut down to what this canary needs. It appends
+   * one entry which names the caller. It also works for the first call, where the variable does
+   * not exist yet.
    *
    * @param process The calling process, which the entry names
    * @return An input mapping, ready to be put into a call activity
@@ -378,9 +379,9 @@ public class Camunda8CallActivityVariablesCanaryIT extends TestOnTheSharedCluste
   }
 
   /**
-   * How long this canary waits for the job at the bottom. Generous rather than measured: the
-   * ordinary round answers within a second, and this number decides when a missing answer ends
-   * the test instead of hanging.
+   * How long this canary waits for the job at the bottom. The value is long on purpose, not
+   * measured. The ordinary round answers within a second. This number only decides when a
+   * missing answer ends the test, so that it does not hang.
    */
   private static final Duration ANSWER_WITHIN = Duration.ofSeconds(60);
 

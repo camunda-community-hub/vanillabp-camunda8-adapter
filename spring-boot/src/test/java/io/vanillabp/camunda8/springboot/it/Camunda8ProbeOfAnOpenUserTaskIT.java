@@ -31,44 +31,46 @@ import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What every way of asking about an OPEN user task answers - the case of a task nobody is
- * cancelling, which is the one story 643 never looked at.
+ * What every way of asking about an OPEN user task answers. This is the case of a task which
+ * nobody is cancelling. Story 643 never looked at this case.
  *
  * <h2>Why this class exists</h2>
  *
  * Story 643 held the window of a running cancellation open and read the probes inside it.
- * Its conclusion was that the probe has no hole. Stephan then reported the opposite from
- * production: a user task the Business Cockpit shows as active while a probe answers
+ * Its conclusion was that the probe has no hole. Then Stephan reported the opposite from
+ * production: a user task which the Business Cockpit shows as active, while a probe answers
  * {@code 404}. His application runs VanillaBP 1, and version 1 asked a different question
  * than version 2 does.
  * <p>
  * So this class asks every question about the same open task and writes down what came back:
- * the empty {@code UpdateUserTask} version 2 sends, the {@code UserTaskGet} version 1 sent,
- * the user-task search, the job command, and the instance probe which says whether the
- * workflow is there at all. Two shapes of task are measured, because version 1 served both
- * and the shape decides which key an application holds.
+ * the empty {@code UpdateUserTask} which version 2 sends, the {@code UserTaskGet} which
+ * version 1 sent, the user-task search, the job command, and the instance probe which says
+ * whether the workflow is there at all. It measures two shapes of task, because version 1
+ * served both. The shape decides which key an application holds.
  *
  * <h2>The two shapes, and why the key decides</h2>
  *
  * A Camunda-managed user task ({@code zeebe:userTask}) has a USER-TASK key. A job-worker user
- * task - a plain BPMN user task, which is what VanillaBP 1 served up to its release 1.6.3 -
- * has a JOB key. The two live in namespaces of their own, so a command of the one kind
- * answers {@code 404} for a key of the other kind however open the task is. Version 2 serves
- * the managed shape only: it ends the boot over the other one where a workflow service claims
- * the process and names it where nobody does, which is why the models here are deployed with
- * the raw client. Version 1 served both, and its {@code UserTaskGet} was sent for either.
+ * task has a JOB key. That is a plain BPMN user task, which VanillaBP 1 served up to its
+ * release 1.6.3. The two kinds of key live in namespaces of their own. So a command of one
+ * kind answers {@code 404} for a key of the other kind, however open the task is. Version 2
+ * serves only the managed shape. It ends the boot over the other shape where a workflow
+ * service claims the process, and it names the shape where nobody does. That is why the
+ * models here are deployed with the raw client. Version 1 served both, and it sent its
+ * {@code UserTaskGet} for either.
  *
  * <h2>What an application knows before the index does</h2>
  *
- * VanillaBP learns of a user task from its {@code creating} task listener, a job the partition
- * hands out before the task is even in state {@code CREATED}. The Business Cockpit's record is
- * written from there. The index an exporter feeds can only show the task afterwards. So the
- * first reading below starts at the moment the {@code creating} job arrived - the moment the
- * cockpit knows - and asks every question from there until each of them answers.
+ * VanillaBP learns of a user task from its {@code creating} task listener. That is a job which
+ * the partition hands out before the task is even in state {@code CREATED}. The Business
+ * Cockpit's record is written from there. The index which an exporter feeds can only show the
+ * task afterwards. So the first reading below starts at the moment the {@code creating} job
+ * arrived, which is the moment the cockpit knows. From there it asks every question until each
+ * of them answers.
  * <p>
- * Nothing of VanillaBP is in the way: the models are deployed with the raw client and their
- * listeners carry job types no worker of this repository subscribes to. The class ends what it
- * started, which is what leaves the shared cluster the way it found it.
+ * Nothing of VanillaBP is in the way. The models are deployed with the raw client. Their
+ * listeners carry job types which no worker of this repository subscribes to. The class ends
+ * what it started, so it leaves the shared cluster the way it found it.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -79,14 +81,14 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
 
   /**
    * The job type of the {@code creating} listener of the managed task. Nothing in this
-   * repository subscribes to it, so this test is the party the task waits for and the moment
-   * the job arrives is a moment the test knows.
+   * repository subscribes to it. So the task waits for this test, and the test knows the
+   * moment when the job arrives.
    */
   private static final String CREATING_JOB_TYPE = "theCreatingJobOnlyThisTestAnswers";
 
   /**
-   * The job type a job-worker user task is served with, which is the shape VanillaBP 1
-   * served up to release 1.6.3. It is Camunda's own constant and not a VanillaBP one.
+   * The job type with which a job-worker user task is served. VanillaBP 1 served this shape
+   * up to release 1.6.3. It is Camunda's own constant, not a VanillaBP one.
    */
   private static final String JOB_WORKER_USER_TASK_JOB_TYPE = "io.camunda.zeebe:userTask";
 
@@ -123,10 +125,9 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       """.formatted(MANAGED_PROCESS_ID, CREATING_JOB_TYPE);
 
   /**
-   * A plain BPMN user task: no {@code zeebe:userTask}, so the cluster serves it with a job of
-   * {@value #JOB_WORKER_USER_TASK_JOB_TYPE} and what an application holds is a job key. That
-   * is the shape VanillaBP 1 served up to release 1.6.3, and the shape whose key no
-   * user-task command can be asked about.
+   * A plain BPMN user task: no {@code zeebe:userTask}. So the cluster serves it with a job of
+   * {@value #JOB_WORKER_USER_TASK_JOB_TYPE}, and an application holds a job key. VanillaBP 1
+   * served this shape up to release 1.6.3. No user-task command can be asked about its key.
    */
   private static final String LEGACY_MODEL = """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -151,29 +152,29 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       """.formatted(LEGACY_PROCESS_ID);
 
   /**
-   * How long a listener job is leased for. Long enough for the readings below and short
-   * enough that a run which breaks off does not leave the cluster holding a task for
+   * How long a listener job is leased for. It is long enough for the readings below. It is
+   * short enough that a run which breaks off does not leave the cluster holding a task for
    * minutes.
    */
   private static final Duration A_LISTENER_JOB_IS_HELD_FOR = Duration.ofMinutes(2);
 
   /**
    * How long the loop keeps asking the same question before it writes down that the answer
-   * never came. Generous: a loaded machine's exporter is what is being measured here.
+   * never came. The value is long, because this measures the exporter of a loaded machine.
    */
   private static final Duration EVERY_QUESTION_IS_ASKED_FOR = Duration.ofSeconds(60);
 
   private static final long BETWEEN_TWO_READINGS_MILLIS = 50;
 
   /**
-   * How long the index is given to hold what the engine has already done, for the one reading
-   * which is about the index rather than about the engine.
+   * How long the index is given to show what the engine has already done. It is for the one
+   * reading which is about the index and not about the engine.
    */
   private static final Duration THE_INDEX_IS_GIVEN_THIS_LONG = Duration.ofSeconds(5);
 
   /**
-   * How often a question which already answered is repeated, so what is written down is the
-   * answer the cluster keeps giving rather than the one it happened to give first.
+   * How often a question which already answered is repeated. So the record shows the answer
+   * which the cluster keeps giving, not the one it happened to give first.
    */
   private static final int READINGS_OF_A_SETTLED_ANSWER = 5;
 
@@ -199,16 +200,16 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
           .join()
           .getProcessInstanceKey();
 
-      // the moment an application - and with it the cockpit's record - learns of the task:
-      // the 'creating' listener job, handed out by the partition before the task is CREATED
+      // the moment when an application, and with it the cockpit's record, learns of the task:
+      // the 'creating' listener job, which the partition hands out before the task is CREATED
       final var creatingJob = awaitTheListenerJob(client, CREATING_JOB_TYPE);
       final var theCockpitKnowsSince = System.nanoTime();
       final var userTaskKey = creatingJob.getUserTask().getUserTaskKey();
       measured.add("the 'creating' listener job named user task "
           + userTaskKey);
 
-      // answered at once, so the task leaves CREATING: a task standing in CREATING is
-      // refused rather than answered, which is decision 38 and not what is measured here
+      // answered at once, so the task leaves CREATING. A command about a task in CREATING is
+      // refused, not answered. That is decision 38, and it is not what this measures
       Camunda8JobLease
           .withToken(client.newCompleteCommand(creatingJob.getKey()), Camunda8JobLease.tokenOf(creatingJob))
           .send()
@@ -246,9 +247,9 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       measured.add("the instance probe, asked once the readings were taken: "
           + whatTheClusterAnswered(() -> Camunda8InstanceProbe
               .askTheEngine(client, instanceKey, Camunda8TaskWiring.RESERVED_PROBE_ELEMENT_ID, null)));
-      // the mirror of the question the adapter asks after a 404: the job side has to say
-      // nothing about a USER-TASK key, or the message of that 404 would name a job key for
-      // every user task which really is over
+      // the mirror of the question which the adapter asks after a 404. The job side has to
+      // say nothing about a USER-TASK key. Otherwise the message of that 404 would name a job
+      // key for every user task which really is over
       final var theIndexOnAUserTaskKey = whatTheIndexSaid(client, userTaskKey);
       measured.add("the job search by the user-task key: "
           + theIndexOnAUserTaskKey);
@@ -258,8 +259,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
               + "from it would then belong to a task of the other kind: "
               + String.join("; ", measured));
 
-      // and the probe of version 2 again, several times, so the 204 above is the answer the
-      // cluster keeps giving for a task which stays open
+      // and the probe of version 2 again, several times. So the 204 above is shown to be the
+      // answer which the cluster keeps giving for a task which stays open
       for (var reading = 1; reading <= READINGS_OF_A_SETTLED_ANSWER; ++reading) {
         measured.add("the probe of version 2, repeated reading "
             + reading
@@ -271,8 +272,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       report(reporter, "probe-of-an-open-managed-user-task", measured);
 
       // What the assertions hold the cluster to. The probe of version 2 may not say "gone"
-      // about a task the engine is holding open, because that 404 is what decisions 35 and
-      // 38 read as "the task is over"
+      // about a task which the engine holds open. Decisions 35 and 38 read that 404 as "the
+      // task is over"
       measured
           .stream()
           .filter(reading -> reading.startsWith("the probe of version 2"))
@@ -287,8 +288,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
                   + "was measured: "
                   + String.join("; ", measured)));
 
-      // and the fallback of version 1 is the mirror image: a job command cannot be asked
-      // about a user-task key at all, so its 404 is about the namespace and not about the task
+      // and the fallback of version 1 is the mirror image. A job command cannot be asked
+      // about a user-task key at all. So its 404 is about the namespace, not about the task
       assertTrue(
           measured
               .stream()
@@ -322,8 +323,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       measured.add("the deployment of a plain BPMN user task: "
           + deployed);
       if (!"accepted".equals(deployed)) {
-        // a line which refuses the shape has no such task to measure, and that refusal is
-        // the finding rather than a failure of this test
+        // a line which refuses the shape has no such task to measure. That refusal is the
+        // finding, not a failure of this test
         report(reporter, "probe-of-an-open-job-worker-user-task", measured);
         return;
       }
@@ -350,11 +351,11 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
               .send()
               .join()));
 
-      // the question the adapter asks itself once a user-task command answered 404: does the
-      // cluster hold a JOB of this key? Two commands could answer it and both are read here,
-      // first about the job which is open and further down about the same key once the job is
-      // gone. What separates a key the cluster holds from one it does not is the whole point,
-      // so a command answering 404 for both is no use whatever else it does
+      // the question which the adapter asks itself once a user-task command answered 404:
+      // does the cluster hold a JOB of this key? Two commands could answer it, and both are
+      // read here. First about the job which is open, and further down about the same key
+      // once the job is gone. The whole point is to tell a key which the cluster holds from
+      // one it does not hold. So a command which answers 404 for both is of no use
       measured.add("the empty UpdateJob on the job key while the task is open: "
           + whatTheClusterAnswered(() -> client
               .newUpdateJobCommand(jobKey)
@@ -409,8 +410,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
           .send()
           .join();
 
-      // the same two questions about the same key, now that the job really is gone: this is
-      // the reading which says whether either of them tells the two cases apart
+      // the same two questions about the same key, now that the job really is gone. This
+      // reading says whether either of them tells the two cases apart
       final var emptyUpdateJobOnAGoneKey = whatTheClusterAnswered(() -> client
           .newUpdateJobCommand(jobKey)
           .update(new JobChangeset())
@@ -437,8 +438,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
       report(reporter, "probe-of-an-open-job-worker-user-task", measured);
 
       // Camunda8UserTaskProbe#aJobOfThatKeyIsThere asks the job side after a user-task
-      // command answered 404, and the whole value of that question is that its 404 means
-      // something else than its other answers
+      // command answered 404. That question is only of value if its 404 means something
+      // other than its other answers
       assertTrue(
           isGone(jobTimeoutOnAGoneKey),
           "A job command answered something other than 404 about a job which is over. The job "
@@ -456,9 +457,9 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
               + "question can tell a job key from a key nobody holds: "
               + String.join("; ", measured));
 
-      // and why the two questions are split the way Camunda8ProcessService splits them. The
-      // index cannot say whether the cluster holds a job: it answered "no job of that key" while
-      // this job was activated and open, and it kept answering with the job once the job was over.
+      // and why Camunda8ProcessService splits the two questions the way it does. The index
+      // cannot say whether the cluster holds a job. It answered "no job of that key" while this
+      // job was activated and open. And it kept answering with the job once the job was over.
       // So the ENGINE is asked whether there is one, and the index only names the element
       assertTrue(
           theIndexOnceTheJobWasOver.contains(JOB_WORKER_USER_TASK_JOB_TYPE),
@@ -518,8 +519,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * Whether a written-down reading says the question was never answered, which is the shape
-   * {@link #untilItAnswers} writes when it ran out of time.
+   * Whether a written-down reading says the question was never answered. That is the shape
+   * which {@link #untilItAnswers} writes when it ran out of time.
    *
    * @param reading One line of the record
    * @return Whether it is the shape of a question which never answered
@@ -532,7 +533,7 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * What the adapter's own reader of the INDEX says about a key - the values
+   * What the adapter's own reader of the INDEX says about a key. These are the values which
    * {@code Camunda8ProcessService} puts into its message once a user-task command answered
    * {@code 404} and the engine said it holds a job of that key.
    *
@@ -573,9 +574,9 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * Whether the cluster refused a command ABOUT a task it holds, which is the {@code 409} of
-   * a task standing between two of its states. Not an answer this measurement waits for, and
-   * not a 404 either.
+   * Whether the cluster refused a command ABOUT a task which it holds. That is the
+   * {@code 409} of a task which is between two of its states. This measurement does not wait
+   * for that answer, and it is not a 404 either.
    *
    * @param answer What was written down
    * @return Whether it is such a refusal
@@ -588,8 +589,9 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * What the cluster answered, as one phrase - the code of the transport it arrived on for a
-   * refusal, and the word this repository uses for a command the cluster carried out.
+   * What the cluster answered, as one phrase. For a refusal, it is the code of the transport
+   * it arrived on. For a command which the cluster carried out, it is the word this
+   * repository uses for that.
    *
    * @param command What is sent
    * @return What came back
@@ -607,8 +609,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * Takes one job of the given type, leased for long enough that the readings are not a race
-   * against a lock which ran out.
+   * Takes one job of the given type. The lease is long enough that the readings are not a
+   * race against a lock which ran out.
    */
   private static ActivatedJob awaitTheListenerJob(
       final CamundaClient client,
@@ -640,8 +642,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
   }
 
   /**
-   * Ends the workflow the first measurement started, so the class which runs next finds the
-   * cluster the way this one found it.
+   * Ends the workflow which the first measurement started. So the class which runs next finds
+   * the cluster the way this one found it.
    */
   private static void completeTheManagedTask(
       final CamundaClient client,
@@ -687,8 +689,8 @@ public class Camunda8ProbeOfAnOpenUserTaskIT extends TestOnTheSharedCluster {
 
   /**
    * Puts the measurement where it can be read after a build: into the test report of the
-   * runner respectively an IDE, and into a file of its own, because the console output of a
-   * test which passes is suppressed.
+   * runner or of an IDE, and into a file of its own. The console output of a test which
+   * passes is suppressed.
    *
    * @param reporter The JUnit reporter
    * @param name What the entry and the file are called

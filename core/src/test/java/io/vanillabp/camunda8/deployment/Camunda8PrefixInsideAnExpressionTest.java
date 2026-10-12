@@ -31,10 +31,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * now that {@code use-prefix} writes the prefix into that expression.
  * <p>
  * Two things are owed. An expression which composes the prefix ITSELF would carry it twice
- * after the rewrite, so the file is refused with the expression to change; an earlier
- * VanillaBP 2 snapshot asked applications to compose it, which is the only way such a model
- * comes about. And where the cluster refuses a deployment over a parse error, the answer
- * quotes the frame this adapter wrote, so the message says what the quote includes.
+ * after the rewrite. So the file is refused, and the message names the expression to change.
+ * An earlier VanillaBP 2 snapshot asked applications to compose it, and that is the only way
+ * such a model comes about. And where the cluster refuses a deployment over a parse error,
+ * the answer quotes the frame this adapter wrote. So the message says what the quote
+ * includes.
  * <p>
  * The cluster is an address nothing listens on. Everything asserted here is read from the
  * model and from what the boot wrote.

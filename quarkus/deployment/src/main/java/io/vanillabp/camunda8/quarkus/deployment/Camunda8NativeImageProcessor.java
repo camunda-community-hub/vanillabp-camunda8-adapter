@@ -19,32 +19,32 @@ import io.quarkus.deployment.builditem.nativeimage.RuntimeInitializedPackageBuil
 import io.quarkus.deployment.builditem.nativeimage.ServiceProviderBuildItem;
 
 /**
- * What the Camunda 8 adapter needs in a native image, registered here so that no
+ * What the Camunda 8 adapter needs in a native image. It is registered here, so no
  * application has to find it out from a stack trace.
  * <p>
- * Everything below sits on the DEPLOYMENT path, which every application runs at every
- * boot: the adapter reads each BPMN file through the Camunda model API, modifies it,
- * serializes it back and sends it to the cluster, and it builds the Camunda client while
- * doing so. On the JVM all of that finds what it needs by itself - a resource bundle, a
- * schema, an implementation named in a service file - because a class is loaded when it
- * is first used. A native image carries only what somebody named while it was built, so
- * an unnamed one of them ends the boot at the first workflow module.
+ * Everything below is on the DEPLOYMENT path, and every application runs that path at
+ * every boot. The adapter reads each BPMN file through the Camunda model API, changes it,
+ * writes it back to XML and sends it to the cluster. On the way it builds the Camunda
+ * client. On the JVM all of that finds what it needs by itself: a resource bundle, a
+ * schema, an implementation named in a service file. This works because a class is loaded
+ * when it is first used. A native image only holds what somebody named while it was built.
+ * So each of these things which nobody names ends the boot at the first workflow module.
  * <p>
- * These build items are read by the native build alone; a JVM-mode build ignores them.
- * They are held by {@code quarkus/native-image-tests}, which builds an image and runs
- * the binary - the two failures below were both invisible to a build.
+ * Only the native build reads these build items. A build in JVM mode ignores them.
+ * {@code quarkus/native-image-tests} holds them: it builds an image and runs the binary.
+ * A build alone did not show either of the two failures below.
  */
 class Camunda8NativeImageProcessor {
 
   /**
-   * Message bundles of the JDK's XML parser, which the Camunda model API validates the
-   * BPMN against. The parser reads them whenever it has something to SAY, and the first
-   * thing it wanted to say was the schema location, so the very first BPMN file failed
-   * with a {@code MissingResourceException} instead of being parsed.
+   * Message bundles of the JDK's XML parser. The Camunda model API uses this parser to
+   * validate the BPMN. The parser reads the bundles whenever it has something to SAY. The
+   * first thing it wanted to say was the schema location. So the very first BPMN file
+   * failed with a {@code MissingResourceException} and was not parsed.
    * <p>
-   * All five are named rather than only the schema one: what a parser says on its error
-   * paths is reached by a broken BPMN, which is later than boot and therefore in the
-   * hands of an application rather than of this repository's tests.
+   * All five are named, not only the one for the schema. A broken BPMN reaches what the
+   * parser says on its error paths. That happens after the boot, so it is in the hands of
+   * an application and not of this repository's tests.
    */
   private static final List<String> XML_PARSER_MESSAGES = List
       .of(
@@ -55,9 +55,9 @@ class Camunda8NativeImageProcessor {
           "com.sun.org.apache.xerces.internal.impl.msg.DOMMessages");
 
   /**
-   * The BPMN schema and everything it imports, resources of the Camunda model API's own
-   * jar. A resource of a dependency is not in a native image unless it is named, and
-   * without them the parser fails with {@code schema_reference.4} on
+   * The BPMN schema and everything it imports. They are resources in the jar of the
+   * Camunda model API. A resource of a dependency is only in a native image if it is
+   * named. Without them the parser fails with {@code schema_reference.4} on
    * <code>BPMN20.xsd</code>.
    */
   private static final List<String> BPMN_SCHEMA = List
@@ -65,11 +65,11 @@ class Camunda8NativeImageProcessor {
 
   /**
    * The gRPC extension points the Camunda client reaches through the
-   * {@link ServiceLoader}. A native image has no service loader unless the
-   * providers are registered, and the client builds a gRPC channel while it is built -
-   * unconditionally, also for an application which configured
-   * <code>rest-address</code> only, see {@code Camunda8ClientFactory} and
-   * {@code CamundaClientImpl#buildChannel}. Without them the boot ends with
+   * {@link ServiceLoader}. In a native image the service loader finds nothing unless the
+   * providers are registered. The client always builds a gRPC channel while it is built,
+   * also for an application which only configured <code>rest-address</code>. See
+   * {@code Camunda8ClientFactory} and {@code CamundaClientImpl#buildChannel}. Without the
+   * providers the boot ends with
    * <code>Could not find a NameResolverProvider for &lt;the default gRPC
    * address&gt;</code>.
    */
@@ -82,20 +82,20 @@ class Camunda8NativeImageProcessor {
   /**
    * Classes of the gRPC stack which must not be initialized while the image is built.
    * <p>
-   * Netty's buffer allocators are initialized at run time (Quarkus' Netty extension says
-   * so), and gRPC holds one in a static field of a holder class. A class initialized at
-   * build time whose fields point at objects of a run-time-initialized type is what
-   * GraalVM refuses: <code>An object of type
+   * Netty's buffer allocators are initialized at run time, because Quarkus' Netty extension
+   * says so. gRPC holds one in a static field of a holder class. GraalVM refuses a class
+   * which is initialized at build time and whose fields point at objects of a type
+   * initialized at run time: <code>An object of type
    * 'io.netty.buffer.PooledByteBufAllocator' was found in the image heap</code>. So
-   * everything on the way to those allocators is initialized at run time as well - the
-   * two holders, the class holding them, and the channel builder which would pull it in.
-   * The last three names are the same treatment for the protobuf runtime and gRPC's
-   * retry machinery, which the client reaches through the channel.
+   * everything on the way to those allocators is initialized at run time as well: the two
+   * holders, the class which holds them, and the channel builder which would pull it in.
+   * The last three names get the same treatment. They are the protobuf runtime and gRPC's
+   * retry code, which the client reaches through the channel.
    * <p>
-   * The same list, minus what only a gRPC SERVER needs, is what Quarkus' own gRPC
-   * extension registers. Depending on that extension instead would drag Vert.x and its
-   * gRPC client and server into every application which uses this adapter, for four
-   * lines of registration.
+   * Quarkus' own gRPC extension registers the same list, plus what only a gRPC SERVER
+   * needs. If this adapter depended on that extension instead, it would pull Vert.x and
+   * its gRPC client and server into every application which uses this adapter. That is too
+   * much for four lines of registration.
    */
   private static final List<String> GRPC_INITIALIZED_AT_RUN_TIME = List
       .of(
@@ -108,38 +108,37 @@ class Camunda8NativeImageProcessor {
           "com.google.protobuf.UnsafeUtil");
 
   /**
-   * The implementation of the Camunda client, none of which may be initialized while the
+   * The implementation of the Camunda client. None of it may be initialized while the
    * image is built.
    * <p>
-   * A job worker backs off with a {@link Random}, and the worker, its builder
-   * and the backoff itself each keep a default of the next one in a static field. A random
-   * seeded while the image is built carries the same seed into every process started from
-   * that image, so GraalVM refuses it: <code>Detected an instance of
-   * Random/SplittableRandom class in the image heap</code>. The image builder initializes
-   * a class at build time wherever its simulation finds that safe, and it found one after
-   * the other safe - the backoff, its builder, the worker, the client builder holding a
-   * default exception handler - so this names the package instead of collecting the
-   * classes one failed build at a time. Nothing of a client's implementation belongs in an
-   * image heap anyway: it is what talks to a cluster the image knows nothing about yet.
+   * A job worker backs off with a {@link Random}. The worker, its builder and the backoff
+   * itself each keep a default of the next one in a static field. A random seeded while
+   * the image is built carries the same seed into every process started from that image.
+   * So GraalVM refuses it: <code>Detected an instance of Random/SplittableRandom class in
+   * the image heap</code>. The image builder initializes a class at build time wherever
+   * its simulation finds that safe. It found one class after the other safe: the backoff,
+   * its builder, the worker, the client builder with its default exception handler. So
+   * this names the whole package, instead of collecting the classes one failed build at a
+   * time. Nothing of a client's implementation belongs in an image heap anyway. It talks
+   * to a cluster the image knows nothing about yet.
    */
   private static final String CAMUNDA_CLIENT_IMPLEMENTATION = "io.camunda.client.impl";
 
   /**
-   * The package holding the request and response types of the cluster's REST API. Jackson
-   * builds them by reflection, and a native image reflects over nothing it was not told
-   * about, so the first answer of the cluster - a tenant lookup during the deployment -
-   * ended the boot with <code>Cannot construct instance of
+   * The package with the request and response types of the cluster's REST API. Jackson
+   * builds them by reflection. A native image only allows reflection on what it was told
+   * about. So the first answer of the cluster, a tenant lookup during the deployment, ended
+   * the boot with <code>Cannot construct instance of
    * io.camunda.client.protocol.rest.ProblemDetail ... this appears to be a native
-   * image</code>. Every type of the package is registered rather than the handful the
-   * deployment happens to read: which of them an operation needs is the client's business,
-   * and the next release moves that line.
+   * image</code>. Every type of the package is registered, not only the few the deployment
+   * happens to read. Which of them an operation needs is up to the client, and the next
+   * release changes that.
    */
   private static final String REST_PROTOCOL_PACKAGE = "io.camunda.client.protocol.rest";
 
   /**
-   * The artifact the two names above live in. Its classes are only visible to a build step
-   * once they are in the Jandex index, which is what {@link IndexDependencyBuildItem} asks
-   * for.
+   * The artifact which holds the two names above. A build step only sees its classes once
+   * they are in the Jandex index. {@link IndexDependencyBuildItem} asks for that.
    */
   private static final String CAMUNDA_CLIENT_GROUP_ID = "io.camunda";
 
@@ -164,14 +163,14 @@ class Camunda8NativeImageProcessor {
   }
 
   /**
-   * Initializes the Camunda model API's entry point while the application runs rather
-   * than while its image is built.
+   * Initializes the entry point of the Camunda model API while the application runs, not
+   * while its image is built.
    * <p>
-   * Quarkus initializes classes at build time by default, and this one builds its parser
-   * in a static initializer, holding on to the URL the schema was found under. At build
-   * time that URL points into the builder container
-   * (<code>jar:file:/project/lib/...</code>), which nothing can read afterwards - so
-   * registering the schema as a resource is necessary but not sufficient.
+   * Quarkus initializes classes at build time by default. This class builds its parser in
+   * a static initializer and keeps the URL where it found the schema. At build time that
+   * URL points into the builder container (<code>jar:file:/project/lib/...</code>), and
+   * nothing can read it afterwards. So registering the schema as a resource is needed, but
+   * it is not enough.
    *
    * @return The run-time initialization of the model API's entry point
    */
@@ -184,9 +183,9 @@ class Camunda8NativeImageProcessor {
 
   /**
    * Registers the gRPC providers the Camunda client looks up through the service loader.
-   * Taken from the classpath rather than written down class by class: which
-   * implementation serves a gRPC extension point is the business of the gRPC release the
-   * client brings, and a name held here would be a second place to maintain.
+   * They are taken from the classpath, not written down class by class. Which
+   * implementation serves a gRPC extension point is up to the gRPC release the client
+   * brings. A name written down here would be a second place to maintain.
    *
    * @param services Producer of the service-provider registrations
    */
@@ -200,7 +199,7 @@ class Camunda8NativeImageProcessor {
   }
 
   /**
-   * Indexes the Camunda client, so that the step below can ask for the types of its REST
+   * Indexes the Camunda client, so the step below can ask for the types of its REST
    * protocol.
    *
    * @return The index request for the Camunda client

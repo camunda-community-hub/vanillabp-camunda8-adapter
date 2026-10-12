@@ -5,41 +5,42 @@ import io.vanillabp.camunda8.Camunda8ReleaseLine;
 /**
  * Says at startup what protobuf would otherwise say at the worst possible moment.
  * <p>
- * The Camunda client ships generated protocol code, and protobuf refuses a runtime older
- * than the code was generated from. The refusal comes out of a static initializer, as an
- * <code>ExceptionInInitializerError</code>, on the first command which touches the protocol
- * and in whatever part of the application happened to send it. Nothing in that error says
- * what to do about it.
+ * The Camunda client ships generated protocol code. Protobuf refuses a runtime which is
+ * older than the version the code was generated from. The refusal comes out of a static
+ * initializer, as an <code>ExceptionInInitializerError</code>. It comes on the first
+ * command which touches the protocol, in whatever part of the application happened to
+ * send it. Nothing in that error says what to do about it.
  * <p>
- * An application decides this number, not the adapter. The platform BOM an application
- * imports manages <code>protobuf-java</code>, and an imported BOM beats every version a
- * dependency brings, so the pin in this repository's parent POM covers our own build and
- * reaches nobody else. Measured in September 2026: on the 8.10 line both platforms hand an
- * application a runtime OLDER than the client's gencode, on the two older lines a newer one,
- * which protobuf allows. The README's section "Release lines" carries the table.
+ * The application decides this version, not the adapter. The platform BOM an application
+ * imports manages <code>protobuf-java</code>. An imported BOM beats every version which a
+ * dependency brings. So the pin in this repository's parent POM covers our own build and
+ * reaches nobody else. Measured in September 2026: on the 8.10 line, both platforms hand
+ * an application a runtime OLDER than the client's gencode. On the two older lines they
+ * hand it a newer one, which protobuf allows. The section "Release lines" of the README
+ * has the table.
  * <p>
- * So the adapter asks the question itself, at startup, where a message can name the fix: it
- * loads one generated class and reads what protobuf says about it. That costs a class load
- * the client does a moment later anyway.
+ * So the adapter asks the question itself, at startup, where a message can name the fix.
+ * It loads one generated class and reads what protobuf says about it. That costs a class
+ * load which the client does a moment later anyway.
  * <p>
- * The question is asked ONCE per JVM and the answer is remembered, because a second attempt
- * to load a class whose initializer failed is answered with a bare
- * <code>NoClassDefFoundError</code> in which protobuf no longer appears.
+ * The question is asked ONCE per JVM, and the answer is remembered. A second attempt to
+ * load a class whose initializer failed only gets a bare <code>NoClassDefFoundError</code>,
+ * in which protobuf no longer appears.
  */
 public final class Camunda8ProtobufRuntime {
 
   /**
-   * The generated protocol code of the Camunda client, which is where protobuf compares its
-   * runtime against the version the code was generated from. It travels with the client, in
-   * the artifact <code>io.camunda:zeebe-gateway-protocol-impl</code>.
+   * The generated protocol code of the Camunda client. This is where protobuf compares its
+   * runtime with the version the code was generated from. It comes with the client, in the
+   * artifact <code>io.camunda:zeebe-gateway-protocol-impl</code>.
    */
   private static final String GENERATED_PROTOCOL = "io.camunda.zeebe.gateway.protocol.GatewayOuterClass";
 
   /**
-   * Protobuf is recognised by the package of what it throws rather than by its type,
-   * because naming the type here would mean declaring <code>protobuf-java</code> as a
-   * dependency of this module. That dependency would then stand in the published POM with
-   * our own pinned version and push it onto every application, which is the one thing
+   * Protobuf is recognised by the package of what it throws, not by its type. Naming the
+   * type here would mean declaring <code>protobuf-java</code> as a dependency of this
+   * module. That dependency would then stand in the published POM with our own pinned
+   * version, and push it onto every application. That is the one thing which
    * decision 39 in the repository's DECISIONS.md rules out.
    */
   private static final String PROTOBUF = "com.google.protobuf.";
@@ -73,10 +74,10 @@ public final class Camunda8ProtobufRuntime {
    * application can act on.
    *
    * @param loadTheGeneratedProtocol Loads the class whose initializer asks protobuf
-   * @return The message, or {@code null} where protobuf did not refuse anything. Whatever
-   *         else goes wrong while loading is no answer about the protobuf runtime, a client
-   *         without generated protocol code above all, and it must never keep an application
-   *         from booting.
+   * @return The message, or {@code null} where protobuf did not refuse anything. Anything
+   *         else which goes wrong while loading says nothing about the protobuf runtime. A
+   *         client without generated protocol code is the main example. It must never keep
+   *         an application from booting.
    */
   static String whatProtobufSaysAbout(
       final Runnable loadTheGeneratedProtocol) {
@@ -143,8 +144,9 @@ public final class Camunda8ProtobufRuntime {
   }
 
   /**
-   * The protobuf runtime this application really runs, read by reflection because naming
-   * the class would declare the dependency, or <code>unknown</code> where it cannot be read.
+   * The protobuf runtime this application really runs, or <code>unknown</code> where it
+   * cannot be read. It is read by reflection, because naming the class would declare the
+   * dependency.
    */
   private static String versionOnTheClasspath() {
 

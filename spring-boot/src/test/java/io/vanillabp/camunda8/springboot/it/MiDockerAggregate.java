@@ -10,9 +10,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * JPA workflow aggregate of the multi-instance integration test. The
- * iterations run one after another, so appending to one column is safe here - a
- * parallel multi-instance would need a row per iteration.
+ * JPA workflow aggregate of the multi-instance integration test. The iterations run one
+ * after another, so appending to one column is safe here. A parallel multi-instance would
+ * need a row per iteration.
  */
 @Entity
 @Table(name = "C8_MI_AGGREGATE")

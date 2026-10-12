@@ -22,10 +22,10 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * The retry loop itself: what makes it try again, what makes it stop and what the
- * waits between two attempts look like. The loop is a pure function of the failure, the
- * attempt count and the clock, so its boundaries belong here rather than into a test
- * against a cluster - real backpressure is not something a test can ask a broker for.
+ * The retry loop itself: what makes it try again, what makes it stop and what the waits
+ * between two attempts look like. The loop is a pure function of the failure, the attempt
+ * count and the clock. So its limits are tested here, not against a cluster. A test cannot
+ * ask a broker for real backpressure.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8CommandRetryTest {
@@ -130,11 +130,11 @@ public class Camunda8CommandRetryTest {
   @DisplayName("A timeout leaves a job's lock long enough for a second attempt")
   public void aTimeoutLeavesEnoughLockForASecondAttempt() {
 
-    // The arithmetic behind the previous test, with the values an installation which
-    // configures neither of them runs on: the lock of a delivered job lasts job-timeout,
-    // and a command which ran out of time consumed request-timeout of it before it
-    // failed. What is left has to outlast the first backoff, or the retry would be
-    // formally responsible for timeouts and practically never run.
+    // The arithmetic behind the previous test, with the defaults of an installation which
+    // configures neither value. The lock of a delivered job lasts job-timeout. A command
+    // which ran out of time used up request-timeout of it before it failed. What is left
+    // has to outlast the first backoff. Otherwise the retry would cover timeouts on paper
+    // and never run in practice.
     final var lockLeftAfterATimeout = Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT
         .minus(Camunda8AdapterConfiguration.DEFAULT_REQUEST_TIMEOUT);
     assertTrue(
@@ -151,7 +151,7 @@ public class Camunda8CommandRetryTest {
     assertEquals(2, attempts.get(), "so the retry really does run");
 
     // and the other way round: a lock shorter than one request cannot carry a second
-    // attempt, which is what the retry says instead of pretending otherwise
+    // attempt. The retry says so instead of pretending otherwise
     final var tooShort = new AtomicInteger();
     assertThrows(
         RuntimeException.class,
@@ -204,9 +204,9 @@ public class Camunda8CommandRetryTest {
 
     final var attempts = new AtomicInteger();
 
-    // the lock of this run expired while its work was running, the cluster handed the job
-    // out again and that run answered first. There is nothing to repeat, and failing the
-    // job would take it away from whoever holds it now - so the command is dropped
+    // the lock of this run expired while its work was running. The cluster handed the job
+    // out again, and that run answered first. There is nothing to repeat. Failing the job
+    // would take it away from whoever holds it now. So the command is dropped
     send(lockOf(Duration.ofMinutes(1)), false, () -> {
       attempts.incrementAndGet();
       throw problem(409);
@@ -248,7 +248,7 @@ public class Camunda8CommandRetryTest {
     final var attempts = new AtomicInteger();
 
     // 60 ms of lock left: the first backoff of 50 ms still fits, the second one of 80 ms
-    // does not - so the loop stops after two attempts rather than after five
+    // does not. So the loop stops after two attempts instead of five
     assertThrows(
         ProblemException.class,
         () -> send(lockOf(Duration.ofMillis(60)), false, () -> {
@@ -306,13 +306,13 @@ public class Camunda8CommandRetryTest {
     assertEquals(80, Camunda8CommandRetry.backoffMillis(2));
     assertEquals(128, Camunda8CommandRetry.backoffMillis(3));
     assertEquals(205, Camunda8CommandRetry.backoffMillis(4));
-    // the last wait of the last allowed retry - well below the client's 5s ceiling, which
-    // is deliberate: a handler waiting occupies an execution slot
+    // the last wait of the last allowed retry. It is well below the client's ceiling of
+    // 5s, on purpose: a handler which waits occupies an execution slot
     assertEquals(328, Camunda8CommandRetry.backoffMillis(Camunda8CommandRetry.MAX_ATTEMPTS));
     assertTrue(
         Camunda8CommandRetry
             .backoffMillis(Camunda8CommandRetry.MAX_ATTEMPTS) < Camunda8CommandRetry.MAX_BACKOFF_MILLIS);
-    // and a very late attempt would be capped rather than growing forever
+    // and a very late attempt would be capped instead of growing forever
     assertEquals(Camunda8CommandRetry.MAX_BACKOFF_MILLIS, Camunda8CommandRetry.backoffMillis(20));
 
   }

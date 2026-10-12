@@ -30,23 +30,23 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What an application learns when it opens more workers than its Camunda client has HTTP
  * connections, and which workers are in that number.
  * <p>
- * The numbers this is built around were measured on 2026-09-26 and are written down in
- * {@code Camunda8WorkerConnections}: 115 workers against the client's 100 connections took
- * 10412 ms where 92 workers against the same 100 took 184 ms. So 115 and 92 are the two
- * numbers below, and the second one is the counter-check which has to stay quiet.
+ * The numbers this is built around were measured on 2026-09-26. They are written down in
+ * {@code Camunda8WorkerConnections}. 115 workers against the client's 100 connections
+ * took 10412 ms, and 92 workers against the same 100 took 184 ms. So 115 and 92 are the two
+ * numbers below. The second one is the counter-check which has to stay quiet.
  * <p>
- * The same pool decides how long the shutdown of those workers takes, and that is the second
- * half of this class. 115 workers on a pool of 100 are two rounds of it, a round costs a
- * request timeout, and the grace this adapter defaults to carries one round and two seconds.
- * So the application which the first half warns about is the same one whose restart ends in
- * the middle of its drain, which is what happened on 2026-09-27.
+ * The same pool decides how long the shutdown of those workers takes. That is the second
+ * half of this class. 115 workers on a pool of 100 are two rounds of it. A round costs a
+ * request timeout, and the default grace of this adapter carries one round and two seconds.
+ * So the application the first half warns about is the same one whose restart ends in the
+ * middle of its drain. That is what happened on 2026-09-27.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8WorkerConnectionsTest {
 
   /**
-   * How many connections the Camunda client keeps unless the application says otherwise,
-   * the same number in the 8.8, 8.9 and 8.10 clients.
+   * How many connections the Camunda client keeps unless the application says otherwise. The
+   * number is the same in the 8.8, 8.9 and 8.10 clients.
    */
   private static final int THE_CLIENTS_OWN_POOL = 100;
 
@@ -57,8 +57,8 @@ public class Camunda8WorkerConnectionsTest {
   private static final int FEWER_WORKERS_THAN_THE_POOL = 92;
 
   /**
-   * A startup report which keeps what it was told, which is what a test reads instead of
-   * the block the platform renders out of it.
+   * A startup report which keeps what it was told. A test reads it instead of the block the
+   * platform renders out of it.
    */
   private static final class WhatWasReported implements StartupReport {
 
@@ -113,9 +113,9 @@ public class Camunda8WorkerConnectionsTest {
   }
 
   /**
-   * The factory of the adapter id under test, which is where the workers open on its
-   * client are counted. Built with an address nothing listens on: the client is built,
-   * which is all a worker count needs, and no test here sends a command.
+   * The factory of the adapter id under test. The workers open on its client are counted
+   * there. It is built with an address nothing listens on. The client is built, and a worker
+   * count needs no more. No test here sends a command.
    */
   private Camunda8ClientFactory clientFactory() {
 
@@ -147,8 +147,8 @@ public class Camunda8WorkerConnectionsTest {
   }
 
   /**
-   * A worker builder which opens the given worker, which is what a test opens instead of
-   * subscribing to a cluster.
+   * A worker builder which opens the given worker. A test opens it instead of subscribing to
+   * a cluster.
    */
   private JobWorkerBuilderStep1.JobWorkerBuilderStep3 builderOpening(
       final JobWorker worker) {
@@ -178,8 +178,8 @@ public class Camunda8WorkerConnectionsTest {
 
   /**
    * The configuration of a built client, as the CLIENT resolved it: a pool of the given
-   * size, a ten second request timeout and the REST transport the adapter's workers
-   * activate over.
+   * size, a request timeout of ten seconds and the REST transport over which the workers of
+   * the adapter activate.
    */
   private CamundaClientConfiguration clientWithAPoolOf(
       final int maxHttpConnections) {
@@ -201,8 +201,8 @@ public class Camunda8WorkerConnectionsTest {
   }
 
   /**
-   * The findings which are about the connection pool a running application shares, which is
-   * the first of the two sentences this check can produce.
+   * The findings about the connection pool a running application shares. That is the first
+   * of the two sentences this check can produce.
    */
   private static List<String> aboutThePool(
       final WhatWasReported reported) {
@@ -216,7 +216,7 @@ public class Camunda8WorkerConnectionsTest {
   }
 
   /**
-   * The findings which are about the shutdown of those workers, which is the second one.
+   * The findings about the shutdown of those workers. That is the second sentence.
    */
   private static List<String> aboutTheShutdown(
       final WhatWasReported reported) {
@@ -408,8 +408,8 @@ public class Camunda8WorkerConnectionsTest {
     final var reported = new WhatWasReported();
     service.setStartupReport(reported);
 
-    // three rounds of the pool, so the drain needs 32 seconds and no grace under the 30 both
-    // Spring Boot and Kubernetes grant a shutdown can carry it
+    // three rounds of the pool, so the drain needs 32 seconds. No grace under the 30
+    // seconds which Spring Boot and Kubernetes grant a shutdown can carry it
     service
         .holdTheWorkersAgainstTheConnectionPool(250, clientWithAPoolOf(THE_CLIENTS_OWN_POOL));
 
@@ -474,8 +474,8 @@ public class Camunda8WorkerConnectionsTest {
     final var clientFactory = clientFactory();
 
     // the workers of one workflow module, the workers of a second one and the worker an
-    // extension opened: they reach the count on the same path, because the count happens
-    // where a worker is OPENED and not where it was ordered
+    // extension opened. They reach the count on the same path, because the count happens
+    // where a worker is OPENED, not where it was ordered
     final var firstModule = openWorkers(clientFactory, 60);
     final var secondModule = openWorkers(clientFactory, 59);
     final var anExtensions = openWorkers(clientFactory, 1);
@@ -499,8 +499,8 @@ public class Camunda8WorkerConnectionsTest {
     final var reported = new WhatWasReported();
     service.setStartupReport(reported);
 
-    // the adapter's own workers, one below the pool of the client it built: the start of
-    // the workflow modules said nothing, because nothing was wrong yet
+    // the adapter's own workers, one below the pool of the client it built. The start
+    // of the workflow modules said nothing, because nothing was wrong yet
     openWorkers(clientFactory, THE_CLIENTS_OWN_POOL - 1);
     assertTrue(reported.findings.isEmpty(), "99 workers fit into the 100 connections the client keeps: "
         + reported.findings);

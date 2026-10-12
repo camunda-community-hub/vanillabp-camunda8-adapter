@@ -39,21 +39,21 @@ import io.vanillabp.integration.spi.PhaseTwoCall;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * Where a changed workflow aggregate is written when the task it belongs to runs inside a
- * scope with MORE sibling element instances than one page holds - the iterations of a
+ * Where a changed workflow aggregate is written when its task runs inside a scope with MORE
+ * sibling element instances than one page holds. For example the iterations of a
  * multi-instance subprocess over a long list.
  * <p>
- * Camunda 8 reports the children of a scope and never the parent of one, so the scope a
- * task runs in is found by walking down from the process instance. A search answering one
- * page let that walk see the first 100 iterations only: the task of the 101st was a task
- * below no scope at all, the adapter reported the scope as unknown, and the aggregate was
+ * Camunda 8 reports the children of a scope and never the parent of one. So the scope a task
+ * runs in is found by walking down from the process instance. A search which answered one
+ * page let that walk see only the first 100 iterations. The task of the 101st was a task
+ * below no scope at all. The adapter reported the scope as unknown, and the aggregate was
  * not written anywhere. The warning it logged blamed the exporter for being late, which is
  * the one thing it was not.
  * <p>
- * The cluster is played by the searches, one page of children per call. Which page was
- * asked for is not read off the call, because the type the client passes the page lambda
- * differs between the release lines this adapter is built from - what is measured is the
- * element instance the values were written to.
+ * The searches play the cluster, one page of children per call. The test does not read off
+ * the call which page was asked for. The type the client passes to the page lambda differs
+ * between the release lines this adapter is built from. So the test measures the element
+ * instance the values were written to.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8ScopeBeyondOnePageTest {

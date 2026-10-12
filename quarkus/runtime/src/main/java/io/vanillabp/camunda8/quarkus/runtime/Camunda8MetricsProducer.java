@@ -9,11 +9,11 @@ import jakarta.inject.Singleton;
  * Publishes what this adapter measures on top of the core's meters: the client's own
  * job counters per worker and the execution slots of every adapter instance. Quarkus
  * applies every {@code MeterBinder} bean to its registry, so producing the binder is
- * all it takes.
+ * enough.
  * <p>
  * This class is registered as a bean ONLY if the application uses the Micrometer
- * extension (see {@code Camunda8IntegrationProcessor}) - it references Micrometer types
- * and must not be loaded otherwise.
+ * extension (see {@code Camunda8IntegrationProcessor}). It refers to Micrometer types, so
+ * it must not be loaded without it.
  */
 @ApplicationScoped
 public class Camunda8MetricsProducer {

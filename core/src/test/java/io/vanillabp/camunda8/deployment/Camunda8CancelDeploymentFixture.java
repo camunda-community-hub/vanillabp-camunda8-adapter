@@ -25,9 +25,9 @@ import io.vanillabp.integration.adapter.spi.workflowend.WorkflowEndedInvoker;
  * One BPMN file through the deployment pipeline, for the per-line tests which ask what the
  * process element of the deployed model carries afterwards.
  * <p>
- * Shared by the three per-line tests so that they differ in their assertions and in nothing
- * else. A model which differed per line would make them incomparable, which is the one thing
- * a per-line trio has to avoid.
+ * The three per-line tests share it, so that they differ in their assertions and in nothing
+ * else. A model which differed per line would make them impossible to compare. That is the
+ * one thing a per-line trio has to avoid.
  */
 public final class Camunda8CancelDeploymentFixture {
 

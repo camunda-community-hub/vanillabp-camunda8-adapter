@@ -19,33 +19,33 @@ import lombok.extern.slf4j.Slf4j;
  * Looks at the execution slots of one adapter id and says when they are all held by
  * handlers which are not coming back.
  * <p>
- * <b>What it watches for.</b> A handler is application code and may block for as long as it
- * likes. It holds its execution slot while it does, so a handler which never returns costs
- * one slot forever. Lose every slot and no worker of this adapter id asks the cluster for
- * work any more, because a worker only asks while a slot is free. The application is then
- * quiet, the health check is green, and nothing in the log says why. This watch is what
- * says it.
+ * <b>What it watches for.</b> A handler is application code, and it may block for as long
+ * as it likes. It holds its execution slot while it does. So a handler which never returns
+ * costs one slot forever. If every slot is lost, no worker of this adapter id asks the
+ * cluster for work any more, because a worker only asks while a slot is free. Then the
+ * application is quiet, the health check is green, and nothing in the log says why. This
+ * watch says it.
  * <p>
  * <b>The Camunda client cannot help here.</b> The client restarts the polling of a worker
- * on the thread which just finished a job, so a thread which never finishes never restarts
+ * on the thread which just finished a job. So a thread which never finishes never restarts
  * anything. Camunda's advice for that is to raise the number of job worker execution
- * threads, and it does not reach this adapter: the adapter hands the client an executor of
- * its own, so the client builds no pool of its own. The knob here is
- * <code>worker-threads</code>, and raising it only means it takes that many stuck handlers
+ * threads. That advice does not reach this adapter. The adapter hands the client an
+ * executor of its own, so the client builds no pool of its own. The setting here is
+ * <code>worker-threads</code>. Raising it only means that it takes that many stuck handlers
  * instead of one.
  * <p>
- * <b>When a handler counts as overdue.</b> Not after some invented duration, but after the
+ * <b>When a handler counts as overdue.</b> Not after some made-up duration, but after the
  * job timeout of its own task. A handler which ran longer than that has lost the lock of
- * the job it is working on, the cluster has handed the job out again, and whatever the
- * handler still does is a second run of work somebody else is already doing. The job
- * timeout is resolved per task over the four configuration levels, so a task which is
- * allowed to run long is measured against its own value.
+ * the job it works on. The cluster has handed the job out again. Whatever the handler
+ * still does is a second run of work which somebody else is already doing. The job timeout
+ * is resolved per task over the four configuration levels. So a task which may run long is
+ * measured against its own value.
  * <p>
  * <b>What raises the alarm.</b> One slot held for a long time is an application doing
  * slow work. Every slot held while the oldest of them is overdue is an adapter which has
- * stopped asking for work. Only the second one is reported, once when it starts and once
- * when it ends, so a log is not filled while the state lasts. The two gauges are what an
- * operator alerts on, and they are readable at every moment.
+ * stopped asking for work. Only the second case is reported, once when it starts and once
+ * when it ends. So the log does not fill up while the state lasts. An operator sets alerts
+ * on the two gauges, and they can be read at every moment.
  * <p>
  * Why a hung slot is watched and reported instead of being ended by the adapter is
  * decision 46 in the repository's DECISIONS.md.
@@ -54,16 +54,16 @@ import lombok.extern.slf4j.Slf4j;
 public class Camunda8SlotWatch implements AutoCloseable {
 
   /**
-   * How often the slots are looked at. The alarm is about an application which has been
-   * quiet for at least a job timeout, so seeing it a few seconds later costs nothing, and
-   * a check of a handful of map entries every ten seconds costs nothing either.
+   * How often the slots are checked. The alarm is about an application which has been quiet
+   * for at least a job timeout. So seeing it a few seconds later costs nothing. And a check
+   * of a handful of map entries every ten seconds costs nothing either.
    */
   static final Duration LOOK_AT_THE_SLOTS_EVERY = Duration.ofSeconds(10);
 
   /**
-   * How many stack frames of an overdue handler are reported. The top frames say where
-   * the handler is waiting, which is the question being asked; the bottom frames are the
-   * client and the executor and are the same every time.
+   * How many stack frames of an overdue handler are reported. The top frames say where the
+   * handler is waiting, and that is the question. The bottom frames are the client and the
+   * executor, and they are the same every time.
    */
   static final int STACK_FRAMES_REPORTED = 20;
 
@@ -82,8 +82,8 @@ public class Camunda8SlotWatch implements AutoCloseable {
   private ScheduledExecutorService watching;
 
   /**
-   * Since when every slot has been held by overdue handlers, or <code>null</code> while
-   * that is not the case. It is the flag and the age of the alarm in one.
+   * Since when overdue handlers have held every slot, or <code>null</code> while that is not
+   * the case. It is the flag and the age of the alarm in one.
    */
   private volatile Instant standstillSince;
 
@@ -115,9 +115,8 @@ public class Camunda8SlotWatch implements AutoCloseable {
   }
 
   /**
-   * Starts looking, on a daemon thread of its own. A thread of its own rather than one of
-   * the executor's, because this watch has to answer while every thread the adapter runs
-   * handlers on is blocked.
+   * Starts watching, on a daemon thread of its own. It does not use a thread of the
+   * executor. This watch has to answer while every thread which runs handlers is blocked.
    */
   public synchronized void start() {
 
@@ -205,8 +204,8 @@ public class Camunda8SlotWatch implements AutoCloseable {
   }
 
   /**
-   * One look at the slots: raises the alarm when every one of them is held and the oldest
-   * holder is overdue, and takes it back when that ends.
+   * One look at the slots. It raises the alarm when every slot is held and the oldest
+   * holder is overdue. It takes the alarm back when that ends.
    */
   void lookAtTheSlots() {
 
@@ -311,7 +310,7 @@ public class Camunda8SlotWatch implements AutoCloseable {
 
   /**
    * Where an overdue handler stands right now. This is the difference between knowing that
-   * something is stuck and knowing what is stuck: the top frames name the call the handler
+   * something is stuck and knowing what is stuck. The top frames name the call the handler
    * waits on.
    */
   private static String stackOf(

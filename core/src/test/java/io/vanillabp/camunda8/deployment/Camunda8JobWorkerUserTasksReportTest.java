@@ -40,9 +40,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * element. A process nobody claims travels to the cluster because of the file it sits in, and
  * there is nothing to ask of a model somebody else owns, so it is named and the boot goes on.
  * <p>
- * One element carries the shape and is still none of this: a user task with a
+ * One element has the shape and is still none of this: a user task with a
  * {@code zeebe:taskDefinition} of its own. A worker of the application serves it under a job
- * type the application chose, so the reader passes over it, and a test below holds that
+ * type the application chose. So the reader passes over it, and a test below holds that
  * boundary.
  * <p>
  * Two shapes reach both messages and both have to keep them apart. One carries the
@@ -129,8 +129,8 @@ public class Camunda8JobWorkerUserTasksReportTest {
   }
 
   /**
-   * A user task somebody modelled in a modeller and left as it was, which was never a
-   * VanillaBP shape.
+   * A user task somebody modelled in a modeller and left as it was. It was never a VanillaBP
+   * shape.
    */
   private static BpmnModelInstance aUserTaskCarryingNothing() {
 
@@ -174,7 +174,7 @@ public class Camunda8JobWorkerUserTasksReportTest {
 
   /**
    * A core which answers that no {@code @WorkflowService} class of the application claims the
-   * process - the answer the core gives by not knowing a workflow aggregate for it.
+   * process. The core gives that answer by not knowing a workflow aggregate for it.
    */
   private static class NoWorkflowServiceClaimsIt extends Camunda8DeploymentServiceTest.NoOpInvoker {
 

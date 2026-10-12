@@ -6,7 +6,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 
 /**
- * JPA persistence of {@link C8MessageStartAggregate} - saves within the caller's JTA
+ * JPA persistence of {@link C8MessageStartAggregate}. It saves within the caller's JTA
  * transaction, which is the transaction a task handler runs in.
  */
 @ApplicationScoped

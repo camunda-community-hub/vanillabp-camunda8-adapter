@@ -6,18 +6,18 @@ import io.camunda.client.api.command.CreateProcessInstanceCommandStep1;
  * The business id an instance carries in Operate. This is the 8.8 variant, and this line has
  * none.
  * <p>
- * Neither the client nor the cluster of this line knows the field: the word
- * <code>businessId</code> appears nowhere in the create command of this client, and the 8.8
- * cluster answers a request carrying it with <code>400</code>, "Request property [businessId]
- * cannot be parsed". So the key is accepted here and nothing is sent, and the boot says so in
- * one line - an application moves between lines with one configuration, and refusing the key
- * would break exactly that.
+ * Neither the client nor the cluster of this line knows the field. The word
+ * <code>businessId</code> appears nowhere in the create command of this client. The 8.8
+ * cluster answers a request which carries it with <code>400</code>, "Request property
+ * [businessId] cannot be parsed". So the key is accepted here, nothing is sent, and the boot
+ * says so in one line. An application moves between lines with one configuration, and
+ * refusing the key would break exactly that.
  * <p>
- * What the id is for is described on the 8.10 variant of this class.
+ * The 8.10 variant of this class describes what the id is for.
  * <p>
- * Public because the process service which starts a workflow lives in another package of this
- * module. It is not on the list of what an extension of the pipeline is told, so it stays the
- * adapter's own and may move with the next change.
+ * It is public because the process service which starts a workflow lives in another package
+ * of this module. It is not on the list of what an extension of the pipeline is told. So it
+ * stays the adapter's own, and it may move with the next change.
  */
 public final class Camunda8BusinessId {
 

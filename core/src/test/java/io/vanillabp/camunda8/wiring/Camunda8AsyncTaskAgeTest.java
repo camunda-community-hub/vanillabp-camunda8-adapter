@@ -30,16 +30,14 @@ import io.vanillabp.integration.adapter.spi.workflowtask.WorkflowTaskOutcome;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * What the job handler does with a task the core reports as
- * still open, and with one it reports as older than
- * <code>vanillabp.delivery.max-task-age</code> allows.
+ * What the job handler does with a task the core reports as still open, and with one it
+ * reports as older than <code>vanillabp.delivery.max-task-age</code> allows.
  * <ul>
- * <li>an open task has its lock renewed for the configured window - every redelivery
- * renews it again, which is what keeps the job alive without any timer of VanillaBP's
- * own;</li>
- * <li>an overdue task is renewed as well while the action is <code>report</code>: the
- * core already said so, and a cluster is not the place to decide that a task waiting for
- * a person is a defect;</li>
+ * <li>an open task has its lock renewed for the configured window. Every redelivery renews
+ * it again. That keeps the job alive without any timer of VanillaBP's own;</li>
+ * <li>an overdue task is renewed as well while the action is <code>report</code>. The core
+ * already said so, and a cluster is not the place to decide that a task which waits for a
+ * person is a defect;</li>
  * <li>with <code>incident</code> the renewal stops and the job is failed without retries
  * left, so the cluster raises an incident naming the workflow aggregate and the age.</li>
  * </ul>

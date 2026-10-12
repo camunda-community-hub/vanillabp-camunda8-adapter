@@ -25,11 +25,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * What the probe of a workflow module is told a record names, taken from the models the
  * module deployed.
  * <p>
- * The rule itself lives in {@code Camunda8OpenTaskProbe}; what is asked here is the half
- * the deployment owns, which is where a wrong answer would come from: the task definition
- * of a Camunda-managed user task is the external form reference its listener job type is
- * built from, and reading the wrong name would either refuse every record of a process or
- * none of them.
+ * The rule itself lives in {@code Camunda8OpenTaskProbe}. This test asks about the half the
+ * deployment owns, because a wrong answer would come from there. The task definition of a
+ * Camunda-managed user task is the external form reference its listener job type is built
+ * from. Reading the wrong name would refuse either every record of a process or none of
+ * them.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8OpenTaskProbeWiringTest {

@@ -26,27 +26,27 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.process.WorkflowNotFoundException;
 
 /**
- * Two <code>camunda8</code> adapter ids on ONE cluster
- * are told apart by the scope they deployed under, not by the first entry of
+ * Two <code>camunda8</code> adapter ids on ONE cluster are told apart by the scope they
+ * deployed under. They are not told apart by the first entry of
  * <code>prioritized-adapters</code>.
  * <p>
- * The scenario is the migration the adapter documents as supported. A workflow is started
- * while only <code>c8-plain</code> exists and waits for a message. The application is then
- * restarted with a second adapter id <code>c8-prefix</code> in FIRST priority, which
- * deploys the same process under a prefixed identifier onto the same cluster. Correlating
- * the message must reach the workflow of the OLD deployment.
+ * The scenario is the migration which the adapter documents as supported. A workflow is
+ * started while only <code>c8-plain</code> exists, and it waits for a message. Then the
+ * application is restarted with a second adapter id <code>c8-prefix</code> in FIRST priority.
+ * It deploys the same process under a prefixed id onto the same cluster. Correlating the
+ * message must reach the workflow of the OLD deployment.
  * <p>
- * <b>What fails without the fix.</b> Both adapters find the instance, because the search
- * behind <code>awarenessOfWorkflow</code> filtered by the aggregate-ID variable alone, and
- * the walk stops at the first <code>ACTIVE</code>. The message is then published as
- * <code>election-app__ElectionMessage</code>, which nobody subscribes to, and the cluster
- * buffers it until its time to live passes. Nothing fails, the workflow simply never
- * continues, which is why the assertion here is a task that ran.
+ * <b>What fails without the fix.</b> Both adapters find the instance. The search behind
+ * <code>awarenessOfWorkflow</code> filtered only by the aggregate-ID variable, and the walk
+ * stops at the first <code>ACTIVE</code>. The message is then published as
+ * <code>election-app__ElectionMessage</code>. Nobody subscribes to that, and the cluster
+ * buffers it until its time to live passes. Nothing fails. The workflow just never continues.
+ * That is why the assertion here is a task which ran.
  * <p>
- * The tenant is deliberately not part of this test. Two ids differing in
- * <code>use-prefix</code> versus <code>none</code> live in the default tenant and are told
- * apart by the process definition id alone, which needs no authenticated cluster; the
- * tenant is one more comparison in the same scope key and is covered by unit tests.
+ * The tenant is not part of this test, on purpose. Two ids which differ in
+ * <code>use-prefix</code> versus <code>none</code> live in the default tenant. They are told
+ * apart by the process definition id alone, which needs no authenticated cluster. The tenant
+ * is one more comparison in the same scope key, and unit tests cover it.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
@@ -54,9 +54,9 @@ import io.vanillabp.spi.process.WorkflowNotFoundException;
 public class Camunda8SharedClusterElectionIT {
 
   /**
-   * The election probes search the cluster, so this cluster brings secondary storage.
-   * A cluster which answers no search is refused while the adapter deploys, for one
-   * adapter id as well as for two, which {@code Camunda8UnsearchableClusterIT} proves.
+   * The election probes search the cluster, so this cluster brings secondary storage. The
+   * adapter refuses a cluster which answers no search while it deploys. That is true for one
+   * adapter id as well as for two. {@code Camunda8UnsearchableClusterIT} proves it.
    */
   @Container
   static final GenericContainer<?> CAMUNDA = ClusterUnderTest.cluster();
@@ -83,7 +83,7 @@ public class Camunda8SharedClusterElectionIT {
 
   /**
    * @param withPrefixAdapter Whether the second adapter id is configured, in first
-   *          priority - which is what the restart of the migration does
+   *          priority. The restart of the migration does that
    */
   private ConfigurableApplicationContext boot(
       final boolean withPrefixAdapter) {
@@ -95,8 +95,8 @@ public class Camunda8SharedClusterElectionIT {
         + restAddress());
     arguments.add("--vanillabp.adapters.c8-plain.grpc-address="
         + grpcAddress());
-    // the correlation follows the start closely, and the exporter of a cold cluster
-    // needs longer than the production default to make the workflow findable
+    // the correlation follows the start closely. The exporter of a cluster which just started
+    // needs longer than the production default before the workflow can be found
     arguments.add("--vanillabp.adapters.c8-plain.workflow-visibility-timeout=PT60S");
     if (withPrefixAdapter) {
       arguments.add("--vanillabp.adapters.c8-prefix.type=camunda8");
@@ -109,8 +109,8 @@ public class Camunda8SharedClusterElectionIT {
       arguments.add("--vanillabp.adapters.c8-prefix.workflow-visibility-timeout=PT60S");
       arguments.add(
           "--vanillabp.workflow-modules.election-app.adapters.c8-prefix.resources-location=classpath:it-election");
-      // the new deployment takes over new workflows, which is what makes the old ones
-      // the ones the election has to find
+      // the new deployment takes over new workflows. So the election has to find the old
+      // ones
       arguments.add("--vanillabp.prioritized-adapters[0]=c8-prefix");
       arguments.add("--vanillabp.prioritized-adapters[1]=c8-plain");
     }
@@ -141,7 +141,7 @@ public class Camunda8SharedClusterElectionIT {
   public void theMessageReachesTheAdapterHoldingTheWorkflow(
       final CapturedOutput output) throws Exception {
 
-    // the application as it was before the migration: one adapter, no prefixes
+    // the application as it was before the migration. One adapter, no prefixes
     ElectionWorkflowService.reset();
     application = boot(false);
     final var aggregateId = bean(TransactionTemplate.class)
@@ -149,18 +149,18 @@ public class Camunda8SharedClusterElectionIT {
             .startWorkflow()
             .getId());
     assertNotNull(aggregateId, "the workflow was started by 'c8-plain'");
-    // Camunda 8 is started after the caller's commit, so returning from startWorkflow says
-    // nothing about the cluster yet. Closing here would hand the start to the restart, where
-    // the prefixed adapter is already deployed: the instance the election has to find would
-    // then be created seconds before the message asks for it.
+    // the workflow in Camunda 8 is started after the caller's commit. So the return from
+    // startWorkflow says nothing about the cluster yet. Closing here would leave the start to
+    // the restart, where the prefixed adapter is already deployed. The instance which the
+    // election has to find would then be created seconds before the message asks for it.
     awaitInOutput(
         output,
         "Started Camunda 8 workflow 'ElectionProcess' (adapter 'c8-plain'",
         "the workflow to reach the cluster while only 'c8-plain' exists");
     application.close();
 
-    // and after it: the same cluster, a second adapter id deploying the same process
-    // under a prefixed identifier, first in the prioritized list
+    // and after the migration. The same cluster, and a second adapter id which deploys the
+    // same process under a prefixed id. It is first in the prioritized list
     application = boot(true);
     correlateUntilTheClusterKnowsTheWorkflow(aggregateId);
 
@@ -169,24 +169,24 @@ public class Camunda8SharedClusterElectionIT {
         "the message reached the workflow started before the migration - without the scope check it is "
             + "published under the prefixed name into a cluster where nobody subscribes to it");
 
-    // The latch and the line are two events and nothing orders them. The latch counts down
-    // in the job worker. The line which names the publishing adapter is written by the
-    // thread which published, after the cluster acknowledged the command, and the cluster
-    // correlates the message and creates the job in the same step which answers that
-    // command. The job can therefore be on its way to the worker while the publishing
-    // thread has not reached its log statement yet. On an idle machine the line was 23 to
-    // 43 ms ahead of the handler over four runs, and that head start was the whole of the
-    // assertion. A pause of the JVM or a busy build server eats it, and that is how this
-    // test went red once without anybody touching it: the message had reached the workflow,
-    // the line had not reached the buffer. So the test waits for the line it judges by.
-    // Delay that line on purpose and the test fails without this wait and passes with it.
+    // The latch and the line are two events, and nothing orders them. The latch counts down
+    // in the job worker. The thread which published writes the line which names the
+    // publishing adapter, after the cluster acknowledged the command. The cluster correlates
+    // the message and creates the job in the same step which answers that command. So the job
+    // can be on its way to the worker before the publishing thread reaches its log
+    // statement. On an idle machine the line came 23 to 43 ms before the handler, over four
+    // runs. The whole assertion relied on that head start. A pause of the JVM or a busy build
+    // server uses it up. That is how this test failed once without anybody touching it: the
+    // message had reached the workflow, but the line had not reached the buffer. So the test
+    // waits for the line it judges by. If you delay that line on purpose, the test fails
+    // without this wait and passes with it.
     awaitInOutput(
         output,
         "Camunda8[c8-plain]: published message",
         "the adapter holding the workflow to report that IT published the message - the one in first "
             + "priority publishing instead is what the scope check prevents");
 
-    // over the running test, because a sentence which is absent is only absent for the
+    // only the output of the running test. A sentence which is absent is only absent for the
     // test which says so
     final var logged = output.getAllOfThisTest();
     assertFalse(
@@ -198,13 +198,14 @@ public class Camunda8SharedClusterElectionIT {
 
 
   /**
-   * Correlates the message, tolerating the read model the election asks.
+   * Correlates the message, and accepts that the read model which the election asks may lag
+   * behind.
    * <p>
-   * The restart leaves no hint behind which adapter started the workflow, so the walk gets
-   * the honest "unknown" of an exporter which has not indexed the instance yet, and the core
-   * has nothing to wait for. VanillaBP documents that residual and names retrying the
-   * business operation as the answer, which is what happens here: this test asks WHICH
-   * adapter answers for the workflow, not how fast the query API catches up.
+   * After the restart there is no hint which adapter started the workflow. So the walk gets
+   * the honest "unknown" of an exporter which has not indexed the instance yet. The core has
+   * nothing to wait for. VanillaBP documents this remaining gap, and says the answer is to
+   * retry the business operation. That is what happens here. This test asks WHICH adapter
+   * answers for the workflow, not how fast the query API catches up.
    *
    * @param aggregateId The aggregate whose workflow waits for the message
    */
@@ -234,8 +235,8 @@ public class Camunda8SharedClusterElectionIT {
   }
 
   /**
-   * Waits for a line the application logs, which is the only place a test outside the
-   * application learns that its phase two ran.
+   * Waits for a line which the application logs. Only there can a test outside the application
+   * learn that its phase two ran.
    *
    * @param output What the application logged so far
    * @param line The line to wait for

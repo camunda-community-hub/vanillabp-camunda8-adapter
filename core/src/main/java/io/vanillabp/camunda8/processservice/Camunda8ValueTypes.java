@@ -8,25 +8,24 @@ import io.vanillabp.integration.adapter.spi.values.ValueDirection;
 import io.vanillabp.integration.adapter.spi.values.ValueTypeVerdict;
 
 /**
- * What Camunda 8 does with one Java type, answered for the startup check which asks
- * whether a value survives the way to the cluster and back.
+ * What Camunda 8 does with one Java type. The startup check asks it, to learn whether a
+ * value survives the way to the cluster and back.
  * <p>
  * A Camunda 8 variable is a JSON value. The broker knows a text, a boolean, a number, a
- * list and an object, and nothing else, so a Java type reaches the cluster as whichever of
- * those it was mapped to and comes back as the Java type that JSON value is read into.
+ * list and an object, and nothing else. So a Java type reaches the cluster as whichever of
+ * those it was mapped to. It comes back as the Java type which that JSON value is read into.
  * <p>
- * The costly case is the decimal. The broker holds a number and not the way it was
- * written, so <code>120.50</code> comes back as <code>120.5</code> (measured while story
- * 241 was implemented). Nothing short of a round trip through a running cluster shows
- * that, which is why a type this class cannot place is answered with "cannot say" rather
- * than with a guess: an application whose cluster is unreachable while it boots still has
- * to boot.
+ * The costly case is the decimal. The broker holds a number, not the way it was written.
+ * So <code>120.50</code> comes back as <code>120.5</code> (measured while story 241 was
+ * implemented). Only a round trip through a running cluster shows that. That is why this
+ * class answers "cannot say" for a type it cannot place, and does not guess. An application
+ * whose cluster is unreachable while it boots must still boot.
  */
 public final class Camunda8ValueTypes {
 
   /**
-   * The Java types a JSON value carries there and back: the texts, the boolean and the
-   * numbers the broker stores as numbers.
+   * The Java types which a JSON value carries there and back: the texts, the boolean, and
+   * the numbers which the broker stores as numbers.
    */
   private static final Set<Class<?>> JSON_CARRIES_IT = Set
       .of(

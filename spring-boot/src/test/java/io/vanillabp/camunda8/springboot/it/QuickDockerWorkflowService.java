@@ -9,9 +9,9 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The second workflow of the worker-threads integration test: its job is
- * served by another worker of the SAME adapter, so it may only be delayed if the
- * adapter has no free execution slot.
+ * The second workflow of the worker-threads integration test. Another worker of the SAME
+ * adapter serves its job. So it may only be delayed if the adapter has no free execution
+ * slot.
  */
 @Service
 @WorkflowService(

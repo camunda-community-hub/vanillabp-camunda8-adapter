@@ -10,74 +10,70 @@ import java.util.TreeSet;
  *
  * <p>
  * A Camunda 8 worker which names none gets the COMPLETE variable scope of the process
- * instance with every job, which Camunda describes as "tens or more variables, of
- * arbitrary size" and recommends against. VanillaBP is in a better position than a plain
- * client user: the workflow aggregate is the source of truth, so a handler is served from
- * the application's own database and the job itself has to carry only what the adapter
- * reads out of it.
+ * instance with every job. Camunda describes that as "tens or more variables, of arbitrary
+ * size" and recommends against it. VanillaBP is in a better position than a plain client
+ * user. The workflow aggregate is the source of truth. So a handler is served from the
+ * own database of the application, and the job has to carry only what the adapter reads
+ * out of it.
  * </p>
  *
  * <p>
  * That is a short and computable list, and every entry of it is here:
  * </p>
  * <ul>
- * <li>the <strong>workflow aggregate's ID</strong>, in the variable named after the
- * aggregate's ID attribute
+ * <li>the <strong>ID of the workflow aggregate</strong>, in the variable named after the
+ * ID attribute of the aggregate
  * ({@code WorkflowTaskWiring#resolveWorkflowAggregateIdName}). Every one of the four
- * worker kinds starts by reading it, and the name is a property of the BPMN process
- * rather than of the adapter, so a worker serving two processes which disagree carries
- * both names;</li>
+ * worker kinds starts by reading it. The name belongs to the BPMN process, not to the
+ * adapter. So a worker serving two processes with different names carries both
+ * names.</li>
  * <li>the <strong>multi-instance context</strong> of the element the job belongs to:
- * the index, the total and the element of every iteration enclosing it,
- * in the variables {@link Camunda8MultiInstance} injects while the model is deployed.
- * Which ones those are depends on the element, which is why this list is not a
- * constant. The one part of it which IS a constant is
- * {@link Camunda8MultiInstance#CHAIN_VARIABLE}: a caller naming the process it calls by an
- * expression writes its iteration chain there, and no deployment can say which process that
- * call reaches;</li>
+ * the index, the total and the element of every iteration enclosing it. They are in the
+ * variables which {@link Camunda8MultiInstance} injects while the model is deployed.
+ * Which ones those are depends on the element. That is why this list is not a constant.
+ * The one part of it which IS a constant is {@link Camunda8MultiInstance#CHAIN_VARIABLE}.
+ * A caller which names the process it calls by an expression writes its iteration chain
+ * there. No deployment can say which process that call reaches.</li>
  * <li>every variable a {@code @TaskParam} of the served tasks reads
- * ({@code WorkflowTaskInvoker#taskParameterNames}). Those names live on the
- * handler methods, and the core reads them off the annotations while the application
- * wires itself - so this part of the list says what the application asks for instead of
- * guessing it from the model. The core is asked with the job type AND with the element
- * id, because a method wired by {@code @WorkflowTask(id = ...)} answers to the element
- * alone. The workflow-end listener is left out of it: a
- * {@code @WorkflowEnded} method cannot declare a {@code @TaskParam} at all, so the
- * aggregate's ID is its complete list.</li>
+ * ({@code WorkflowTaskInvoker#taskParameterNames}). Those names live on the handler
+ * methods. The core reads them from the annotations while the application wires itself.
+ * So this part of the list says what the application asks for. It is not guessed from
+ * the model. The core is asked with the job type AND with the element id, because a
+ * method wired by {@code @WorkflowTask(id = ...)} answers to the element alone. The
+ * workflow-end listener is left out. A {@code @WorkflowEnded} method cannot declare a
+ * {@code @TaskParam} at all, so the ID of the aggregate is its complete list.</li>
  * </ul>
  *
  * <p>
- * What stays out is therefore what only the aggregate sync wrote into the instance: a copy
- * of the data the handler already holds, which on a workflow aggregate with a few large
- * attributes is the whole of what Camunda warns about.
+ * So what stays out is what only the aggregate sync wrote into the instance. That is a copy
+ * of the data the handler already holds. On a workflow aggregate with a few large
+ * attributes, it is all of what Camunda warns about.
  * </p>
  *
  * <p>
  * <strong>The list belongs to the WORKER, not to the delivery.</strong> A worker
- * subscribes to a job type and serves every task of the workflow module using it, across
- * BPMN processes, so its list is the union over everything it serves. The list is also
- * part of what the gateway compares when it decides whether two job streams are
- * equivalent, so it has to be the same on every node and after every restart
- * of one application version: it is therefore sorted, and derived from the deployed
- * models rather than from the iteration order of a hash map.
+ * subscribes to a job type. It serves every task of the workflow module which uses it,
+ * across BPMN processes. So its list is the union over everything it serves. The gateway
+ * also compares the list when it decides whether two job streams are equivalent. So it has
+ * to be the same on every node and after every restart of one application version. That
+ * is why it is sorted, and derived from the deployed models and not from the iteration
+ * order of a hash map.
  * </p>
  *
  * <p>
- * <strong>Where the derivation cannot win.</strong> A worker serving the start events the
- * cluster fires itself asks for everything, because VanillaBP copies every variable such a
- * start carries into the workflow aggregate
- * ({@code BpmsInitiatedStartContext#getVariables}) - there is no list to derive. Apart
- * from that one worker kind, a statically named {@code @TaskParam} is covered by
- * construction. A name no annotation carries, read through a path the scanner cannot see,
- * is not fetched: the delivery fails with a message which says so rather than quietly
- * handing the method a <code>null</code>. The handler reads such a value from the workflow
- * aggregate instead.
+ * <strong>Where the derivation cannot win.</strong> Some start events are fired by the
+ * cluster itself. A worker serving them asks for everything, because VanillaBP copies every
+ * variable such a start carries into the workflow aggregate
+ * ({@code BpmsInitiatedStartContext#getVariables}). There is no list to derive. Apart from
+ * that one worker kind, a statically named {@code @TaskParam} is always covered. A name no
+ * annotation carries, read through a path the scanner cannot see, is not fetched. Then the
+ * delivery fails with a message which says so. It does not quietly hand the method a
+ * <code>null</code>. The handler reads such a value from the workflow aggregate instead.
  * </p>
  * <p>
  * There is no setting which asks for more. The key <code>fetch-variables</code> did that in
- * snapshots of version 2.0 and was removed: a handler reads its data from the workflow
- * aggregate.
- * A key still set ends the start ({@link #rejectTheRemovedKey}).
+ * snapshots of version 2.0 and was removed. A handler reads its data from the workflow
+ * aggregate. A key which is still set ends the start ({@link #rejectTheRemovedKey}).
  * </p>
  * <p>
  * Why the list is derived per worker, why it is sorted, and why a name outside it fails the
@@ -92,7 +88,7 @@ public final class Camunda8FetchVariables {
    * What one worker asks for: either the complete scope, or the names below.
    *
    * @param all Whether the worker asks for every variable of the process instance
-   * @param names The variable names to fetch, sorted; empty while {@link #all} is
+   * @param names The variable names to fetch, sorted. Empty while {@link #all} is
    *          <code>true</code>
    */
   public record Selection(boolean all,
@@ -114,7 +110,7 @@ public final class Camunda8FetchVariables {
      * The selection of a worker which asks for named variables only.
      *
      * @param names The variable names, in any order
-     * @return A selection asking for those names, sorted so it is stable across
+     * @return A selection asking for those names. They are sorted, so it is stable across
      *         restarts
      */
     public static Selection of(
@@ -125,8 +121,8 @@ public final class Camunda8FetchVariables {
     }
 
     /**
-     * Whether this selection brings one variable along, which is what a guiding message about a
-     * variable nobody fetched is built on.
+     * Whether this selection brings one variable along. A guiding message about a variable
+     * nobody fetched is built on it.
      *
      * @param name A variable name
      * @return Whether a job of this worker carries that variable
@@ -160,12 +156,12 @@ public final class Camunda8FetchVariables {
 
   /**
    * Ends the start where somebody still sets the removed key <code>fetch-variables</code>.
-   * Ignoring it would be silent: a value of <code>all</code> was set for a handler which
-   * reads a variable nobody declared, and that handler would now fail its delivery long
-   * after the start. The message names every key it found and says what applies instead.
+   * Ignoring it would be silent. A value of <code>all</code> was set for a handler which
+   * reads a variable nobody declared. That handler would now fail its delivery long after
+   * the start. The message names every key it found and says what applies instead.
    *
    * @param adapterId The adapter id
-   * @param keys The full keys which set it, at the adapter level and below; empty where
+   * @param keys The full keys which set it, at the adapter level and below. Empty where
    *          nobody does
    * @throws IllegalStateException If any key sets it
    */
@@ -189,19 +185,19 @@ public final class Camunda8FetchVariables {
   }
 
   /**
-   * What a delivery says when the variable holding the workflow aggregate's ID is not
-   * there. A worker always asks for that variable, so the cause is the process instance: a
+   * What a delivery says when the variable holding the ID of the workflow aggregate is not
+   * there. A worker always asks for that variable. So the cause is the process instance: a
    * workflow started past VanillaBP, a model which removed the variable, or a call activity
    * which did not hand it to the called process. The last one is a call activity saying
-   * <code>propagateAllParentVariables="false"</code> without an input mapping of the ID, which
-   * the deployment leaves as modelled (see decision 77 in the repository's DECISIONS.md). The
-   * message still names the fetched list, because that is the first thing a reader checks.
+   * <code>propagateAllParentVariables="false"</code> without an input mapping of the ID. The
+   * deployment leaves it as modelled (see decision 77 in the repository's DECISIONS.md). The
+   * message still names the fetched list, because a reader checks that first.
    *
    * @param what What kind of job it is, capitalized ("Job", "The user-task listener job")
-   * @param jobKey The job's key
+   * @param jobKey The key of the job
    * @param taskDefinition The task definition, as the core knows it
    * @param bpmnProcessId The BPMN process id, as the core knows it
-   * @param aggregateIdName The variable the aggregate's ID was expected in
+   * @param aggregateIdName The variable the ID of the aggregate was expected in
    * @param selection What this worker fetches
    * @return The message
    */
@@ -234,16 +230,15 @@ public final class Camunda8FetchVariables {
 
   /**
    * What a delivery says when a <code>&#64;TaskParam</code> names a variable this worker
-   * did not fetch. The adapter cannot tell that case apart from a variable which is
-   * genuinely absent, and handing the method a <code>null</code> would be a silent loss
-   * of what the model computed - so the delivery fails, which on this BPMS means retries
-   * and then an incident naming the way out.
+   * did not fetch. The adapter cannot tell that case apart from a variable which is really
+   * absent. Handing the method a <code>null</code> would silently lose what the model
+   * computed. So the delivery fails. On this BPMS that means retries, and then an incident
+   * which names the way out.
    * <p>
    * The worker asks for every name a <code>&#64;TaskParam</code> of the tasks it serves
-   * DECLARES, so getting here means the name was not declared on the
-   * method: it was assembled at runtime, or read past the annotation. The message says
-   * so, because the first thing a reader will check is the annotation, and it is right
-   * there.
+   * DECLARES. So getting here means the name was not declared on the method. It was put
+   * together at runtime, or read past the annotation. The message says so, because a reader
+   * checks the annotation first, and the annotation is right there on the method.
    *
    * @param name The variable the method asked for
    * @param taskDefinition The task definition, as the core knows it
@@ -266,19 +261,19 @@ public final class Camunda8FetchVariables {
   }
 
   /**
-   * The variables one served element contributes: the workflow aggregate's ID, the
-   * multi-instance context of the iterations enclosing that element, and the chain a caller
-   * naming its process by an expression hands down.
+   * The variables one served element contributes: the ID of the workflow aggregate, the
+   * multi-instance context of the iterations enclosing that element, and the chain which a
+   * caller hands down when it names its process by an expression.
    * <p>
    * That last name is a constant, and every worker serving an element asks for it. No
-   * deployment knows who can be reached by an expression, so there is no list to derive: the
-   * chain is model knowledge of the CALLER, and the called process learns it from that
-   * variable alone. Where the variable is absent the key does not even reach the job, so a
+   * deployment knows which process an expression can reach. So there is no list to derive.
+   * The chain is model knowledge of the CALLER, and the called process learns it from that
+   * variable alone. Where the variable is absent, the key does not even reach the job. So a
    * worker of a process nobody calls that way pays nothing for it.
    *
    * @param variables Where the names are collected
-   * @param aggregateIdName The name of the aggregate's ID variable of the element's
-   *          BPMN process
+   * @param aggregateIdName The name of the ID variable of the aggregate, in the BPMN
+   *          process of the element
    * @param chain The multi-instance elements enclosing the element, from
    *          {@link Camunda8MultiInstance.Registry#chainOf(String, String)}
    */

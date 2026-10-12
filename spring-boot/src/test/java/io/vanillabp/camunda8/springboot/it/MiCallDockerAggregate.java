@@ -11,7 +11,7 @@ import lombok.Setter;
 
 /**
  * JPA workflow aggregate of the decomposition test. One aggregate for the caller, the
- * called process and the process that one calls, which is what
+ * called process and the process which that one calls. That is what
  * <code>secondaryBpmnProcesses</code> says: the three models are one business case.
  */
 @Entity
@@ -32,7 +32,7 @@ public class MiCallDockerAggregate {
   @Column(length = 2000)
   private String bothChains;
 
-  /** The order the chain arrived in, as the resolver saw it. */
+  /** The order in which the chain arrived, as the resolver saw it. */
   @Column(length = 2000)
   private String chainOrder;
 

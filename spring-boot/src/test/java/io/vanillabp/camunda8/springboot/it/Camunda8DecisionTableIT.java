@@ -13,13 +13,13 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
- * End-to-end test of a decision table deployed with its workflow module: the boot sends
- * the module's DMN file to the cluster together with its BPMN files, the business rule
- * task of the process has the cluster evaluate it, and the task after it receives what
+ * End-to-end test of a decision table which is deployed with its workflow module. The boot
+ * sends the module's DMN file to the cluster together with its BPMN files. The business
+ * rule task of the process lets the cluster evaluate it. The task after it receives what
  * the decision produced.
  * <p>
- * Nothing here queries what was deployed: the proof is that the workflow reaches the
- * second task at all and carries the value one rule of the table produced.
+ * Nothing here queries what was deployed. The proof is that the workflow reaches the
+ * second task at all, and that it carries the value which one rule of the table produced.
  * <p>
  * The class is skipped when Docker is unavailable
  * ({@code @Testcontainers(disabledWithoutDocker = true)}).
@@ -63,8 +63,8 @@ public class Camunda8DecisionTableIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * Waits until the workflow reached the task behind the business rule task and wrote
-   * what the decision produced into its aggregate.
+   * Waits until the workflow reached the task after the business rule task, and until that
+   * task wrote what the decision produced into its aggregate.
    *
    * @param aggregateId The workflow's aggregate
    * @param expected What the rule of the table produces for it

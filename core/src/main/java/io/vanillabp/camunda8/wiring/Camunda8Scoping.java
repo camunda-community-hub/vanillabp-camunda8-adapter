@@ -31,8 +31,8 @@ import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Applies {@link NameClashAvoidance#USE_PREFIX} to a Camunda 8 model:
- * every identifier a cluster resolves GLOBALLY is prefixed, so two workflow modules
+ * Applies {@link NameClashAvoidance#USE_PREFIX} to a Camunda 8 model.
+ * Every identifier a cluster resolves GLOBALLY is prefixed. So two workflow modules
  * may use the same names without a tenant.
  *
  * <table>
@@ -43,54 +43,52 @@ import lombok.extern.slf4j.Slf4j;
  * <tr><td>{@code zeebe:calledDecision decisionId}</td><td>workflow module</td><td>the decisions of the module are deployed under prefixed ids, FEEL included</td></tr>
  * <tr><td>{@code bpmn:message name}</td><td>workflow module</td><td>messages are published and correlated by name</td></tr>
  * <tr><td>{@code bpmn:signal name}, {@code bpmn:escalation escalationCode}</td><td>workflow module</td><td>broadcast by name</td></tr>
- * <tr><td>{@code bpmn:error errorCode}</td><td>workflow module</td><td>completeness - a code is process-local, but the application may throw it via {@code ProcessService#cancelTask}</td></tr>
+ * <tr><td>{@code bpmn:error errorCode}</td><td>workflow module</td><td>for completeness. A code is process-local, but the application may throw it via {@code ProcessService#cancelTask}</td></tr>
  * <tr><td>{@code zeebe:taskDefinition type}</td><td>workflow module + process</td><td>job types are what workers subscribe to, cluster-wide</td></tr>
- * <tr><td>{@code zeebe:taskListener type}, {@code zeebe:executionListener type}</td><td>workflow module + process</td><td>a served listener's job type is a task definition of this module</td></tr>
- * <tr><td>{@code zeebe:formDefinition externalReference}</td><td>workflow module + process</td><td>it IS the user task's task definition and becomes a listener job type</td></tr>
+ * <tr><td>{@code zeebe:taskListener type}, {@code zeebe:executionListener type}</td><td>workflow module + process</td><td>the job type of a served listener is a task definition of this module</td></tr>
+ * <tr><td>{@code zeebe:formDefinition externalReference}</td><td>workflow module + process</td><td>it IS the task definition of the user task and becomes a listener job type</td></tr>
  * </table>
  *
  * <p>
  * The job type of a listener somebody modelled is in that table as well, where a method of
- * this application serves it: such a job type has become a task definition of this workflow
+ * this application serves it. Such a job type has become a task definition of this workflow
  * module like any other.
  * <p>
  * An element another runtime serves, see {@link Camunda8Connectors}, never enters that
- * table: its job type names a runtime somebody else deployed rather than an identifier of
- * this workflow module, so it is left as the modeller wrote it under every mode.
+ * table. Its job type names a runtime somebody else deployed, not an identifier of this
+ * workflow module. So it is left as the modeller wrote it, under every mode.
  * <p>
- * A value written as FEEL is rewritten too, and ONE rule says how, for every place above:
- * where the value starts with {@code =} the prefix goes INSIDE the expression, and everywhere
- * else it goes in front. Such a value is code which yields an identifier at runtime and it
- * takes up the whole attribute, so a prefix written in front of it would become part of its
+ * A value written as FEEL is rewritten too, and ONE rule says how, for every place above.
+ * Where the value starts with {@code =}, the prefix goes INSIDE the expression. Everywhere
+ * else it goes in front. Such a value is code which gives an identifier at runtime, and it
+ * takes up the whole attribute. So a prefix written in front of it would become part of its
  * text: {@code =whichProcess} is deployed as {@code ="loan-approval__" + string(whichProcess)}.
- * The rule is not asked where Camunda 8 evaluates an expression today, because that is a list
- * which ages. Where an expression is not evaluated, a {@code =} does not appear and the rule
- * costs nothing; where Camunda 8 learns to evaluate one, nothing here has to change.
- * {@link #forEveryPrefixedValue} is the one list of the places, and both the rewrite and the
- * refusal below read it, so a place added there is covered by both in the same change.
+ * The rule does not ask where Camunda 8 evaluates an expression today, because such a list
+ * gets old. Where an expression is not evaluated, a {@code =} does not appear, and the rule
+ * costs nothing. Where Camunda 8 learns to evaluate one, nothing here has to change.
+ * {@link #forEveryPrefixedValue} is the one list of the places. Both the rewrite and the
+ * refusal below read it. So a place added there is covered by both in the same change.
  * <p>
- * The application therefore writes no prefix anywhere, which is what keeps a model portable
- * between this BPMS and the others. What that costs is named rather than hidden: the cluster
- * holds an expression nobody typed, so a parse error it reports quotes this frame around the
- * application's own text ({@link #elementIdsNamingTheirTargetByExpression} is read for the one
- * message where that matters). An expression which carries the prefix already is refused
- * instead of being given a second one
- * ({@link #whatAlreadyCarriesThePrefixInAnExpression}).
+ * So the application writes no prefix anywhere. That keeps a model portable between this
+ * BPMS and the others. The cost is named and not hidden. The cluster holds an expression
+ * nobody typed. So a parse error it reports quotes this frame around the text of the
+ * application ({@link #elementIdsNamingTheirTargetByExpression} is read for the one message
+ * where that matters). An expression which already carries the prefix is refused. It is not
+ * given a second one ({@link #whatAlreadyCarriesThePrefixInAnExpression}).
  * <p>
- * The same elements are READ rather than rewritten where somebody asks which names a
- * workflow module declares ({@link #moduleWideIdentifiersOf},
- * {@link #taskDefinitionsOf}). One reader is the deployment, which hands them to the core
- * so that two workflow modules ending up under one name are named; the other is a model
- * the cluster still holds, where the same names are read back out of what was deployed
- * years ago.
+ * The same elements are READ and not rewritten where somebody asks which names a workflow
+ * module declares ({@link #moduleWideIdentifiersOf}, {@link #taskDefinitionsOf}). One reader
+ * is the deployment. It hands them to the core, so that two workflow modules ending up under
+ * one name are named. The other reader is a model the cluster still holds. There the same
+ * names are read back out of what was deployed years ago.
  * <p>
- * The rewriting happens in <code>prepareBpmn</code>, BEFORE wiring: everything after
- * it - the wiring validation, the listener injection, the workers - therefore sees
- * the identifiers the cluster will see, while the core keeps working with the plain
- * ones (the adapter translates at every boundary).
+ * The rewriting happens in <code>prepareBpmn</code>, BEFORE wiring. So everything after it
+ * (the wiring validation, the listener injection, the workers) sees the identifiers the
+ * cluster will see. The core keeps working with the plain ones. The adapter translates at
+ * every boundary.
  * <p>
  * Why the deployed bytes carry the scoped identifiers while the registries stay plain is decision 2
- * in the repository's DECISIONS.md; that this rewrite is one of the model changes the adapter makes
+ * in the repository's DECISIONS.md. That this rewrite is one of the model changes the adapter makes
  * is decision 5 in the repository's DECISIONS.md.
  */
 @Slf4j
@@ -100,25 +98,24 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * The TENANT a workflow module is deployed to, respectively an operation of it runs
-   * in: the workflow module id unless the application configured a name, and
-   * <code>null</code> wherever the mode is not {@link NameClashAvoidance#BY_ADAPTER}
-   * ({@code none} uses no tenant, and under {@code use-prefix} the prefix IS the
-   * isolation - a tenant on top would defeat the purpose, since clusters are licensed
-   * per tenant).
+   * The TENANT a workflow module is deployed to, or which an operation of it runs in. It is
+   * the workflow module id, unless the application configured a name. It is
+   * <code>null</code> wherever the mode is not {@link NameClashAvoidance#BY_ADAPTER}.
+   * {@code none} uses no tenant. Under {@code use-prefix} the prefix IS the isolation. A
+   * tenant on top would defeat the purpose, because clusters are licensed per tenant.
    * <p>
-   * That a tenant is what {@code by-adapter} means here is CAMUNDA 8 knowledge, so it
-   * lives in the adapter: the core answers the mode and nothing else.
+   * That {@code by-adapter} means a tenant here is CAMUNDA 8 knowledge. So it lives in the
+   * adapter. The core answers the mode and nothing else.
    * <p>
-   * Two questions read this one function. One is where a workflow module is deployed, the
+   * Two questions read this one function. One is where a workflow module is deployed. The
    * other is whether the cluster keeps two workflow modules apart
-   * ({@code Camunda8DeploymentService#ownIsolationSeparatesWorkflowModules}), which the core
-   * asks while it looks for two BPMN processes reaching the cluster under one identifier. An
-   * answer composed some other way could say "separated" about a module the very next deploy
-   * command puts into the tenant of its neighbour.
+   * ({@code Camunda8DeploymentService#ownIsolationSeparatesWorkflowModules}). The core asks
+   * that while it looks for two BPMN processes which reach the cluster under one identifier.
+   * An answer put together in some other way could say "separated" about a module which the
+   * very next deploy command puts into the tenant of its neighbour.
    *
-   * @param scoping The core's name-clash-avoidance support, or <code>null</code>
-   *          (tests): the configured tenant is used as it is then
+   * @param scoping The name-clash-avoidance support of the core, or <code>null</code>
+   *          (tests). Then the configured tenant is used as it is
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
    * @param configuredTenantId The tenant name the application configured for this workflow
@@ -148,13 +145,13 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Whether the given workflow module's identifiers are prefixed for this adapter -
-   * asked by the deployment service for the decision tables of the module, whose ids are
+   * Whether the identifiers of the given workflow module are prefixed for this adapter.
+   * The deployment service asks it for the decision tables of the module. Their ids are
    * rewritten outside a BPMN model.
    *
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support (may be <code>null</code>)
+   * @param scoping The name-clash-avoidance support of the core (may be <code>null</code>)
    * @return Whether prefixing applies
    */
   public static boolean prefixes(
@@ -168,17 +165,17 @@ public final class Camunda8Scoping {
 
   /**
    * The names of the given model which the workflow module scopes as a whole: a message
-   * name, a signal name, a BPMN error code, an escalation code. Every one of them is a
-   * name the cluster resolves globally, which is why {@link #apply} rewrites them, and
-   * reading them costs nothing while the model is open anyway.
+   * name, a signal name, a BPMN error code, an escalation code. The cluster resolves every
+   * one of them globally. That is why {@link #apply} rewrites them. Reading them costs
+   * nothing while the model is open anyway.
    * <p>
-   * The names are returned as they STAND in the model, so the caller decides what they
-   * are: a model about to be deployed carries the plain names as long as {@link #apply}
-   * has not run over it, a model the cluster hands back carries the scoped ones.
+   * The names are returned as they STAND in the model. So the caller decides what they
+   * are. A model about to be deployed carries the plain names, as long as {@link #apply}
+   * has not run over it. A model the cluster hands back carries the scoped ones.
    *
    * @param model The model of one BPMN file
-   * @return One entry per name, without duplicates and with no BPMN process on it -
-   *         these names belong to the workflow module, not to one of its processes
+   * @return One entry per name, without duplicates and with no BPMN process on it. These
+   *         names belong to the workflow module, not to one of its processes
    */
   public static Collection<NameClashAvoidanceSupport.ModelIdentifier> moduleWideIdentifiersOf(
       final BpmnModelInstance model) {
@@ -208,19 +205,19 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * The job types of the given model, each with the BPMN process it belongs to - a task
-   * definition is scoped per process as well as per workflow module. A user task's
-   * external form reference is among them, because it becomes a listener job type like any
+   * The job types of the given model, each with the BPMN process it belongs to. A task
+   * definition is scoped per process as well as per workflow module. The external form
+   * reference of a user task is among them, because it becomes a listener job type like any
    * other.
    * <p>
-   * The element an element template hands to another runtime is left out, the same way
-   * {@link #apply} leaves its job type alone: that name belongs to a runtime somebody else
-   * deployed rather than to this workflow module.
+   * The element which an element template hands to another runtime is left out, just as
+   * {@link #apply} leaves its job type alone. That name belongs to a runtime somebody else
+   * deployed, not to this workflow module.
    *
    * @param model The model of one BPMN file
    * @param workflowModuleId The workflow module ID
    * @param allowConnectorsResolver What the configuration says about the elements built
-   *          from an element template (may be <code>null</code>: nothing is left out then)
+   *          from an element template (may be <code>null</code>. Then nothing is left out)
    * @return One entry per job type, without duplicates, as the names stand in the model
    */
   public static Collection<NameClashAvoidanceSupport.ModelIdentifier> taskDefinitionsOf(
@@ -274,19 +271,19 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Rewrites the identifiers of the given model in place. A no-op unless the mode of
-   * the workflow module is {@link NameClashAvoidance#USE_PREFIX}.
+   * Rewrites the identifiers of the given model in place. It does nothing unless the mode
+   * of the workflow module is {@link NameClashAvoidance#USE_PREFIX}.
    *
    * @param model The model of one BPMN file
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support
+   * @param scoping The name-clash-avoidance support of the core
    * @param allowConnectorsResolver What the configuration says about the elements built
    *          from an element template, asked per BPMN process of the file (may be
-   *          <code>null</code>: nothing is left alone then)
+   *          <code>null</code>. Then nothing is left alone)
    * @param servedListenerJobTypes Whether this application serves the listener of the given
    *          PLAIN process id and job type, asked per listener of the file (may be
-   *          <code>null</code>: no listener job type is rewritten then)
+   *          <code>null</code>. Then no listener job type is rewritten)
    */
   public static void apply(
       final BpmnModelInstance model,
@@ -300,9 +297,9 @@ public final class Camunda8Scoping {
       return;
     }
 
-    // every value this adapter prefixes, each with the prefix of its own place, and each
+    // every value this adapter prefixes, each with the prefix of its own place. Each is
     // written back by the one rule: an expression gets the prefix inside it, anything else
-    // gets it in front
+    // gets it in front.
     forEveryPrefixedValue(
         model,
         workflowModuleId,
@@ -313,9 +310,9 @@ public final class Camunda8Scoping {
         prefixed -> prefixed.write().accept(prefixed.withThePrefix(workflowModuleId)));
 
     // ... and the process ids last. Everything above is scoped per process or addresses a
-    // process by id, and all of it has read the plain ids while it ran. A process id is the id
-    // of an XML element and can never be an expression, so the rule above has nothing to decide
-    // here
+    // process by id. All of it has read the plain ids while it ran. A process id is the id of
+    // an XML element and can never be an expression. So the rule above has nothing to decide
+    // here.
     model
         .getModelElementsByType(Process.class)
         .forEach(process -> {
@@ -335,31 +332,31 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Hands every value of the given model which this adapter writes a prefix into to the given
-   * reader, one by one.
+   * Hands to the given reader, one by one, every value of the given model into which this
+   * adapter writes a prefix.
    * <p>
    * This is the one list of those places. Both things done with them read it: the rewrite in
-   * {@link #apply} and the refusal of an expression which composes the prefix itself
-   * ({@link #whatAlreadyCarriesThePrefixInAnExpression}). A place added here is therefore
-   * rewritten and guarded in the same change, which is what keeps the two from drifting apart.
+   * {@link #apply}, and the refusal of an expression which puts the prefix together itself
+   * ({@link #whatAlreadyCarriesThePrefixInAnExpression}). So a place added here is rewritten
+   * and guarded in the same change. That keeps the two from drifting apart.
    * <p>
-   * A value the modeller left empty is not handed over. There is nothing in it to prefix, and
-   * the cluster says what it thinks of such a model itself; anything composed around nothing
-   * would only hide what it says.
+   * A value the modeller left empty is not handed over. There is nothing in it to prefix. And
+   * the cluster itself says what it thinks of such a model. Anything put around nothing would
+   * only hide what it says.
    * <p>
-   * The BPMN process ids are not among them, for two reasons which both hold: an id of an XML
-   * element cannot be an expression, and the places above read those ids while they are still
-   * the plain ones. {@link #apply} rewrites them itself, after this walk.
+   * The BPMN process ids are not among them, for two reasons which both hold. An id of an XML
+   * element cannot be an expression. And the places above read those ids while they are
+   * still the plain ones. {@link #apply} rewrites them itself, after this walk.
    *
    * @param model The model of one BPMN file
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support
+   * @param scoping The name-clash-avoidance support of the core
    * @param allowConnectorsResolver What the configuration says about the elements built from an
-   *          element template (may be <code>null</code>: nothing is left out then)
+   *          element template (may be <code>null</code>. Then nothing is left out)
    * @param servedListenerJobTypes Whether this application serves the listener of the given
-   *          PLAIN process id and job type (may be <code>null</code>: no listener job type is
-   *          among the values then)
+   *          PLAIN process id and job type (may be <code>null</code>. Then no listener job type
+   *          is among the values)
    * @param read What to do with each of them
    */
   private static void forEveryPrefixedValue(
@@ -372,11 +369,11 @@ public final class Camunda8Scoping {
       final Consumer<PrefixedValue> read) {
 
     // the job type of a listener this application serves is a task definition of this
-    // workflow module like any other, so it is scoped like any other: without that, two
-    // modules carrying the same listener job type would share one worker, which is the clash
-    // this mode exists to avoid. A listener this application does NOT serve keeps the name the
-    // modeller typed, for the reason a connector's job type keeps its: renaming it would
-    // rename something this application does not own
+    // workflow module like any other. So it is scoped like any other. Without that, two
+    // modules carrying the same listener job type would share one worker. This mode exists to
+    // avoid exactly that clash. A listener this application does NOT serve keeps the name the
+    // modeller typed, for the same reason as the job type of a connector. Renaming it would
+    // rename something this application does not own.
     model
         .getModelElementsByType(ZeebeTaskListener.class)
         .forEach(listener -> readTheListenerJobType(
@@ -402,8 +399,8 @@ public final class Camunda8Scoping {
             servedListenerJobTypes,
             read));
 
-    // job types are what workers subscribe to, cluster-wide, and they are scoped per PROCESS
-    // as well as per workflow module
+    // workers subscribe to job types across the whole cluster. So job types are scoped per
+    // PROCESS as well as per workflow module.
     readScopedPerProcess(
         model,
         ZeebeTaskDefinition.class,
@@ -415,8 +412,8 @@ public final class Camunda8Scoping {
         adapterId,
         scoping,
         read);
-    // a user task's external form reference IS its task definition and becomes a listener job
-    // type, so it is scoped the same way
+    // the external form reference of a user task IS its task definition and becomes a
+    // listener job type. So it is scoped the same way.
     readScopedPerProcess(
         model,
         ZeebeFormDefinition.class,
@@ -433,8 +430,8 @@ public final class Camunda8Scoping {
     final UnaryOperator<String> scopedByTheModule = identifier -> scoping
         .scopedIdentifier(workflowModuleId, identifier, adapterId);
 
-    // the names the workflow module scopes as a whole: published, correlated or broadcast by
-    // name, and declared by an element of the file rather than by one of its processes
+    // the names the workflow module scopes as a whole. They are published, correlated or
+    // broadcast by name. An element of the file declares them, not one of its processes.
     readScopedPerModule(
         model, Message.class, "bpmn:message name", Message::getName, Message::setName, modulePrefix,
         scopedByTheModule, read);
@@ -444,18 +441,18 @@ public final class Camunda8Scoping {
     readScopedPerModule(
         model, Escalation.class, "bpmn:escalation escalationCode", Escalation::getEscalationCode,
         Escalation::setEscalationCode, modulePrefix, scopedByTheModule, read);
-    // an error code carries the prefix of the module whose model declares it, and so does the
-    // code a TaskException raises (Camunda8JobHandler). Both sides of a throw and its catcher are
-    // therefore the same module, which they are: a called element below gets this module's
-    // prefix, and a called element carries no tenant of its own, so the cluster resolves it in
-    // the tenant of the calling instance. A call activity cannot leave its workflow module here
+    // an error code carries the prefix of the module whose model declares it. So does the code
+    // a TaskException raises (Camunda8JobHandler). So this treats a throw and its catcher as
+    // the same module, and they are. A called element below gets the prefix of this module.
+    // A called element carries no tenant of its own, so the cluster resolves it in the tenant
+    // of the calling instance. A call activity cannot leave its workflow module here.
     readScopedPerModule(
         model, Error.class, "bpmn:error errorCode", Error::getErrorCode, Error::setErrorCode, modulePrefix,
         scopedByTheModule, read);
 
-    // a call activity addresses another process BY ID, and a business rule task a decision. Both
-    // of those were renamed the same way, the process by the line above and the decision while
-    // this module's DMN files were read
+    // a call activity addresses another process BY ID, and a business rule task a decision.
+    // Both were renamed the same way. The process is renamed by the line above. The decision
+    // was renamed while the DMN files of this module were read.
     readTargetNamedById(
         model,
         ZeebeCalledElement.class,
@@ -486,7 +483,7 @@ public final class Camunda8Scoping {
    * @param write Where the prefixed name goes
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support
+   * @param scoping The name-clash-avoidance support of the core
    * @param servedListenerJobTypes Whether this application serves that listener, or
    *          <code>null</code>
    * @param read What to do with the value
@@ -534,7 +531,7 @@ public final class Camunda8Scoping {
    * @param servedByAnotherRuntime Whether this one belongs to a runtime somebody else deployed
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support
+   * @param scoping The name-clash-avoidance support of the core
    * @param read What to do with each value
    */
   private static <T extends BpmnModelElementInstance> void readScopedPerProcess(
@@ -656,17 +653,18 @@ public final class Camunda8Scoping {
    * One value of a model which this adapter writes a prefix into.
    * <p>
    * It carries what both readers of {@link #forEveryPrefixedValue} need: where the value stands,
-   * what it says, which prefix belongs at this place, where a prefixed value goes and how the
+   * what it says, which prefix belongs at this place, where a prefixed value goes, and how the
    * core spells a prefixed identifier of this kind.
    *
    * @param attribute The attribute holding the value, as the modeler names it
-   * @param elementId The BPMN element it belongs to, which for a name of the whole file is the
+   * @param elementId The BPMN element it belongs to. For a name of the whole file, it is the
    *          element declaring that name
    * @param bpmnProcessId The BPMN process the element belongs to, as it stands in the model, and
    *          <code>null</code> for a name the workflow module scopes as a whole
    * @param value What the modeller wrote
-   * @param prefix The prefix THIS place gets, separator included: the workflow module's for most
-   *          of them, and the module's plus the process' for a job type
+   * @param prefix The prefix THIS place gets, separator included. For most of them it is the
+   *          one of the workflow module. For a job type it is the one of the module plus the
+   *          one of the process
    * @param write Where the prefixed value goes
    * @param prefixedByTheCore How the core spells the prefixed form of a plain identifier of this
    *          kind
@@ -684,10 +682,10 @@ public final class Camunda8Scoping {
      * THE RULE, and the only one: a value written as FEEL gets the prefix INSIDE the expression,
      * and every other value gets it in front.
      * <p>
-     * It is asked at every place a prefix is written, without asking first whether Camunda 8
-     * evaluates an expression at that place today. A list of those places would age with every
-     * Camunda release, while this rule cannot be wrong: where no expression is evaluated, a
-     * value starting with {@code =} does not appear, and where one is evaluated later, nothing
+     * It is asked at every place a prefix is written. It does not first ask whether Camunda 8
+     * evaluates an expression at that place today. A list of those places would get old with
+     * every Camunda release. This rule cannot be wrong. Where no expression is evaluated, a
+     * value starting with {@code =} does not appear. And where one is evaluated later, nothing
      * here has to change.
      *
      * @param workflowModuleId The workflow module, for the log line
@@ -703,11 +701,11 @@ public final class Camunda8Scoping {
     }
 
     /**
-     * Whether the modeller's own expression composes a prefix of this workflow module, which the
-     * rule above would give a second one.
+     * Whether the expression of the modeller puts together a prefix of this workflow module.
+     * The rule above would give it a second one.
      * <p>
-     * Both prefixes are looked for. A job type is prefixed by the module AND by its process, so
-     * an expression may compose either the whole thing or the module's part of it, and both of
+     * Both prefixes are looked for. A job type is prefixed by the module AND by its process. So
+     * an expression may put together either the whole thing or the part of the module. Both of
      * those end up doubled.
      *
      * @param modulePrefix The prefix of the workflow module, separator included
@@ -727,14 +725,14 @@ public final class Camunda8Scoping {
    * application serves, and connectors are allowed for its process.
    * <p>
    * Its job type was never an identifier of this workflow module. It names a runtime
-   * somebody else deployed, cluster-wide, so prefixing it would rename something this
-   * application does not own. The price is stated rather than
-   * hidden: under {@code use-prefix} such a job type reaches the cluster unscoped, which is
-   * the very clash the mode exists to avoid. It costs nothing here, because a connector
-   * runtime subscribes to that type globally anyway and two workflow modules carrying the
-   * same connector element are meant to reach the same runtime. Refusing the combination
-   * instead would take the only isolation mode which works without a multi-tenant cluster
-   * away from every application that wants one connector.
+   * somebody else deployed for the whole cluster. So prefixing it would rename something
+   * this application does not own. The price is stated, not hidden. Under
+   * {@code use-prefix}, such a job type reaches the cluster unscoped. That is the very clash
+   * the mode exists to avoid. It costs nothing here. A connector runtime subscribes to that
+   * type globally anyway. And two workflow modules carrying the same connector element are
+   * meant to reach the same runtime. Refusing the combination instead would take away the
+   * only isolation mode which works without a multi-tenant cluster. Every application which
+   * wants one connector would lose it.
    */
   private static boolean isServedByAnotherRuntime(
       final BpmnModelElementInstance extensionElement,
@@ -752,10 +750,10 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Whether the given value of a model names nothing at all. Two forms do: one the modeller left
-   * empty, and one holding nothing but <code>=</code>, which is an expression with no expression
-   * in it. The cluster refuses both itself, and anything composed around them would only hide
-   * what it refuses.
+   * Whether the given value of a model names nothing at all. Two forms do. One is a value the
+   * modeller left empty. The other holds nothing but <code>=</code>, which is an expression
+   * with no expression in it. The cluster itself refuses both. Anything put around them would
+   * only hide what it refuses.
    *
    * @param identifier What the model says at that place
    * @return Whether there is nothing to rewrite
@@ -768,13 +766,13 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * Whether the given value is FEEL rather than an identifier, which it is where it starts with
-   * <code>=</code>. Such a value is code: it takes up the WHOLE attribute, so the prefix goes
+   * Whether the given value is FEEL and not an identifier. It is FEEL where it starts with
+   * <code>=</code>. Such a value is code. It takes up the WHOLE attribute, so the prefix goes
    * inside it.
    *
    * <p>
-   * Public because the refusal of a job type written this way asks exactly this question, and
-   * one answer is what keeps the frame and that refusal talking about the same values.
+   * It is public, because the refusal of a job type written this way asks exactly this
+   * question. One answer keeps the frame and that refusal talking about the same values.
    *
    * @param identifier What the model says at that place
    * @return Whether it is an expression
@@ -787,31 +785,31 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * The given expression with the prefix of its place written into it, so that what it yields at
+   * The given expression with the prefix of its place written into it. So what it gives at
    * runtime is the identifier the cluster knows.
    * <p>
-   * The one frame, used by every place a prefix is written. A second shape of it would be a
-   * second thing to get right, and the error cases below are what makes this one the shape.
+   * This is the one frame, used by every place a prefix is written. A second shape of it would
+   * be a second thing to get right. The error cases below make this one the shape.
    * <p>
-   * The frame is a concatenation of two strings, which Camunda's FEEL does with
-   * <code>+</code>, and {@code string(...)} around the application's part makes the
-   * concatenation work whatever that part returns. The parentheses are what carry every shape
-   * an expression can have: an {@code if ... then ... else ...} returning one of several ids,
-   * a {@code get value(...)} over a context, a text the expression composes itself, and an
-   * expression written over several lines.
+   * The frame joins two strings. Camunda's FEEL does that with <code>+</code>. The
+   * {@code string(...)} around the part of the application makes the join work, whatever that
+   * part returns. The parentheses carry every shape an expression can have: an
+   * {@code if ... then ... else ...} returning one of several ids, a {@code get value(...)}
+   * over a context, a text the expression puts together itself, and an expression written
+   * over several lines.
    * <p>
-   * What this costs is that the cluster then holds an expression nobody typed. Where the
-   * application's part does not parse, the cluster refuses the deployment quoting this whole
-   * expression, and the column it counts is counted from the opening quote. The deployment
-   * says so where it reports such a refusal.
+   * The cost is that the cluster then holds an expression nobody typed. Where the part of the
+   * application does not parse, the cluster refuses the deployment. It quotes this whole
+   * expression, and it counts the column from the opening quote. The deployment says so where
+   * it reports such a refusal.
    * <p>
-   * Measured against a cluster of every release line on 2026-10-01, with
-   * {@code Camunda8PrefixInsideAnExpressionCanaryIT} holding the result: the frame resolves
-   * the called process respectively the called decision, and where the application's part
-   * yields <code>null</code> the cluster raises an incident naming the missing variable AND
-   * this frame. Those two are the places Camunda 8 evaluated an expression at on that day. The
-   * frame is written at every place a prefix is written all the same, because what the cluster
-   * evaluates is a list which ages while this rule cannot be wrong, see {@link PrefixedValue}.
+   * Measured against a cluster of every release line on 2026-10-01.
+   * {@code Camunda8PrefixInsideAnExpressionCanaryIT} holds the result. The frame resolves the
+   * called process or the called decision. Where the part of the application gives
+   * <code>null</code>, the cluster raises an incident which names the missing variable AND
+   * this frame. On that day, Camunda 8 evaluated an expression at those two places. The frame
+   * is written at every place a prefix is written all the same. The list of what the cluster
+   * evaluates gets old, but this rule cannot be wrong, see {@link PrefixedValue}.
    *
    * @param expression The expression as the modeller wrote it, <code>=</code> included
    * @param prefix The prefix of this place, separator included
@@ -840,7 +838,7 @@ public final class Camunda8Scoping {
    *
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support
+   * @param scoping The name-clash-avoidance support of the core
    * @return The prefix, and the empty string where nothing is prefixed
    */
   public static String prefixOf(
@@ -860,7 +858,7 @@ public final class Camunda8Scoping {
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The BPMN process id as it stands in the model
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support
+   * @param scoping The name-clash-avoidance support of the core
    * @return The prefix, and the empty string where nothing is prefixed
    */
   private static String taskDefinitionPrefixOf(
@@ -875,10 +873,10 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * The prefix of a scoped identifier, read off one the core wrote.
+   * The prefix of a scoped identifier, read from one the core wrote.
    * <p>
-   * Read rather than composed here: the core owns how a prefix is built, and a second way of
-   * spelling it out could produce something the core never writes.
+   * It is read here and not put together. The core owns how a prefix is built. A second way
+   * of spelling it out could produce something the core never writes.
    *
    * @param scopedByTheCore How the core spells the scoped form of a plain identifier
    * @return The prefix, and the empty string where nothing is prefixed
@@ -898,11 +896,12 @@ public final class Camunda8Scoping {
    * The elements of one BPMN process which name the process they call or the decision they
    * evaluate as a FEEL expression.
    * <p>
-   * Read for the one message such an element owes a developer. Under {@code use-prefix} the
-   * expression reaching the cluster is the application's part inside a frame of this adapter,
-   * so a parse error the cluster reports for it quotes more than the developer wrote. The
-   * deployment names these elements where the cluster refuses a deployment, and says nothing
-   * about them otherwise: there is nothing for anybody to do.
+   * This is read for the one message such an element owes a developer. Under
+   * {@code use-prefix}, the expression reaching the cluster is the part of the application
+   * inside a frame of this adapter. So a parse error the cluster reports for it quotes more
+   * than the developer wrote. The deployment names these elements where the cluster refuses
+   * a deployment. Otherwise it says nothing about them, because there is nothing for anybody
+   * to do.
    *
    * @param model The BPMN model of one file
    * @param bpmnProcessId The process id as the CLUSTER will know it
@@ -963,27 +962,28 @@ public final class Camunda8Scoping {
    * The values of one BPMN FILE whose expression already carries a prefix of the given workflow
    * module.
    * <p>
-   * Such an expression composes the scoped identifier itself, which is what an earlier VanillaBP 2
-   * snapshot asked an application to do. Writing the prefix into it a second time would deploy an
-   * expression yielding the prefix twice, and every use of it would fail once a workflow reached
-   * the element. So the deployment refuses the file and says what to take out, which is a boot a
-   * developer can act on instead of an incident per instance.
+   * Such an expression puts the scoped identifier together itself. An earlier VanillaBP 2
+   * snapshot asked an application to do that. Writing the prefix into it a second time would
+   * deploy an expression which gives the prefix twice. Every use of it would fail once a
+   * workflow reached the element. So the deployment refuses the file and says what to take
+   * out. A developer can act on such a boot. That is better than an incident per instance.
    * <p>
-   * Every place {@link #forEveryPrefixedValue} knows is asked, because every one of them gets the
-   * prefix written into its expression. The two never drift apart: one list answers both.
+   * Every place {@link #forEveryPrefixedValue} knows is asked, because every one of them gets
+   * the prefix written into its expression. The two never drift apart, because one list
+   * answers both.
    * <p>
-   * Read BEFORE {@link #apply} runs over the model, because afterwards every expression carries
-   * the prefix by design.
+   * This is read BEFORE {@link #apply} runs over the model. Afterwards every expression
+   * carries the prefix by design.
    *
    * @param model The BPMN model of one file, as the modeller wrote it
    * @param workflowModuleId The workflow module ID
    * @param adapterId The adapter ID
-   * @param scoping The core's name-clash-avoidance support
+   * @param scoping The name-clash-avoidance support of the core
    * @param allowConnectorsResolver What the configuration says about the elements built from an
-   *          element template (may be <code>null</code>: nothing is left out then)
+   *          element template (may be <code>null</code>. Then nothing is left out)
    * @param servedListenerJobTypes Whether this application serves the listener of the given PLAIN
-   *          process id and job type (may be <code>null</code>: no listener job type is asked
-   *          about then)
+   *          process id and job type (may be <code>null</code>. Then no listener job type is
+   *          asked about)
    * @return One entry per value, empty where no expression mentions the prefix and where nothing
    *         is prefixed at all
    */
@@ -1020,8 +1020,8 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * One value of a model which is written as FEEL and composes the workflow module's prefix
-   * itself.
+   * One value of a model which is written as FEEL and puts the prefix of the workflow module
+   * together itself.
    *
    * @param attribute The attribute holding it, as the modeler names it
    * @param elementId The BPMN element it belongs to
@@ -1036,7 +1036,7 @@ public final class Camunda8Scoping {
                                             String expression) {
 
     /**
-     * The entry in one line, which is how the refusal names it.
+     * The entry in one line. This is how the refusal names it.
      *
      * @return Where the expression stands and what it says
      */
@@ -1054,18 +1054,18 @@ public final class Camunda8Scoping {
    * The sentence a developer needs where the cluster refuses a deployment and quotes an
    * expression this adapter wrote the prefix into.
    * <p>
-   * Camunda 8 parses the FEEL of a model while it deploys it, and a parse error names the
-   * element and quotes the whole expression with the column it stopped at. Under
-   * {@code use-prefix} that expression is the application's own text inside the frame of
-   * {@link #withThePrefixInside}, so both the quote and the column read as if the developer
+   * Camunda 8 parses the FEEL of a model while it deploys it. A parse error names the element
+   * and quotes the whole expression, with the column it stopped at. Under {@code use-prefix},
+   * that expression is the text of the application inside the frame of
+   * {@link #withThePrefixInside}. So both the quote and the column read as if the developer
    * had typed something they never typed. Measured on 2026-10-01 against a cluster of every
-   * release line, with {@code string(whichProcess +)} inside the frame: the answer was
-   * {@code failed to parse expression '"loan-approval__" + string(whichProcess +)' ... :1:27},
-   * where the same mistake without a frame around it was reported at {@code :1:14}.
+   * release line, with {@code string(whichProcess +)} inside the frame. The answer was
+   * {@code failed to parse expression '"loan-approval__" + string(whichProcess +)' ... :1:27}.
+   * The same mistake without a frame around it was reported at {@code :1:14}.
    * <p>
-   * This is the only place the frame is mentioned at runtime. While a deployment goes through
-   * there is nothing for anybody to do, and a line per boot about a model which is right is
-   * what this adapter took away when it started writing the prefix itself.
+   * This is the only place the frame is mentioned at runtime. While a deployment goes through,
+   * there is nothing for anybody to do. A line per boot about a model which is right is
+   * exactly what this adapter took away when it started writing the prefix itself.
    *
    * @param nameClashAvoidanceKey The property key which put the workflow module into this mode
    * @param prefix The prefix of the workflow module, separator included
@@ -1117,9 +1117,8 @@ public final class Camunda8Scoping {
   }
 
   /**
-   * The id of the {@code bpmn:process} the given element belongs to - task
-   * definitions are scoped per process, and at rewriting time the process ids are
-   * still plain.
+   * The id of the {@code bpmn:process} the given element belongs to. Task definitions
+   * are scoped per process. At rewriting time the process ids are still plain.
    */
   private static String owningProcessId(
       final BpmnModelElementInstance element) {
@@ -1131,8 +1130,8 @@ public final class Camunda8Scoping {
       }
       current = current.getParentElement();
     }
-    // an element outside any process (should not happen for task definitions) -
-    // scoping by the module alone is the safe fallback
+    // an element outside any process (should not happen for task definitions). Scoping
+    // by the module alone is the safe fallback.
     if (element instanceof FlowElement flowElement) {
       log.warn(
           "Camunda8: could not determine the BPMN process of element '{}' - its task definition is "

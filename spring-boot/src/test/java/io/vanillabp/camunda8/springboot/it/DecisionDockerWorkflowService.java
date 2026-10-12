@@ -10,7 +10,7 @@ import io.vanillabp.spi.service.WorkflowService;
 import io.vanillabp.spi.service.WorkflowTask;
 
 /**
- * The workflow service of the decision-table integration test: the workflow runs a
+ * The workflow service of the decision-table integration test. The workflow runs a
  * business rule task, and the task after it reads what the decision produced.
  */
 @Service
@@ -32,8 +32,8 @@ public class DecisionDockerWorkflowService {
   }
 
   /**
-   * Nothing about DMN is visible here: the cluster evaluated the decision this module
-   * deployed, wrote the result into the workflow, and the parameter names it.
+   * Nothing about DMN is visible here. The cluster evaluated the decision which this module
+   * deployed, and wrote the result into the workflow. The parameter names that result.
    */
   @WorkflowTask(taskDefinition = "recordRating")
   public void recordRating(

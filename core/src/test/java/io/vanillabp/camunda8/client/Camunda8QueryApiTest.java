@@ -30,7 +30,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 public class Camunda8QueryApiTest {
 
   /**
-   * How many searches reached the cluster - the number the "asked once" claim is made of.
+   * How many searches reached the cluster. The claim "asked once" is checked against it.
    */
   private final AtomicInteger searches = new AtomicInteger();
 

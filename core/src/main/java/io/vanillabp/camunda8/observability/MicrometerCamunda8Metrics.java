@@ -15,19 +15,19 @@ import io.micrometer.core.instrument.binder.MeterBinder;
 
 /**
  * Publishes what {@link Camunda8Metrics} measures as Micrometer meters. Both platforms
- * apply {@link MeterBinder} beans to their registries themselves, so this one class
- * serves both, exactly like the platform's own meters do.
+ * apply {@link MeterBinder} beans to their registries themselves. So this one class
+ * serves both, exactly like the own meters of the platform do.
  * <p>
  * The client ships a Micrometer implementation of {@code JobWorkerMetrics} itself. It is
- * deliberately not used: its meter names and tags are Camunda's
- * ({@code camunda.job.invocations} and friends), and an application should not have to
- * learn two naming schemes to read one dashboard. What is used is the client's HOOK,
- * which is the part that matters - the counters below are incremented by the client, not
- * by this adapter.
+ * not used, on purpose. Its meter names and tags are Camunda's
+ * ({@code camunda.job.invocations} and similar). An application should not have to learn
+ * two naming schemes to read one dashboard. What is used is the HOOK of the client, and
+ * that is the part which matters. The client increments the counters below, not this
+ * adapter.
  * <p>
- * Before {@link #bindTo(MeterRegistry)} was called there is no registry and nothing is
- * recorded. That is the normal state while beans are being built, and it is why the
- * worker metrics resolve their counters lazily instead of at worker-creation time.
+ * Before {@link #bindTo(MeterRegistry)} is called, there is no registry and nothing is
+ * recorded. That is the normal state while beans are being built. It is also why the
+ * worker metrics look up their counters lazily, and not when the worker is created.
  */
 public class MicrometerCamunda8Metrics implements Camunda8Metrics, MeterBinder {
 
@@ -43,8 +43,8 @@ public class MicrometerCamunda8Metrics implements Camunda8Metrics, MeterBinder {
   private final Map<String, Counter> counters = new ConcurrentHashMap<>();
 
   /**
-   * The execution slots registered per adapter instance, kept because an adapter builds
-   * its client before the registry exists.
+   * The execution slots registered per adapter instance. They are kept, because an adapter
+   * builds its client before the registry exists.
    */
   private final Map<String, ExecutionSlots> executionSlots = new LinkedHashMap<>();
 
@@ -55,8 +55,8 @@ public class MicrometerCamunda8Metrics implements Camunda8Metrics, MeterBinder {
   }
 
   /**
-   * What the handlers of one adapter instance do to their slots, kept for the same reason
-   * the slots are.
+   * What the handlers of one adapter instance do to their slots. They are kept for the
+   * same reason as the slots.
    */
   private final Map<String, RunningExecutions> runningExecutions = new LinkedHashMap<>();
 

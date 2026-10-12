@@ -22,8 +22,8 @@ public class ElectionAggregate {
   private Long id;
 
   /**
-   * Written by the task behind the message catch: it proves the message reached the
-   * workflow, and therefore the adapter which holds it.
+   * Written by the task behind the message catch. It proves that the message reached the
+   * workflow, and so the adapter which holds it.
    */
   private String servedBy;
 
