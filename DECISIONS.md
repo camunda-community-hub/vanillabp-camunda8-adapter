@@ -3205,9 +3205,7 @@ See [A form reference has to be a name as well](./README.md#a-form-reference-has
 *Merged into decision 19 on 2026-10-12, before the 2.0 release.* It said that the user-task
 listeners of a declared process id are read from the models the cluster holds.
 
-### 71. A standard loop is refused in a claimed process, warned about in one nobody claims, and a held version is warned about while workflows run on it
-
-*Superseded in part by decision 73: a standard loop in a process nobody claims is not looked at any more, so it gets no WARN.*
+### 71. A standard loop is refused in a claimed process, and a held version is warned about while workflows run on it
 
 #### What was decided
 
@@ -3217,20 +3215,20 @@ Measured on 8.8.39, 8.9.21 and 8.10.0-rc1. A model which counts on the loop does
 somebody finds out in production.
 
 So the deployment reads the model for the marker before anything else, at any depth of its
-subprocesses, and answers in three ways:
+subprocesses, and answers in two ways:
 
 - A BPMN process a `@WorkflowService` class claims does not deploy. The message names the activity,
   the process, the workflow module, what the cluster does with the marker, and the two forms which
   do repeat an activity: a loop in the sequence flow, or a multi-instance element with
   `@MultiInstanceElement`, `@MultiInstanceIndex` and `@MultiInstanceTotal`.
-- A process nobody claims gets one WARN with the same words. It is somebody else's model, and the
-  file travels to the cluster as a whole. This is the split decisions 53, 59 and 69 make for the
-  findings they are about, so the same kind of mistake gets the same answer.
 - A version the cluster already holds is never refused, because nobody can change it. Where
   workflows still run on it, the start of the workflow module logs a WARN naming the version, the
   activity and how many workflows are on it. A version no workflow runs on any more is passed over.
   Where the cluster cannot count, the WARN says so instead of a number. The models come from the
   picture of decision 19, and a count is asked only for a version which carries the marker.
+
+A process nobody claims is not looked at (decision 73). It is somebody else's model, and the file
+travels to the cluster as a whole.
 
 #### Why
 
@@ -3243,8 +3241,8 @@ Camunda 7.
 This is a rule which refuses a model. If it came after the 2.0 release, it would stop an
 application which boots today. That is why it comes with 2.0.
 
-`Camunda8StandardLoopRefusalTest` holds the refusal, the WARN of an unclaimed process, the
-multi-instance element which must deploy, and which held versions are warned about.
+`Camunda8StandardLoopRefusalTest` holds the refusal, the unclaimed process which is not looked at,
+the multi-instance element which must deploy, and which held versions are warned about.
 
 See [A standard loop is refused while deploying](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Deviations#a-standard-loop-is-refused-while-deploying).
 

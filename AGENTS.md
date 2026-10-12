@@ -52,7 +52,7 @@ its old text is gone.
 This rule had one exception, once, before the 2.0 release. On 2026-10-12 three chains of entries
 were merged into their first entry, which now holds today's rule: 32, 33, 34, 41, 72 and 76 went
 into 27, 21 and 70 into 19, and 65, 66 and 78 into 64. The merged entries keep their number and
-heading and say where their text went. From 2.0 on, the rule holds again without exception.
+heading and say where their text went. The note of 71 became part of its text and heading. From 2.0 on, the rule holds again without exception.
 
 The same rule holds for adding an entry. A decision earns a number when several places rely on it
 and a copy of the explanation in each of them would go stale. Anything smaller is a comment where
