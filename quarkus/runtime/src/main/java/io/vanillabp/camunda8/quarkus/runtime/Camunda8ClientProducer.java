@@ -23,7 +23,7 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
 
 /**
- * Produces the {@link Camunda8ClientFactoryRegistry} (one lazily built
+ * Produces the {@link Camunda8ClientFactoryRegistry} (one
  * {@code CamundaClient} per Camunda 8 adapter ID). It is built from the configuration of
  * each adapter at <code>vanillabp.adapters.&lt;id&gt;.*</code>, which the adapter's overlay
  * mapping ({@link VanillaBpCamunda8Properties}) binds. Property names are NEVER parsed in

@@ -35,8 +35,9 @@ import io.vanillabp.spi.process.ProcessService;
  *   <li>starting a workflow inside a committed transaction creates the process instance
  *       only <b>after the commit</b> (phase two) carrying the aggregate's ID as a
  *       variable named after the aggregate's ID property ({@code id} for
- *       {@link DockerAggregate}) - proven by a raw Camunda 8 job worker activating the
- *       service task and observing the variable, and</li>
+ *       {@link DockerAggregate}) - proven by the {@code @WorkflowTask} method of
+ *       {@code DockerWorkflowService}, which the adapter's worker invokes for the service
+ *       task and which receives the aggregate found by that variable, and</li>
  *   <li>a rolled-back transaction never creates an instance (no job is ever activated and
  *       the outbox entry is gone).</li>
  * </ul>

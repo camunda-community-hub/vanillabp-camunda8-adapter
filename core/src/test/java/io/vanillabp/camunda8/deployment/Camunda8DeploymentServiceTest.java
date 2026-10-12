@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,6 +25,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.slf4j.LoggerFactory;
 
+import io.camunda.client.CamundaClient;
 import io.camunda.client.api.worker.JobWorkerBuilderStep1;
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
@@ -92,8 +94,16 @@ public class Camunda8DeploymentServiceTest {
 
   private Camunda8DeploymentService newDeploymentService() {
 
-    // an unconfigured factory: getClient() would throw if ever called
-    return DeploymentServiceUnderTest.of("c8", new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration()),
+    return newDeploymentService(new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration()));
+
+  }
+
+  private Camunda8DeploymentService newDeploymentService(
+      final Camunda8ClientFactory clientFactory) {
+
+    // a factory with the default configuration: its client points at the local cluster of
+    // the release line, which no unit test may depend on
+    return DeploymentServiceUnderTest.of("c8", clientFactory,
         TestCollaborators
             .of(new NoOpInvoker()),
         (
@@ -212,23 +222,27 @@ public class Camunda8DeploymentServiceTest {
   }
 
   @Test
-  @DisplayName("deploying an empty module does not touch the (unconfigured) client")
+  @DisplayName("deploying an empty module does not touch the client")
   public void deployEmptyModuleDoesNotTouchClient() {
 
-    final var service = newDeploymentService();
+    final var askedForTheClient = new AtomicInteger();
+    final var service = newDeploymentService(new Camunda8ClientFactory("c8", new Camunda8AdapterConfiguration()) {
+      @Override
+      public CamundaClient getClient() {
 
-    // null context (no BPMN files at all) and empty context must not build a client
+        askedForTheClient.incrementAndGet();
+        return super.getClient();
+
+      }
+    });
+
+    // null context (no BPMN files at all) and empty context must not ask for the client
     assertDoesNotThrow(() -> service.deployResources("module", null));
     assertDoesNotThrow(() -> service.deployResources("module",
         new Camunda8ProcessingContext("c8", "module", new Camunda8MultiInstance.Registry())));
+    assertEquals(0, askedForTheClient.get(), "an empty module sends nothing to the cluster");
 
   }
-
-
-  /**
-   * Wiring validation is exercised by the integration tests - unit tests use a
-   * permissive no-op invoker.
-   */
 
   @Test
   @DisplayName("a listener worker's lock is resolved like a task's, defaulting to the same five minutes")

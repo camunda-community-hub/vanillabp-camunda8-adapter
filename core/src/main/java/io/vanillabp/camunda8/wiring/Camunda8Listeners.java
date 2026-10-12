@@ -31,7 +31,7 @@ import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
  * Every listener VanillaBP writes carries a job type starting with
  * {@value #VANILLABP_JOB_TYPE_PREFIX}: the user-task lifecycle listeners, the start
  * listeners of the start events the cluster fires on its own, and the end listener of a
- * process whose end is reported. The Business Cockpit extension writes its own under
+ * process whose end is reported, with its cancel listener on the 8.10 line. The Business Cockpit extension writes its own under
  * {@code io.vanillabp.businesscockpit:}, which that prefix covers as well. Besides the
  * prefix, the moment helps. A listener of an extension is not in the model yet while the
  * collection below walks it. VanillaBP promises the moment at which an extension reaches a

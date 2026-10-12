@@ -198,7 +198,7 @@ public class Camunda8FormReferenceWrittenAsAnExpressionTest {
 
   /**
    * The sentence which tells this finding apart from everything else a boot may say. The
-   * refusal and the WARN both carry it.
+   * refusal carries it. Where the boot goes on, the tests check that it is absent.
    */
   private static final String THE_FINDING = "name their form by a FEEL expression";
 

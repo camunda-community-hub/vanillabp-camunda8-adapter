@@ -51,7 +51,9 @@ import io.vanillabp.integration.test.utils.outbox.PhaseTwoOutboxReader.Entry;
  * somebody changed the model to start on a timer, while the code still calls
  * startWorkflow.</li>
  * </ul>
- * All three block the outbox entry after a single attempt. A model which cannot evaluate an
+ * For the first two, the test shows that the outbox entry is blocked after a single attempt.
+ * For the third, it shows that the adapter judges the answer as not repeatable, which is what
+ * blocks an entry; no workflow service starts that model. A model which cannot evaluate an
  * expression is not refused at all. The instance exists and has an incident. The cluster
  * reports the incident, and no outbox entry waits for it.
  * <p>

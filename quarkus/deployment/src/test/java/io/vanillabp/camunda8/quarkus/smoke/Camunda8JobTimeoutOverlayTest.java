@@ -28,8 +28,11 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Proves that the job timeout resolves through all FOUR configuration levels of the Quarkus
  * overlay mapping: task, workflow, workflow-module and adapter level. The most specific level
  * wins. It also proves that the async-task-lock-renewal is read at adapter level. This class
- * also checks the Quarkus overlay key by key. Every client, worker and authentication key has
- * to bind AND arrive at the client which the adapter id built. No BPMN resources are deployed,
+ * also checks the Quarkus overlay key by key. Every client and worker key has to bind, and
+ * arrive at the client which the adapter id built. Two are checked for binding only: the stream
+ * timeout, and of the authentication keys everything beyond method and user name. Of the
+ * authentication block, the client is checked for the kind of credentials it got. No BPMN
+ * resources are deployed,
  * because the workflow module's resources-location is empty. So the boot succeeds without a
  * cluster.
  */

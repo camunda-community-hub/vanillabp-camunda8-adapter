@@ -183,8 +183,8 @@ public class MicrometerCamunda8Metrics implements Camunda8Metrics, MeterBinder {
         "How many handlers this adapter may run at the same time",
         tags,
         slots.configured());
-    // absent rather than guessed in the platform-thread mode, where the client owns its
-    // pool and does not report what it does with it
+    // absent rather than guessed for an adapter which booted without a connection. It has
+    // no executor whose slots could be read
     gauge(
         meterRegistry,
         EXECUTION_SLOTS_IN_USE,

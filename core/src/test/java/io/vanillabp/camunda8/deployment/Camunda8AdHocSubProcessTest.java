@@ -45,7 +45,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Who claims the process decides what happens about that flavour. A process a
  * {@code @WorkflowService} class of the application claims does not deploy, because the
  * application stands in for it and nothing of it serves the element. A process nobody claims
- * keeps the WARN it always had.
+ * is not looked at (decision 73 in the repository's DECISIONS.md).
  * <p>
  * The cluster is an address nothing listens on. Everything asserted below is read from the
  * model.
@@ -255,7 +255,7 @@ public class Camunda8AdHocSubProcessTest {
 
   /**
    * The sentence which tells the job worker flavour apart from everything else this boot
-   * may say. The refusal and the WARN both carry it.
+   * may say. The refusal carries it. Where the boot goes on, the tests check that it is absent.
    */
   private static final String THE_UNSERVED_FLAVOUR = "carry a 'zeebe:taskDefinition' of their own";
 

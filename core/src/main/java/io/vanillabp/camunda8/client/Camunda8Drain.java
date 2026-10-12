@@ -37,7 +37,7 @@ import lombok.extern.slf4j.Slf4j;
  * <b>Why the drain waits for the workers as well.</b>
  * {@code JobWorker#isClosed()} is the client's own answer, and it means three things at
  * once. The worker was closed, no activation request of it is in flight, and no activated
- * job is left. This adapter does not wait for it, because a worker long-polls with the
+ * job is left. Waiting for it has a cost, because a worker long-polls with the
  * request timeout (ten seconds by default) and closing it does not cancel the request in
  * flight, so a worker which runs nothing at all reports {@code false} for as long as that
  * request takes. What that costs was known; what it buys was not, and it turned out to be

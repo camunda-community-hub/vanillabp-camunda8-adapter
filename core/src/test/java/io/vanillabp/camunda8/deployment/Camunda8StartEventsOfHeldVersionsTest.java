@@ -39,8 +39,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 import io.vanillabp.spi.service.BpmsStartTrigger;
 
 /**
- * Which start events the cluster fires on its own in a version it still HOLDS - the
- * answer the core judges the <code>&#64;WorkflowStartedByBpms</code> methods of a
+ * Which start events a version the cluster still HOLDS has: the plain one and the ones the
+ * cluster fires on its own. That is the answer the core judges the <code>&#64;WorkflowStartedByBpms</code> methods of a
  * declared-only BPMN process id by, the id a renamed process left behind.
  * <p>
  * Nothing wires such an id while an application boots. So nothing judged those methods,

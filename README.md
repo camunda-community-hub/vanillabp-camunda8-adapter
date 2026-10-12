@@ -3265,9 +3265,10 @@ elements to activate, and a `@WorkflowTask` method has no way to say that. Servi
 new outcome of a workflow task, which is a design of its own rather than something this element
 gets on the side.
 
-A model using that flavour deploys and its workflow stops at the element, so the deployment writes
-one WARN per BPMN process naming it, what it costs and the two ways out. An element built from an
-element template is left alone there, because then a connector runtime owns it.
+Where a `@WorkflowService` class claims the process, a model using that flavour ends the boot with
+a message naming the element, what it costs and the two ways out. A process nobody claims is not
+looked at, see [Ad-hoc subprocesses](#ad-hoc-subprocesses). An element built from an element
+template is left alone, because then a connector runtime owns it.
 
 ### Cancel user task
 
@@ -3774,10 +3775,12 @@ A build which stops at `package` never reaches the phase which writes the report
 prints a line per platform saying that the coverage was not checked, and those two tests are
 reported as skipped, instead of failing over a file the run could not have written.
 
-Every release line is judged by that one number. Line 8.10 is the reason it is not the rule itself:
-that line excludes the tests of an open cluster bug it cannot pass, which costs it about a point and
-a quarter on either platform, and a gate standing at 90 turned the nightly matrix red over coverage
-nobody was in a position to write.
+Every release line is judged by that one number. Line 8.10 is why it is not the rule itself: while
+that line was built against an alpha, it excluded the tests of a cluster bug it could not pass. That
+cost it about a point and a quarter on either platform, and a gate standing at 90 turned the
+nightly matrix red over coverage nobody was in a position to write. The exclusions went with the
+move to `8.10.0-rc1`, and no line excludes anything today. The gate stays at 85 all the same,
+because it is never raised to whatever a suite happens to reach.
 
 Both platforms run the documented features end to end against a real cluster: Spring Boot in the
 `spring-boot` module's `*IT` classes, Quarkus in `quarkus/integration-tests`. That duplication

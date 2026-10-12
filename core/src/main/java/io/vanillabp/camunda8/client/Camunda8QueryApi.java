@@ -16,8 +16,10 @@ import lombok.extern.slf4j.Slf4j;
  * them. So does a cluster whose credentials may not read what the adapter asks for. This
  * adapter serves neither. The deployment ends the boot on a remembered <code>false</code>,
  * with a message which names both reasons and both ways out, see decision
- * 20 in the repository's DECISIONS.md. So this class is asked once and read once, and
- * every other reader of the capability is gone.
+ * 20 in the repository's DECISIONS.md. Two more places read the remembered answer later.
+ * The picture of the models the cluster holds stays empty on an adapter degraded to
+ * <code>warn</code>, and {@code canLocateWorkflows} tells the core whether it can build a
+ * migration on this adapter.
  *
  * <h2>Why the answer is remembered anyway</h2>
  *

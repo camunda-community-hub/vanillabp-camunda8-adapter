@@ -74,9 +74,9 @@ public class Camunda8ProtobufPinTest {
 
     if (!Files.isRegularFile(CLIENT_POM)) {
       throw new AssertionError(
-          "The Camunda client's POM is missing at '%s'. It is copied there by the "
+          ("The Camunda client's POM is missing at '%s'. It is copied there by the "
               + "maven-dependency-plugin execution 'the-clients-own-pom' of this module, so this "
-              + "test cannot run from an IDE which skipped it.".formatted(CLIENT_POM));
+              + "test cannot run from an IDE which skipped it.").formatted(CLIENT_POM));
     }
     final var factory = DocumentBuilderFactory.newInstance();
     factory.setNamespaceAware(false);

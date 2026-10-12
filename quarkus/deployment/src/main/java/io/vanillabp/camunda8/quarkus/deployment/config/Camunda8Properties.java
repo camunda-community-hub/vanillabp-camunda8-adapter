@@ -5,8 +5,9 @@ import io.quarkus.runtime.annotations.ConfigRoot;
 import io.smallrye.config.ConfigMapping;
 
 /**
- * Camunda 8 adapter build-time properties. Empty for now - adapter-specific
- * configuration (client connection, etc.) is added by later feature stories.
+ * Camunda 8 adapter build-time properties. There are none. The adapter's own keys (client
+ * connection and the rest) are read at run time, through the overlay mapping
+ * {@code VanillaBpCamunda8Properties} of the runtime module.
  */
 @ConfigRoot(phase = ConfigPhase.BUILD_TIME)
 @ConfigMapping(prefix = "vanillabp")

@@ -22,8 +22,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 /**
  * The executor of the virtual-thread mode. What the client submits runs on a virtual thread,
  * and never more of it at once than the bound allows. What the client SCHEDULES runs on a
- * platform thread of its own. What both executors share - the bound, the gate in front of
- * the scheduled tasks and the shutdown - is {@link Camunda8ExecutorTest}.
+ * platform thread of its own. What both executors share - the bound and the gate in front
+ * of the scheduled tasks - is {@link Camunda8ExecutorTest}.
  */
 @ExtendWith(SuppressOutputExtension.class)
 public class Camunda8VirtualThreadExecutorTest {

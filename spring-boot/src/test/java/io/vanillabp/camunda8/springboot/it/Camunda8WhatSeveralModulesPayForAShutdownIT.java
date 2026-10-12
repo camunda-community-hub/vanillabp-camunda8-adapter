@@ -51,13 +51,14 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Its workers are split into groups of thirty. A group is a workflow module, each with a
  * {@link Camunda8Drain} of its own, the same object which the adapter gives a module. The
  * groups are left alone long enough for every activation request to be parked at the
- * cluster. Then the shutdown is replayed exactly as the platform drives it: last module
- * first, one module at a time. Each module closes its own workers and then calls
- * {@link Camunda8Drain#awaitQuiet} with the whole grace. The test reads the wait of each
+ * cluster. Then the shutdown is replayed the way the platform stops the modules: last module
+ * first, one module at a time. In the first reading each module closes its own workers and
+ * then calls {@link Camunda8Drain#awaitQuiet} with the whole grace. The test reads the wait of each
  * module and the sum over them.
  * <p>
  * The same cases are read a second time, with every module's workers closed BEFORE anything
- * is waited for. That is the other way an adapter can do it. Then the modules cost one wait,
+ * is waited for. That is the way this adapter does it now ({@code Camunda8DeploymentService}
+ * waits once, after the last module of an adapter instance). Then the modules cost one wait,
  * not a wait each. Both readings are in the same block, because this measurement was taken to
  * choose between them.
  * <p>
@@ -184,8 +185,8 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
   }
 
   /**
-   * What the two ways of draining several workflow modules cost: one wait per module, the
-   * way the platform drives it today, and one wait for all of them.
+   * What the two ways of draining several workflow modules cost: one wait per module, and one
+   * wait for all of them, which is what this adapter does now.
    *
    * @param reporter Where the reading goes
    * @throws Exception Where the cluster or a wait is interrupted
@@ -411,7 +412,7 @@ public class Camunda8WhatSeveralModulesPayForAShutdownIT extends TestOnTheShared
                       Integer.valueOf(testCase.modules()),
                       testCase.closeThemAllFirst()
                           ? "every module's workers closed first and then one wait"
-                          : "one wait per module, as the platform drives it",
+                          : "one wait per module",
                       Integer.valueOf(reading),
                       Long.valueOf(wholeShutdown.toMillis()),
                       Double.valueOf((double) wholeShutdown.toMillis() / REQUEST_TIMEOUT.toMillis()),

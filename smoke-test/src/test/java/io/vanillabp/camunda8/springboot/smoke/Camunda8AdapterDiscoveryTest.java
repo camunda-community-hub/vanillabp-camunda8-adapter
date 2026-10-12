@@ -19,7 +19,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * Smoke test proving the Camunda 8 adapter is discovered on Spring Boot when configured
  * ({@code vanillabp.adapters.c8: camunda8}), without any Camunda 8 cluster or Docker: no
  * BPMN files are provided and the deployment lifecycle is disabled, so no cluster
- * connection is needed.
+ * connection is needed. One test asks the local cluster of the release line for its health,
+ * and it holds whether one runs there or not.
  * <p>
  * {@code DeploymentAutoConfiguration} is excluded, because it runs the deployment pipeline
  * when the context starts. The Testcontainers-based ITs cover a real deployment to a cluster.

@@ -18,8 +18,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * is configured but not there. No Docker and no cluster. The address points at a port nothing
  * listens on. The endpoint exists for exactly this situation.
  * <p>
- * The counterpart - an adapter which is not configured at all - is asserted by
- * {@link Camunda8AdapterDiscoveryTest}, whose application has no address configured.
+ * The counterpart - an adapter configured without an address, which asks the local cluster
+ * of its release line - is asserted by {@link Camunda8AdapterDiscoveryTest}.
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SpringBootTest(

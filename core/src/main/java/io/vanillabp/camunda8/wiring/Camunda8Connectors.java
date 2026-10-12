@@ -257,9 +257,9 @@ public final class Camunda8Connectors {
 
   /**
    * The line which opens and closes the startup report. Plain ASCII, so a log viewer
-   * without a font for box drawing shows a line rather than a row of question marks, and
-   * nothing else this adapter logs is framed: a second framed message would cost this one
-   * its effect.
+   * without a font for box drawing shows a line rather than a row of question marks. The
+   * listener report ({@link Camunda8Listeners#FRAME_LINE}) is the only other message this
+   * adapter frames. More framed messages would cost the frame its effect.
    */
   public static final String FRAME_LINE = "=".repeat(100);
 

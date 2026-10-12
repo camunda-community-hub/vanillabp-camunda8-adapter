@@ -11,6 +11,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
 /**
  * Release line <code>8.10</code>, the current GA line, built against the newest Camunda minor.
+ * It is what a build without a profile produces.
  * <p>
  * This test exists once per line, in the line's own test source directory. Only the copy of
  * the active line is compiled. It proves that the per-line build works: the profile selected

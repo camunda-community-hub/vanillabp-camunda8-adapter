@@ -51,7 +51,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * answer after that, and it reads what the adapter made of the refusal.
  * <p>
  * It runs on the 8.10 line and nowhere else, because no earlier client can ask for a lease.
- * The pull-request checks build the GA lines, so what proves this is the nightly matrix.
+ * 8.10 is a GA line, so the pull-request checks run this test as well as the nightly matrix.
  * <p>
  * <b>The handler runs more than once here, and the test may not count the runs.</b> The lock of
  * this job has to expire, otherwise the test could not take the activation over. From

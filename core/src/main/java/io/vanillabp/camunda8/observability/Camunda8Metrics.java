@@ -17,8 +17,8 @@ import io.camunda.client.api.worker.JobWorkerMetrics;
  * <li>the job counters of the client itself, which sit BEFORE the execution slots. The
  * difference between activated and handled is the queue in front of the handlers.</li>
  * <li>the execution slots of the adapter: how many there are, how many are busy and how
- * many jobs wait for one. A cluster with work and an application with no free slot is
- * the situation which probe P3 of the spike described. Here it becomes visible.</li>
+ * many jobs wait for one. A cluster with work and an application with no free slot
+ * looks like an idle application from the outside. Here it becomes visible.</li>
  * </ul>
  * The Micrometer implementation is {@link MicrometerCamunda8Metrics}. Micrometer is
  * optional. Without it, none of that is loaded and the adapter runs unchanged.

@@ -54,9 +54,9 @@ import io.vanillabp.spi.process.TaskNotFoundException;
  * Task processing against a REAL Camunda 8 broker (Testcontainers):
  * <ul>
  * <li>happy path through the adapter's polling job workers incl. redelivery
- * convergence (the first invocation blocks beyond the task's job timeout - the
- * redelivered job converges idempotently, the duplicate completion is
- * tolerated);</li>
+ * convergence (the first delivery of a task throws, the cluster delivers the job
+ * again, and the second delivery converges: the change of the first one was rolled
+ * back);</li>
  * <li>{@code TaskException} - BPMN error with error-boundary routing, the
  * throwing handler's aggregate changes committed;</li>
  * <li>technical exception - job failed with decremented retries, local
@@ -353,9 +353,9 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   /**
-   * The rows the start of one workflow left behind. Read by aggregate AND by process:
-   * the classes of this module share one in-memory database, and their aggregate ids
-   * overlap.
+   * The rows the start of one workflow left behind. Read by aggregate AND by process. Each
+   * test class has a database of its own (<code>generate-unique-name</code>, and the context
+   * is closed after the class), so the second filter is caution, not need.
    *
    * @param aggregateId The workflow aggregate this test started
    * @param bpmnProcessId The process the workflow was started of
@@ -1139,8 +1139,8 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
         () -> userTaskNotificationState(aggregateId));
 
     // cancel the whole instance - the canceling task listener fires as a job
-    // (the instance key was captured at start: the search API needs secondary
-    // storage which the test broker does not run)
+    // (the instance key was captured at start, so no search has to wait for the
+    // secondary storage to catch up)
     workflowServiceClient()
         .newCancelInstanceCommand(lastStartedInstanceKey)
         .send()

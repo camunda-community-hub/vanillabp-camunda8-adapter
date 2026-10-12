@@ -24,7 +24,7 @@ import io.vanillabp.integration.test.utils.PrintsWhenPassing;
  * reports which span many modules. So the gate reads exactly the report which is published,
  * and report and gate can never disagree.
  * <p>
- * The completeness test comes first for a reason. A threshold checked against an incomplete
+ * The completeness test is there for a reason. A threshold checked against an incomplete
  * aggregate fails builds because of coverage which exists but is not counted. Nobody can fix
  * that by writing a test.
  * <p>

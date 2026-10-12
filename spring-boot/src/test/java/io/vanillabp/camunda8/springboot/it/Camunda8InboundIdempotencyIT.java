@@ -218,10 +218,9 @@ public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedClust
         .send()
         .join();
 
-    // looked up by the process instance key rather than by the aggregate: the classes of
-    // this module share one in-memory database and their aggregate ids overlap, while a
-    // process instance key is the cluster's and belongs to this workflow alone. That the
-    // row is found at all is therefore already the assertion about the workflow id
+    // looked up by the process instance key rather than by the aggregate: a process
+    // instance key is the cluster's and belongs to this workflow alone. That the row is
+    // found at all is therefore already the assertion about the workflow id
     final var elements = new java.util.concurrent.atomic.AtomicReference<List<String>>(List.of());
     awaitUntil(
         () -> {
@@ -240,8 +239,9 @@ public class Camunda8InboundIdempotencyIT extends SpringBootTestOnTheSharedClust
 
   /**
    * What the log wrote down about the asynchronous task of one workflow aggregate. Read by
-   * aggregate AND by task definition: every integration test class of this repository
-   * shares the in-memory database, and their aggregate IDs start at 1 just like ours.
+   * aggregate AND by task definition. Each test class has a database of its own
+   * (<code>generate-unique-name</code>, and the context is closed after the class), so the
+   * second filter is caution, not need.
    *
    * @param aggregateId The workflow aggregate this test started
    * @return Those records, empty while the log holds none

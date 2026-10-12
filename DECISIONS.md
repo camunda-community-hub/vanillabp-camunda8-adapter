@@ -1449,7 +1449,7 @@ release line reaches the runtime for messages, not for behaviour (`Camunda8Relea
 cluster may be newer than the line a build was compiled against. And the slowest measurement fits
 under three seconds with room to spare. For the faster lines it costs two seconds in the case
 which waits the window out to its end, which is a workflow that no BPMS of the election knows. An
-operator who wants the second back sets the key.
+operator who wants those two seconds back sets the key.
 
 It is not zero. A workflow which starts and ends within a few milliseconds is gone from the engine
 before the read model has heard of it at all. Answering `UNKNOWN_TO_BPMS` for a workflow which
@@ -1947,6 +1947,11 @@ side. And it names both situations it can be: a workflow which another applicati
 workflow aggregate deleted here while its workflow was still running. Nothing in the code can tell
 the two apart, so nothing in the message claims to.
 
+*Note 2026-10-12: this no longer holds everywhere. Since decision 108 of
+`adapter-platform-integration` the delivery log keeps a start row for every workflow this
+application starts, and the core reads it before it words the message (decision 99 there). The
+sentence above holds only where no start row can be read.*
+
 Two options from the earlier draft of this entry were not taken. A new inbound outcome meaning "not
 mine" was not introduced, because nothing is handed back. And the case is not left undocumented,
 which the third option would have meant.
@@ -2117,6 +2122,10 @@ The id of a workflow is the id of its workflow aggregate. The application assign
 `@WorkflowStartedByBpms` method, and nobody else does. Camunda 8 keeps no business key, so this
 adapter keeps that id in a PROCESS VARIABLE. The rule itself and what the core does with it are
 decision 98 of `adapter-platform-integration`.
+
+*Note 2026-10-12: since 8.9 Camunda 8 has a business id field. Decision 37 may write the
+aggregate's id there, for the eye only. VanillaBP never reads it back, so the variable stays the
+place where the id lives.*
 
 **The name of the variable.** The variable is called after the workflow aggregate's id attribute: a
 `Ride` whose `@Id` field is `rideId` names its workflow in the variable `rideId`.
@@ -2291,9 +2300,6 @@ reports through `StartupReport`, the bean of decision 97 of `adapter-platform-in
 platform integrations publish one instance per application, and both producers of this adapter now
 hand it to the deployment service. Where there is none, as in a test which builds the service by
 hand, the message goes into the log where it was found.
-
-`Camunda8WorkerConnections` holds the number and `Camunda8WorkerConnectionsTest` holds the sentence
-it produces.
 
 ### 51. The shutdown grace is the budget of the whole shutdown, and the workflow modules are one wait
 

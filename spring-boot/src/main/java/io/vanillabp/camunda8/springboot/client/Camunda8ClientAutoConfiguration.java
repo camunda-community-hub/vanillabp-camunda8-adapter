@@ -25,7 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Exposes the {@link Camunda8ClientFactoryRegistry}. It is built from the configuration
  * of each adapter at <code>vanillabp.adapters.&lt;id&gt;.*</code>, which the adapter's
- * overlay {@link VanillaBpCamunda8Properties} binds. The registry owns one lazily built
+ * overlay {@link VanillaBpCamunda8Properties} binds. The registry owns one
  * {@code CamundaClient} per adapter ID. It is a managed bean, so its {@code close()} runs
  * when the application shuts down, and that closes all clients.
  * <p>

@@ -26,12 +26,6 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  */
 @ExtendWith(SuppressOutputExtension.class)
 @SuppressOutputExtension.SuppressBackgroundOutput
-// the order is part of the test: a broadcast reaches EVERY workflow of the module which
-// waits at that moment, and the broadcast test repeats its signal until both of its
-// instances continued. Whatever is still in flight from that loop would continue the
-// instance of the rollback test as well, which is what made it fail in the GitHub build
-// ('expected <null> but was <recordSignal>'). The rollback test therefore runs FIRST, on a
-// cluster nobody signalled yet.
 @SpringBootTest(
     classes = DockerTestApplication.class,
     properties = "spring.config.name=camunda8-it")
