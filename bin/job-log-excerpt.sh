@@ -36,14 +36,17 @@ set -euo pipefail
 max_lines=30
 
 # Only what the step printed. The BOM sits in front of the first line of each step, the colours
-# come from the script echo and from tools which think they write to a terminal.
+# come from the script echo and from tools which think they write to a terminal. The gh CLI
+# writes a colour code as the visible text '^[[36m' unless it is told to keep escape sequences,
+# so both forms are removed.
 plain() {
   LC_ALL=C sed -E \
     -e 's/^\xEF\xBB\xBF//' \
     -e '/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/! s/^[^\t]*\t[^\t]*\t//' \
     -e 's/^\xEF\xBB\xBF//' \
     -e 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z ?//' \
-    -e 's/\x1B\[[0-9;]*[A-Za-z]//g'
+    -e 's/\x1B\[[0-9;]*[A-Za-z]//g' \
+    -e 's/\^\[\[[0-9;]*[A-Za-z]//g'
 }
 
 # The lines of the step which broke first: from its '##[group]Run' header up to the runner's
@@ -136,7 +139,7 @@ LOG
     printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9691515Z \x1B[36;1m  echo "the reason" >&2\x1B[0m\n'
     printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9756803Z shell: /usr/bin/bash -e {0}\n'
     printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9759371Z ##[endgroup]\n'
-    printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9866772Z camunda8.line=8.10\n'
+    printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9866772Z ^[[1mcamunda8.line=8.10^[[0m\n'
     printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9899306Z Line 8.10 ran camunda/camunda:8.10.1 against the client 8.10.0.\n'
     printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9900038Z raise camunda8.version.line-8.10 in pom.xml.\n'
     printf 'line (8.10)\tThe cluster\t2026-10-13T04:01:08.9911688Z ##[error]Process completed with exit code 1.\n'
