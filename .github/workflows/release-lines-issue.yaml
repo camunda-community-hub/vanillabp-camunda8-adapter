@@ -157,8 +157,8 @@ jobs:
                     cat "$work/excerpt.md"
                     echo '```'
                   else
-                    echo "Nothing in that log is marked as an error, so there is nothing to"
-                    echo "quote here. The job itself is the place to read."
+                    echo "The log of that job gives no reason which could be quoted here."
+                    echo "The job itself is the place to read."
                   fi
                   echo
                   echo "The test reports and the application logs of that line are attached"
