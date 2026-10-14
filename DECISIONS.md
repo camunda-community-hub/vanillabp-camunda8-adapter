@@ -3418,3 +3418,26 @@ the message.
 *Merged into decision 64 on 2026-10-12, before the 2.0 release.*
 It said that a task-scoped push searches for its scope once, and
 that phase two does not sleep.
+
+### 79. The issue of a red night quotes the step which broke, and one script reads the log for every repository
+
+Built by story 1492 on 2026-10-14. It adds to the second rule of decision 31.
+
+The issue of a red line quotes what the log of its job says. Until this story that was Maven's
+`[ERROR]` lines, with a fallback here of the ten lines before the last `##[error]` of the log. The
+Business Cockpit's Camunda 8 adapter had no fallback. On 2026-10-13 its line 8.10 went red in a
+shell check whose reason was three lines of plain text, and the issue quoted nothing.
+
+`bin/job-log-excerpt.sh` reads the log now. It finds the step which broke first, from its
+`##[group]Run` header to the runner's `##[error]Process completed with exit code`. Steps with
+`if: always()` run after a failure and can fail as well, but the first break is the cause. If that
+step printed Maven's `[ERROR]` lines, those are the excerpt, as before. Otherwise the excerpt is
+the step's own output, without the script GitHub echoes in front of it, at most the last thirty
+lines. Only the failed step is read, so an `[ERROR]` which an earlier Maven step survived is not
+quoted, and the clean-up of the job is not quoted either.
+
+Every repository with such an issue uses this script: this one and the four Business Cockpit
+repositories. They check this repository out and call it, the way the Business Cockpit's
+Camunda 8 adapter already calls `bin/line-preview.sh`. Five copies of one pipeline had already drifted: one had a
+fallback, four did not. Its self test runs in `checks.yaml`, with a Maven failure, a failing shell
+check, a long output and a log without an error.
