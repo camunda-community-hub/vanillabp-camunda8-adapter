@@ -448,6 +448,9 @@ A night which goes red does not stay buried in the list of runs. `release-lines-
 one issue per red line, labelled `release-lines` and titled after the line, and comments on that
 issue while the line stays red. A line which is green again gets a comment and the issue stays
 open, because a green night is not a fix. Whoever merges the fix closes it. See decision 31.
+The issue quotes the reason of the step which broke: Maven's summary when Maven broke, and the
+last lines of the step otherwise. `bin/job-log-excerpt.sh` finds them, and the Business Cockpit
+repositories call the same script. See decision 79.
 
 The night is also how this repository measures the platform. Every line resolves the platform
 with `--update-snapshots`, so a snapshot published during the day is built against by the next

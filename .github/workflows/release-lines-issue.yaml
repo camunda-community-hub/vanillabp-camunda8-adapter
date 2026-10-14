@@ -47,6 +47,11 @@ jobs:
       actions: read
       issues: write
     steps:
+      # for bin/job-log-excerpt.sh. 'workflow_run' always runs the workflow of the default
+      # branch, so this is main and never the branch of the run being reported.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: bin
       - name: Open or update the issue of every line which broke
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
@@ -139,35 +144,21 @@ jobs:
                   echo
                   gh run view --job "$job_id" --log-failed > "$work/job.log" 2>/dev/null \
                     || true
-                  # Every log line carries the job, the step and a timestamp before what was
-                  # printed, and the step is 'UNKNOWN STEP' for a job of a matrix, so the
-                  # whole log arrives rather than the failed step alone.
-                  sed -E 's/^[^\t]*\t[^\t]*\t[^ ]+ //' "$work/job.log" > "$work/plain.log"
-                  # Maven's own summary, without the six lines it prints after every
-                  # failure about switches to re-run it with.
-                  grep -aE '^\[ERROR\]' "$work/plain.log" \
-                    | grep -avE '^\[ERROR\][[:space:]]*$|-> \[Help|\[Help [0-9]+\] http|To see the full stack trace|Re-run Maven using|For more information about the errors|After correcting the problems|mvn <args> -rf|See dump files|See /home/runner/' \
-                    | head -30 > "$work/excerpt.md" || true
-                  # A line can go red while Maven says nothing at all: both red nights this
-                  # repository had in September 2026 ended in BUILD SUCCESS and failed in the
-                  # step which prints the cluster and the client afterwards. What that step
-                  # printed carries no marker, so the ten lines up to the runner's own error
-                  # are taken. The tail of the log is not those lines: the cleanup of the job
-                  # runs after the failing step and prints another thirty.
-                  if [ ! -s "$work/excerpt.md" ]; then
-                    end=$(grep -anF '##[error]' "$work/plain.log" | tail -1 | cut -d: -f1)
-                    if [ -n "$end" ]; then
-                      start=$(( end > 9 ? end - 9 : 1 ))
-                      sed -n "${start},${end}p" "$work/plain.log" > "$work/excerpt.md"
-                    fi
-                  fi
+                  # Maven's summary when Maven broke, and otherwise the last lines of the
+                  # step which broke first. A line can go red while Maven says nothing at
+                  # all: both red nights this repository had in September 2026 ended in
+                  # BUILD SUCCESS and failed in the step which prints the cluster and the
+                  # client afterwards. The script says how it finds that step, and its self
+                  # test holds it against both kinds of log. See decision 79 in the
+                  # repository's DECISIONS.md.
+                  bin/job-log-excerpt.sh "$work/job.log" > "$work/excerpt.md"
                   if [ -s "$work/excerpt.md" ]; then
                     echo '```'
                     cat "$work/excerpt.md"
                     echo '```'
                   else
-                    echo "Nothing in that log is marked as an error, so there is nothing to"
-                    echo "quote here. The job itself is the place to read."
+                    echo "The log of that job gives no reason which could be quoted here."
+                    echo "The job itself is the place to read."
                   fi
                   echo
                   echo "The test reports and the application logs of that line are attached"

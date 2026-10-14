@@ -51,6 +51,17 @@ jobs:
       - name: Every citation of a decision points at something which exists
         run: bash bin/check-decision-citations.sh
 
+  # The issue of a red night quotes the log of the job which broke, and the Business Cockpit
+  # repositories call the same script for theirs. Nothing else runs it before a night goes
+  # red, so a broken excerpt would only show as an empty issue. The self test holds it
+  # against a Maven failure, a failing shell check and a log with nothing to quote.
+  job-log-excerpt-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: The excerpt of a job log quotes the reason of the step which broke
+        run: bash bin/job-log-excerpt.sh --self-test
+
   # The ground rule of the release lines: a user must never read the version suffix of an
   # artifact to find out which methods exist. This job keeps that true, and it needs no
   # cluster, so it runs on every pull request while the integration tests of the other
