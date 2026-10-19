@@ -4,9 +4,15 @@ name: Publish to GitHub Packages
 # result like every other one - it did not while this workflow only listened to pushes
 # and ignored renovate/**, and a required check nobody produces waits forever.
 #
-# Publishing from main alone is the second half of it: there is one snapshot version per
-# module, so every branch used to overwrite what main had published in the registry, and
-# whoever pushed last decided what the other repositories compiled against.
+# Publishing from main alone is the second half of it: a snapshot version is shared by
+# every build which publishes it, so every branch used to overwrite what main had
+# published in the registry, and whoever pushed last decided what the other repositories
+# compiled against.
+#
+# A push to main publishes one snapshot per release line, 2.0.0-<line>-SNAPSHOT, in the
+# job 'snapshot'. So a project can try any line before it is released, not only the
+# current GA line. The job 'publish' still builds and tests the current GA line on that
+# push, because the coverage report on GitHub Pages comes from its tests.
 "on":
   pull_request:
   push:
@@ -39,21 +45,12 @@ jobs:
       # skipped their second run, the compiler did not, and every javac warning was
       # reported twice - once per compilation. It stays 'install' because
       # the Quarkus tests load modules from the local repository.
+      #
+      # It runs on a push to main as well, where it publishes nothing. The job 'snapshot'
+      # publishes, and this run gives the coverage report.
       - name: Build and test
-        if: "${{ github.event_name == 'pull_request' }}"
         run: mvn --batch-mode --no-transfer-progress --update-snapshots install
         env:
-          CI: false
-      # spi-for-java and the platform come from the snapshot repository of Maven Central,
-      # which the root pom.xml names and which needs no login. The settings file only
-      # carries the login for the deploy into GitHub Packages.
-      - name: Publish package
-        if: "${{ github.event_name == 'push' }}"
-        run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml
-          --batch-mode --no-transfer-progress --update-snapshots deploy
-        env:
-          USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CI: false
       # what a failing test printed is in these reports, and for the Quarkus tests
       # booting their application in a forked JVM it is ONLY in that application's own
@@ -105,6 +102,63 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: coverage
+  # The release lines are the line-* profiles of the parent POM, read the same way as in
+  # line-matrix.yaml. So a new line publishes snapshots as soon as its profile exists.
+  discover:
+    if: "${{ github.event_name == 'push' }}"
+    runs-on: ubuntu-latest
+    outputs:
+      lines: "${{ steps.list.outputs.lines }}"
+    steps:
+      - uses: actions/checkout@v7
+      - id: list
+        name: Collect the release lines
+        run: |
+          list=$(sed -n 's|.*<id>line-\([0-9][^<]*\)</id>.*|\1|p' pom.xml \
+            | jq -R -s -c 'split("\n")[:-1]')
+          echo "lines=${list}" >> "$GITHUB_OUTPUT"
+          echo "Publishing lines: ${list}"
+  # One snapshot per line, 2.0.0-<line>-SNAPSHOT, built against the client pin of that
+  # line. It skips the tests: the pull request ran every line through the matrix of
+  # checks.yaml, and the nightly matrix runs them again. What this job proves is that
+  # every line still compiles against its own pin.
+  #
+  # 'maven.test.skip' and not 'skipTests': Failsafe 3.6.0 no longer reads '-DskipTests',
+  # so its integration tests would still start clusters. 'maven.test.skip' also skips the
+  # test compilation, and no module of this repository publishes test classes. 'clean'
+  # for the same reason as in line-matrix.yaml: classes compiled against another client
+  # are binary compatible with nothing.
+  snapshot:
+    if: "${{ github.event_name == 'push' }}"
+    needs: discover
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        line: "${{ fromJSON(needs.discover.outputs.lines) }}"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          java-version: 25.0.4+101.0.LTS
+          distribution: temurin
+          cache: maven
+      # spi-for-java and the platform come from the snapshot repository of Maven Central,
+      # which the root pom.xml names and which needs no login. The settings file only
+      # carries the login for the deploy into GitHub Packages.
+      - name: "Publish the snapshot of line ${{ matrix.line }}"
+        run: mvn -s $GITHUB_WORKSPACE/.github/workflows/github-packages-settings.xml
+          --batch-mode --no-transfer-progress --update-snapshots
+          -Pline-${{ matrix.line }} -Drevision=2.0.0-${{ matrix.line }}-SNAPSHOT
+          -Dmaven.test.skip=true -DskipITs
+          clean deploy
+        env:
+          USER_NAME: "${{ secrets.VANILLABP_USER_NAME }}"
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CI: false
   native-build:
     # The one test which cannot run in a JVM: the adapter has to build into a native
     # image AND start as one. Both halves are needed - the image built long before it

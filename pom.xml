@@ -125,11 +125,13 @@
          green. Renovate is turned off for io.netty for that reason. -->
     <netty.version.quarkus>4.1.137.Final</netty.version.quarkus>
     <!-- The version of every artifact, resolved into the published POMs by the
-         flatten plugin. A plain 'mvn install' builds 2.0.0-SNAPSHOT of the current GA
-         line, which is what a developer of this repository wants and needs to remember
-         no property for. A release of a line adds the line to it, e.g.
+         flatten plugin. It names the line of the build, because every line publishes a
+         snapshot of its own. A plain 'mvn install' builds 2.0.0-8.10-SNAPSHOT of the
+         current GA line, and '-Pline-8.8' builds 2.0.0-8.8-SNAPSHOT. These are the same
+         coordinates the registry has, so a developer of this repository needs to remember
+         no property. A release of a line sets the version, e.g.
          '-Pline-8.8 -Drevision=2.1.0-8.8'. See the README, section "Release lines". -->
-    <revision>2.0.0-SNAPSHOT</revision>
+    <revision>2.0.0-${camunda8.line}-SNAPSHOT</revision>
     <!-- The release line this build produces: the Camunda client it is compiled against
          and, because a client is only promised against clusters of its own version and
          newer, the lowest cluster version the artifacts accept. Every line is built from
