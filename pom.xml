@@ -125,11 +125,14 @@
          green. Renovate is turned off for io.netty for that reason. -->
     <netty.version.quarkus>4.1.137.Final</netty.version.quarkus>
     <!-- The version of every artifact, resolved into the published POMs by the
-         flatten plugin. A plain 'mvn install' builds 2.0.0-SNAPSHOT of the current GA
-         line, which is what a developer of this repository wants and needs to remember
-         no property for. A release of a line adds the line to it, e.g.
-         '-Pline-8.8 -Drevision=2.1.0-8.8'. See the README, section "Release lines". -->
-    <revision>2.0.0-SNAPSHOT</revision>
+         flatten plugin. It names the line, because every line publishes a snapshot of its
+         own. A plain 'mvn install' builds 2.0.0-8.10-SNAPSHOT of the current GA line, the
+         same coordinates the registry has. Another line names its version as well, e.g.
+         '-Pline-8.8 -Drevision=2.0.0-8.8-SNAPSHOT', and so does a release, e.g.
+         '-Pline-8.8 -Drevision=2.1.0-8.8'. See the README, section "Release lines".
+         The value cannot be '2.0.0-${camunda8.line}-SNAPSHOT': Maven accepts it, but the
+         Quarkus build stops on any placeholder inside 'revision'. -->
+    <revision>2.0.0-8.10-SNAPSHOT</revision>
     <!-- The release line this build produces: the Camunda client it is compiled against
          and, because a client is only promised against clusters of its own version and
          newer, the lowest cluster version the artifacts accept. Every line is built from
@@ -678,8 +681,8 @@
          and for the delta source directory. The properties above are the current GA line,
          so a build without any profile is that line: nothing to remember, and no
          'activeByDefault' which any other profile on the command line would switch off.
-         Rotating the lines means editing these profiles, the pin properties, the Renovate
-         boundary rule and the line table of the README. -->
+         Rotating the lines means editing these profiles, the pin properties, the default
+         revision, the Renovate boundary rule and the line table of the README. -->
     <profile>
       <!-- a bugfix line: it takes fixes and nothing which needs a newer cluster. It did not
            end when 8.10 went GA, see the README, section "How long a line lives" -->

@@ -39,7 +39,7 @@ mvn spotless:apply
 mvn install
 ```
 
-That builds the current GA (general availability) line as `2.0.0-SNAPSHOT`. Almost every change is
+That builds the current GA (general availability) line as `2.0.0-8.10-SNAPSHOT`. Almost every change is
 written against this line. Write `install`, not `install verify`. `install` already runs every phase
 of `verify`. Naming both runs two lifecycles per module and reports every compiler warning twice.
 

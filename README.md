@@ -200,8 +200,9 @@ hand the adapter that block while the application boots. `Camunda8StartupReportB
 `Camunda8StartupReportTest` check that. If this wiring broke, the finding would go into the
 plain log instead. There it is one line among many and reads like nothing happened.
 
-Snapshots have no suffix yet. Until the first release they are `2.0.0-SNAPSHOT` of the
-current GA line, which is what a build without a profile produces.
+Snapshots carry the line as well: `2.0.0-8.8-SNAPSHOT`, `2.0.0-8.9-SNAPSHOT` and
+`2.0.0-8.10-SNAPSHOT`. So a project can try the line it will use before that line is released.
+A build without a profile produces the current GA line, `2.0.0-8.10-SNAPSHOT`.
 
 ### Which line to use, and moving to the next one
 
@@ -275,7 +276,8 @@ a Maven profile that selects the client pin, and with it the cluster the integra
 run against:
 
 ```bash
-mvn install                                          # current GA line, 2.0.0-SNAPSHOT
+mvn install                                          # current GA line, 2.0.0-8.10-SNAPSHOT
+mvn -Pline-8.8 -Drevision=2.0.0-8.8-SNAPSHOT clean install  # snapshot of the oldest line
 mvn -Pline-8.8 -Drevision=2.1.0-8.8 clean install    # a release of the oldest line
 mvn -Pline-8.10 -Drevision=2.1.0-8.10-alpha1 clean install
 ```
@@ -310,8 +312,8 @@ What that test knows about a published POM sits in `PublishedPom`, published as
 same assertions, so neither repository keeps a copy which could drift. The module has no
 dependencies at all, because the class only reads a file and throws an `AssertionError`. A
 caller says with `inTheRun(...)` which run it is asking about, and every failure message repeats
-it. The reason: a version like `2.0.0-8.9-SNAPSHOT` names the line by itself, but the plain
-version of a pull request build does not. And this module knows the line it was built for, not
+it. The reason: a version like `2.0.0-8.9-SNAPSHOT` names the line by itself, but a version
+given with `-Drevision` does not have to. And this module knows the line it was built for, not
 the line the caller is testing.
 
 Nothing else of ours reaches an application either, and that is the point of dropping the
@@ -482,10 +484,10 @@ A release of one line consists of:
    job which builds or publishes a line comes after it. No input skips it. See decision 31.
 3. The API identity check green, so no line gained or lost a method.
 4. The line table of this README and of the wiki updated when a pin moved.
-5. The version property of every consumer pointed at the suffixed coordinates. The
-   blueprints carry `camunda8-adapter.version`, which is `2.0.0-SNAPSHOT` today and has to
-   become a suffixed version with the first release. That switch is the moment the suffix
-   becomes visible to users, and `UPGRADE.md` describes it.
+5. The version property of every consumer pointed at the released coordinates. The
+   blueprints carry `camunda8-adapter.version`, which is `2.0.0-8.10-SNAPSHOT` today. The
+   switch to the suffix already happened with the snapshots, so the release only drops
+   `-SNAPSHOT`. `UPGRADE.md` describes the suffix for users.
 6. The consumers of the snapshot follow the current GA line too. The blueprints start a
    Camunda 8 cluster of their own for the CI (`bin/camunda8_cluster.sh`), and that cluster
    has to be at least the client the adapter was built against, so it moves with the
@@ -498,10 +500,14 @@ A release of one line consists of:
    same way: `renovate/verify-pin-automerge.js` applies them to an update with Renovate's own
    rule engine. What the dry run would add is which updates Renovate actually finds.
 
-Every push to `main` publishes a snapshot of the current GA line to the GitHub Packages registry of
-this repository, `https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter`.
-A snapshot carries no line in its version, so `2.0.0-SNAPSHOT` is the line a build without a
-profile builds.
+Every push to `main` publishes one snapshot per line to the GitHub Packages registry of this
+repository, `https://maven.pkg.github.com/camunda-community-hub/vanillabp-camunda8-adapter`:
+`2.0.0-8.8-SNAPSHOT`, `2.0.0-8.9-SNAPSHOT` and `2.0.0-8.10-SNAPSHOT`. The job `snapshot` of
+`deploy-to-github-packages.yaml` reads the lines from the `line-*` profiles of the parent POM,
+the same way the line matrix does, and builds each one with `-Pline-<id>
+-Drevision=2.0.0-<id>-SNAPSHOT`. It skips the tests, because the pull request and the nightly
+matrix test every line. It still compiles every line against its own pin. Nothing publishes a
+plain `2.0.0-SNAPSHOT` any more.
 
 A release starts the way it does for every Camunda Community Hub extension: publish a GitHub
 Release and let GitHub create the tag, for example `2.0.0`. The tag names the release and has no
@@ -517,15 +523,15 @@ hand, the same workflow is a rehearsal: it runs the gate and the same Maven call
 signing, uploads nothing, and keeps what it staged as an artifact of the run. Version 1 is
 maintained on the branch `maintenance/1.x` and releases from there with the hub's action.
 
-Rotating the lines when a minor goes GA touches four places: the `line-*` profiles and the
-pin properties of the parent POM, the boundary rule of `renovate.json`, the table above,
+Rotating the lines when a minor goes GA touches four places: the `line-*` profiles, the
+pin properties and the default `<revision>` of the parent POM, the boundary rule of `renovate.json`, the table above,
 and the wiki.
 
 ## Dependencies
 
 All artifacts use the groupId `org.camunda.community.vanillabp`. Their version carries the
-release line once the adapter is released, e.g. `2.1.0-8.9`; until then it is
-`2.0.0-SNAPSHOT` of the current GA line, see [Release lines](#release-lines).
+release line, e.g. `2.1.0-8.9`. Snapshots carry it too, e.g. `2.0.0-8.10-SNAPSHOT` for the
+current GA line, see [Release lines](#release-lines).
 
 ### Spring Boot
 
@@ -536,7 +542,7 @@ required VanillaBP platform integration:
 <dependency>
   <groupId>org.camunda.community.vanillabp</groupId>
   <artifactId>camunda8-adapter-spring-boot</artifactId>
-  <version>2.0.0-SNAPSHOT</version>
+  <version>2.0.0-8.10-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -553,7 +559,7 @@ Both VanillaBP and the adapter are Quarkus extensions, so both must be added exp
 <dependency>
   <groupId>org.camunda.community.vanillabp</groupId>
   <artifactId>camunda8-adapter-quarkus</artifactId>
-  <version>2.0.0-SNAPSHOT</version>
+  <version>2.0.0-8.10-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -3729,8 +3735,10 @@ order): `spi-for-java`, then `adapter-platform-integration`. Then:
 mvn install
 ```
 
-That is the current GA line as `2.0.0-SNAPSHOT`, no property to remember. Another line is
-a profile, another version a `-Drevision`, and `bin/api-identity.sh` compares the public
+That is the current GA line as `2.0.0-8.10-SNAPSHOT`, the same coordinates the registry has,
+and no property to remember. Another line is a profile, and its snapshot is a `-Drevision` as
+well, for example `-Pline-8.8 -Drevision=2.0.0-8.8-SNAPSHOT`. Without it, that build would carry
+the version of the GA line. Another version is a `-Drevision` too, and `bin/api-identity.sh` compares the public
 API of the lines; see [Release lines](#release-lines).
 
 `install` and not `install verify`: install runs every phase verify has, so naming both walks

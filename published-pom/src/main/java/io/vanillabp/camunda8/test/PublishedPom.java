@@ -62,8 +62,8 @@ public final class PublishedPom {
    * Names the run these assertions belong to. Every failure message repeats it.
    * <p>
    * A message names the coordinate of the artifact. In a build whose version carries the
-   * release line, that coordinate already says which line was meant. Where the version is
-   * plain, as in a pull request build, it says nothing. A reader of a red build then has to
+   * release line, that coordinate already says which line was meant. Where a build was given
+   * a version without the line, it says nothing. A reader of a red build then has to
    * guess which of several lines produced it. This module cannot fill the gap itself. It
    * knows the line it was built for, not the line the caller tests.
    *

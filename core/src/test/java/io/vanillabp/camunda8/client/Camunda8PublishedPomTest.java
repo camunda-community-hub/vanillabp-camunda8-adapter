@@ -32,8 +32,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * promise. This test is the caller which names the artifact and the versions expected of it.
  * <p>
  * It also names the release line, because a failure has to say which line it came from. Our
- * nightly version carries the line, but the version of a pull request build does not. The
- * module cannot fill that in. It knows the line it was built for, not the line a caller is
+ * own versions carry the line, but a build given another version with '-Drevision' need not.
+ * The module cannot fill that in. It knows the line it was built for, not the line a caller is
  * testing.
  */
 @ExtendWith(SuppressOutputExtension.class)
