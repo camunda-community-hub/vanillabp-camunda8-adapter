@@ -277,7 +277,7 @@ run against:
 
 ```bash
 mvn install                                          # current GA line, 2.0.0-8.10-SNAPSHOT
-mvn -Pline-8.8 clean install                         # oldest line, 2.0.0-8.8-SNAPSHOT
+mvn -Pline-8.8 -Drevision=2.0.0-8.8-SNAPSHOT clean install  # snapshot of the oldest line
 mvn -Pline-8.8 -Drevision=2.1.0-8.8 clean install    # a release of the oldest line
 mvn -Pline-8.10 -Drevision=2.1.0-8.10-alpha1 clean install
 ```
@@ -523,8 +523,8 @@ hand, the same workflow is a rehearsal: it runs the gate and the same Maven call
 signing, uploads nothing, and keeps what it staged as an artifact of the run. Version 1 is
 maintained on the branch `maintenance/1.x` and releases from there with the hub's action.
 
-Rotating the lines when a minor goes GA touches four places: the `line-*` profiles and the
-pin properties of the parent POM, the boundary rule of `renovate.json`, the table above,
+Rotating the lines when a minor goes GA touches four places: the `line-*` profiles, the
+pin properties and the default `<revision>` of the parent POM, the boundary rule of `renovate.json`, the table above,
 and the wiki.
 
 ## Dependencies
@@ -3736,8 +3736,9 @@ mvn install
 ```
 
 That is the current GA line as `2.0.0-8.10-SNAPSHOT`, the same coordinates the registry has,
-and no property to remember. Another line is a profile and gets its own snapshot version, for
-example `2.0.0-8.8-SNAPSHOT`. Another version is a `-Drevision`, and `bin/api-identity.sh` compares the public
+and no property to remember. Another line is a profile, and its snapshot is a `-Drevision` as
+well, for example `-Pline-8.8 -Drevision=2.0.0-8.8-SNAPSHOT`. Without it, that build would carry
+the version of the GA line. Another version is a `-Drevision` too, and `bin/api-identity.sh` compares the public
 API of the lines; see [Release lines](#release-lines).
 
 `install` and not `install verify`: install runs every phase verify has, so naming both walks
