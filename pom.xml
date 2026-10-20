@@ -131,7 +131,8 @@
          '-Pline-8.8 -Drevision=2.0.0-8.8-SNAPSHOT', and so does a release, e.g.
          '-Pline-8.8 -Drevision=2.1.0-8.8'. See the README, section "Release lines".
          The value cannot be '2.0.0-${camunda8.line}-SNAPSHOT': Maven accepts it, but the
-         Quarkus build stops on any placeholder inside 'revision'. -->
+         Quarkus build stops on any placeholder inside 'revision'. See decision 80 in the
+         repository's DECISIONS.md. -->
     <revision>2.0.0-8.10-SNAPSHOT</revision>
     <!-- The release line this build produces: the Camunda client it is compiled against
          and, because a client is only promised against clusters of its own version and

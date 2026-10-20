@@ -3441,3 +3441,31 @@ repositories. They check this repository out and call it, the way the Business C
 Camunda 8 adapter already calls `bin/line-preview.sh`. Five copies of one pipeline had already drifted: one had a
 fallback, four did not. Its self test runs in `checks.yaml`, with a Maven failure, a failing shell
 check, a long output and a log without an error.
+
+### 80. Every release line publishes its own snapshot
+
+Built by story 988 on 2026-10-19.
+
+A push to `main` publishes one snapshot per release line: `2.0.0-8.8-SNAPSHOT`,
+`2.0.0-8.9-SNAPSHOT` and `2.0.0-8.10-SNAPSHOT`. The lines are the `line-*` profiles of the parent
+POM, read the same way as in `line-matrix.yaml`, so there is no second list to keep. Nothing
+publishes a plain `2.0.0-SNAPSHOT` any more.
+
+The reason: a project has to be able to try a snapshot of its own line before that line is
+released. Before this, only the current GA line had a snapshot. The 8.10 client needs a cluster
+of at least 8.10, so a project on an 8.8 cluster had no snapshot it could use. The Business
+Cockpit's Camunda 8 adapter had the same problem, because each of its lines read the same
+snapshot of this adapter.
+
+The snapshots stay in the GitHub Packages registry of this repository.
+
+The default `<revision>` is `2.0.0-8.10-SNAPSHOT`, the current GA line. So a plain `mvn install`
+builds the same coordinates the registry has. Another line names its version with `-Drevision`,
+like a release does. A default of `2.0.0-${camunda8.line}-SNAPSHOT` would follow the profile by
+itself, and Maven accepts it, but the Quarkus build stops on any placeholder inside `revision`.
+So the default moves with the GA line when the lines rotate.
+
+The job which publishes skips the tests. The pull request runs every line through the matrix, and
+the nightly matrix runs them again. The job still compiles every line against that line's client
+pin. The job `publish` still runs the tests of the current GA line on the push, because the
+coverage report on GitHub Pages comes from them. A red test there does not stop the snapshots.

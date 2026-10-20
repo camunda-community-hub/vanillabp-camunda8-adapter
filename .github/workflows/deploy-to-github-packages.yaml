@@ -12,7 +12,8 @@ name: Publish to GitHub Packages
 # A push to main publishes one snapshot per release line, 2.0.0-<line>-SNAPSHOT, in the
 # job 'snapshot'. So a project can try any line before it is released, not only the
 # current GA line. The job 'publish' still builds and tests the current GA line on that
-# push, because the coverage report on GitHub Pages comes from its tests.
+# push, because the coverage report on GitHub Pages comes from its tests. See decision 80
+# in the repository's DECISIONS.md.
 "on":
   pull_request:
   push:
@@ -127,7 +128,7 @@ jobs:
   # so its integration tests would still start clusters. 'maven.test.skip' also skips the
   # test compilation, and no module of this repository publishes test classes. 'clean'
   # for the same reason as in line-matrix.yaml: classes compiled against another client
-  # are binary compatible with nothing.
+  # are binary compatible with nothing. See decision 80 in the repository's DECISIONS.md.
   snapshot:
     if: "${{ github.event_name == 'push' }}"
     needs: discover
