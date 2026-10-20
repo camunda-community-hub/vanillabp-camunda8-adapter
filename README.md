@@ -202,7 +202,7 @@ plain log instead. There it is one line among many and reads like nothing happen
 
 Snapshots carry the line as well: `2.0.0-8.8-SNAPSHOT`, `2.0.0-8.9-SNAPSHOT` and
 `2.0.0-8.10-SNAPSHOT`. So a project can try the line it will use before that line is released.
-A build without a profile produces the current GA line, `2.0.0-8.10-SNAPSHOT`.
+A build without a profile produces the current GA line, `2.0.0-8.10-SNAPSHOT`. See decision 80.
 
 ### Which line to use, and moving to the next one
 
@@ -487,7 +487,7 @@ A release of one line consists of:
 5. The version property of every consumer pointed at the released coordinates. The
    blueprints carry `camunda8-adapter.version`, which is `2.0.0-8.10-SNAPSHOT` today. The
    switch to the suffix already happened with the snapshots, so the release only drops
-   `-SNAPSHOT`. `UPGRADE.md` describes the suffix for users.
+   `-SNAPSHOT`. `UPGRADE.md` describes the suffix for users. See decision 80.
 6. The consumers of the snapshot follow the current GA line too. The blueprints start a
    Camunda 8 cluster of their own for the CI (`bin/camunda8_cluster.sh`), and that cluster
    has to be at least the client the adapter was built against, so it moves with the
@@ -507,7 +507,7 @@ repository, `https://maven.pkg.github.com/camunda-community-hub/vanillabp-camund
 the same way the line matrix does, and builds each one with `-Pline-<id>
 -Drevision=2.0.0-<id>-SNAPSHOT`. It skips the tests, because the pull request and the nightly
 matrix test every line. It still compiles every line against its own pin. Nothing publishes a
-plain `2.0.0-SNAPSHOT` any more.
+plain `2.0.0-SNAPSHOT` any more. See decision 80.
 
 A release starts the way it does for every Camunda Community Hub extension: publish a GitHub
 Release and let GitHub create the tag, for example `2.0.0`. The tag names the release and has no
