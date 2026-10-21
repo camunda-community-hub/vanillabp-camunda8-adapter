@@ -581,6 +581,33 @@ The adapter ID (`myengine` above) identifies an adapter *instance*; the same BPM
 may be configured multiple times with different IDs (the central migration scenario:
 e.g. an old on-prem cluster and a new SaaS cluster side by side).
 
+### What the IDE knows about the keys
+
+The Spring Boot module ships `META-INF/spring-configuration-metadata.json`. An IDE reads it to
+offer the keys in `application.yaml` and to mark a key it does not know. The file has two parts,
+see decision 82 in [`DECISIONS.md`](./DECISIONS.md):
+
+- The configuration processor writes one entry for each map of `VanillaBpCamunda8Properties`, with
+  the type of the map's values. An IDE which follows that type below a map key offers the keys for
+  every adapter id, workflow module, workflow, task and message. We expect IntelliJ IDEA to do so,
+  but nobody tried it in an IDE yet.
+- `spring-boot/src/main/resources/META-INF/additional-spring-configuration-metadata.json` is
+  written by hand. It describes every key of the adapter level once more, under the adapter id
+  `camunda8`, with a type, a description and a default where there is one. A key which is also
+  read below a workflow module names those levels in its description. A removed key is
+  deprecated with level `error`.
+
+So a new key needs its field in the overlay of both platforms and an entry in the hand-written
+file. `EveryKeyIsKnownToTheIdeTest` fails when the entry is missing, when an entry describes a key
+nobody reads, and when a type or a default differs from the code.
+
+The processor merges the hand-written file only while `javac` compiles. A change to that file alone
+leaves the old metadata in `target`, and the test then reads the old file. Build with `clean` after
+such a change.
+
+The Quarkus module needs none of this. It is a Quarkus extension, and its build writes a
+description of every key into `META-INF/quarkus-config-doc/`.
+
 ### Connecting to a Camunda 8 cluster
 
 Each adapter instance is connected to a cluster through the **canonical per-adapter
