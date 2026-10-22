@@ -24,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.BeanUtils;
 import org.springframework.boot.configurationmetadata.ConfigurationMetadataProperty;
 import org.springframework.boot.configurationmetadata.ConfigurationMetadataRepositoryJsonBuilder;
+import org.springframework.boot.configurationmetadata.Deprecation;
 import org.springframework.boot.context.properties.bind.DataObjectPropertyName;
 import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.util.ClassUtils;
@@ -164,6 +165,8 @@ public class EveryKeyIsKnownToTheIdeTest {
         .keySet()
         .stream()
         .filter(name -> name.startsWith(DESCRIBED_ADAPTER_LEVEL))
+        // a key which no longer works is described so the IDE marks it, and no code binds it
+        .filter(name -> !isNoLongerSupported(metadata.get(name)))
         .filter(name -> !keysRead.containsKey(ADAPTER_LEVEL + name.substring(DESCRIBED_ADAPTER_LEVEL.length())))
         .forEach(notRead::add);
     assertTrue(
@@ -213,6 +216,15 @@ public class EveryKeyIsKnownToTheIdeTest {
               .convert(entry.getDefaultValue(), ClassUtils.resolvePrimitiveIfNecessary(property.getPropertyType())),
           "the default of '%s' in the metadata".formatted(name));
     });
+
+  }
+
+  private static boolean isNoLongerSupported(
+      final ConfigurationMetadataProperty entry) {
+
+    return (entry.getDeprecation() != null) && (entry
+        .getDeprecation()
+        .getLevel() == Deprecation.Level.ERROR);
 
   }
 

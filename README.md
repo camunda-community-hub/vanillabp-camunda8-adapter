@@ -594,12 +594,14 @@ see decision 82 in [`DECISIONS.md`](./DECISIONS.md):
 - `spring-boot/src/main/resources/META-INF/additional-spring-configuration-metadata.json` is
   written by hand. It describes every key of the adapter level once more, under the adapter id
   `camunda8`, with a type, a description and a default where there is one. A key which is also
-  read below a workflow module names those levels in its description. A removed key is
-  deprecated with level `error`.
+  read below a workflow module names those levels in its description. A removed key, and a key
+  of version 1 which this version does not read, is deprecated with level `error`. Where there is
+  one, the entry names the key to write instead.
 
 So a new key needs its field in the overlay of both platforms and an entry in the hand-written
 file. `EveryKeyIsKnownToTheIdeTest` fails when the entry is missing, when an entry describes a key
-nobody reads, and when a type or a default differs from the code.
+nobody reads, and when a type or a default differs from the code. Only an entry deprecated with
+level `error` may describe a key which nothing binds.
 
 The processor merges the hand-written file only while `javac` compiles. A change to that file alone
 leaves the old metadata in `target`, and the test then reads the old file. Build with `clean` after

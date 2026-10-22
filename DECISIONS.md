@@ -3518,6 +3518,7 @@ at the bottom. `Camunda8IncidentMessageLengthCanaryIT` holds the cluster to the 
 **What gets no trace.** A `DeliveryOfAnUnknownWorkflowException` keeps its one line, whatever the
 key says. It is a refusal of the core and not a defect of the code which ran. Its message names the
 workflow and says what to do (decision 45).
+
 ### 82. The IDE learns every key from the metadata of the Spring Boot jar, and a test keeps it complete
 
 Built by story 993 on 2026-10-21.
@@ -3541,6 +3542,12 @@ The Spring Boot module now writes the file in two parts:
   metadata format has no name for "any id", so the levels below a workflow module cannot get entries
   of their own. A key which is also read there names those levels in its description instead. A
   removed key is described as deprecated with level `error`, so the IDE marks it.
+- A key of version 1 which this version does not read any more is described the same way, with the
+  key to write instead where there is one: `task-timeout`, `poll-request-timeout`, `use-tenants`,
+  `task-id-as-hex-string` and `vanillabp.allow-connectors`. The start warns about them
+  (`Camunda8VersionOneKeys`), but nothing binds them. So the test lets an entry with level `error`
+  stand without a field. Their old places below a workflow module cannot get entries, for the reason
+  above.
 
 `EveryKeyIsKnownToTheIdeTest` walks the overlay class the way the binder does. It fails when a key
 has no entry, when an entry describes a key nobody reads, and when a type or a default in the file

@@ -301,6 +301,54 @@
       "type": "java.lang.Boolean",
       "description": "Whether the check of the other open tasks of a workflow asks the cluster about each Camunda-managed user task, too. It costs one command per user task.",
       "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.task-timeout",
+      "type": "java.time.Duration",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. Write 'job-timeout' instead, at the same level.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Renamed in 2.0.",
+        "replacement": "vanillabp.adapters.camunda8.job-timeout"
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.poll-request-timeout",
+      "type": "java.time.Duration",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. Write 'request-timeout' instead, at the adapter level only.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Renamed in 2.0, and read at the adapter level only.",
+        "replacement": "vanillabp.adapters.camunda8.request-timeout"
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.use-tenants",
+      "type": "java.lang.Boolean",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. 'true' is what this version does by default. For 'false' write 'vanillabp.adapters.<id>.name-clash-avoidance: none'.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Gone in 2.0. Tenants follow 'name-clash-avoidance' now."
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.task-id-as-hex-string",
+      "type": "java.lang.Boolean",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. A task id is always decimal now. Task ids stored in hexadecimal are data to migrate, see UPGRADE.md of the adapter.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Gone in 2.0. A task id is always decimal."
+      }
+    },
+    {
+      "name": "vanillabp.allow-connectors",
+      "type": "java.lang.Boolean",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. It moved into the adapter section, and so did its workflow-module and workflow levels: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.allow-connectors'.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Moved into the adapter section in 2.0.",
+        "replacement": "vanillabp.adapters.camunda8.allow-connectors"
+      }
     }
   ],
   "hints": [
