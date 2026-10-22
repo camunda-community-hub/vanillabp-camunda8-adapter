@@ -30,7 +30,9 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * trace is long. The adapter cuts the text to {@link Camunda8Errors#INCIDENT_MESSAGE_LIMIT}
  * characters itself, at the end of the trace. So the cause at its start is never lost. That only
  * works while the cluster keeps at least that many characters. This test fails a job with a text
- * of exactly that length, once over REST and once over gRPC, and reads the incident back. A red
+ * of exactly that length and reads the incident back. It goes over REST, the transport this
+ * adapter prefers. The client hands the text on unchanged over gRPC as well, but this suite's
+ * cluster refuses a gRPC command from a client which does not authenticate. A red
  * run here is news about Camunda. The message says what to do with it.
  * <p>
  * It also fails jobs with longer texts and writes what came back into
@@ -74,30 +76,23 @@ public class Camunda8IncidentMessageLengthCanaryIT extends TestOnTheSharedCluste
       """.formatted(PROCESS, JOB_TYPE);
 
   @Test
-  @DisplayName("The cluster keeps an incident text of the length the adapter cuts to, over REST and gRPC")
+  @DisplayName("The cluster keeps an incident text of the length the adapter cuts to")
   public void theClusterKeepsWhatTheAdapterSends() throws Exception {
 
     final var text = "x".repeat(Camunda8Errors.INCIDENT_MESSAGE_LIMIT - 1)
         + "!";
-    for (final var rest : new boolean[]{
-        true, false
-    }) {
-      try (final var client = client(rest)) {
-        deploy(client);
-        final var kept = whatTheIncidentKeeps(client, text);
-        assertEquals(
-            text,
-            kept,
-            ("The cluster kept %d of the %d characters of an incident text sent over %s. That is news "
-                + "about Camunda, not a defect of this repository. The adapter cuts a stack trace to "
-                + "Camunda8Errors.INCIDENT_MESSAGE_LIMIT itself, so the cause at its start stays in the "
-                + "incident (see decision 81 in the repository's DECISIONS.md). Measure the new limit "
-                + "with the texts this canary writes to target/incident-message-length.txt, and lower "
-                + "the constant and decision 81 together.")
-                .formatted(kept.length(), text.length(), rest
-                    ? "REST"
-                    : "gRPC"));
-      }
+    try (final var client = client()) {
+      deploy(client);
+      final var kept = whatTheIncidentKeeps(client, text);
+      assertEquals(
+          text,
+          kept,
+          ("The cluster kept %d of the %d characters of an incident text. That is news about "
+              + "Camunda, not a defect of this repository. The adapter cuts a stack trace to "
+              + "Camunda8Errors.INCIDENT_MESSAGE_LIMIT itself, so the cause at its start stays in the "
+              + "incident (see decision 81 in the repository's DECISIONS.md). Measure the new limit "
+              + "with the texts this canary writes to target/incident-message-length.txt, and lower "
+              + "the constant and decision 81 together.").formatted(kept.length(), text.length()));
     }
 
   }
@@ -107,29 +102,22 @@ public class Camunda8IncidentMessageLengthCanaryIT extends TestOnTheSharedCluste
   public void measureWhatTheClusterKeeps() throws Exception {
 
     final var report = new StringBuilder();
-    for (final var rest : new boolean[]{
-        true, false
-    }) {
-      try (final var client = client(rest)) {
-        deploy(client);
-        for (final var text : new String[]{
-            "x".repeat(10_000), "ä".repeat(10_000), "x".repeat(40_000)
-        }) {
-          final var kept = whatTheIncidentKeeps(client, text);
-          report
-              .append(rest
-                  ? "REST"
-                  : "gRPC")
-              .append(": sent ")
-              .append(text.length())
-              .append(" chars of '")
-              .append(text.charAt(0))
-              .append("', kept ")
-              .append(kept.length())
-              .append(" chars, ")
-              .append(kept.getBytes(StandardCharsets.UTF_8).length)
-              .append(" bytes\n");
-        }
+    try (final var client = client()) {
+      deploy(client);
+      for (final var text : new String[]{
+          "x".repeat(10_000), "\u00e4".repeat(10_000), "x".repeat(40_000)
+      }) {
+        final var kept = whatTheIncidentKeeps(client, text);
+        report
+            .append("sent ")
+            .append(text.length())
+            .append(" chars of '")
+            .append(text.charAt(0))
+            .append("', kept ")
+            .append(kept.length())
+            .append(" chars, ")
+            .append(kept.getBytes(StandardCharsets.UTF_8).length)
+            .append(" bytes\n");
       }
     }
     Files
@@ -144,12 +132,11 @@ public class Camunda8IncidentMessageLengthCanaryIT extends TestOnTheSharedCluste
 
   }
 
-  private static CamundaClient client(
-      final boolean rest) {
+  private static CamundaClient client() {
 
     return CamundaClient
         .newClientBuilder()
-        .preferRestOverGrpc(rest)
+        .preferRestOverGrpc(true)
         .restAddress(URI.create(restAddress()))
         .grpcAddress(URI.create(grpcAddress()))
         .build();

@@ -3493,8 +3493,20 @@ in has `errorMessage.size=4000`: H2, PostgreSQL, MySQL, MariaDB, SQL Server and 
 writer cuts the message to that many characters before it writes it. On Oracle it also cuts to
 4000 bytes, because Oracle counts a column in bytes.
 
-The numbers come from the artifacts of the cluster, `camunda-db-rdbms-schema` 8.10.4 (the files
-`db/vendor-properties/*.properties`) and the `IncidentWriter` of `camunda-db-rdbms`.
+Measured on 2026-10-22 against `camunda/camunda:8.10.4` with H2 as secondary storage, over REST:
+a text of 10000 or 40000 characters came back with 4000. A text of 10000 `ä` came back with 4000
+characters, which are 8000 bytes, so H2 counts characters. A text of exactly 4000 characters came
+back whole. The 8.8 and 8.9 lines were not measured, because their images could not be pulled in
+time.
+
+Elasticsearch and OpenSearch keep the whole text: the exporter of 8.8.42 only trims the white
+space around it. So the limit belongs to a database as secondary storage, which the 8.9 and 8.10
+lines use by default, and not to a release line. The adapter cuts on every line, because one
+application does not know which storage its cluster uses.
+
+The numbers come from the artifacts of the cluster: `camunda-db-rdbms-schema` 8.10.4 (the files
+`db/vendor-properties/*.properties`), the `IncidentWriter` of `camunda-db-rdbms` 8.10.4 and the
+`IncidentHandler` of `camunda-exporter` 8.8.42.
 
 The adapter cuts the text itself, at the end of the stack trace, to
 `Camunda8Errors.INCIDENT_MESSAGE_LIMIT` bytes in UTF-8. That is never more than 4000 characters
