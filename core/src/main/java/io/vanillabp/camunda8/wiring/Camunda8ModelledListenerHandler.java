@@ -107,6 +107,12 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
   private final Camunda8RetryBackoffResolver retryBackoffResolver;
 
   /**
+   * Whether the incident of a failed listener job carries the whole stack trace. May be
+   * <code>null</code>. Then the default of the resolver applies.
+   */
+  private final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver;
+
+  /**
    * Asks the cluster about the OTHER tasks this workflow has open, once this notification is
    * through. May be <code>null</code>, which asks nothing.
    */
@@ -131,6 +137,8 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
    * @param fetchVariables What the worker asked for, or <code>null</code> for every variable
    * @param retryBackoffResolver How long a failed job waits, or <code>null</code> for the
    *          default
+   * @param reportErrorsAsStackTraceResolver Whether an incident carries the stack trace, or
+   *          <code>null</code> for the default
    * @param openTaskProbe What asks the cluster about the other open tasks of the workflow, or
    *          <code>null</code> to ask nothing
    */
@@ -144,6 +152,7 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
       final Camunda8Drain drain,
       final Camunda8FetchVariables.Selection fetchVariables,
       final Camunda8RetryBackoffResolver retryBackoffResolver,
+      final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver,
       final Camunda8OpenTaskProbe openTaskProbe) {
 
     this.openTaskProbe = openTaskProbe;
@@ -159,6 +168,7 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
     this.scoping = scoping;
     this.multiInstanceRegistry = multiInstanceRegistry;
     this.retryBackoffResolver = retryBackoffResolver;
+    this.reportErrorsAsStackTraceResolver = reportErrorsAsStackTraceResolver;
 
   }
 
@@ -265,14 +275,16 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
       final String bpmnProcessId,
       final String taskDefinition) {
 
+    final var withStackTrace = Camunda8ReportErrorsAsStackTraceResolver
+        .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId, taskDefinition);
     final var retriesLeft = job.getRetries() - 1;
     if (retriesLeft <= 0) {
-      return Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT;
+      return Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT.withStackTrace(withStackTrace);
     }
     return new Camunda8ListenerJobs.Failure(
         retriesLeft, Camunda8RetryBackoffResolver
             .resolve(retryBackoffResolver, workflowModuleId, bpmnProcessId, taskDefinition)
-            .duration());
+            .duration(), withStackTrace);
 
   }
 

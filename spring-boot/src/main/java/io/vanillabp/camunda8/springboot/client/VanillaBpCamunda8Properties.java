@@ -87,7 +87,8 @@ public class VanillaBpCamunda8Properties {
    * (task &gt; workflow &gt; workflow-module &gt; adapter). These keys are resolved like
    * this:
    * <ul>
-   * <li><code>job-timeout</code> and <code>retry-backoff</code>, over all four levels.</li>
+   * <li><code>job-timeout</code>, <code>retry-backoff</code> and
+   * <code>report-errors-as-stack-trace</code>, over all four levels.</li>
    * <li><code>message-time-to-live</code>, with a MESSAGE instead of a task as the most
    * specific level.</li>
    * <li><code>allow-connectors</code> and <code>allow-listeners</code>, with the workflow
@@ -210,6 +211,39 @@ public class VanillaBpCamunda8Properties {
         adapter != null
             ? adapter.resolvedRetryBackoff()
             : Camunda8RetryBackoffResolver.DEFAULT_RETRY_BACKOFF, false);
+
+  }
+
+  /**
+   * Resolves whether the incident of a failed job carries the whole stack trace, in the same
+   * way: the most specific level wins, both for on and for off. Without a value at a scope
+   * level, the adapter level counts.
+   *
+   * @param workflowModuleId The workflow module the task belongs to
+   * @param bpmnProcessId The BPMN process the task belongs to
+   * @param taskDefinition The task definition, or <code>null</code> for a job which serves
+   *          no task
+   * @param adapterId The adapter id whose keys are read
+   * @return The most specific configured value, or <code>null</code> where no level
+   *         configures one
+   */
+  public Boolean reportErrorsAsStackTraceFor(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String taskDefinition,
+      final String adapterId) {
+
+    final var scoped = scopedKeysMostSpecificFirst(workflowModuleId, bpmnProcessId, taskDefinition, adapterId)
+        .map(Camunda8ScopedKeys::getReportErrorsAsStackTrace)
+        .filter(Objects::nonNull)
+        .findFirst();
+    if (scoped.isPresent()) {
+      return scoped.get();
+    }
+    final var adapter = adapters.get(adapterId);
+    return adapter == null
+        ? null
+        : adapter.getReportErrorsAsStackTrace();
 
   }
 
@@ -670,6 +704,36 @@ public class VanillaBpCamunda8Properties {
         final Duration retryBackoff) {
 
       this.retryBackoff = retryBackoff;
+
+    }
+
+    /**
+     * Whether the incident of a failed job of this scope carries the whole stack trace. It is
+     * a {@code Boolean}, so a more specific level can switch it off again.
+     */
+    private Boolean reportErrorsAsStackTrace;
+
+    /**
+     * Whether the incident of a failed job of this scope carries the whole stack trace.
+     *
+     * @return The setting, or <code>null</code> where this level says nothing
+     */
+    public Boolean getReportErrorsAsStackTrace() {
+
+      return reportErrorsAsStackTrace;
+
+    }
+
+    /**
+     * Whether the incident of a failed job of this scope carries the whole stack trace.
+     *
+     * @param reportErrorsAsStackTrace The setting, or <code>null</code> where this level says
+     *          nothing
+     */
+    public void setReportErrorsAsStackTrace(
+        final Boolean reportErrorsAsStackTrace) {
+
+      this.reportErrorsAsStackTrace = reportErrorsAsStackTrace;
 
     }
 

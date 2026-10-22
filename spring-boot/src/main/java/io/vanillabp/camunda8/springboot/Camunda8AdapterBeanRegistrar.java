@@ -130,6 +130,13 @@ public class Camunda8AdapterBeanRegistrar implements BeanRegistrar {
                     workflowModuleId,
                     bpmnProcessId) -> overlay
                         .allowListenersFor(workflowModuleId, bpmnProcessId, adapterId));
+                // whether an incident carries the whole stack trace; it can be set
+                // down to the level of the task
+                deploymentService.setReportErrorsAsStackTraceResolver((
+                    workflowModuleId,
+                    bpmnProcessId,
+                    taskDefinition) -> overlay
+                        .reportErrorsAsStackTraceFor(workflowModuleId, bpmnProcessId, taskDefinition, adapterId));
                 // where this adapter reports what it found while the application
                 // starts: the block both platform integrations write at the end of a start
                 deploymentService.setStartupReport(

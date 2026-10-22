@@ -154,6 +154,14 @@ public class Camunda8JobHandler implements JobHandler {
   private final Camunda8RetryBackoffHeader retryBackoffHeader;
 
   /**
+   * Whether the incident of a failed job carries the whole stack trace, resolved per task.
+   * May be <code>null</code> (tests). Then
+   * {@link Camunda8ReportErrorsAsStackTraceResolver#DEFAULT_REPORT_ERRORS_AS_STACK_TRACE}
+   * applies.
+   */
+  private final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver;
+
+  /**
    * What this worker asked the cluster for. A job carries these variables and no others.
    * It is read twice. A missing aggregate-ID variable now has a second possible cause. And
    * a <code>&#64;TaskParam</code> outside the list is a question this delivery cannot
@@ -180,7 +188,7 @@ public class Camunda8JobHandler implements JobHandler {
 
   /**
    * The worker this handler serves. Built through the generated
-   * <code>Camunda8JobHandler.builder()</code>: eight of these thirteen values may be left
+   * <code>Camunda8JobHandler.builder()</code>: nine of these fourteen values may be left
    * out, and a positional list of that length no longer says which is which.
    *
    * @param adapterId The adapter whose worker delivers here
@@ -199,6 +207,8 @@ public class Camunda8JobHandler implements JobHandler {
    *          of its own, which never shuts down
    * @param retryBackoffResolver How long the cluster waits before it hands a failed job out
    *          again, or <code>null</code> for the default backoff
+   * @param reportErrorsAsStackTraceResolver Whether an incident carries the stack trace, or
+   *          <code>null</code> for no stack trace
    * @param fetchVariables What the worker asked for, or <code>null</code> for every variable
    * @param predatesDeployedVersion Whether a workflow predates the deployed version, or
    *          <code>null</code> to answer no for all of them
@@ -217,6 +227,7 @@ public class Camunda8JobHandler implements JobHandler {
       final Camunda8AdapterConfiguration.AsyncTaskMaxAgeAction asyncTaskMaxAgeAction,
       final Camunda8Drain drain,
       final Camunda8RetryBackoffResolver retryBackoffResolver,
+      final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver,
       final Camunda8FetchVariables.Selection fetchVariables,
       final BiPredicate<String, Integer> predatesDeployedVersion,
       final Camunda8OpenTaskProbe openTaskProbe) {
@@ -231,6 +242,7 @@ public class Camunda8JobHandler implements JobHandler {
         ? Camunda8FetchVariables.Selection.everything()
         : fetchVariables;
     this.retryBackoffResolver = retryBackoffResolver;
+    this.reportErrorsAsStackTraceResolver = reportErrorsAsStackTraceResolver;
     this.retryBackoffHeader = new Camunda8RetryBackoffHeader(adapterId, workflowModuleId);
     this.drain = drain == null
         ? new Camunda8Drain(adapterId, workflowModuleId)
@@ -347,7 +359,10 @@ public class Camunda8JobHandler implements JobHandler {
                       .retryBackoff(retryBackoff)
                       // the type belongs into the incident as much as the message does.
                       // On its own, a NullPointerException just says 'null'.
-                      .errorMessage(Camunda8Errors.incidentMessage(e)),
+                      .errorMessage(Camunda8Errors
+                          .incidentMessage(e, Camunda8ReportErrorsAsStackTraceResolver
+                              .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId,
+                                  taskDefinition))),
                   Camunda8JobLease.tokenOf(job))
               .send()
               .join());

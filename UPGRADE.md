@@ -243,6 +243,54 @@ also names the user-task notifications and the message correlation which those m
 Camunda 7 needs no such wait. It attaches its listener while the engine parses a process
 definition, and that reaches every version the engine holds.
 
+### Every key of version 1, and where it went
+
+Version 1 read the keys of this adapter below `vanillabp.workflow-modules.<m>.adapters.camunda8`,
+and some of them also below a workflow (`.workflows.<w>`) and a task (`.workflows.<w>.tasks.<t>`).
+In 2.0 the section is named after the adapter id, not after the BPMS. If you name your adapter
+`camunda8`, the paths stay as they were. The table says what became of each key. "All four levels"
+means the adapter level `vanillabp.adapters.<id>` plus the three levels version 1 had.
+
+|        Key of version 1        |                                                  In 2.0                                                  |
+|--------------------------------|----------------------------------------------------------------------------------------------------------|
+| `tenant-id`                    | Same name, at the workflow-module level. The adapter level is new.                                       |
+| `use-tenants`                  | Gone. `true` is the default now. For `false` write `vanillabp.adapters.<id>.name-clash-avoidance: none`. |
+| `task-id-as-hex-string`        | Gone, see "A task id is decimal" above.                                                                  |
+| `report-errors-as-stack-trace` | Same name and default, at all four levels. See the next section.                                         |
+| `task-timeout`                 | Renamed to `job-timeout`, at all four levels.                                                            |
+| `retry-backoff`                | Same name, at all four levels.                                                                           |
+| `poll-interval`                | Same name, at the adapter level only: `vanillabp.adapters.<id>.poll-interval`.                           |
+| `poll-request-timeout`         | Renamed to `request-timeout`, at the adapter level only.                                                 |
+| `stream-enabled`               | Same name, at the adapter level only.                                                                    |
+| `stream-timeout`               | Same name, at the adapter level only.                                                                    |
+| `allow-connectors`             | Moved into the adapter section, see "`allow-connectors` moved under the adapter" below.                  |
+
+You do not have to find these keys yourself. Spring Boot and Quarkus both ignore a key they do not
+know, so a key of version 1 would do nothing without a word. So the start writes one WARN for each
+key of the table which 2.0 no longer reads at that place. The WARN names the key you wrote and the
+key to write instead. The start goes on, because each of these keys only tunes something which
+works without it. Only keys in a configuration file are found this way. An environment variable
+spells a key in a form which cannot be taken apart again without guessing.
+
+### `report-errors-as-stack-trace` writes the causes first
+
+Version 1.9.1 added `report-errors-as-stack-trace`. With `true`, the incident of a failed job
+carries the whole stack trace of what your code threw, and not only its message. 2.0 reads the key
+at the same place, with the same default `false`. It can also be set for the adapter, for one
+workflow and for one task.
+
+The text looks different. Version 1 wrote the stack trace as Java prints it, and the version 1
+README warned about the length: a long trace was cut at the end, and with an exception of Spring
+that often took away the cause. 2.0 starts the text with the chain of causes, one line per cause,
+with type and message, and the innermost cause last. The stack trace follows. Where the text is
+longer than the 4000 characters the cluster keeps, the adapter cuts the end of the stack trace
+itself and says so in a last line. So the cause is always in the incident.
+
+The key now covers every job which runs your code: a service task, a user-task notification, a
+listener somebody modelled, a start event the cluster fires and the end of a workflow. A job the
+core refuses because it belongs to a workflow this application does not own keeps its one-line
+message. That message already says everything there is to say.
+
 ### `allow-connectors` moved under the adapter
 
 Version 1 read `vanillabp.allow-connectors` at the root of the tree, with a workflow-module and a
