@@ -56,7 +56,8 @@ public interface VanillaBpCamunda8Properties {
    * (task &gt; workflow &gt; workflow-module &gt; adapter). These keys are resolved like
    * this:
    * <ul>
-   * <li><code>job-timeout</code> and <code>retry-backoff</code>, over all four levels.</li>
+   * <li><code>job-timeout</code>, <code>retry-backoff</code> and
+   * <code>report-errors-as-stack-trace</code>, over all four levels.</li>
    * <li><code>message-time-to-live</code>, with a MESSAGE instead of a task as the most
    * specific level.</li>
    * <li><code>allow-connectors</code> and <code>allow-listeners</code>, with the workflow
@@ -138,6 +139,41 @@ public interface VanillaBpCamunda8Properties {
             .jobTimeout()
             .orElse(Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT)
         : Camunda8JobTimeoutResolver.DEFAULT_JOB_TIMEOUT;
+
+  }
+
+  /**
+   * Resolves whether the incident of a failed job carries the whole stack trace, in the same
+   * way: the most specific level wins, both for on and for off. Without a value at a scope
+   * level, the adapter level counts.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The BPMN process ID
+   * @param taskDefinition The task definition, or <code>null</code> for a job which serves
+   *          no task
+   * @param adapterId The adapter ID
+   * @return The most specific configured value, or <code>null</code> where no level
+   *         configures one
+   */
+  default Boolean reportErrorsAsStackTraceFor(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String taskDefinition,
+      final String adapterId) {
+
+    final var scoped = scopedKeysMostSpecificFirst(workflowModuleId, bpmnProcessId, taskDefinition, adapterId)
+        .map(Camunda8ScopedKeys::reportErrorsAsStackTrace)
+        .flatMap(Optional::stream)
+        .findFirst();
+    if (scoped.isPresent()) {
+      return scoped.get();
+    }
+    final var adapter = adapters().get(adapterId);
+    return adapter == null
+        ? null
+        : adapter
+            .reportErrorsAsStackTrace()
+            .orElse(null);
 
   }
 
@@ -706,6 +742,15 @@ public interface VanillaBpCamunda8Properties {
     Optional<Duration> retryBackoff();
 
     /**
+     * Whether the incident of a failed job carries the whole stack trace. This is the
+     * adapter level of the resolution where the most specific level wins. Default:
+     * <code>false</code>.
+     *
+     * @return Whether an incident carries the stack trace
+     */
+    Optional<Boolean> reportErrorsAsStackTrace();
+
+    /**
      * The removed key <code>fetch-variables</code>. It is bound only so the startup can
      * refuse it with a guiding message. Otherwise SmallRye would only say "does not map to
      * any root".
@@ -1062,6 +1107,15 @@ public interface VanillaBpCamunda8Properties {
      * @return The backoff of a failed job
      */
     Optional<Duration> retryBackoff();
+
+    /**
+     * Whether the incident of a failed job carries the whole stack trace, at this level. It
+     * is empty, not <code>false</code>, where nothing is configured. So a more specific level
+     * can switch it off again.
+     *
+     * @return Whether an incident carries the stack trace
+     */
+    Optional<Boolean> reportErrorsAsStackTrace();
 
     /**
      * The removed key <code>fetch-variables</code> at this level, bound only so the startup

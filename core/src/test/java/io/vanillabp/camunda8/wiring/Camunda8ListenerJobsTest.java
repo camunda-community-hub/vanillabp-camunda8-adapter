@@ -116,6 +116,45 @@ public class Camunda8ListenerJobsTest {
   }
 
   @Test
+  @DisplayName("A listener whose caller asks for the stack trace writes it into the incident")
+  public void aFailureWithStackTraceCarriesTheFrames() {
+
+    run(
+        Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT.withStackTrace(true),
+        () -> {
+          throw new IllegalStateException("the extension could not archive the order");
+        });
+
+    final var message = ArgumentCaptor.forClass(String.class);
+    verify(jobClient.newFailCommand(4711L).retries(0)).errorMessage(message.capture());
+    assertTrue(
+        message.getValue().startsWith("java.lang.IllegalStateException: the extension could not archive the order"),
+        message.getValue());
+    assertTrue(
+        message.getValue().contains("\tat io.vanillabp.camunda8.wiring.Camunda8ListenerJobsTest"),
+        () -> "the incident carries the frames: "
+            + message.getValue());
+
+  }
+
+  @Test
+  @DisplayName("A job about a workflow this application does not own gets no stack trace, even where one is asked for")
+  public void aJobOfAWorkflowWeDoNotOwnGetsNoStackTrace() {
+
+    run(
+        Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT.withStackTrace(true),
+        () -> {
+          throw new DeliveryOfAnUnknownWorkflowException(
+              "c8", "test-module", "TestProcess", "theExtensionsListener", "com.example.TheOrder", "42", "2251799813685249");
+        });
+
+    final var message = ArgumentCaptor.forClass(String.class);
+    verify(jobClient.newFailCommand(4711L).retries(0)).errorMessage(message.capture());
+    assertFalse(message.getValue().contains("\tat "), message.getValue());
+
+  }
+
+  @Test
   @DisplayName("A job about a workflow this application does not own raises an incident which explains that")
   public void aJobOfAWorkflowWeDoNotOwnExplainsItselfInTheIncident() {
 

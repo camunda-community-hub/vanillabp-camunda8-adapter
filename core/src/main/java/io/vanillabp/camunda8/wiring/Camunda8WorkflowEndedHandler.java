@@ -89,8 +89,16 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
   private final Camunda8RetryBackoffResolver retryBackoffResolver;
 
   /**
+   * Whether the incident of a failed job carries the whole stack trace. May be
+   * <code>null</code> (tests). Then
+   * {@link Camunda8ReportErrorsAsStackTraceResolver#DEFAULT_REPORT_ERRORS_AS_STACK_TRACE}
+   * applies.
+   */
+  private final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver;
+
+  /**
    * Builds the handler of one process. The deployment service calls it. The drain and the
-   * retry-backoff resolver may be <code>null</code>, and each one says here what that means.
+   * two resolvers may be <code>null</code>, and each one says here what that means.
    *
    * @param adapterId The adapter id this handler belongs to
    * @param workflowModuleId The workflow module the process belongs to
@@ -100,6 +108,8 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
    * @param drain Where the running handler is counted, or <code>null</code> for a drain of its own
    * @param retryBackoffResolver Answers how long the cluster waits before it offers a failed job
    *          again, or <code>null</code> for VanillaBP's default of ten seconds
+   * @param reportErrorsAsStackTraceResolver Answers whether an incident carries the stack
+   *          trace, or <code>null</code> for no stack trace
    */
   public Camunda8WorkflowEndedHandler(
       final String adapterId,
@@ -108,9 +118,11 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
       final String aggregateIdVariable,
       final WorkflowEndedInvoker workflowEndedInvoker,
       final Camunda8Drain drain,
-      final Camunda8RetryBackoffResolver retryBackoffResolver) {
+      final Camunda8RetryBackoffResolver retryBackoffResolver,
+      final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver) {
 
     this.retryBackoffResolver = retryBackoffResolver;
+    this.reportErrorsAsStackTraceResolver = reportErrorsAsStackTraceResolver;
     this.drain = drain == null
         ? new Camunda8Drain(adapterId, workflowModuleId)
         : drain;
@@ -213,7 +225,9 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
                       .newFailCommand(job.getKey())
                       .retries(job.getRetries() - 1)
                       .retryBackoff(retryBackoff)
-                      .errorMessage(Camunda8Errors.incidentMessage(e)),
+                      .errorMessage(Camunda8Errors
+                          .incidentMessage(e, Camunda8ReportErrorsAsStackTraceResolver
+                              .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId, null))),
                   Camunda8JobLease.tokenOf(job))
               .send()
               .join());

@@ -63,8 +63,9 @@ import lombok.extern.slf4j.Slf4j;
  * the shutdown rule least of all. So in front of the call, a handler does only work which
  * cannot throw. Today that is reading the job and renaming what it carries. Such a failure
  * leaves the whole stack trace in the incident. By that a red run tells it apart from a job
- * this class failed. The incident of such a job carries the one sentence
- * {@link Camunda8Errors#incidentMessage} builds.
+ * this class failed. The incident of such a job carries what
+ * {@link Camunda8Errors#incidentMessage(Throwable, boolean)} builds: one sentence, or the
+ * stack trace where <code>report-errors-as-stack-trace</code> asks for it.
  * <p>
  * The class is public, because an extension wires listeners into the same models and serves
  * them from the same cluster. Its listener jobs are the listener jobs of the adapter in every
@@ -105,16 +106,47 @@ public final class Camunda8ListenerJobs {
    * @param retryBackoff How long the cluster waits before handing the job out again, or
    *          <code>null</code> for no backoff. There is nothing to delay where no attempt
    *          is left
+   * @param withStackTrace Whether the incident carries the whole stack trace, as
+   *          <code>report-errors-as-stack-trace</code> asks for
    */
   public record Failure(
                         int retriesLeft,
-                        Duration retryBackoff) {
+                        Duration retryBackoff,
+                        boolean withStackTrace) {
 
     /**
      * The answer for a listener which has no attempt left. So failing it raises the
-     * incident at once.
+     * incident at once. The incident carries no stack trace.
      */
     public static final Failure NO_RETRIES_LEFT = new Failure(0, null);
+
+    /**
+     * A failure whose incident carries no stack trace.
+     *
+     * @param retriesLeft The retries the fail command leaves
+     * @param retryBackoff How long the cluster waits before handing the job out again, or
+     *          <code>null</code> for no backoff
+     */
+    public Failure(
+        final int retriesLeft,
+        final Duration retryBackoff) {
+
+      this(retriesLeft, retryBackoff, false);
+
+    }
+
+    /**
+     * The same failure, with or without the stack trace in its incident.
+     *
+     * @param stackTrace Whether the incident carries the whole stack trace
+     * @return The failure
+     */
+    public Failure withStackTrace(
+        final boolean stackTrace) {
+
+      return new Failure(retriesLeft, retryBackoff, stackTrace);
+
+    }
 
   }
 
@@ -283,7 +315,7 @@ public final class Camunda8ListenerJobs {
                   command = command.retryBackoff(howToFail.retryBackoff());
                 }
                 command
-                    .errorMessage(Camunda8Errors.incidentMessage(e))
+                    .errorMessage(Camunda8Errors.incidentMessage(e, howToFail.withStackTrace()))
                     .send()
                     .join();
               });

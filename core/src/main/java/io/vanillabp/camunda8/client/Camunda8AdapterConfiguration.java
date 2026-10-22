@@ -48,6 +48,10 @@ import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
  *       resolvable per workflow module, workflow and task like {@code job-timeout}) - how
  *       long the cluster waits before it hands a FAILED job out again, see
  *       {@link #retryBackoff}</li>
+ *   <li>{@code .report-errors-as-stack-trace} (optional, default {@code false}, resolvable
+ *       per workflow module, workflow and task like {@code job-timeout}) - whether the
+ *       incident of a failed job carries the whole stack trace, see
+ *       {@link #reportErrorsAsStackTrace}</li>
  *   <li>{@code .allow-connectors} (optional, default {@code false}, resolvable per
  *       workflow module and workflow) - whether an element built from an element template
  *       is left to the runtime which owns it, see
@@ -619,6 +623,42 @@ public class Camunda8AdapterConfiguration {
       final boolean allowListeners) {
 
     this.allowListeners = allowListeners;
+
+  }
+
+  /**
+   * Whether the incident of a failed job carries the whole stack trace of what the
+   * application threw. This is the adapter level of the resolution where the most specific
+   * value wins, over four levels (task &gt; workflow &gt; workflow-module &gt; adapter), see
+   * {@link io.vanillabp.camunda8.wiring.Camunda8ReportErrorsAsStackTraceResolver}.
+   * <code>null</code> where this level says nothing, and then the default
+   * <code>false</code> applies.
+   */
+  private Boolean reportErrorsAsStackTrace;
+
+  /**
+   * Whether the incident of a failed job carries the whole stack trace, read at adapter
+   * level.
+   *
+   * @return The setting, or <code>null</code> where this level says nothing
+   */
+  public Boolean getReportErrorsAsStackTrace() {
+
+    return reportErrorsAsStackTrace;
+
+  }
+
+  /**
+   * Whether the incident of a failed job carries the whole stack trace, read at adapter
+   * level.
+   *
+   * @param reportErrorsAsStackTrace The setting, or <code>null</code> where this level says
+   *          nothing
+   */
+  public void setReportErrorsAsStackTrace(
+      final Boolean reportErrorsAsStackTrace) {
+
+    this.reportErrorsAsStackTrace = reportErrorsAsStackTrace;
 
   }
 

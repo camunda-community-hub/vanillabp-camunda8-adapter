@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeoutException;
@@ -423,6 +424,104 @@ public class Camunda8ErrorsTest {
         "java.lang.IllegalStateException: the connection pool is exhausted",
         Camunda8Errors.incidentMessage(new IllegalStateException("the connection pool is exhausted")));
     assertEquals("no exception given", Camunda8Errors.incidentMessage(null));
+
+  }
+
+  @Test
+  @DisplayName("Without report-errors-as-stack-trace, an incident is the one line it always was")
+  public void withoutTheKeyAnIncidentIsOneLine() {
+
+    final var failure = new IllegalStateException("the order is locked", new IOException("disk full"));
+    assertEquals(
+        Camunda8Errors.incidentMessage(failure),
+        Camunda8Errors.incidentMessage(failure, false));
+    assertEquals("no exception given", Camunda8Errors.incidentMessage(null, true));
+
+  }
+
+  @Test
+  @DisplayName("With report-errors-as-stack-trace, the chain of causes comes first and the stack trace after it")
+  public void withTheKeyTheCausesComeFirst() {
+
+    final var failure = new IllegalStateException(
+        "the order is locked", new RuntimeException(new IOException("disk full")));
+
+    final var incident = Camunda8Errors.incidentMessage(failure, true);
+
+    assertTrue(
+        incident.startsWith("""
+            java.lang.IllegalStateException: the order is locked
+            Caused by: java.lang.RuntimeException: java.io.IOException: disk full
+            Caused by: java.io.IOException: disk full
+
+            java.lang.IllegalStateException: the order is locked
+            	at """),
+        incident);
+    assertTrue(incident.contains("withTheKeyTheCausesComeFirst"), "the frames are there: "
+        + incident);
+
+  }
+
+  @Test
+  @DisplayName("A stack trace longer than the cluster keeps is cut at its end, so the cause stays visible")
+  public void aLongStackTraceIsCutAtItsEnd() {
+
+    // the shape of a Spring failure: the cause is deep down, under many frames
+    var failure = new IOException("the cause somebody looks for");
+    for (var level = 0; level < 30; level++) {
+      failure = new IOException("wrapper "
+          + level
+          + " "
+          + "x".repeat(200), failure);
+    }
+
+    final var incident = Camunda8Errors.incidentMessage(failure, true);
+
+    assertEquals(Camunda8Errors.INCIDENT_MESSAGE_LIMIT, incident.length());
+    assertTrue(incident.endsWith("characters the cluster keeps"), incident);
+    final var chain = incident.substring(0, incident.indexOf("\n\n"));
+    assertTrue(chain.startsWith("java.io.IOException: wrapper 29 "), chain);
+    assertTrue(chain.contains("causes left out"), chain);
+    assertTrue(chain.endsWith("Caused by: java.io.IOException: the cause somebody looks for"), chain);
+    assertTrue(chain.length() <= Camunda8Errors.INCIDENT_MESSAGE_LIMIT / 2, chain);
+
+  }
+
+  @Test
+  @DisplayName("The cut counts bytes, and never splits a character which needs two chars")
+  public void theCutCountsBytesAndKeepsSurrogatePairsWhole() {
+
+    // an emoji needs two chars and four bytes. A text of them puts a pair on every position
+    // of the cut, and Oracle keeps 4000 bytes, not 4000 characters
+    final var text = "\uD83D\uDE00".repeat(Camunda8Errors.INCIDENT_MESSAGE_LIMIT);
+    final var cut = Camunda8Errors.cutToTheLimit(text);
+    assertTrue(
+        cut.getBytes(StandardCharsets.UTF_8).length <= Camunda8Errors.INCIDENT_MESSAGE_LIMIT,
+        cut);
+    final var beforeTheNote = cut.substring(0, cut.indexOf("\n... cut"));
+    assertFalse(Character.isHighSurrogate(beforeTheNote.charAt(beforeTheNote.length() - 1)), cut);
+    // and a text which fits is left as it is
+    assertEquals("\u00e4".repeat(2000), Camunda8Errors.cutToTheLimit("\u00e4".repeat(2000)));
+
+  }
+
+
+  @Test
+  @DisplayName("A cause chain which is a ring ends the incident text and does not run forever")
+  @Timeout(5)
+  public void aRingOfCausesEndsTheText() {
+
+    final var first = new IllegalStateException("first");
+    final var second = new IllegalStateException("second", first);
+    first.initCause(second);
+
+    final var incident = Camunda8Errors.incidentMessage(first, true);
+
+    assertTrue(incident.startsWith("""
+        java.lang.IllegalStateException: first
+        Caused by: java.lang.IllegalStateException: second
+
+        """), incident);
 
   }
 

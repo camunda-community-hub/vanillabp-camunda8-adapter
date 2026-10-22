@@ -3469,3 +3469,52 @@ The job which publishes skips the tests. The pull request runs every line throug
 the nightly matrix runs them again. The job still compiles every line against that line's client
 pin. The job `publish` still runs the tests of the current GA line on the push, because the
 coverage report on GitHub Pages comes from them. A red test there does not stop the snapshots.
+
+### 81. An incident with a stack trace starts with its causes, and the adapter cuts it to what the cluster keeps
+
+Built by story 992 on 2026-10-21.
+
+`report-errors-as-stack-trace` came with version 1.9.1 and is back, with the same name and the same
+default `false`. Version 1 read it per workflow module. Here it is read at the four levels of every
+scope-specific key, task, workflow, workflow module and adapter, and the most specific value wins.
+It counts for every job which runs code of the application: a service task, a user-task
+notification, a modelled listener, a start event the cluster fires and the end of a workflow.
+
+**The text.** With `true`, `Camunda8Errors#incidentMessage(Throwable, boolean)` builds the text.
+It starts with the chain of causes, one line per cause with type and message, the innermost cause
+last. The chain takes at most half of the limit below. A longer chain keeps the outermost cause and
+as many of the innermost ones as fit, and one line says how many were left out. The stack trace
+follows, as Java prints it.
+
+**The limit.** Neither the client nor the engine cuts the text. The client puts it into the fail
+command as it is, over REST and over gRPC. The secondary storage cuts it, which is what Operate and
+the search API read from. In the 8.10 artifacts every database the cluster can keep that storage
+in has `errorMessage.size=4000`: H2, PostgreSQL, MySQL, MariaDB, SQL Server and Oracle. The incident
+writer cuts the message to that many characters before it writes it. On Oracle it also cuts to
+4000 bytes, because Oracle counts a column in bytes.
+
+Measured on 2026-10-22 against `camunda/camunda:8.10.4` with H2 as secondary storage, over REST:
+a text of 10000 or 40000 characters came back with 4000. A text of 10000 `ä` came back with 4000
+characters, which are 8000 bytes, so H2 counts characters. A text of exactly 4000 characters came
+back whole. The 8.8 and 8.9 lines were not measured, because their images could not be pulled in
+time.
+
+Elasticsearch and OpenSearch keep the whole text: the exporter of 8.8.42 only trims the white
+space around it. So the limit belongs to a database as secondary storage, which the 8.9 and 8.10
+lines use by default, and not to a release line. The adapter cuts on every line, because one
+application does not know which storage its cluster uses.
+
+The numbers come from the artifacts of the cluster: `camunda-db-rdbms-schema` 8.10.4 (the files
+`db/vendor-properties/*.properties`), the `IncidentWriter` of `camunda-db-rdbms` 8.10.4 and the
+`IncidentHandler` of `camunda-exporter` 8.8.42.
+
+The adapter cuts the text itself, at the end of the stack trace, to
+`Camunda8Errors.INCIDENT_MESSAGE_LIMIT` bytes in UTF-8. That is never more than 4000 characters
+either, so every storage keeps the text whole. The last line says that it was cut. Version 1 sent the whole trace, and its README
+warned that the cluster cut it after 4000 characters. With an exception of Spring, that cut took
+away the cause, which sits at the bottom of the trace. Here the cause is at the top, and the cut is
+at the bottom. `Camunda8IncidentMessageLengthCanaryIT` holds the cluster to the limit on every line.
+
+**What gets no trace.** A `DeliveryOfAnUnknownWorkflowException` keeps its one line, whatever the
+key says. It is a refusal of the core and not a defect of the code which ran. Its message names the
+workflow and says what to do (decision 45).

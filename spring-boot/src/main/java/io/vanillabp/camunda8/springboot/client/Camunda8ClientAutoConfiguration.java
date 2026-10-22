@@ -1,6 +1,8 @@
 package io.vanillabp.camunda8.springboot.client;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -9,10 +11,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.EnumerablePropertySource;
+import org.springframework.core.env.Environment;
 
 import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.client.Camunda8StartupValidation;
+import io.vanillabp.camunda8.client.Camunda8VersionOneKeys;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentService;
 import io.vanillabp.camunda8.observability.MicrometerCamunda8Metrics;
 import io.vanillabp.camunda8.wiring.Camunda8Connectors;
@@ -63,12 +69,15 @@ public class Camunda8ClientAutoConfiguration {
    * @param coreProperties The platform's properties, which name the configured adapter ids and
    *          their types
    * @param overlay The adapter's own view of the same tree
+   * @param environment Where the keys of version 1 are looked for, which this version does
+   *          not read
    * @return The registry, with every completely configured client already built
    */
   @Bean(destroyMethod = "close")
   public Camunda8ClientFactoryRegistry camunda8ClientFactoryRegistry(
       final VanillaBpConfigurationProperties coreProperties,
-      final VanillaBpCamunda8Properties overlay) {
+      final VanillaBpCamunda8Properties overlay,
+      final Environment environment) {
 
     final Map<String, Camunda8AdapterConfiguration> configurations = new HashMap<>();
     coreProperties
@@ -109,7 +118,29 @@ public class Camunda8ClientAutoConfiguration {
           configurations.put(adapterId, configuration);
         });
 
+    // a key of version 1 which this version does not read would change nothing in silence
+    Camunda8VersionOneKeys.reportKeysOfVersionOne(configurations.keySet(), propertyNames(environment), log::warn);
+
     return new Camunda8ClientFactoryRegistry(configurations);
+
+  }
+
+  /**
+   * The names of every property a configuration file or a property source with a list of
+   * names holds. A source which cannot list its names is skipped.
+   */
+  private static List<String> propertyNames(
+      final Environment environment) {
+
+    if (!(environment instanceof ConfigurableEnvironment configurable)) {
+      return List.of();
+    }
+    return configurable
+        .getPropertySources()
+        .stream()
+        .filter(EnumerablePropertySource.class::isInstance)
+        .flatMap(source -> Arrays.stream(((EnumerablePropertySource<?>) source).getPropertyNames()))
+        .toList();
 
   }
 

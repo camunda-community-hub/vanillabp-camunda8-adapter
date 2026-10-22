@@ -1,5 +1,10 @@
 package io.vanillabp.camunda8.client;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
@@ -9,6 +14,7 @@ import io.camunda.client.api.command.ClientHttpException;
 import io.camunda.client.api.command.ClientStatusException;
 import io.camunda.client.api.command.ProblemException;
 import io.grpc.Status;
+import io.vanillabp.integration.adapter.spi.workflowtask.DeliveryOfAnUnknownWorkflowException;
 
 /**
  * Shared classification of Camunda 8 client errors. Two kinds of caller ask.
@@ -502,5 +508,160 @@ public final class Camunda8Errors {
         : "%s: %s".formatted(throwable.getClass().getName(), message);
 
   }
+
+  /**
+   * The longest incident text every secondary storage of the cluster keeps whole: 4000
+   * characters, and on Oracle 4000 bytes. The cluster itself takes a longer text, but the
+   * storage which Operate and the search API read from cuts it. Decision 81 in the
+   * repository's DECISIONS.md says where the number comes from.
+   */
+  public static final int INCIDENT_MESSAGE_LIMIT = 4000;
+
+  /**
+   * What a failed job reports as its error message, with the whole stack trace where the
+   * application asked for it with <code>report-errors-as-stack-trace</code> (see decision 81
+   * in the repository's DECISIONS.md).
+   * <p>
+   * The text starts with the chain of causes, one line per level: the type and the message,
+   * the innermost cause last. The chain takes at most half of
+   * {@link #INCIDENT_MESSAGE_LIMIT}. The stack trace follows. Where the whole text is longer
+   * than the limit, this method cuts the END of the stack trace. So the innermost cause is
+   * always in the incident. A Spring exception wraps its cause in several layers of
+   * frames, and a cut by the cluster would take away exactly the cause.
+   * <p>
+   * A {@link DeliveryOfAnUnknownWorkflowException} gets no stack trace. It is a refusal of
+   * the core, not a defect of the code which ran. Its message names the workflow and says
+   * what to do, and the trace would only add which line of the core read the database.
+   *
+   * @param throwable What the handler threw
+   * @param withStackTrace Whether the application asked for the stack trace
+   * @return The incident text, never <code>null</code>
+   */
+  public static String incidentMessage(
+      final Throwable throwable,
+      final boolean withStackTrace) {
+
+    if (!withStackTrace || (throwable == null) || (throwable instanceof DeliveryOfAnUnknownWorkflowException)) {
+      return incidentMessage(throwable);
+    }
+    final var stackTrace = new StringWriter();
+    throwable.printStackTrace(new PrintWriter(stackTrace));
+    return cutToTheLimit(chainOfCauses(throwable)
+        + "\n\n"
+        + stackTrace);
+
+  }
+
+  /**
+   * The longest line of {@link #chainOfCauses(Throwable)}. A message can be very long, for
+   * example one which repeats the messages of all its causes. One such line must not push
+   * the innermost cause out of the incident.
+   */
+  private static final int CAUSE_LINE_LIMIT = 300;
+
+  /**
+   * What starts every line of {@link #chainOfCauses(Throwable)} after the first one. It is
+   * the words Java itself uses in a stack trace.
+   */
+  private static final String CAUSED_BY = "\nCaused by: ";
+
+  /**
+   * The room kept for the line which says how many causes were left out.
+   */
+  private static final int LEFT_OUT_LINE = 40;
+
+  /**
+   * The chain of causes, one line per level, the innermost cause last. It takes at most half
+   * of {@link #INCIDENT_MESSAGE_LIMIT}, so the stack trace keeps the other half. Where the
+   * chain is longer, the outermost cause stays, and so do as many of the innermost ones as
+   * fit. One line in between says how many causes were left out.
+   */
+  private static String chainOfCauses(
+      final Throwable throwable) {
+
+    final var causes = new ArrayList<String>();
+    // bounded like every other walk of a cause chain here, see firstCauseAnswering
+    final var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+    var current = throwable;
+    while ((current != null) && seen.add(current)) {
+      final var line = incidentMessage(current).replaceAll("\\s+", " ");
+      causes.add(line.length() <= CAUSE_LINE_LIMIT
+          ? line
+          : line.substring(0, CAUSE_LINE_LIMIT - 4)
+              + " ...");
+      current = current.getCause();
+    }
+    final var budget = INCIDENT_MESSAGE_LIMIT / 2;
+    final var innermostKept = new ArrayDeque<String>();
+    var used = causes.getFirst().length() + LEFT_OUT_LINE;
+    var index = causes.size() - 1;
+    while ((index > 0) && ((used + CAUSED_BY.length() + causes.get(index).length()) <= budget)) {
+      used += CAUSED_BY.length() + causes.get(index).length();
+      innermostKept.addFirst(causes.get(index));
+      index--;
+    }
+    final var text = new StringBuilder(causes.getFirst());
+    if (index > 0) {
+      text
+          .append(CAUSED_BY)
+          .append("... ")
+          .append(index)
+          .append(index == 1
+              ? " cause left out"
+              : " causes left out");
+    }
+    innermostKept.forEach(cause -> text
+        .append(CAUSED_BY)
+        .append(cause));
+    return text.toString();
+
+  }
+
+  /**
+   * The text, cut at its end so that it takes at most {@link #INCIDENT_MESSAGE_LIMIT} bytes in
+   * UTF-8, with a last line which says that it was cut. A character never takes less than one
+   * byte, so the text then also has at most that many characters.
+   */
+  static String cutToTheLimit(
+      final String text) {
+
+    if (text.getBytes(StandardCharsets.UTF_8).length <= INCIDENT_MESSAGE_LIMIT) {
+      return text;
+    }
+    final var cutNote = "\n... cut by VanillaBP to the %d characters the cluster keeps"
+        .formatted(Integer.valueOf(INCIDENT_MESSAGE_LIMIT));
+    final var room = INCIDENT_MESSAGE_LIMIT - cutNote.length();
+    // walked by code point, so a character which needs two chars is never cut in half. Half
+    // of it would turn into a question mark
+    var end = 0;
+    var bytes = 0;
+    while (end < text.length()) {
+      final var codePoint = text.codePointAt(end);
+      final var size = utf8Bytes(codePoint);
+      if (bytes + size > room) {
+        break;
+      }
+      bytes += size;
+      end += Character.charCount(codePoint);
+    }
+    return text.substring(0, end) + cutNote;
+
+  }
+
+  private static int utf8Bytes(
+      final int codePoint) {
+
+    if (codePoint < 0x80) {
+      return 1;
+    }
+    if (codePoint < 0x800) {
+      return 2;
+    }
+    return codePoint < 0x10000
+        ? 3
+        : 4;
+
+  }
+
 
 }

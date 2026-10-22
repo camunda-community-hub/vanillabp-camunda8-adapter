@@ -117,8 +117,14 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
   private final Camunda8OpenTaskProbe openTaskProbe;
 
   /**
+   * Whether the incident of a failed notification carries the whole stack trace. May be
+   * <code>null</code>. Then the default of the resolver applies.
+   */
+  private final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver;
+
+  /**
    * The user-task listener worker this handler serves. Built through the generated
-   * <code>Camunda8UserTaskListenerHandler.builder()</code>: five of these eight values may
+   * <code>Camunda8UserTaskListenerHandler.builder()</code>: six of these nine values may
    * be left out, and a positional list of that length no longer says which is which.
    *
    * @param adapterId The adapter whose worker delivers here
@@ -132,6 +138,8 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
    * @param fetchVariables What the worker asked for, or <code>null</code> for every variable
    * @param openTaskProbe What asks the cluster about the other open tasks of the workflow, or
    *          <code>null</code> to ask nothing
+   * @param reportErrorsAsStackTraceResolver Whether an incident carries the stack trace, or
+   *          <code>null</code> for the default
    */
   @Builder
   public Camunda8UserTaskListenerHandler(
@@ -142,9 +150,11 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
       final Camunda8MultiInstance.Registry multiInstanceRegistry,
       final Camunda8Drain drain,
       final Camunda8FetchVariables.Selection fetchVariables,
-      final Camunda8OpenTaskProbe openTaskProbe) {
+      final Camunda8OpenTaskProbe openTaskProbe,
+      final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver) {
 
     this.openTaskProbe = openTaskProbe;
+    this.reportErrorsAsStackTraceResolver = reportErrorsAsStackTraceResolver;
     this.fetchVariables = fetchVariables == null
         ? Camunda8FetchVariables.Selection.everything()
         : fetchVariables;
@@ -196,7 +206,9 @@ public class Camunda8UserTaskListenerHandler implements JobHandler {
             bpmnProcessId,
             // a notification which failed has no attempt left, whatever the model says. The
             // failure IS the incident, and there is no next attempt a backoff could delay.
-            () -> Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT,
+            () -> Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT
+                .withStackTrace(Camunda8ReportErrorsAsStackTraceResolver
+                    .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId, taskDefinition)),
             () -> {
               if (event == null) {
                 log

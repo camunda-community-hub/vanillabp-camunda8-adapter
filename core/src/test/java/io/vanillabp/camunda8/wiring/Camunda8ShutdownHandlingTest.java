@@ -229,7 +229,7 @@ public class Camunda8ShutdownHandlingTest {
     when(invoker.startWorkflowByBpms(anyString(), anyString(), any()))
         .thenThrow(new IllegalStateException("interrupted by the shutdown"));
     return new Camunda8BpmsInitiatedStartHandler(
-        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null);
+        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null, null);
 
   }
 
@@ -264,7 +264,7 @@ public class Camunda8ShutdownHandlingTest {
         .doThrow(new IllegalStateException("interrupted by the shutdown"))
         .when(invoker)
         .workflowEnded(anyString(), anyString(), any());
-    return new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null);
+    return new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null, null);
 
   }
 

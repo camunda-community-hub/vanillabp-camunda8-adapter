@@ -57,6 +57,7 @@ import io.vanillabp.camunda8.wiring.Camunda8ModelExpressions;
 import io.vanillabp.camunda8.wiring.Camunda8ModelledListenerHandler;
 import io.vanillabp.camunda8.wiring.Camunda8MultiInstance;
 import io.vanillabp.camunda8.wiring.Camunda8OpenTaskProbe;
+import io.vanillabp.camunda8.wiring.Camunda8ReportErrorsAsStackTraceResolver;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Scoping;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
@@ -182,6 +183,42 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
     return Camunda8AllowConnectorsResolver
         .resolve(allowConnectorsResolver, workflowModuleId, bpmnProcessId);
+
+  }
+
+  /**
+   * What the configuration says about <code>report-errors-as-stack-trace</code>. It is
+   * <code>null</code> until a platform module hands one over. Then no incident carries a
+   * stack trace, which is the default.
+   */
+  private Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver;
+
+  /**
+   * Hands over how <code>report-errors-as-stack-trace</code> resolves for this adapter
+   * instance.
+   *
+   * @param reportErrorsAsStackTraceResolver The resolver, or <code>null</code> for the
+   *          default
+   */
+  public void setReportErrorsAsStackTraceResolver(
+      final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver) {
+
+    this.reportErrorsAsStackTraceResolver = reportErrorsAsStackTraceResolver;
+
+  }
+
+  /**
+   * What the handlers ask about <code>report-errors-as-stack-trace</code>. They ask through
+   * this method and not the resolver itself. So a resolver handed over after a worker was
+   * built still counts.
+   */
+  private Boolean reportErrorsAsStackTraceFor(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final String taskDefinition) {
+
+    return Camunda8ReportErrorsAsStackTraceResolver
+        .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId, taskDefinition);
 
   }
 
@@ -3981,6 +4018,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .drain(drain)
               .fetchVariables(listenerFetch)
               .openTaskProbe(openTaskProbe)
+              .reportErrorsAsStackTraceResolver(this::reportErrorsAsStackTraceFor)
               .build())
           .timeout(
               listenerLockOf(workflowModuleId, bpmnProcessIds, "user-task listener", listenerJobType))
@@ -4044,6 +4082,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .drain(drain)
               .fetchVariables(listenerFetch)
               .retryBackoffResolver(retryBackoffResolver)
+              .reportErrorsAsStackTraceResolver(this::reportErrorsAsStackTraceFor)
               .openTaskProbe(openTaskProbe)
               .build())
           .timeout(listenerLockOf(workflowModuleId, scopedBpmnProcessIds, "modelled listener", jobType))
@@ -4076,7 +4115,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .jobType(startEvent.listenerJobType())
               .handler(new Camunda8BpmsInitiatedStartHandler(
                   adapterId, workflowModuleId, plainProcessId, startEvent.startEventId(), startEvent.kind(), startEvent
-                      .signalName(), bpmsInitiatedStartInvoker, drain, retryBackoffResolver))
+                      .signalName(), bpmsInitiatedStartInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
               .timeout(
                   listenerLockOf(workflowModuleId, List.of(startEvent.bpmnProcessId()), "start-event", startEvent
                       .listenerJobType()))
@@ -4119,7 +4158,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .handler(new Camunda8WorkflowEndedHandler(
                   adapterId, workflowModuleId, plainProcessId, workflowTaskWiring
                       .resolveWorkflowAggregateIdName(workflowModuleId,
-                          plainProcessId), workflowEndedInvoker, drain, retryBackoffResolver))
+                          plainProcessId), workflowEndedInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
               .timeout(
                   listenerLockOf(workflowModuleId, List.of(scopedProcessId), "workflow-end", Camunda8TaskWiring
                       .workflowEndedJobTypeOf(scopedProcessId)))
@@ -4162,6 +4201,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .asyncTaskMaxAgeAction(asyncTaskMaxAgeAction())
               .drain(drain)
               .retryBackoffResolver(retryBackoffResolver)
+              .reportErrorsAsStackTraceResolver(this::reportErrorsAsStackTraceFor)
               .fetchVariables(taskFetch)
               .predatesDeployedVersion(processVersions::predatesDeployedVersion)
               .openTaskProbe(openTaskProbe)
@@ -4508,6 +4548,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             .asyncTaskMaxAgeAction(asyncTaskMaxAgeAction())
             .drain(drain)
             .retryBackoffResolver(retryBackoffResolver)
+            .reportErrorsAsStackTraceResolver(this::reportErrorsAsStackTraceFor)
             .fetchVariables(Camunda8FetchVariables.Selection.everything())
             .predatesDeployedVersion(processVersions::predatesDeployedVersion)
             .openTaskProbe(openTaskProbe)
@@ -4558,6 +4599,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             .drain(drain)
             .fetchVariables(Camunda8FetchVariables.Selection.everything())
             .openTaskProbe(openTaskProbe)
+            .reportErrorsAsStackTraceResolver(this::reportErrorsAsStackTraceFor)
             .build())
         .timeout(
             listenerLockOf(
@@ -4611,7 +4653,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         .newWorker()
         .jobType(jobType)
         .handler(new Camunda8WorkflowEndedHandler(
-            adapterId, workflowModuleId, bpmnProcessId, aggregateIdName, workflowEndedInvoker, drain, retryBackoffResolver))
+            adapterId, workflowModuleId, bpmnProcessId, aggregateIdName, workflowEndedInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
         .timeout(listenerLockOf(workflowModuleId, List.of(scopedBpmnProcessId), "workflow-end", jobType))
         .name("vanillabp-%s-%s".formatted(adapterId, scopedBpmnProcessId)), jobType),
         workflowModuleId,

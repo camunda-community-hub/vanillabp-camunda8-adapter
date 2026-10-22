@@ -126,6 +126,35 @@ public class Camunda8JobTimeoutOverlayTest {
   }
 
   @Test
+  public void reportErrorsAsStackTraceResolvesThroughAllFourLevels() {
+
+    final var overlay = overlay();
+
+    // the levels switch it on and off in turn. So each answer shows that its own level won,
+    // in both directions
+    Assertions.assertEquals(
+        Boolean.FALSE,
+        overlay.reportErrorsAsStackTraceFor("test-app", "TaskProcess", "happyTask", "c8"));
+    Assertions.assertEquals(
+        Boolean.TRUE,
+        overlay.reportErrorsAsStackTraceFor("test-app", "TaskProcess", "otherTask", "c8"));
+    Assertions.assertEquals(
+        Boolean.FALSE,
+        overlay.reportErrorsAsStackTraceFor("test-app", "OtherProcess", "someTask", "c8"));
+    Assertions.assertEquals(
+        Boolean.TRUE,
+        overlay.reportErrorsAsStackTraceFor("unknown-module", "SomeProcess", "someTask", "c8"));
+    // a job which serves no task, like the end of a workflow, reads the workflow level
+    Assertions.assertEquals(
+        Boolean.TRUE,
+        overlay.reportErrorsAsStackTraceFor("test-app", "TaskProcess", null, "c8"));
+    // and an adapter id which configures nothing leaves it to the default
+    Assertions.assertNull(
+        overlay.reportErrorsAsStackTraceFor("test-app", "TaskProcess", "happyTask", "unknown-adapter"));
+
+  }
+
+  @Test
   public void retryBackoffResolvesThroughAllFourLevels() {
 
     final var overlay = overlay();

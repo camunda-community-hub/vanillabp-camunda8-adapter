@@ -327,7 +327,7 @@ public class Camunda8OutcomeCommandRetryTest {
                 "42", "id", Map.of("id", "42"), true));
 
     new Camunda8BpmsInitiatedStartHandler(
-        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null)
+        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null, null)
         .handle(jobClient, job());
 
     assertEquals(3, attempts.get());
@@ -349,7 +349,7 @@ public class Camunda8OutcomeCommandRetryTest {
     // event the job reports tells them apart
     when(endListenerJob.getListenerEventType()).thenReturn(ListenerEventType.END);
 
-    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null)
+    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null, null)
         .handle(jobClient, endListenerJob);
 
     verify(jobClient.newFailCommand(4711L).retries(2), times(1))

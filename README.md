@@ -1439,6 +1439,16 @@ operator reads in Operate, and `NullPointerException` used to write just `null` 
 `Camunda8TaskProcessingIT#aFailedJobIsHandedOutAgainOnlyAfterTheBackoff` and
 `Camunda8OutcomeCommandRetryTest#theIncidentNamesTheExceptionType`.
 
+With `report-errors-as-stack-trace: true` the incident carries more than that one line. Its
+default is `false`, as in version 1, and it is resolved over the same four levels as
+`retry-backoff`. The text starts with the chain of causes, one line each and the innermost cause
+last, and the stack trace follows. The adapter cuts the text to the 4000 characters the cluster
+keeps, at the end of the trace, so the cause is never the part that gets lost (decision 81). A job
+the core refuses with `DeliveryOfAnUnknownWorkflowException` keeps its one line. Held by
+`Camunda8ErrorsTest`, `Camunda8ListenerJobsTest`,
+`Camunda8JobTimeoutOverlayTest#reportErrorsAsStackTraceResolvesThroughAllFourLevels`,
+`Camunda8ReportErrorsAsStackTraceOverlayTest` and `Camunda8IncidentMessageLengthCanaryIT`.
+
 A model may name the backoff of a single element itself, in the task header `retryBackoff` which
 version 1 read. The adapter reads it from the JOB, not from the model while deploying. An
 `ActivatedJob` carries the headers of its element, so nothing has to be scanned, and the value

@@ -94,7 +94,7 @@ public final class Camunda8WorkflowEndedFixture {
     Mockito.lenient().when(completion.send()).thenReturn(answer);
     Mockito.lenient().when(client.newCompleteCommand(Mockito.anyLong())).thenReturn(completion);
 
-    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, null, null)
+    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, null, null, null)
         .handle(client, aJobReporting(eventType, variables));
 
     return new WhatHappened(
