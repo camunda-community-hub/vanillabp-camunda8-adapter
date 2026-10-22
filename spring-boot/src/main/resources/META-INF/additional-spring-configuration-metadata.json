@@ -1,0 +1,370 @@
+{
+  "properties": [
+    {
+      "name": "vanillabp.adapters.camunda8.mode",
+      "type": "io.vanillabp.camunda8.client.Camunda8AdapterConfiguration$Mode",
+      "description": "How this adapter reaches its cluster: 'self-managed' for a cluster you run yourself, addressed by 'rest-address' and 'grpc-address', or 'saas' for Camunda 8 SaaS, which needs 'cluster-id', 'region', 'client-id' and 'client-secret'. All keys of this section work for every adapter id of type 'camunda8', not only for the id 'camunda8'.",
+      "defaultValue": "self-managed"
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.rest-address",
+      "type": "java.lang.String",
+      "description": "The REST address of a self-managed cluster. Without it the adapter uses the address of a local cluster, and the start warns about that."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.grpc-address",
+      "type": "java.lang.String",
+      "description": "The gRPC address of a self-managed cluster. Without it the adapter uses the address of a local cluster, and the start warns about that."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.prefer-rest-over-grpc",
+      "type": "java.lang.Boolean",
+      "description": "Whether the client talks REST to the cluster. With 'false' it talks gRPC.",
+      "defaultValue": true
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.tenant-id",
+      "type": "java.lang.String",
+      "description": "The Camunda 8 tenant every workflow module of this adapter is deployed into. A workflow module may name its own tenant at 'vanillabp.workflow-modules.<module>.adapters.<id>.tenant-id'. There is no workflow or task level, because a tenant belongs to the deployment, and the adapter deploys once per workflow module."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.cluster-id",
+      "type": "java.lang.String",
+      "description": "The cluster a SaaS adapter connects to. Required with mode 'saas'."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.region",
+      "type": "java.lang.String",
+      "description": "The region the SaaS cluster runs in. Required with mode 'saas'."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.client-id",
+      "type": "java.lang.String",
+      "description": "The OIDC client a SaaS adapter connects as. Required with mode 'saas'."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.client-secret",
+      "type": "java.lang.String",
+      "description": "The secret of the SaaS client. Required with mode 'saas'."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.method",
+      "type": "io.vanillabp.camunda8.client.Camunda8AuthConfiguration$Method",
+      "description": "How the adapter proves who it is: 'none', 'basic' or 'oidc'. Without it the adapter picks the method from the keys which are set."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.username",
+      "type": "java.lang.String",
+      "description": "The user the method 'basic' sends."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.password",
+      "type": "java.lang.String",
+      "description": "The password the method 'basic' sends with the user."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.client-id",
+      "type": "java.lang.String",
+      "description": "The client the method 'oidc' fetches its token as."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.client-secret",
+      "type": "java.lang.String",
+      "description": "The secret of the OIDC client."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.authorization-server-url",
+      "type": "java.lang.String",
+      "description": "The token endpoint the method 'oidc' asks for a token."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.audience",
+      "type": "java.lang.String",
+      "description": "The audience the cluster expects in the token."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.scope",
+      "type": "java.lang.String",
+      "description": "The scope the token is asked for, where the authorization server wants one."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.credentials-cache-path",
+      "type": "java.lang.String",
+      "description": "Where the client keeps the tokens it fetched, so a restart does not fetch a new token while the old one is still valid. Default: the client's '${user.home}/.camunda/credentials'."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.connect-timeout",
+      "type": "java.time.Duration",
+      "description": "How long connecting to the authorization server may take. Default: the client's 5 seconds."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.read-timeout",
+      "type": "java.time.Duration",
+      "description": "How long reading the token response may take. Default: the client's 5 seconds."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.keystore-path",
+      "type": "java.lang.String",
+      "description": "The keystore with the client certificate the authorization server asks for. It is not used for the cluster."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.keystore-password",
+      "type": "java.lang.String",
+      "description": "The password of the keystore."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.keystore-key-password",
+      "type": "java.lang.String",
+      "description": "The password of the private key in the keystore."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.truststore-path",
+      "type": "java.lang.String",
+      "description": "The truststore which checks the certificate of the authorization server. It is not used for the certificate of the cluster."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.truststore-password",
+      "type": "java.lang.String",
+      "description": "The password of the truststore."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.auth.ca-certificate-path",
+      "type": "java.lang.String",
+      "description": "The certificate authority which checks the TLS certificate of the cluster. Use it for a gateway whose certificate the JVM does not know. It works with every method."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.job-timeout",
+      "type": "java.time.Duration",
+      "description": "How long a job stays locked for the worker which took it. It is also read per workflow module, per workflow and per task, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.tasks.<task-definition>.adapters.<id>.job-timeout'. Default: 5 minutes."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.retry-backoff",
+      "type": "java.time.Duration",
+      "description": "How long the cluster waits before it hands out a failed job again. It is also read per workflow module, per workflow and per task, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.tasks.<task-definition>.adapters.<id>.retry-backoff'. Default: 10 seconds."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.report-errors-as-stack-trace",
+      "type": "java.lang.Boolean",
+      "description": "Whether the incident of a failed job carries the whole stack trace instead of only the type and message of the exception. It is also read per workflow module, per workflow and per task, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.tasks.<task-definition>.adapters.<id>.report-errors-as-stack-trace'.",
+      "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.message-time-to-live",
+      "type": "java.time.Duration",
+      "description": "How long the cluster keeps a published message. It buffers a message which arrives before its subscription, and a second message with the same id is dropped while the first one lives. It is also read per workflow module, per workflow and per message, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.messages.<message-name>.adapters.<id>.message-time-to-live'. Default: the client's."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.allow-connectors",
+      "type": "java.lang.Boolean",
+      "description": "Whether an element built from an element template, usually a Camunda connector, is left to the runtime which owns it. It is also read per workflow module and per workflow, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.allow-connectors'. There is no task level.",
+      "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.allow-listeners",
+      "type": "java.lang.Boolean",
+      "description": "Whether @WorkflowTask methods serve the listeners somebody modelled. Without it a model with such a listener does not start. It is also read per workflow module and per workflow, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.allow-listeners'. There is no task level.",
+      "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.fetch-variables",
+      "type": "java.lang.String",
+      "description": "Removed in 2.0. A start which still sets it ends with a message, at this level and at 'vanillabp.workflow-modules.<module>.adapters.<id>.fetch-variables' and the levels below it.",
+      "deprecation": {
+        "level": "error",
+        "reason": "A worker now always fetches the variables VanillaBP reads. A handler which needs more reads it from the workflow aggregate."
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.async-task-timeout",
+      "type": "java.time.Duration",
+      "description": "Renamed. A start which still sets it ends with a message.",
+      "deprecation": {
+        "level": "error",
+        "reason": "The window is now called 'async-task-lock-renewal'.",
+        "replacement": "vanillabp.adapters.camunda8.async-task-lock-renewal"
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.async-task-lock-renewal",
+      "type": "java.time.Duration",
+      "description": "How long the lock of a job is extended which a @TaskId handler left open. It also sets how often the lock is renewed. Keep it well below 'vanillabp.delivery.retention'.",
+      "defaultValue": "1h"
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.async-task-max-age-action",
+      "type": "io.vanillabp.camunda8.client.Camunda8AdapterConfiguration$AsyncTaskMaxAgeAction",
+      "description": "What the adapter does about a task which stayed open longer than 'vanillabp.delivery.max-task-age': 'report' leaves it at the message of the core, 'incident' fails the job so an incident shows up.",
+      "defaultValue": "report"
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.job-lease",
+      "type": "io.vanillabp.camunda8.client.Camunda8AdapterConfiguration$JobLease",
+      "description": "Whether the adapter leases every job it holds, from the activation to the answer: 'use' or 'do-not-use'. There is no default. On a line which can lease, the start stops until the application says which one it wants."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.accept-unscoped-identifiers",
+      "type": "java.lang.Boolean",
+      "description": "States that the identifiers of this application are unique across all its workflow modules. It silences the warning which the name-clash-avoidance mode 'none' logs per workflow module.",
+      "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.shutdown-grace",
+      "type": "java.time.Duration",
+      "description": "How long the shutdown of this adapter waits for the handlers which are still running. It is the budget of the whole shutdown, not of one workflow module.",
+      "defaultValue": "20s"
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.health-timeout",
+      "type": "java.time.Duration",
+      "description": "How long the health check waits for the cluster to answer. '0s' switches the check off, and the health then reports UNKNOWN.",
+      "defaultValue": "2s"
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.startup-wait",
+      "type": "java.time.Duration",
+      "description": "How long the start waits for its cluster to answer. '0s' switches the waiting off.",
+      "defaultValue": "10m"
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.worker-threads",
+      "type": "java.lang.String",
+      "description": "How the adapter runs what it delivers: a positive number of platform threads, or 'virtual'. It applies to the whole adapter. Default: 4 platform threads."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.worker-threads-bound",
+      "type": "java.lang.Integer",
+      "description": "How many handlers may run at the same time with 'worker-threads: virtual'. Default: the number the platform-thread mode would use. Setting it without 'virtual' ends the start."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.max-jobs-active",
+      "type": "java.lang.Integer",
+      "description": "How many jobs one worker may hold at the same time. Default: 8 per thread, at most 32."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.poll-interval",
+      "type": "java.time.Duration",
+      "description": "How long a worker waits between two activation requests. Default: the client's 100 milliseconds."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.request-timeout",
+      "type": "java.time.Duration",
+      "description": "How long a request to the cluster may take. For an activation request it is also the long-polling window. Default: the client's 10 seconds."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.stream-enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether the cluster pushes jobs to the workers instead of only answering their polls. Default: the client's 'false'."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.stream-timeout",
+      "type": "java.time.Duration",
+      "description": "How long a job stream stays open before the client opens it again. Only used with 'stream-enabled'. Default: the client's."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.max-message-size",
+      "type": "java.lang.Integer",
+      "description": "The largest inbound message the client accepts, in bytes. Default: the client's."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.keep-alive",
+      "type": "java.time.Duration",
+      "description": "The keep-alive interval of the client's connections. Default: the client's."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.max-http-connections",
+      "type": "java.lang.Integer",
+      "description": "How many HTTP connections the REST transport may open. Default: the client's."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.override-authority",
+      "type": "java.lang.String",
+      "description": "The name the TLS certificate is checked against, for a gateway reached under another name than the one in its certificate."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.workflow-visibility-timeout",
+      "type": "java.time.Duration",
+      "description": "How long a workflow of this cluster may stay invisible to the query API after it started. Raise it for a slow exporter, '0s' switches the waiting off. Default: 10 seconds."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.ended-workflow-visibility-timeout",
+      "type": "java.time.Duration",
+      "description": "The same window for a workflow the engine has already forgotten, where only its end has to reach the query API. '0s' answers at once. Default: 3 seconds."
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.aggregate-id-as-business-id",
+      "type": "java.lang.Boolean",
+      "description": "Whether a workflow this adapter starts carries the id of the workflow aggregate as its business id, so Operate shows it. VanillaBP never reads it back.",
+      "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.probe-open-user-tasks",
+      "type": "java.lang.Boolean",
+      "description": "Whether the check of the other open tasks of a workflow asks the cluster about each Camunda-managed user task, too. It costs one command per user task.",
+      "defaultValue": false
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.task-timeout",
+      "type": "java.time.Duration",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. Write 'job-timeout' instead, at the same level.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Renamed in 2.0.",
+        "replacement": "vanillabp.adapters.camunda8.job-timeout"
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.poll-request-timeout",
+      "type": "java.time.Duration",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. Write 'request-timeout' instead, at the adapter level only.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Renamed in 2.0, and read at the adapter level only.",
+        "replacement": "vanillabp.adapters.camunda8.request-timeout"
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.use-tenants",
+      "type": "java.lang.Boolean",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. 'true' is what this version does by default. For 'false' write 'vanillabp.adapters.<id>.name-clash-avoidance: none'.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Gone in 2.0. Tenants follow 'name-clash-avoidance' now."
+      }
+    },
+    {
+      "name": "vanillabp.adapters.camunda8.task-id-as-hex-string",
+      "type": "java.lang.Boolean",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. A task id is always decimal now. Task ids stored in hexadecimal are data to migrate, see UPGRADE.md of the adapter.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Gone in 2.0. A task id is always decimal."
+      }
+    },
+    {
+      "name": "vanillabp.allow-connectors",
+      "type": "java.lang.Boolean",
+      "description": "A key of VanillaBP 1 which this version does not read. The start warns about it. It moved into the adapter section, and so did its workflow-module and workflow levels: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.allow-connectors'.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Moved into the adapter section in 2.0.",
+        "replacement": "vanillabp.adapters.camunda8.allow-connectors"
+      }
+    }
+  ],
+  "hints": [
+    {
+      "name": "vanillabp.adapters.camunda8.worker-threads",
+      "values": [
+        {
+          "value": "virtual",
+          "description": "Run every handler on a virtual thread."
+        }
+      ],
+      "providers": [
+        {
+          "name": "any"
+        }
+      ]
+    }
+  ]
+}

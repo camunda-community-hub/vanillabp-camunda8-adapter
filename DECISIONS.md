@@ -3518,3 +3518,43 @@ at the bottom. `Camunda8IncidentMessageLengthCanaryIT` holds the cluster to the 
 **What gets no trace.** A `DeliveryOfAnUnknownWorkflowException` keeps its one line, whatever the
 key says. It is a refusal of the core and not a defect of the code which ran. Its message names the
 workflow and says what to do (decision 45).
+
+### 82. The IDE learns every key from the metadata of the Spring Boot jar, and a test keeps it complete
+
+Built by story 993 on 2026-10-21.
+
+An IDE offers the keys of `application.yaml` and marks a key it does not know. It reads them from
+`META-INF/spring-configuration-metadata.json` in the jars of the application. Until this story the
+adapter shipped no such file, so every key of the adapter looked unknown. Version 1 had none either.
+
+The Spring Boot module now writes the file in two parts:
+
+- The configuration processor writes one entry for each map of `VanillaBpCamunda8Properties`:
+  `vanillabp.adapters` and `vanillabp.workflow-modules`. Each entry names the type of the map's
+  values. The processor never describes the keys below a map key, because the application chooses
+  that key. An IDE which follows the value type finds the keys there, for every adapter id, workflow
+  module, workflow, task and message. We expect IntelliJ IDEA to do this, but nobody tried it in an
+  IDE yet.
+- `additional-spring-configuration-metadata.json` is written by hand. It describes every key of the
+  adapter level once more, under the adapter id `camunda8`. That is the id which needs no `type`
+  key. These entries are the only place where a key gets a type, a
+  description and a default which every IDE shows. The
+  metadata format has no name for "any id", so the levels below a workflow module cannot get entries
+  of their own. A key which is also read there names those levels in its description instead. A
+  removed key is described as deprecated with level `error`, so the IDE marks it.
+- A key of version 1 which this version does not read any more is described the same way, with the
+  key to write instead where there is one: `task-timeout`, `poll-request-timeout`, `use-tenants`,
+  `task-id-as-hex-string` and `vanillabp.allow-connectors`. The start warns about them
+  (`Camunda8VersionOneKeys`), but nothing binds them. So the test lets an entry with level `error`
+  stand without a field. Their old places below a workflow module cannot get entries, for the reason
+  above.
+
+`EveryKeyIsKnownToTheIdeTest` walks the overlay class the way the binder does. It fails when a key
+has no entry, when an entry describes a key nobody reads, and when a type or a default in the file
+differs from the code. So a new key needs its field in the overlay of both platforms and its entry
+in the file, or the build is red.
+
+The platform also writes an entry `vanillabp.adapters`, with a type of its own. Which entry an IDE
+uses when two jars describe the same name was not tried in an IDE. The Quarkus module needs none of
+this: it is a Quarkus extension, and its build writes a description of every key into
+`META-INF/quarkus-config-doc/`.
