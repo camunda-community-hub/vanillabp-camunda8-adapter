@@ -3558,3 +3558,34 @@ The platform also writes an entry `vanillabp.adapters`, with a type of its own. 
 uses when two jars describe the same name was not tried in an IDE. The Quarkus module needs none of
 this: it is a Quarkus extension, and its build writes a description of every key into
 `META-INF/quarkus-config-doc/`.
+
+### 84. An Apache HttpClient 5 which is too old is named when the client build fails, not by comparing versions
+
+Built by story 999 on 2026-10-28.
+
+The Camunda client talks REST through Apache HttpClient 5. The platform BOM of an application
+manages its version, and an imported BOM beats what the client asks for. Spring Boot 4.0 manages
+`httpclient5` 5.5. Every client this repository pins asks for 5.6, but only the clients of the 8.9
+line call a method which 5.5 does not have. They fail with a `NoSuchMethodError` while the adapter
+builds its client, so at startup. Nothing in that error names the dependency to pin.
+
+**The adapter turns that error into a message, and it does nothing else.** `Camunda8ClientFactory`
+builds the client through `Camunda8HttpClientRuntime`. A linkage error which names a class of
+`org.apache.hc` becomes an `IllegalStateException`. Its message names the versions on the
+classpath, the entries to add to the `dependencyManagement` of the application, and the properties
+for `spring-boot-starter-parent`. Any other linkage error is thrown on as it was.
+
+**The adapter does not compare version numbers.** A check of "5.5 is older than the 5.6 the client
+asks for" would stop the 8.8 and the 8.10 line on Spring Boot 4.0. Both work there, measured with
+the clients and BOMs of 2026-10-28. A rule which stops working applications is wrong. Waiting for
+the real failure costs nothing, because the client is built at startup anyway. And if a later
+client of the 8.8 or the 8.10 line starts to call something new, the same message appears without a
+change here.
+
+**The error is not the cause of the new exception.** Spring Boot has a failure analyzer for a
+`NoSuchMethodError` anywhere in the causes, and its report would replace the message. So the
+original error is added as a suppressed exception. Its stack trace stays in the log.
+
+**The pin is the application's.** This is decision 39 again: nothing this repository pins reaches
+an application. The README says which application has to pin what, in the section
+[Apache HttpClient 5](./README.md#apache-httpclient-5).
