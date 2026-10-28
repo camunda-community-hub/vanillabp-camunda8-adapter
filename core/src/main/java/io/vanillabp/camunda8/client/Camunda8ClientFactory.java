@@ -245,7 +245,9 @@ public class Camunda8ClientFactory implements AutoCloseable {
     applyTransportOptions(builder);
     applyAuthentication(builder);
 
-    final var built = builder.build();
+    // the client builds its HTTP client here. An Apache HttpClient 5 which is too old fails
+    // right here, and the message has to name the dependency to pin
+    final var built = Camunda8HttpClientRuntime.buildOrNameTheMissingPin(builder::build);
     reportSizing();
     reportEnvironmentOverrides(built);
     return built;
