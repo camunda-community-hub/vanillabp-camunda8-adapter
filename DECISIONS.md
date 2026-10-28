@@ -3662,6 +3662,40 @@ file. It finds the keys in the `@ConfigMapping` interfaces themselves and writes
 `{*}`. So the names help the generated documentation and everybody who reads the file. They do not
 change what this plugin offers while you type.
 
+### 86. A person who read a client bump says so with a commit, and that turns the red check green
+
+Built by story 2008 on 2026-10-28.
+
+On a GA line, `client-api-changes` is red when a client bump adds enum literals or abstract
+interface methods. That stops the patch automerge, which is its purpose. The check is also
+required by the ruleset of `main`, and the ruleset lets nobody bypass it. So the old advice "merge
+by hand" could not work. A bump which added something could not merge at all, even after somebody
+had read it.
+
+Now `camunda8-client-read.properties` holds, per line, the last client a person read, written as
+`line-<line>=<version>`. When a bump on a GA line adds something, the workflow asks
+`bin/client-api-read.sh` whether that file names the new version or a newer release for the line.
+If it does, the comment says so and the check is green. If not, the check stays red. The comment
+and the log then name the exact entry to set. The person who read the additions pushes one commit
+with that entry to the pull request's branch. The trigger `synchronize` runs the check again.
+
+The file is read from the pull request's own checkout, so the commit on the branch is what counts.
+A pre-release counts only when the entry names it exactly. A preview line is not blocked anyway.
+A bump which adds nothing does not touch the file, so an entry may be older than its pin. The file
+started with the pins of `main` on 2026-10-28. Those were read when they merged.
+
+Two other ways were possible. A label `client-api-read` would have needed the trigger `labeled`
+again, which once started this workflow four times for one commit. Admins in the bypass list of
+the ruleset would have been the smallest change, but then nothing records who read what. The
+commit records it in Git, without a bypass.
+
+The commit has a price. Renovate stops updating a branch with a commit from somebody else, and it
+does not merge that branch. The person who pushed the commit merges it. The README says what else
+this means.
+
+`businesscockpit-camunda8-adapter` keeps a file of the same name and format. There it records
+which client was read against the cockpit's code, and its own pull request raises it.
+
 ### 87. A listener somebody modelled is retried only where the model asks for it, like a task
 
 Built by story 2009 on 2026-10-28. Stephan decided it on 2026-10-28.

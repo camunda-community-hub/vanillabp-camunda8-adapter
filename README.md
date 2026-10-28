@@ -104,6 +104,26 @@ automerge cannot carry such a change through unread. That is
 `.github/workflows/client-api-changes.yaml` with `bin/client-api-changes.sh`.
 `Camunda8UnknownClientEnumsTest` holds what the adapter does with a literal it has never seen.
 
+The check is required, and nobody can bypass it, an admin included. So there is no merge by hand.
+The red check turns green when `camunda8-client-read.properties` names the new version for that
+line. This file holds, per line, the last client a person read. To merge such a bump:
+
+1. Read the comment on the pull request and check the code which uses each new member.
+2. Push one commit to the pull request's branch which raises the entry of that line, for example
+   `line-8.10=8.10.6`. The comment and the log of the red check name the exact entry.
+3. The check runs again on that commit and turns green. Merge the pull request.
+
+Git now says who read which client. A bump which adds nothing merges without a change to the file,
+so an entry can be older than its pin. `bin/client-api-read.sh` reads the file, see decision 86.
+
+Your commit changes how Renovate treats the branch. Renovate sees a commit from another author and
+stops updating the branch. It writes an "Edited/Blocked" comment, and the dependency dashboard
+lists the pull request under that name. Renovate also does not merge it any more, so step 3 is
+yours. This does not matter if you merge right away. If a newer client comes out while the pull
+request is still open, Renovate does not move this branch to it. It proposes the newer client after
+the merge. Ticking the rebase box on the pull request lets Renovate build the branch again, and that
+throws your commit away.
+
 A pin which names a pre-release also waits for a person. Renovate reads the step from the last
 candidate of a minor to its release as a patch, because only the qualifier falls away. So the
 patch automerge would have moved such a pin on its own. But the pin is the small part of that
