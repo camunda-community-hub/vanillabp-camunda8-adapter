@@ -3805,7 +3805,7 @@ version counts. A patch level changes nothing about support, so client 8.10.5 ag
 | same minor version               | INFO  | the pair Camunda supports without a condition |
 | one minor version newer          | WARN  | supported, but meant to end with the upgrade  |
 | one minor version older          | WARN  | support has not confirmed this direction      |
-| more than one minor version away | ERROR | nobody can say that every call works          |
+| more than one minor version away | ERROR | some calls may fail                           |
 | a version that cannot be read    | INFO  | says it could not compare, and nothing more   |
 
 The pair one minor version apart is a WARN in both directions, even where support allows it. A
@@ -3814,7 +3814,7 @@ an older cluster also says that support has not confirmed that direction.
 
 **The start never ends because of the versions.** Otherwise production may stand still only
 because somebody forgot to update a client. An ERROR in the log costs nothing. A start which
-fails in production costs a lot. So the check informs, and the operator decides.
+fails in production costs a lot. So the check only reports, and the operator decides.
 
 Every line names the cluster version, the client version and the release line of the build. It
 also names the way out: the adapter release line which has the minor version of the cluster, and

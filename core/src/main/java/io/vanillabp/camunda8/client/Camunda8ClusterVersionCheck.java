@@ -6,22 +6,21 @@ import io.vanillabp.camunda8.Camunda8ReleaseLine;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Compares the version of the cluster with the client this build was compiled against, once
- * per start, and says in one line what the operator should think of the pair.
+ * Compares the version of the cluster with the client this build was compiled against. It
+ * does so once per start and writes one line about the pair.
  * <p>
- * Only the minor version counts. Camunda changes nothing in a patch release which makes a
- * client stop working against its cluster, so client 8.10.5 against cluster 8.10.0 is a match.
+ * Only the minor version counts. A patch level does not change what Camunda support accepts,
+ * so client 8.10.5 against cluster 8.10.0 is a match.
  * <ul>
  * <li>Same minor version: INFO.</li>
  * <li>One minor version apart, in either direction: WARN. Camunda support accepts a client one
- * minor version older than its cluster, which is the state during an upgrade. It is still
- * meant to end, so the operator reads it at every start.</li>
- * <li>More than one minor version apart: ERROR, because then nobody can say that every call
- * works.</li>
+ * minor version older than its cluster. That is the state during an upgrade, and an upgrade
+ * should end. So the operator reads the line at every start.</li>
+ * <li>More than one minor version apart: ERROR, because then some calls may fail.</li>
  * </ul>
  * Nothing here ends the start. Otherwise production could stand still only because somebody
  * forgot to update a client. Every line names the release line of the adapter which matches the
- * cluster. That is the way out.
+ * cluster, so the operator knows what to change.
  * <p>
  * The version comes from the topology request with which the start waits for its cluster
  * ({@link Camunda8ClusterWait}). So the check costs no request of its own.
@@ -130,8 +129,8 @@ public final class Camunda8ClusterVersionCheck {
     if ((cluster == null) || (client == null)) {
       return new Verdict(
           Severity.INFO, ("Camunda8[%s]: cannot compare cluster version '%s' with client '%s' of adapter release line "
-              + "'%s', so this start says nothing about whether Camunda supports the pair. The adapter "
-              + "release line should have the minor version of the cluster.")
+              + "'%s', so it cannot say whether Camunda supports this pair. Use the adapter release line "
+              + "with the minor version of the cluster.")
               .formatted(adapterId, clusterVersion, clientVersion, line));
     }
 
@@ -156,7 +155,7 @@ public final class Camunda8ClusterVersionCheck {
     if (distance == 1) {
       return new Verdict(
           Severity.WARN, ("Camunda8[%s]: cluster %s is one minor version newer than client %s of adapter release line "
-              + "%s. Camunda support accepts this while a cluster upgrade is under way. To end it, %s.")
+              + "%s. Camunda support accepts this during a cluster upgrade. When the upgrade is done, %s.")
               .formatted(adapterId, clusterVersion, clientVersion, line, matchingLine));
     }
     if (distance == -1) {
@@ -171,8 +170,8 @@ public final class Camunda8ClusterVersionCheck {
         : "older";
     return new Verdict(
         Severity.ERROR, ("Camunda8[%s]: cluster %s is more than one minor version %s than client %s of adapter release "
-            + "line %s. Camunda does not support this pair, so not every call is sure to work. The start "
-            + "goes on anyway. %s%s.")
+            + "line %s. Camunda does not support this pair, so some calls may fail. The start goes on "
+            + "anyway. %s%s.")
             .formatted(
                 adapterId,
                 clusterVersion,
