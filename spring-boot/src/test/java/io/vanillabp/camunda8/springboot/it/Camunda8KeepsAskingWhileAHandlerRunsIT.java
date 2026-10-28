@@ -71,6 +71,13 @@ public class Camunda8KeepsAskingWhileAHandlerRunsIT extends SpringBootTestOnTheS
     // the blocking handler holds its job for as long as this test runs. A redelivery of that
     // job would look exactly like the second job arriving
     registry.add("vanillabp.workflow-modules.test-app.adapters.c8.job-timeout", () -> "PT2M");
+    // no lease in this class. The gateway of 8.10 can lose a leased job on its way to a
+    // worker, and such a job stays locked until its lock runs out (decision 88). Here that is
+    // two minutes, longer than this test waits for the second job, and the short long poll
+    // above makes the race more likely. What this test measures is whether the client asks
+    // again, and the lease plays no part in it. The other classes of this module keep the
+    // lease
+    registry.add("vanillabp.adapters.c8.job-lease", () -> "do-not-use");
 
   }
 
