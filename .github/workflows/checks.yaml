@@ -122,15 +122,17 @@ jobs:
       - name: A version in the read record turns a find green
         run: |
           set -euo pipefail
+          # The lines and versions below are made up. This is a fixture for the script, not
+          # the record of this repository, which is camunda8-client-read.properties at the root.
           record="${RUNNER_TEMP}/camunda8-client-read.properties"
           cat > "$record" <<'PROPERTIES'
           # a comment, and spaces around one '='
-          line-8.9 = 8.9.26
-          line-8.10=8.10.6
-          line-8.11=8.11.0-alpha2
+          line-9.1 = 9.1.4
+          line-9.2=9.2.7
+          line-9.3=9.3.0-alpha2
           PROPERTIES
           twice="${RUNNER_TEMP}/twice.properties"
-          printf 'line-8.10=8.10.5\nline-8.10=8.10.6\n' > "$twice"
+          printf 'line-9.2=9.2.6\nline-9.2=9.2.7\n' > "$twice"
           answers() {
             status=0
             bin/client-api-read.sh "$1" "$2" "$3" || status=$?
@@ -140,17 +142,17 @@ jobs:
             }
           }
           echo "Read, so these turn the check green:"
-          answers 8.10 8.10.6 "$record" 0
-          answers 8.10 8.10.5 "$record" 0
-          answers 8.9 8.9.26 "$record" 0
-          answers 8.11 8.11.0-alpha2 "$record" 0
+          answers 9.2 9.2.7 "$record" 0
+          answers 9.2 9.2.6 "$record" 0
+          answers 9.1 9.1.4 "$record" 0
+          answers 9.3 9.3.0-alpha2 "$record" 0
           echo "Not read, so these keep it red:"
-          answers 8.10 8.10.7 "$record" 1
-          answers 8.11 8.11.0-alpha3 "$record" 1
-          answers 8.8 8.8.44 "$record" 1
-          answers 8.10 8.10.6 "${RUNNER_TEMP}/gone.properties" 1
+          answers 9.2 9.2.8 "$record" 1
+          answers 9.3 9.3.0-alpha3 "$record" 1
+          answers 9.0 9.0.1 "$record" 1
+          answers 9.2 9.2.7 "${RUNNER_TEMP}/gone.properties" 1
           echo "Cannot be read, and has to say so:"
-          answers 8.10 8.10.6 "$twice" 2
+          answers 9.2 9.2.7 "$twice" 2
       - name: The read record of this repository names every line
         # the fixture says the reading works, this says the file of this repository is
         # still written the way the reading expects
