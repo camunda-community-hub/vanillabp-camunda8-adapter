@@ -55,6 +55,7 @@ import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.camunda8.wiring.Camunda8Listeners;
 import io.vanillabp.camunda8.wiring.Camunda8ModelExpressions;
 import io.vanillabp.camunda8.wiring.Camunda8ModelledListenerHandler;
+import io.vanillabp.camunda8.wiring.Camunda8ModelledRetries;
 import io.vanillabp.camunda8.wiring.Camunda8MultiInstance;
 import io.vanillabp.camunda8.wiring.Camunda8OpenTaskProbe;
 import io.vanillabp.camunda8.wiring.Camunda8ReportErrorsAsStackTraceResolver;
@@ -776,6 +777,38 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         .map(Camunda8ModelsTheClusterHolds.HeldModel::model)
         .findFirst()
         .orElse(null);
+
+  }
+
+  /**
+   * Whether the model of one process version writes <code>retries</code> on the
+   * <code>zeebe:taskDefinition</code> of one element. A job of an element without it is
+   * failed with no retries left, see decision 83 in the repository's DECISIONS.md.
+   * <p>
+   * The version this boot deployed is answered from the local record. Every other version
+   * is answered from the picture of what the cluster holds, like every other check of a held
+   * version. So a workflow which outlived a redeployment is judged by its own model, not by
+   * the newest one.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param version The version of the process definition the job belongs to
+   * @param elementId The BPMN element of the job
+   * @return Whether the model asks for retries, or <code>null</code> where it could not be read
+   */
+  private Boolean retriesModelledFor(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final int version,
+      final String elementId) {
+
+    final var deployed = clientFactory
+        .getDeployedProcesses()
+        .deployedVersionOf(workflowModuleId, bpmnProcessId);
+    final var model = (deployed != null) && (deployed.version() == version)
+        ? deployed.model()
+        : heldModelOfVersion(workflowModuleId, bpmnProcessId, String.valueOf(version));
+    return Camunda8ModelledRetries.retriesModelledFor(model, elementId);
 
   }
 
@@ -4205,6 +4238,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .fetchVariables(taskFetch)
               .predatesDeployedVersion(processVersions::predatesDeployedVersion)
               .openTaskProbe(openTaskProbe)
+              .modelledRetries(this::retriesModelledFor)
               .build())
           .timeout(timeout)
           .name("vanillabp-%s-%s".formatted(adapterId, taskDefinition)), taskDefinition),
@@ -4552,6 +4586,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             .fetchVariables(Camunda8FetchVariables.Selection.everything())
             .predatesDeployedVersion(processVersions::predatesDeployedVersion)
             .openTaskProbe(openTaskProbe)
+            .modelledRetries(this::retriesModelledFor)
             .build())
         .timeout(jobTimeoutResolver.jobTimeoutFor(workflowModuleId, bpmnProcessId, plainTaskDefinition))
         .name("vanillabp-%s-%s".formatted(adapterId, jobType)), jobType),

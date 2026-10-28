@@ -18,7 +18,7 @@
     <bpmn:sequenceFlow id="Flow_ToTaken" sourceRef="Gateway_Fork" targetRef="Activity_Taken" />
     <bpmn:serviceTask id="Activity_Taken">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="theTaskTakenAway" />
+        <zeebe:taskDefinition type="theTaskTakenAway" retries="3" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_ToTaken</bpmn:incoming>
       <bpmn:outgoing>Flow_TakenToEnd</bpmn:outgoing>
@@ -38,7 +38,7 @@
     <bpmn:sequenceFlow id="Flow_ToStaying" sourceRef="Gateway_Fork" targetRef="Activity_Staying" />
     <bpmn:serviceTask id="Activity_Staying">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="theTaskStayingOpen" />
+        <zeebe:taskDefinition type="theTaskStayingOpen" retries="3" />
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_ToStaying</bpmn:incoming>
       <bpmn:outgoing>Flow_StayingToEnd</bpmn:outgoing>

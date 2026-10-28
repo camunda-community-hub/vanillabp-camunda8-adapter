@@ -29,7 +29,7 @@ import io.vanillabp.spi.service.WorkflowTask;
     workflowAggregateClass = TaskDockerAggregate.class,
     bpmnProcess = @BpmnProcess(bpmnProcessId = "TaskProcess"),
     secondaryBpmnProcesses = {
-        @BpmnProcess(bpmnProcessId = "FailProcess"), @BpmnProcess(
+        @BpmnProcess(bpmnProcessId = "FailProcess"), @BpmnProcess(bpmnProcessId = "NoRetriesProcess"), @BpmnProcess(
             bpmnProcessId = "ModelledBackoffProcess"), @BpmnProcess(bpmnProcessId = "AsyncProcess"), @BpmnProcess(
                 bpmnProcessId = "RetryProcess"), @BpmnProcess(bpmnProcessId = "AsyncCancelProcess"), @BpmnProcess(
                     bpmnProcessId = "UserTaskProcess"), @BpmnProcess(
@@ -141,6 +141,16 @@ public class TaskDockerWorkflowService {
     // and the job is failed with decremented retries
     aggregate.appendResult("must-never-be-visible");
     throw new IllegalStateException("boom-c8");
+
+  }
+
+  @WorkflowTask
+  public void failsWithoutRetries(
+      final TaskDockerAggregate aggregate) {
+
+    countInvocation("failsWithoutRetries", aggregate);
+    // its element writes no 'retries', so the first failure is the incident
+    throw new IllegalStateException("boom-without-retries");
 
   }
 

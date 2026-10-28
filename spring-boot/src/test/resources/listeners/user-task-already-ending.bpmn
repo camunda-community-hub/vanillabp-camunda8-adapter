@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_UserTaskAlreadyEnding"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="UserTaskAlreadyEndingProcess" isExecutable="true">
+    <bpmn:startEvent id="AlreadyEnding_Start">
+      <bpmn:outgoing>AlreadyEnding_ToTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="AlreadyEnding_ToTask" sourceRef="AlreadyEnding_Start" targetRef="AlreadyEnding_Task" />
+
+    <!-- The configuration says that somebody else answers the jobs of the two listeners
+         ('implemented-externally' of the task named by the job type). That is what lets
+         this process deploy. Nobody answers them while the test runs. So the task stays in
+         CANCELING after its instance was canceled, and in COMPLETING after somebody else
+         completed it. VanillaBP writes its own 'canceling' listener AFTER the one here. -->
+    <bpmn:userTask id="AlreadyEnding_Task" name="the user task which is ending while the application completes it">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="theTaskWhichIsAlreadyEnding" />
+        <zeebe:taskListeners>
+          <zeebe:taskListener eventType="completing" type="aCompletingListenerNobodyServes" />
+          <zeebe:taskListener eventType="canceling" type="aCancelingListenerNobodyServes" />
+        </zeebe:taskListeners>
+      </bpmn:extensionElements>
+      <bpmn:incoming>AlreadyEnding_ToTask</bpmn:incoming>
+      <bpmn:outgoing>AlreadyEnding_ToEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="AlreadyEnding_ToEnd" sourceRef="AlreadyEnding_Task" targetRef="AlreadyEnding_End" />
+    <bpmn:endEvent id="AlreadyEnding_End">
+      <bpmn:incoming>AlreadyEnding_ToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

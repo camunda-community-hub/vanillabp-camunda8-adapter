@@ -2,6 +2,7 @@ package io.vanillabp.camunda8.processservice;
 
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 import io.camunda.client.api.response.ProcessInstanceEvent;
 import io.camunda.client.api.search.enums.ElementInstanceType;
 import io.camunda.client.api.search.enums.ProcessInstanceState;
+import io.camunda.client.api.search.enums.UserTaskState;
 import io.camunda.client.api.search.response.Job;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
 import io.camunda.zeebe.model.bpmn.instance.AdHocSubProcess;
@@ -910,6 +912,19 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
               e);
         }
         if (Camunda8Errors.refusedAboutAUserTaskItHolds(e)) {
+          // the same answer comes for a task the cluster is already ENDING. It is canceling
+          // the task, or somebody else is completing it. The completion of phase two would
+          // then meet a task which is gone, after the commit, where nobody can tell the
+          // caller any more. So this transaction rolls back, as in version 1. See decision 83
+          // in the repository's DECISIONS.md
+          final var endingState = theStateOfAUserTaskWhichIsEnding(request.taskId());
+          if (endingState != null) {
+            throw newTaskNotFound(
+                request.taskId(),
+                ("User task '%s' is in state '%s', so it cannot be completed any more. "
+                    + "Aborting the transaction completing it!").formatted(request.taskId(), endingState),
+                e);
+          }
           // this check aborts a transaction whose task is GONE. If the cluster refuses a
           // command ABOUT a task, the task is not gone. The common case is a task which the
           // cluster is still creating. The application was notified from the 'creating'
@@ -926,6 +941,60 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         throw e;
       }
     });
+
+  }
+
+  /**
+   * The states of a user task in which the cluster is already ending it. A completion sent
+   * now is refused, or it meets a task which is gone. <code>CANCELING</code> and
+   * <code>COMPLETING</code> are the two which matter. In them the cluster still holds the task,
+   * so the empty update gets the same <code>409</code> as a task which is still being created.
+   * The two final states are here because version 1 had them, and because a search which
+   * already says so leaves no doubt.
+   */
+  private static final Set<UserTaskState> STATES_OF_AN_ENDING_USER_TASK = EnumSet
+      .of(UserTaskState.CANCELING, UserTaskState.CANCELED, UserTaskState.COMPLETING, UserTaskState.COMPLETED);
+
+  /**
+   * The state of a user task, if the search says the cluster is already ending it. This is
+   * asked only after the engine refused the empty update with <code>409</code>, because that
+   * answer alone cannot tell a task being created from a task being ended. The state is a
+   * value of the cluster and not a sentence of it, so decision 16 in the repository's
+   * DECISIONS.md holds.
+   * <p>
+   * The search runs behind the engine. A task which started to end a moment ago may still be
+   * reported in its old state. So this narrows the window in which a completion commits for a
+   * task which is ending. It does not close it. Version 1 had the same window.
+   *
+   * @param taskId The id of the user task
+   * @return The state, or <code>null</code> where the task is not ending or the search could not
+   *         answer
+   */
+  private UserTaskState theStateOfAUserTaskWhichIsEnding(
+      final String taskId) {
+
+    final UserTaskState state;
+    try {
+      state = clientFactory
+          .getClient()
+          .newUserTaskGetRequest(taskKeyOf(taskId))
+          .send()
+          .join()
+          .getState();
+    } catch (final RuntimeException e) {
+      // a task which is still being created may not be in the search yet. And a search
+      // which fails says nothing about the task. Either way the answer of the engine stands
+      log.debug(
+          "Camunda8[{}]: the search could not tell the state of user task '{}' - the pre-commit "
+              + "check reads the refusal of the engine as a task which is still there",
+          adapterId,
+          taskId,
+          e);
+      return null;
+    }
+    return STATES_OF_AN_ENDING_USER_TASK.contains(state)
+        ? state
+        : null;
 
   }
 

@@ -946,6 +946,23 @@ application cannot use the task key it was just handed.
 second `creating` listener nobody answers, so the task stays in `CREATING` until the test
 answers that job itself.
 
+### A user task the cluster is already ending
+
+The same `409` comes for a task in `CANCELING` or `COMPLETING`. The cluster is canceling the task,
+or somebody else is completing it. Read alone, the answer let the transaction commit, and the
+completion of phase two then met a task which was gone. So after a `409` the check of phase one
+asks the search for the state of the task (`newUserTaskGetRequest`). In `CANCELING`, `CANCELED`,
+`COMPLETING` and `COMPLETED` it throws `TaskNotFoundException`, and the caller's transaction rolls
+back, as in version 1. In every other state, and where the search cannot answer, nothing changes.
+An open task costs no search, because the engine answers it with `204`. The search runs behind
+the engine, so a task which started to end a moment ago can still slip through. See decision 83.
+
+`Camunda8UserTaskAlreadyEndingTest` holds the state matrix without a cluster.
+`Camunda8UserTaskAlreadyEndingIT` forces both states against a real one, with a `canceling` and a
+`completing` listener nobody answers. It also holds the premise: the engine answers the empty update
+of such a task with `409`. Measured on 8.10 on 2026-10-28: without the change both transactions
+committed.
+
 ### The delivery identity is a job key, so it belongs to one cluster
 
 `Camunda8JobHandler` reports the job key as the delivery id, and the core remembers a processed
@@ -1397,8 +1414,11 @@ Execution model per delivered job (at-least-once ordering):
    - `TaskException` → `ThrowError` with the error code (BPMN error; the
      aggregate changes stay COMMITTED - the V1 contract);
    - any other exception → the local transaction is rolled back and the job is
-     failed with decremented retries and a `retryBackoff` (Camunda 8 redelivers
-     after it, see below).
+     failed. Where the element's `zeebe:taskDefinition` writes `retries`, the job
+     keeps one retry less and gets a `retryBackoff` (Camunda 8 redelivers after it,
+     see below). Where it does not, the job keeps no retry, and the cluster raises
+     an incident at once, as in version 1 from 1.7.1 on. The answer comes from the
+     model of the job's process version (`Camunda8ModelledRetries`, decision 83).
 
 `Camunda8TaskProcessingIT` walks that list against a real cluster
 (`#happyPathAndBpmnErrorRoutesBoundary`, `#technicalExceptionFailsJobAndRollsBack` and
