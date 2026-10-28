@@ -783,12 +783,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
   /**
    * Whether the model of one process version writes <code>retries</code> on the
    * <code>zeebe:taskDefinition</code> of one element. A job of an element without it is
-   * failed with no retries left, see decision 83 in the repository's DECISIONS.md.
-   * <p>
-   * The version this boot deployed is answered from the local record. Every other version
-   * is answered from the picture of what the cluster holds, like every other check of a held
-   * version. So a workflow which outlived a redeployment is judged by its own model, not by
-   * the newest one.
+   * failed with no retries left, see decision 83 in the repository's DECISIONS.md. Which
+   * model answers is said by {@link #modelOfVersion}.
    *
    * @param workflowModuleId The workflow module ID
    * @param bpmnProcessId The PLAIN BPMN process ID
@@ -802,13 +798,57 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       final int version,
       final String elementId) {
 
+    return Camunda8ModelledRetries
+        .retriesModelledFor(modelOfVersion(workflowModuleId, bpmnProcessId, version), elementId);
+
+  }
+
+  /**
+   * Whether the model of one process version writes <code>retries</code> on one listener
+   * somebody modelled. A job of a listener without it is failed with no retries left, like
+   * the job of a task, see decision 87 in the repository's DECISIONS.md.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param version The version of the process definition the job belongs to
+   * @param elementId The BPMN element the listener sits on
+   * @param jobType The job type of the listener, as the cluster reports it
+   * @return Whether the model asks for retries, or <code>null</code> where it could not be read
+   */
+  private Boolean listenerRetriesModelledFor(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final int version,
+      final String elementId,
+      final String jobType) {
+
+    return Camunda8ModelledRetries
+        .retriesModelledForListener(modelOfVersion(workflowModuleId, bpmnProcessId, version), elementId, jobType);
+
+  }
+
+  /**
+   * The model of one process version AS DEPLOYED. The version this boot deployed is answered
+   * from the local record. Every other version is answered from the picture of what the
+   * cluster holds, like every other check of a held version. So a workflow which outlived a
+   * redeployment is judged by its own model, not by the newest one.
+   *
+   * @param workflowModuleId The workflow module ID
+   * @param bpmnProcessId The PLAIN BPMN process ID
+   * @param version The version of the process definition
+   * @return The model, or <code>null</code> where it could not be read
+   */
+  private BpmnModelInstance modelOfVersion(
+      final String workflowModuleId,
+      final String bpmnProcessId,
+      final int version) {
+
     final var deployed = clientFactory
         .getDeployedProcesses()
         .deployedVersionOf(workflowModuleId, bpmnProcessId);
-    final var model = (deployed != null) && (deployed.version() == version)
+    return (deployed != null) && (deployed.version() == version)
         ? deployed.model()
         : heldModelOfVersion(workflowModuleId, bpmnProcessId, String.valueOf(version));
-    return Camunda8ModelledRetries.retriesModelledFor(model, elementId);
 
   }
 
@@ -4117,6 +4157,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .retryBackoffResolver(retryBackoffResolver)
               .reportErrorsAsStackTraceResolver(this::reportErrorsAsStackTraceFor)
               .openTaskProbe(openTaskProbe)
+              .modelledRetries(this::listenerRetriesModelledFor)
               .build())
           .timeout(listenerLockOf(workflowModuleId, scopedBpmnProcessIds, "modelled listener", jobType))
           .name("vanillabp-%s-%s".formatted(adapterId, jobType)), jobType),

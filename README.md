@@ -1545,7 +1545,8 @@ kinds of worker. The listener somebody modelled is not among them yet.
 `retry-backoff` travels with every fail command which leaves the job retries. Its default is
 `PT10S`. Like `job-timeout` it can be set per module, workflow and task, and it is resolved per
 COMMAND and not per worker, so nothing has to be aligned between the processes one worker
-serves. A job failed with `retries(0)` carries none, because there is no next attempt. The error
+serves. A job failed with `retries(0)` carries none, because there is no next attempt
+(`Camunda8ModelledRetriesTest#noRetriesLeftMeansNoBackoff`). The error
 message of a fail command carries the exception's TYPE next to its message. That text is what an
 operator reads in Operate, and `NullPointerException` used to write just `null` there. Held by
 `Camunda8JobTimeoutOverlayTest#retryBackoffResolvesThroughAllFourLevels`,
@@ -2135,6 +2136,14 @@ Where the switch is on, the listener is a task like any other one:
   issue 23702. In these last two cases a change of the aggregate is kept by the application and
   reaches the cluster at the next real sync point of that workflow. On Camunda 7 every listener writes in
   the engine's own transaction, which is worth knowing when a module runs on both.
+- a failed job follows the rule of a task. It keeps one retry less only where the listener writes
+  `retries` on its own `zeebe:executionListener` or `zeebe:taskListener`. Without it, the job keeps
+  no retry and the cluster raises the incident at once. The `zeebe:taskDefinition` of the element
+  does not count for its listeners. The answer comes from the model of the job's process version
+  (`Camunda8ModelledRetries#retriesModelledForListener`), and one line per listener says when a
+  failure raises the incident for that reason. A method serving a listener may write, so it runs a
+  second time only where somebody said this is safe, see
+  [decision 87](./DECISIONS.md#87-a-listener-somebody-modelled-is-retried-only-where-the-model-asks-for-it-like-a-task).
 
 The event is part of the listener's identity: the wiring made one task of one listener, so one
 method serves one event of one element. `@TaskEvent` receives `TaskEvent.Event#CREATED` for
