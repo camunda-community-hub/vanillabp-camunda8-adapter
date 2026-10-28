@@ -4,8 +4,10 @@ import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.camunda.client.CamundaClient;
+import io.camunda.client.api.response.Topology;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -33,6 +35,9 @@ import lombok.extern.slf4j.Slf4j;
  * it rejects are not a question of time. So the start ends at once, not at the end of the
  * wait. That is what makes a long wait acceptable.</li>
  * </ul>
+ * <b>What is written when it ends.</b> The answer which ends the wait names the version of
+ * the cluster. {@link Camunda8ClusterVersionCheck} compares it with the client.
+ * <p>
  * <b>What is written while it waits.</b> There is a line before the first attempt which
  * names the wait. Then every few seconds there is a line with the time gone and the last
  * answer of the cluster. Nothing here is summarised, and nothing is remembered as "said
@@ -74,12 +79,22 @@ public final class Camunda8ClusterWait {
       final Camunda8AdapterConfiguration configuration,
       final CamundaClient client) {
 
+    final var topology = new AtomicReference<Topology>();
     untilTheClusterAnswers(
         adapterId,
         configuration.describeAddress(),
         configuration.resolvedStartupWait(),
         TIME_PER_ATTEMPT,
-        () -> askForTheTopology(client, TIME_PER_ATTEMPT));
+        () -> topology.set(askForTheTopology(client, TIME_PER_ATTEMPT)));
+
+    // the answer which ended the wait names the version of the cluster. So comparing it
+    // with the client costs no request of its own. A start with 'startup-wait: PT0S' asked
+    // nothing, and says so instead (see decision 90 in the repository's DECISIONS.md)
+    if (topology.get() == null) {
+      Camunda8ClusterVersionCheck.logThatNothingWasCompared(adapterId);
+    } else {
+      Camunda8ClusterVersionCheck.logTheVerdict(adapterId, topology.get().getGatewayVersion());
+    }
 
   }
 
@@ -173,8 +188,10 @@ public final class Camunda8ClusterWait {
    * client's own timeout ends the request. The wait on the future ends the waiting for it.
    * Without the second one, a request which the transport never finishes would outlive the
    * deadline this wait promised.
+   *
+   * @return The topology the cluster answered with
    */
-  private static void askForTheTopology(
+  private static Topology askForTheTopology(
       final CamundaClient client,
       final Duration timePerAttempt) {
 
@@ -183,7 +200,7 @@ public final class Camunda8ClusterWait {
         .requestTimeout(timePerAttempt)
         .send();
     try {
-      request.get(timePerAttempt.toMillis(), TimeUnit.MILLISECONDS);
+      return request.get(timePerAttempt.toMillis(), TimeUnit.MILLISECONDS);
     } catch (final InterruptedException e) {
       Thread
           .currentThread()

@@ -16,7 +16,7 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * application of another line would have to take.
  * <p>
  * A release line is a promise about the cluster an application may run. The client a build
- * was compiled against is the lowest cluster version that build accepts. The POM keeps the
+ * was compiled against should have the minor version of the cluster. The POM keeps the
  * promise, not the jar, because the POM puts the client on the classpath of an application.
  * It used to say something else. The version lived in a property which the line profile
  * sets, and the published POM was a copy of the source POM. A consumer activates none of our
