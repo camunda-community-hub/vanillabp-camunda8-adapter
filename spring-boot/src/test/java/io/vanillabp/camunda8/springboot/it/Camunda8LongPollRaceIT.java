@@ -23,6 +23,7 @@ import io.camunda.client.api.worker.JobWorker;
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.vanillabp.camunda8.client.Camunda8JobLease;
 import io.vanillabp.camunda8.test.ClusterUnderTest;
+import io.vanillabp.integration.test.utils.PrintsWhenPassing;
 
 /**
  * A measurement, not a test of this adapter: how often the gateway activates a job for a long
@@ -42,6 +43,9 @@ import io.vanillabp.camunda8.test.ClusterUnderTest;
  * decision 88 in the repository's DECISIONS.md.
  */
 @EnabledIfSystemProperty(named = "camunda8.measure.long-poll-race", matches = "true")
+@PrintsWhenPassing(
+  "the measurement is the result - it runs only when somebody asks for it, and then the "
+      + "numbers it prints are what that person came for")
 public class Camunda8LongPollRaceIT {
 
   /** Whether the activations ask for a lease. Without a lease the FAIL of the gateway works. */
