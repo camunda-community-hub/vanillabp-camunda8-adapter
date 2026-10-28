@@ -49,7 +49,7 @@
     <bpmn:sequenceFlow id="FP_f1" sourceRef="FP_start" targetRef="FP_task" />
     <bpmn:serviceTask id="FP_task">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="alwaysFails" />
+        <zeebe:taskDefinition type="alwaysFails" retries="3" />
       </bpmn:extensionElements>
       <bpmn:incoming>FP_f1</bpmn:incoming>
       <bpmn:outgoing>FP_f2</bpmn:outgoing>
@@ -66,7 +66,7 @@
     <bpmn:sequenceFlow id="MB_f1" sourceRef="MB_start" targetRef="MB_task" />
     <bpmn:serviceTask id="MB_task">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="modelledBackoffFails" />
+        <zeebe:taskDefinition type="modelledBackoffFails" retries="3" />
         <zeebe:taskHeaders>
           <zeebe:header key="retryBackoff" value="PT12S" />
         </zeebe:taskHeaders>
@@ -86,7 +86,7 @@
     <bpmn:sequenceFlow id="RP_f1" sourceRef="RP_start" targetRef="RP_task" />
     <bpmn:serviceTask id="RP_task">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="retryTask" />
+        <zeebe:taskDefinition type="retryTask" retries="3" />
       </bpmn:extensionElements>
       <bpmn:incoming>RP_f1</bpmn:incoming>
       <bpmn:outgoing>RP_f2</bpmn:outgoing>

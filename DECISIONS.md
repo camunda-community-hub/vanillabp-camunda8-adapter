@@ -3558,3 +3558,40 @@ The platform also writes an entry `vanillabp.adapters`, with a type of its own. 
 uses when two jars describe the same name was not tried in an IDE. The Quarkus module needs none of
 this: it is a Quarkus extension, and its build writes a description of every key into
 `META-INF/quarkus-config-doc/`.
+
+### 83. A failed job is retried only where the model asks for it, and a user task which is ending rolls the completion back
+
+Built by story 998 on 2026-10-28. Both halves bring back what version 1 did, which Stephan decided
+on 2026-10-22.
+
+**Retries.** A Camunda 8 job comes with three retries, unless the model writes another number in
+the attribute `retries` of the `zeebe:taskDefinition`. Version 1 changed that from 1.7.1 on (V1
+commit `89a30b9`, in every release up to 1.10.0). Where the element of a failed job has no
+`retries` attribute, the adapter fails the job with no retries left, so the cluster raises an
+incident at the first failure. Where the attribute is there, whatever its value, the job keeps one
+retry less, as Camunda does on its own. The reason of version 1 still holds: a task is retried only
+when somebody said it is safe to run it again.
+
+The job does not tell the two cases apart. It carries three retries either way. So the answer
+comes from the model of the process version the job belongs to: the model this boot deployed, or
+the model the cluster holds for an older version (see decision 19). A model which cannot be read
+leaves the decision to Camunda, and one line per element says so. The transaction of the failed
+job was rolled back, so one more attempt does no harm, and the next failure asks the model again.
+An incident instead would wait for an operator, because of a model nobody could read for a
+moment. Version 1 read only the model it deployed, so an older version was judged by the newest
+model. This adapter judges every version by its own model.
+
+The rule covers the jobs of `@WorkflowTask` methods (`Camunda8JobHandler`). The listeners which
+VanillaBP writes carry their retries in the model already. A listener somebody modelled keeps the
+retries the cluster hands over.
+
+**A user task which is ending.** The pre-commit check of `completeUserTask` sends an empty
+update. For a task in `CANCELING` or `COMPLETING` the engine answers `409`, the same answer as for
+a task which is still being created. Read alone, the transaction committed, and the completion
+after the commit met a task which was gone. Nobody could tell the caller any more. Version 1
+rolled back in these states (V1 commit `bf242ba`, released in 1.10.0). So after a `409` the check
+asks the search for the state of the task. In `CANCELING`, `CANCELED`, `COMPLETING` and
+`COMPLETED` it throws `TaskNotFoundException`, and the caller's transaction rolls back. In every
+other state, and where the search cannot answer, the transaction commits as before. The state is
+a value the cluster sends, not a sentence, so decision 16 holds. The search runs behind the
+engine, so this narrows the window and does not close it. Version 1 had the same window.
