@@ -151,7 +151,7 @@
          Micrometer (see MicrometerCamunda8Metrics). Pinned to the OLDER of both
          platforms, like the platform integration does it (Quarkus 3.37.1 manages 1.16.6,
          Spring Boot 4.1.0 manages 1.17.0) -->
-    <micrometer.version>1.17.1</micrometer.version>
+    <micrometer.version>1.17.2</micrometer.version>
     <protobuf.version>4.36.2</protobuf.version>
     <!-- the cluster the integration tests run against follows the pinned client: the
          client a build was compiled against IS the minimum cluster version of that
