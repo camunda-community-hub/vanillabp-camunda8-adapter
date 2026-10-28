@@ -3558,3 +3558,103 @@ The platform also writes an entry `vanillabp.adapters`, with a type of its own. 
 uses when two jars describe the same name was not tried in an IDE. The Quarkus module needs none of
 this: it is a Quarkus extension, and its build writes a description of every key into
 `META-INF/quarkus-config-doc/`.
+
+### 83. A failed job is retried only where the model asks for it, and a user task which is ending rolls the completion back
+
+Built by story 998 on 2026-10-28. Both halves bring back what version 1 did, which Stephan decided
+on 2026-10-22.
+
+**Retries.** A Camunda 8 job comes with three retries, unless the model writes another number in
+the attribute `retries` of the `zeebe:taskDefinition`. Version 1 changed that from 1.7.1 on (V1
+commit `89a30b9`, in every release up to 1.10.0). Where the element of a failed job has no
+`retries` attribute, the adapter fails the job with no retries left, so the cluster raises an
+incident at the first failure. Where the attribute is there, whatever its value, the job keeps one
+retry less, as Camunda does on its own. The reason of version 1 still holds: a task is retried only
+when somebody said it is safe to run it again.
+
+The job does not tell the two cases apart. It carries three retries either way. So the answer
+comes from the model of the process version the job belongs to: the model this boot deployed, or
+the model the cluster holds for an older version (see decision 19). A model which cannot be read
+leaves the decision to Camunda, and one line per element says so. The transaction of the failed
+job was rolled back, so one more attempt does no harm, and the next failure asks the model again.
+An incident instead would wait for an operator, because of a model nobody could read for a
+moment. Version 1 read only the model it deployed, so an older version was judged by the newest
+model. This adapter judges every version by its own model.
+
+The rule covers the jobs of `@WorkflowTask` methods (`Camunda8JobHandler`). The listeners which
+VanillaBP writes carry their retries in the model already. A listener somebody modelled keeps the
+retries the cluster hands over.
+
+**A user task which is ending.** The pre-commit check of `completeUserTask` sends an empty
+update. For a task in `CANCELING` or `COMPLETING` the engine answers `409`, the same answer as for
+a task which is still being created. Read alone, the transaction committed, and the completion
+after the commit met a task which was gone. Nobody could tell the caller any more. Version 1
+rolled back in these states (V1 commit `bf242ba`, released in 1.10.0). So after a `409` the check
+asks the search for the state of the task. In `CANCELING`, `CANCELED`, `COMPLETING` and
+`COMPLETED` it throws `TaskNotFoundException`, and the caller's transaction rolls back. In every
+other state, and where the search cannot answer, the transaction commits as before. The state is
+a value the cluster sends, not a sentence, so decision 16 holds. The search runs behind the
+engine, so this narrows the window and does not close it. Version 1 had the same window.
+
+### 84. An Apache HttpClient 5 which is too old is named when the client build fails, not by comparing versions
+
+Built by story 999 on 2026-10-28.
+
+The Camunda client talks REST through Apache HttpClient 5. The platform BOM of an application
+manages its version, and an imported BOM beats what the client asks for. Spring Boot 4.0 manages
+`httpclient5` 5.5. Every client this repository pins asks for 5.6, but only the clients of the 8.9
+line call a method which 5.5 does not have. They fail with a `NoSuchMethodError` while the adapter
+builds its client, so at startup. Nothing in that error names the dependency to pin.
+
+**The adapter turns that error into a message, and it does nothing else.** `Camunda8ClientFactory`
+builds the client through `Camunda8HttpClientRuntime`. A linkage error which names a class of
+`org.apache.hc` becomes an `IllegalStateException`. Its message names the versions on the
+classpath, the entries to add to the `dependencyManagement` of the application, and the properties
+for `spring-boot-starter-parent`. Any other linkage error is thrown on as it was.
+
+**The adapter does not compare version numbers.** A check of "5.5 is older than the 5.6 the client
+asks for" would stop the 8.8 and the 8.10 line on Spring Boot 4.0. Both work there, measured with
+the clients and BOMs of 2026-10-28. A rule which stops working applications is wrong. Waiting for
+the real failure costs nothing, because the client is built at startup anyway. And if a later
+client of the 8.8 or the 8.10 line starts to call something new, the same message appears without a
+change here.
+
+**The error is not the cause of the new exception.** Spring Boot has a failure analyzer for a
+`NoSuchMethodError` anywhere in the causes, and its report would replace the message. So the
+original error is added as a suppressed exception. Its stack trace stays in the log.
+
+**The pin is the application's.** This is decision 39 again: nothing this repository pins reaches
+an application. The README says which application has to pin what, in the section
+[Apache HttpClient 5](./README.md#apache-httpclient-5).
+
+### 85. Every map of the Quarkus configuration names its key, with the names all adapters share
+
+Built by story 995 on 2026-10-28.
+
+The Quarkus module is a Quarkus extension. Its build writes a description of every key into
+`META-INF/quarkus-config-doc/quarkus-config-model.json` (see decision 82). A map is a level where
+the application chooses the key, for example an adapter id. Quarkus writes such a key as a name in
+quotes. Without help it takes the name of the Java method. So the file showed
+`vanillabp.adapters."adapters".job-timeout`, and nobody could tell from it what to write there.
+
+Now every map of `VanillaBpCamunda8Properties` carries `@ConfigDocMapKey`. The platform and every
+adapter use the same names. The first three are also the names which the platform wiki writes in
+angle brackets, for example `<adapter-id>`:
+
+|        Map        |         Name         |
+|-------------------|----------------------|
+| `adapters`        | `adapter-id`         |
+| `workflowModules` | `workflow-module-id` |
+| `workflows`       | `bpmn-process-id`    |
+| `tasks`           | `task-definition`    |
+| `messages`        | `message-name`       |
+
+So the key above now reads `vanillabp.adapters."adapter-id".job-timeout`.
+
+`EveryMapKeyHasANameTest` reads the file which the build wrote. It fails when a map key has a name
+which is not in this table. So a new map needs the annotation, or the build is red.
+
+The Quarkus Tools plugin for IntelliJ IDEA (by Red Hat, checked in version 2.6.1) does not read this
+file. It finds the keys in the `@ConfigMapping` interfaces themselves and writes every map key as
+`{*}`. So the names help the generated documentation and everybody who reads the file. They do not
+change what this plugin offers while you type.

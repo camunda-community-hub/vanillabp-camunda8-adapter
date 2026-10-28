@@ -546,6 +546,70 @@ required VanillaBP platform integration:
 </dependency>
 ```
 
+### Apache HttpClient 5
+
+The Camunda client talks REST through Apache HttpClient 5 (`httpclient5`, with its core
+`httpcore5`). The platform BOM of an application manages both, and an imported BOM beats the
+versions the client asks for. These are the numbers, read on 2026-10-28 from the client POM of
+each line and from the BOMs. Each cell is `httpclient5`/`httpcore5`:
+
+| Line | Client pin |   It asks for   |  Spring Boot 4.0.9  | Spring Boot 4.1.1 | Quarkus 3.40.1.1 |
+|------|------------|-----------------|---------------------|-------------------|------------------|
+| 8.8  | `8.8.43`   | `5.6.5`/`5.4.4` | `5.5.2`/`5.3.6`     | `5.6.4`/`5.4.3`   | `5.6.4`/`5.4.3`  |
+| 8.9  | `8.9.25`   | `5.6.5`/`5.4.4` | **`5.5.2`/`5.3.6`** | `5.6.4`/`5.4.3`   | `5.6.4`/`5.4.3`  |
+| 8.10 | `8.10.5`   | `5.6.5`/`5.4.4` | `5.5.2`/`5.3.6`     | `5.6.4`/`5.4.3`   | `5.6.4`/`5.4.3`  |
+
+Only one combination breaks: Spring Boot 4.0 with the 8.9 line. The clients of that line call
+`HttpAsyncClientBuilder.disableContentCompression()`, which came with `httpclient5` 5.6. The 8.8
+and the 8.10 client ask for 5.6 too, but they call nothing which 5.5 lacks. This was measured in
+two ways. A small application on the Spring Boot 4.0.9 BOM built each client and sent a REST
+request to a stub server. And every reference to `org.apache.hc` in the three client jars was
+looked up in `httpclient5` 5.5.2 and `httpcore5` 5.3.6. The 8.9 call is the only one missing.
+
+The failure comes while the adapter builds its client, so the application does not start. Spring
+Boot's own report names the missing method and says to correct the classpath. It does not say
+which dependency to pin. So `Camunda8HttpClientRuntime` catches the error around the build and
+throws a message instead. The message names the versions on the classpath, the three entries to
+add to the `dependencyManagement` of the application, and the properties to set under
+`spring-boot-starter-parent`. The original error stays in the log as a suppressed exception.
+
+The check does not compare version numbers. A comparison would stop the 8.8 and the 8.10 line on
+Spring Boot 4.0, and both work there. If a later client of those lines calls something new, the
+same message appears. See [decision 84](./DECISIONS.md).
+
+An application on Spring Boot 4.0 and the 8.9 line pins the versions itself, before the Spring
+Boot BOM is imported:
+
+```xml
+<dependency>
+  <groupId>org.apache.httpcomponents.client5</groupId>
+  <artifactId>httpclient5</artifactId>
+  <version>5.6.5</version>
+</dependency>
+<dependency>
+  <groupId>org.apache.httpcomponents.core5</groupId>
+  <artifactId>httpcore5</artifactId>
+  <version>5.4.4</version>
+</dependency>
+<dependency>
+  <groupId>org.apache.httpcomponents.core5</groupId>
+  <artifactId>httpcore5-h2</artifactId>
+  <version>5.4.4</version>
+</dependency>
+```
+
+Pinning `httpclient5` alone was enough in the sample application. But `httpclient5` 5.6 is built
+against `httpcore5` 5.4, so the core moves with it. Read the numbers from the client of your line
+rather than from the table:
+
+```bash
+mvn dependency:tree -Dverbose -Dincludes=org.apache.httpcomponents.client5,org.apache.httpcomponents.core5
+```
+
+Version 1 of the adapter warned about the same thing in its README. This repository builds against
+Spring Boot 4.1, so its own tests never meet the failure. `Camunda8HttpClientRuntimeTest` hands the
+check the error which the 8.9 client throws.
+
 ### Quarkus
 
 Both VanillaBP and the adapter are Quarkus extensions, so both must be added explicitly:
@@ -945,6 +1009,23 @@ application cannot use the task key it was just handed.
 `Camunda8UserTaskStillCreatingIT` forces the state against a real one, with a model whose
 second `creating` listener nobody answers, so the task stays in `CREATING` until the test
 answers that job itself.
+
+### A user task the cluster is already ending
+
+The same `409` comes for a task in `CANCELING` or `COMPLETING`. The cluster is canceling the task,
+or somebody else is completing it. Read alone, the answer let the transaction commit, and the
+completion of phase two then met a task which was gone. So after a `409` the check of phase one
+asks the search for the state of the task (`newUserTaskGetRequest`). In `CANCELING`, `CANCELED`,
+`COMPLETING` and `COMPLETED` it throws `TaskNotFoundException`, and the caller's transaction rolls
+back, as in version 1. In every other state, and where the search cannot answer, nothing changes.
+An open task costs no search, because the engine answers it with `204`. The search runs behind
+the engine, so a task which started to end a moment ago can still slip through. See decision 83.
+
+`Camunda8UserTaskAlreadyEndingTest` holds the state matrix without a cluster.
+`Camunda8UserTaskAlreadyEndingIT` forces both states against a real one, with a `canceling` and a
+`completing` listener nobody answers. It also holds the premise: the engine answers the empty update
+of such a task with `409`. Measured on 8.10 on 2026-10-28: without the change both transactions
+committed.
 
 ### The delivery identity is a job key, so it belongs to one cluster
 
@@ -1397,8 +1478,11 @@ Execution model per delivered job (at-least-once ordering):
    - `TaskException` → `ThrowError` with the error code (BPMN error; the
      aggregate changes stay COMMITTED - the V1 contract);
    - any other exception → the local transaction is rolled back and the job is
-     failed with decremented retries and a `retryBackoff` (Camunda 8 redelivers
-     after it, see below).
+     failed. Where the element's `zeebe:taskDefinition` writes `retries`, the job
+     keeps one retry less and gets a `retryBackoff` (Camunda 8 redelivers after it,
+     see below). Where it does not, the job keeps no retry, and the cluster raises
+     an incident at once, as in version 1 from 1.7.1 on. The answer comes from the
+     model of the job's process version (`Camunda8ModelledRetries`, decision 83).
 
 `Camunda8TaskProcessingIT` walks that list against a real cluster
 (`#happyPathAndBpmnErrorRoutesBoundary`, `#technicalExceptionFailsJobAndRollsBack` and

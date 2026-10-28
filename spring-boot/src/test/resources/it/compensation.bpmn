@@ -50,7 +50,7 @@
     </bpmn:boundaryEvent>
     <bpmn:serviceTask id="Comp_CancelBooking" isForCompensation="true">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="cancelBooking" />
+        <zeebe:taskDefinition type="cancelBooking" retries="3" />
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:boundaryEvent id="Comp_PaymentCompensated" attachedToRef="Comp_ChargePayment">
@@ -58,7 +58,7 @@
     </bpmn:boundaryEvent>
     <bpmn:serviceTask id="Comp_RefundPayment" isForCompensation="true">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="refundPayment" />
+        <zeebe:taskDefinition type="refundPayment" retries="3" />
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:association id="Comp_BookingUndoneBy" associationDirection="One" sourceRef="Comp_BookingCompensated" targetRef="Comp_CancelBooking" />

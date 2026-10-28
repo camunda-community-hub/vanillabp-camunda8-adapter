@@ -49,7 +49,7 @@
     <bpmn:sequenceFlow id="FP_f1" sourceRef="FP_start" targetRef="FP_task" />
     <bpmn:serviceTask id="FP_task">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="alwaysFails" />
+        <zeebe:taskDefinition type="alwaysFails" retries="3" />
       </bpmn:extensionElements>
       <bpmn:incoming>FP_f1</bpmn:incoming>
       <bpmn:outgoing>FP_f2</bpmn:outgoing>
@@ -66,7 +66,7 @@
     <bpmn:sequenceFlow id="MB_f1" sourceRef="MB_start" targetRef="MB_task" />
     <bpmn:serviceTask id="MB_task">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="modelledBackoffFails" />
+        <zeebe:taskDefinition type="modelledBackoffFails" retries="3" />
         <zeebe:taskHeaders>
           <zeebe:header key="retryBackoff" value="PT12S" />
         </zeebe:taskHeaders>
@@ -79,6 +79,25 @@
       <bpmn:incoming>MB_f2</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
+  <!-- The same failing handler, on an element WITHOUT 'retries'. Its job is failed with no
+       retries left at the first failure, see decision 83 in the repository's DECISIONS.md. -->
+  <bpmn:process id="NoRetriesProcess" isExecutable="true">
+    <bpmn:startEvent id="NR_start">
+      <bpmn:outgoing>NR_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="NR_f1" sourceRef="NR_start" targetRef="NR_task" />
+    <bpmn:serviceTask id="NR_task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="failsWithoutRetries" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>NR_f1</bpmn:incoming>
+      <bpmn:outgoing>NR_f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="NR_f2" sourceRef="NR_task" targetRef="NR_end" />
+    <bpmn:endEvent id="NR_end">
+      <bpmn:incoming>NR_f2</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
   <bpmn:process id="RetryProcess" isExecutable="true">
     <bpmn:startEvent id="RP_start">
       <bpmn:outgoing>RP_f1</bpmn:outgoing>
@@ -86,7 +105,7 @@
     <bpmn:sequenceFlow id="RP_f1" sourceRef="RP_start" targetRef="RP_task" />
     <bpmn:serviceTask id="RP_task">
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="retryTask" />
+        <zeebe:taskDefinition type="retryTask" retries="3" />
       </bpmn:extensionElements>
       <bpmn:incoming>RP_f1</bpmn:incoming>
       <bpmn:outgoing>RP_f2</bpmn:outgoing>

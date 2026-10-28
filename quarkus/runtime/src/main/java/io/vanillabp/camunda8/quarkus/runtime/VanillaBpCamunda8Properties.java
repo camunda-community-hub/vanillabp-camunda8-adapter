@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import io.quarkus.runtime.annotations.ConfigDocMapKey;
 import io.quarkus.runtime.annotations.ConfigPhase;
 import io.quarkus.runtime.annotations.ConfigRoot;
 import io.quarkus.runtime.annotations.StaticInitSafe;
@@ -48,6 +49,7 @@ public interface VanillaBpCamunda8Properties {
    *
    * @return The sections, keyed by adapter id, empty where the application wrote none
    */
+  @ConfigDocMapKey("adapter-id")
   Map<String, Camunda8AdapterKeys> adapters();
 
   /**
@@ -69,6 +71,7 @@ public interface VanillaBpCamunda8Properties {
    *
    * @return The workflow-module sections, keyed by workflow module ID
    */
+  @ConfigDocMapKey("workflow-module-id")
   Map<String, ModuleOverlay> workflowModules();
 
   /**
@@ -1180,6 +1183,7 @@ public interface VanillaBpCamunda8Properties {
      *
      * @return The adapter sections
      */
+    @ConfigDocMapKey("adapter-id")
     Map<String, Camunda8ModuleScopedKeys> adapters();
 
     /**
@@ -1187,6 +1191,7 @@ public interface VanillaBpCamunda8Properties {
      *
      * @return The workflow sections
      */
+    @ConfigDocMapKey("bpmn-process-id")
     Map<String, WorkflowOverlay> workflows();
 
   }
@@ -1201,6 +1206,7 @@ public interface VanillaBpCamunda8Properties {
      *
      * @return The adapter sections
      */
+    @ConfigDocMapKey("adapter-id")
     Map<String, Camunda8ScopedKeys> adapters();
 
     /**
@@ -1208,6 +1214,7 @@ public interface VanillaBpCamunda8Properties {
      *
      * @return The task sections
      */
+    @ConfigDocMapKey("task-definition")
     Map<String, TaskOverlay> tasks();
 
     /**
@@ -1216,6 +1223,7 @@ public interface VanillaBpCamunda8Properties {
      *
      * @return The message sections
      */
+    @ConfigDocMapKey("message-name")
     Map<String, MessageOverlay> messages();
 
   }
@@ -1231,6 +1239,7 @@ public interface VanillaBpCamunda8Properties {
      *
      * @return The adapter sections
      */
+    @ConfigDocMapKey("adapter-id")
     Map<String, Camunda8ScopedKeys> adapters();
 
   }
@@ -1246,6 +1255,7 @@ public interface VanillaBpCamunda8Properties {
      *
      * @return The adapter sections
      */
+    @ConfigDocMapKey("adapter-id")
     Map<String, Camunda8ScopedKeys> adapters();
 
   }

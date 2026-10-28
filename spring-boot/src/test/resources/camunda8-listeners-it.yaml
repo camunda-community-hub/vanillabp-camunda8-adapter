@@ -44,6 +44,15 @@ vanillabp:
           tasks:
             aCreatingListenerNobodyServes:
               implemented-externally: true
+        UserTaskAlreadyEndingProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
+          tasks:
+            aCompletingListenerNobodyServes:
+              implemented-externally: true
+            aCancelingListenerNobodyServes:
+              implemented-externally: true
   outbox:
     poll-interval: PT0.5S
     attempt-frequency: PT0.5S

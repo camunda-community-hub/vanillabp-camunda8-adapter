@@ -921,6 +921,47 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   @Test
+  @DisplayName("A failed job of an element without 'retries' raises the incident at the first failure")
+  public void aTaskWithoutRetriesInTheModelEndsInAnIncidentAtOnce() throws Exception {
+
+    final var aggregateId = transactionTemplate.execute(status -> repository
+        .save(new TaskDockerAggregate())
+        .getId());
+    startSecondaryProcess("NoRetriesProcess", aggregateId);
+    final var instanceKey = lastStartedInstanceKey;
+
+    awaitUntil(
+        () -> invocations("failsWithoutRetries", aggregateId) >= 1,
+        60000,
+        "the failing job to be delivered");
+    // version 1 did the same from 1.7.1 on. Camunda on its own would hand the job out twice
+    // more. See decision 83 in the repository's DECISIONS.md
+    awaitUntil(
+        () -> !workflowServiceClient()
+            .newIncidentSearchRequest()
+            .filter(filter -> filter.processInstanceKey(instanceKey))
+            .send()
+            .join()
+            .items()
+            .isEmpty(),
+        60000,
+        "the incident of the failed job");
+    final var incident = workflowServiceClient()
+        .newIncidentSearchRequest()
+        .filter(filter -> filter.processInstanceKey(instanceKey))
+        .send()
+        .join()
+        .items()
+        .getFirst();
+    assertEquals("NR_task", incident.getElementId(), "the incident stands at the element which failed");
+    assertEquals(
+        1,
+        invocations("failsWithoutRetries", aggregateId),
+        "the job was delivered once and not handed out again");
+
+  }
+
+  @Test
   @DisplayName("@TaskId dormancy: the open job is not re-invoked although its job timeout is 2s")
   public void asyncTaskStaysDormant() throws Exception {
 

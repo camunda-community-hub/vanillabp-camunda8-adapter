@@ -366,11 +366,53 @@ Version 1 let a Camunda 8 model set the backoff of a single element in the task 
 `retryBackoff`. That filled a gap: Camunda 8 has nothing like Camunda 7's
 `camunda:failedJobRetryTimeCycle`. The header is read again, and no model has to change for that.
 
-Two things are different from version 1. The header is read from the JOB, not from the model while
+One thing is different from version 1. The header is read from the JOB, not from the model while
 deploying. So it also holds for process versions this application never deployed, and no
-redeployment is needed. And version 1 only looked at the header if the element's
-`zeebe:taskDefinition` had a `retries` attribute as well. That condition is gone, because whoever
-models a backoff means it either way.
+redeployment is needed. Like in version 1, the header only matters where the element's
+`zeebe:taskDefinition` has a `retries` attribute. Without it, a failed job is not retried at all,
+see the next section.
+
+### A failed task is retried only where your model writes `retries`
+
+A Camunda 8 job comes with three retries, unless the model writes another number in the attribute
+`retries` of the `zeebe:taskDefinition`. This adapter fails the job of a `@WorkflowTask` method with
+no retries left where the element has no such attribute. So the cluster raises an incident at the
+first failure. Where the attribute is there, whatever its value, the job keeps one retry less, as
+Camunda does on its own.
+
+What this means for you depends on the version you come from:
+
+- Coming from 1.7.1 up to 1.10.0, nothing changes. Version 1 did the same since 1.7.1. One detail is
+  better now: version 1 read only the model it deployed, so a workflow of an older process version
+  was judged by the newest model. This adapter reads the model of the version the job belongs to.
+- Coming from 1.7.0 or older, a task which used to get three attempts now gets one. Look for the
+  service tasks whose handler can fail for a reason which passes, like a remote system which does
+  not answer. Write `retries="3"` (or the number you want) on their `zeebe:taskDefinition`, and a
+  `retryBackoff` header or `retry-backoff` where the next attempt should wait. Do not add it where
+  running the handler a second time is not safe. On Camunda 8 a changed model is a new process
+  version. Workflows already running stay on their old version and its old model.
+
+One case is easy to miss: tasks which run at the same time and write one workflow aggregate with a
+version attribute. When two of them commit at once, one loses with an optimistic locking error. It
+needs a second attempt, so those tasks need `retries` as well. This adapter's own tests met exactly
+this in three models.
+
+If the model of a failed job cannot be read, for example while the search of the cluster does not
+answer, the job keeps one retry less, and one warning per element says so. Why the adapter decides
+this way is decision 83 in [`DECISIONS.md`](./DECISIONS.md).
+
+### A user task which is already ending rolls the completion back
+
+`completeUserTask` checks before the commit whether the cluster still has the task. A task in
+state `CANCELING` or `COMPLETING` is still there, but it cannot be completed any more. The cluster
+is canceling it, or somebody else is completing it. Such a task now ends your transaction with a
+`TaskNotFoundException`, so your changes roll back. The adapter reads the state from the search,
+which runs a little behind the cluster. So a task which started to end a moment ago can still slip
+through, as it could in version 1.
+
+Coming from 1.10.0, this is what you know. Coming from an older version, a completion in these
+states used to commit, and the completion sent afterwards failed in the log. Catch
+`TaskNotFoundException` where you complete user tasks, if you do not already.
 
 An application which already moved the value into the configuration has one thing to check. If the
 value landed at the TASK level

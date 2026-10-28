@@ -3,6 +3,8 @@ package io.vanillabp.camunda8.wiring;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 
 import io.camunda.client.CamundaClient;
@@ -40,8 +42,11 @@ import lombok.extern.slf4j.Slf4j;
  * logs a WARN, because this is the documented residual of at-least-once.</li>
  * <li>{@code TaskException} maps to a BPMN error (error-boundary routing, aggregate
  * changes committed).</li>
- * <li>any other exception fails the job with one retry less. The core already rolled the
- * local transaction back.</li>
+ * <li>any other exception fails the job. The core already rolled the local transaction
+ * back. The job keeps one retry less where its model writes <code>retries</code> on the
+ * <code>zeebe:taskDefinition</code> of the element, and none at all where it does not. So
+ * a model without the attribute raises the incident at the first failure, as in version 1
+ * (see decision 83 in the repository's DECISIONS.md).</li>
  * <li>the completion CARRIES THE AGGREGATE STATE: the values the aggregate shares with the
  * BPMS, plus always the technical aggregate-ID variable. Without them, a gateway right
  * after the service task would evaluate the values of the last sync point driven by
@@ -187,8 +192,21 @@ public class Camunda8JobHandler implements JobHandler {
   private final Camunda8OpenTaskProbe openTaskProbe;
 
   /**
+   * Answers whether the model of a job asks for retries, see decision 83 in the repository's
+   * DECISIONS.md. May be <code>null</code> (tests). Then every failed job keeps one retry
+   * less, which is what Camunda does on its own.
+   */
+  private final Camunda8ModelledRetries.Models modelledRetries;
+
+  /**
+   * The elements whose model could not be read when one of their jobs failed. So an outage
+   * costs one line per element and not one per job.
+   */
+  private final Set<String> modelNotReadReported = ConcurrentHashMap.newKeySet();
+
+  /**
    * The worker this handler serves. Built through the generated
-   * <code>Camunda8JobHandler.builder()</code>: nine of these fourteen values may be left
+   * <code>Camunda8JobHandler.builder()</code>: ten of these fifteen values may be left
    * out, and a positional list of that length no longer says which is which.
    *
    * @param adapterId The adapter whose worker delivers here
@@ -214,6 +232,8 @@ public class Camunda8JobHandler implements JobHandler {
    *          <code>null</code> to answer no for all of them
    * @param openTaskProbe What asks the cluster about the other open tasks of the workflow, or
    *          <code>null</code> to ask nothing
+   * @param modelledRetries Whether the model of a job asks for retries, or <code>null</code>
+   *          to count every failed job down by one
    */
   @Builder
   public Camunda8JobHandler(
@@ -230,9 +250,11 @@ public class Camunda8JobHandler implements JobHandler {
       final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver,
       final Camunda8FetchVariables.Selection fetchVariables,
       final BiPredicate<String, Integer> predatesDeployedVersion,
-      final Camunda8OpenTaskProbe openTaskProbe) {
+      final Camunda8OpenTaskProbe openTaskProbe,
+      final Camunda8ModelledRetries.Models modelledRetries) {
 
     this.openTaskProbe = openTaskProbe;
+    this.modelledRetries = modelledRetries;
     this.predatesDeployedVersion = predatesDeployedVersion == null
         ? (
             processId,
@@ -330,17 +352,31 @@ public class Camunda8JobHandler implements JobHandler {
       }
       // the core rolled the local transaction back. Fail the job, so Camunda 8
       // applies its retry semantics (retries reach 0 -> incident).
+      final var retriesLeft = retriesLeftAfterThisFailure(job, bpmnProcessId, taskDefinition);
       final var retryBackoff = retryBackoffOf(job, bpmnProcessId, taskDefinition);
-      log.warn(
-          "Camunda8[{}]: processing job '{}' (type '{}') of BPMN process '{}' failed - failing the job "
-              + "with {} retries left, to be handed out again in {}",
-          adapterId,
-          job.getKey(),
-          taskDefinition,
-          bpmnProcessId,
-          job.getRetries() - 1,
-          retryBackoff,
-          e);
+      if (retriesLeft > 0) {
+        log.warn(
+            "Camunda8[{}]: processing job '{}' (type '{}') of BPMN process '{}' failed - failing the job "
+                + "with {} retries left, to be handed out again in {}",
+            adapterId,
+            job.getKey(),
+            taskDefinition,
+            bpmnProcessId,
+            retriesLeft,
+            retryBackoff,
+            e);
+      } else {
+        log.warn(
+            "Camunda8[{}]: processing job '{}' (type '{}') of BPMN process '{}' failed - failing the job "
+                + "with no retries left, so the cluster raises an incident. Element '{}' is retried only "
+                + "where its model writes 'retries' on the zeebe:taskDefinition",
+            adapterId,
+            job.getKey(),
+            taskDefinition,
+            bpmnProcessId,
+            job.getElementId(),
+            e);
+      }
       Camunda8CommandRetry.sendUnlessTheJobIsGone(
           adapterId,
           "failure",
@@ -352,7 +388,7 @@ public class Camunda8JobHandler implements JobHandler {
               .withToken(
                   client
                       .newFailCommand(job.getKey())
-                      .retries(job.getRetries() - 1)
+                      .retries(retriesLeft)
                       // without it, the cluster hands the job out again at once. A
                       // handler failing on something which needs a moment would use up
                       // its retries before the cause has a chance to pass.
@@ -546,6 +582,74 @@ public class Camunda8JobHandler implements JobHandler {
                 Camunda8JobLease.tokenOf(job))
             .send()
             .join());
+
+  }
+
+  /**
+   * How many retries a failed job keeps. It is one less than it arrived with, where the
+   * model of its process version writes <code>retries</code> on the
+   * <code>zeebe:taskDefinition</code> of the element. Where the model does not, it is none,
+   * so the cluster raises the incident at once. Version 1 did the same from 1.7.1 on, see
+   * decision 83 in the repository's DECISIONS.md.
+   * <p>
+   * A model which cannot be read leaves the decision to Camunda, which counts down by one.
+   * The transaction was rolled back, so one more attempt does no harm. And the next failure
+   * asks the model again. An incident, on the other hand, waits for an operator.
+   *
+   * @param job The job which is about to be failed
+   * @param bpmnProcessId The BPMN process id, as the core knows it
+   * @param taskDefinition The task definition, as the core knows it
+   * @return The retries the fail command leaves
+   */
+  private int retriesLeftAfterThisFailure(
+      final ActivatedJob job,
+      final String bpmnProcessId,
+      final String taskDefinition) {
+
+    final var countedDown = Math.max(0, job.getRetries() - 1);
+    if (modelledRetries == null) {
+      return countedDown;
+    }
+    final Boolean modelled;
+    try {
+      modelled = modelledRetries
+          .retriesModelledFor(workflowModuleId, bpmnProcessId, job.getProcessDefinitionVersion(), job.getElementId());
+    } catch (final RuntimeException e) {
+      reportModelNotRead(job, bpmnProcessId, taskDefinition, e);
+      return countedDown;
+    }
+    if (modelled == null) {
+      reportModelNotRead(job, bpmnProcessId, taskDefinition, null);
+      return countedDown;
+    }
+    return modelled
+        ? countedDown
+        : 0;
+
+  }
+
+  private void reportModelNotRead(
+      final ActivatedJob job,
+      final String bpmnProcessId,
+      final String taskDefinition,
+      final RuntimeException cause) {
+
+    if (!modelNotReadReported
+        .add("%s/%s/%s".formatted(bpmnProcessId, job.getProcessDefinitionVersion(), job.getElementId()))) {
+      return;
+    }
+    log.warn(
+        "Camunda8[{}]: the model of version {} of BPMN process '{}' (workflow module '{}') could not be "
+            + "read, so it is unknown whether element '{}' (type '{}') writes 'retries' on its "
+            + "zeebe:taskDefinition. A failed job of it keeps one retry less, as Camunda does on its own, "
+            + "and the next failure asks the model again",
+        adapterId,
+        job.getProcessDefinitionVersion(),
+        bpmnProcessId,
+        workflowModuleId,
+        job.getElementId(),
+        taskDefinition,
+        cause);
 
   }
 

@@ -39,7 +39,7 @@
       <bpmn:sequenceFlow id="MI_SubToTask" sourceRef="MI_SubStart" targetRef="MI_Task" />
       <bpmn:serviceTask id="MI_Task">
         <bpmn:extensionElements>
-          <zeebe:taskDefinition type="awaitPushPerInstance" />
+          <zeebe:taskDefinition type="awaitPushPerInstance" retries="3" />
         </bpmn:extensionElements>
         <bpmn:incoming>MI_SubToTask</bpmn:incoming>
         <bpmn:outgoing>MI_TaskToEnd</bpmn:outgoing>
@@ -76,7 +76,7 @@
       <bpmn:sequenceFlow id="AT_SubToTask" sourceRef="AT_SubStart" targetRef="AT_Task" />
       <bpmn:serviceTask id="AT_Task">
         <bpmn:extensionElements>
-          <zeebe:taskDefinition type="awaitPushPerInstance" />
+          <zeebe:taskDefinition type="awaitPushPerInstance" retries="3" />
         </bpmn:extensionElements>
         <bpmn:incoming>AT_SubToTask</bpmn:incoming>
         <bpmn:outgoing>AT_TaskToEnd</bpmn:outgoing>
