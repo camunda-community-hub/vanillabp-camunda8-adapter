@@ -143,7 +143,13 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
   public void aModelWithoutANoneStartEventIsRefusedForGood() {
 
     // a model which is started by a timer and by nothing else, while the application
-    // still calls startWorkflow. The cluster refuses that create for good
+    // still calls startWorkflow. The cluster refuses that create for good.
+    //
+    // The timer waits for a date far in the future, so it never fires while tests run.
+    // This class shares its cluster with the other test classes of this module. A timer
+    // which fires starts an instance in the middle of whichever class runs then. That
+    // class checks for workflows left behind and reports the instance as its own. A
+    // timer of 30 minutes did exactly that on a nightly run
     deploy(
         "timer-start-only.bpmn",
         """
@@ -153,7 +159,7 @@ public class Camunda8RefusedStartIT extends SpringBootTestOnTheSharedCluster {
                 <bpmn:startEvent id="start">
                   <bpmn:outgoing>f1</bpmn:outgoing>
                   <bpmn:timerEventDefinition id="timer">
-                    <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R1/PT30M</bpmn:timeCycle>
+                    <bpmn:timeDate xsi:type="bpmn:tFormalExpression">2999-12-31T23:59:59Z</bpmn:timeDate>
                   </bpmn:timerEventDefinition>
                 </bpmn:startEvent>
                 <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="end" />
