@@ -3626,3 +3626,35 @@ original error is added as a suppressed exception. Its stack trace stays in the 
 **The pin is the application's.** This is decision 39 again: nothing this repository pins reaches
 an application. The README says which application has to pin what, in the section
 [Apache HttpClient 5](./README.md#apache-httpclient-5).
+
+### 85. Every map of the Quarkus configuration names its key, with the names all adapters share
+
+Built by story 995 on 2026-10-28.
+
+The Quarkus module is a Quarkus extension. Its build writes a description of every key into
+`META-INF/quarkus-config-doc/quarkus-config-model.json` (see decision 82). A map is a level where
+the application chooses the key, for example an adapter id. Quarkus writes such a key as a name in
+quotes. Without help it takes the name of the Java method. So the file showed
+`vanillabp.adapters."adapters".job-timeout`, and nobody could tell from it what to write there.
+
+Now every map of `VanillaBpCamunda8Properties` carries `@ConfigDocMapKey`. The platform and every
+adapter use the same names. The first three are also the names which the platform wiki writes in
+angle brackets, for example `<adapter-id>`:
+
+|        Map        |         Name         |
+|-------------------|----------------------|
+| `adapters`        | `adapter-id`         |
+| `workflowModules` | `workflow-module-id` |
+| `workflows`       | `bpmn-process-id`    |
+| `tasks`           | `task-definition`    |
+| `messages`        | `message-name`       |
+
+So the key above now reads `vanillabp.adapters."adapter-id".job-timeout`.
+
+`EveryMapKeyHasANameTest` reads the file which the build wrote. It fails when a map key has a name
+which is not in this table. So a new map needs the annotation, or the build is red.
+
+The Quarkus Tools plugin for IntelliJ IDEA (by Red Hat, checked in version 2.6.1) does not read this
+file. It finds the keys in the `@ConfigMapping` interfaces themselves and writes every map key as
+`{*}`. So the names help the generated documentation and everybody who reads the file. They do not
+change what this plugin offers while you type.
