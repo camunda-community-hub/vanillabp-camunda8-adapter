@@ -3585,6 +3585,9 @@ The rule covers the jobs of `@WorkflowTask` methods (`Camunda8JobHandler`). The 
 VanillaBP writes carry their retries in the model already. A listener somebody modelled keeps the
 retries the cluster hands over.
 
+The last sentence is superseded by decision 87: a listener somebody modelled follows the same rule
+as a task.
+
 **A user task which is ending.** The pre-commit check of `completeUserTask` sends an empty
 update. For a task in `CANCELING` or `COMPLETING` the engine answers `409`, the same answer as for
 a task which is still being created. Read alone, the transaction committed, and the completion
@@ -3692,3 +3695,81 @@ this means.
 
 `businesscockpit-camunda8-adapter` keeps a file of the same name and format. There it records
 which client was read against the cockpit's code, and its own pull request raises it.
+
+### 87. A listener somebody modelled is retried only where the model asks for it, like a task
+
+Built by story 2009 on 2026-10-28. Stephan decided it on 2026-10-28.
+
+Decision 83 brought back the rule of version 1 for the job of a task. A listener somebody modelled
+kept the retries the cluster hands over, which are three where the model writes none. Now the same
+rule holds for such a listener. Stephan gave the reason: in VanillaBP, retries must be configured
+explicitly. A task may write, and then a retry would be a mistake. A method which serves a listener
+may write as well. An execution listener on `end` even writes into the process instance (see
+decision 1). And a reader of a model should not need two rules.
+
+So `Camunda8ModelledListenerHandler` fails the job of a listener with no retries left, unless the
+listener writes `retries` in the model. A listener writes it on its own `zeebe:executionListener` or
+`zeebe:taskListener`. The `zeebe:taskDefinition` of the element does not count, because it is about
+the task and not about the listener. Where the attribute is there, whatever its value, the job keeps
+one retry less and waits the configured `retry-backoff`.
+
+The answer comes from the model of the job's process version, exactly as in decision 83, and a model
+which cannot be read leaves the count to Camunda. The listener is found by its element and its job
+type. That is enough, because the wiring refuses two served listeners of one element under one job
+type.
+
+Version 1 served only one kind of listener, a `zeebe:taskListener` of a `zeebe:userTask`, from 1.7.0
+to 1.10.0. Every one of these releases failed the job of such a listener with no retries left. 1.7.0
+failed every job that way. From 1.7.1 on it looked for `retries` on the `zeebe:taskDefinition`, and a
+user task has none. So a listener without the attribute behaves as in version 1. A listener with it
+now gets the retries it asks for.
+
+A job failed with no retries left carries no `retryBackoff`, for a task, a listener or a job of
+VanillaBP's own. There is no next attempt to delay.
+
+### 88. Until Camunda fixes its gateway, the adapter advises against a lease, and its own tests keep one
+
+Built by story 2002 on 2026-10-28.
+
+The gateway of Camunda 8.10 parks an activation request which found no job. Its own timer answers
+the request empty when the long poll runs out. If that timer fires while an activation for the
+request is still on its way to the broker, the gateway cannot send the job. It then gives the job
+back with a FAIL command, built in `RoundRobinActivateJobsHandler.toFailJobRequest`. That command
+carries no lease token. So the broker refuses it for a leased job, and the job stays locked for
+nobody until the lock of the lost activation runs out. The signature is `Failed to send 1 activated
+jobs` followed by `Failed to reactivate job ... a matching lease token must be provided`.
+
+**What was measured.** `Camunda8LongPollRaceIT` against `camunda/camunda:8.10.5`, on 2026-10-28.
+It runs only when asked for (`-Dcamunda8.measure.long-poll-race=true`). The numbers are in the
+README section [A job activated for a worker which never saw it](./README.md#a-job-activated-for-a-worker-which-never-saw-it).
+Four of them decide this entry:
+
+- A job which becomes free just before the long poll ends: 16 of 345 tries stuck with a lease, 0 of
+  183 without one.
+- A client which waits five seconds longer than the long poll instead of one: still 7 of 183 stuck.
+  The client never ends the request first, so its HTTP timeout plays no part.
+- A worker whose retry backoff equals its long poll, ten seconds each: 19 of 300 retries late by one
+  or two locks with a lease, 0 of 300 without one.
+- A long poll of 13 seconds against the same backoff: 3 of 300 late, from handlers which paused
+  about three seconds. Two clocks of different length still meet, only at another handler duration.
+
+So only the missing lease brings the rate to zero. A longer HTTP timeout and a long poll which
+differs from the retry backoff do not. On 8.8 and 8.9 there is no lease, and the gateway's FAIL is
+accepted. There the same race costs a few milliseconds (19 lost sends in 183 tries against
+`camunda/camunda:8.9.26`, every job given back at once).
+
+**The adapter advises, it does not decide.** Decision 36 stands: the application chooses, and
+there is no default. The boot message, the README and the wiki now say that `do-not-use` is the
+safer choice until Camunda fixes the gateway, and that switching to `use` later costs nothing. The
+adapter does not switch the lease off on its own. That would overrule an application which chose
+it. And the ratchet still holds on 8.10.5, measured in the same IT: after its lock ran out, a leased
+job went to the next activation with a lease and not to one without. So an adapter which dropped
+the lease by itself would strand the jobs which an application leased before.
+
+**The tests of this repository keep `use`.** Many of them activate jobs with a lease themselves,
+and they guard the code an application runs when it chooses the lease. A test whose wait is
+shorter than one `job-timeout` can still meet the stall. `Camunda8JobLeaseIT` protects itself
+with a short lock of its own.
+
+**When Camunda fixes it**, run the IT with the lease against the fixed version. If no job is stuck,
+remove the advice from the boot message, the README and the wiki, and mark this entry superseded.

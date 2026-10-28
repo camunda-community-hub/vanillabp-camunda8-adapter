@@ -542,6 +542,16 @@ Two listeners of one element with ONE job type end the boot, and the message nam
 ran one of them, and which one was undefined. So the model promised something it could not
 deliver. Give every listener of an element its own job type, and write one method per job type.
 
+A failed listener job is retried only where the listener writes `retries` on itself, on its
+`zeebe:taskListener` or `zeebe:executionListener`. Without the attribute, the job is failed with
+no retries left, and the cluster raises an incident at the first failure. That is the rule for a
+task as well, see [the entry above](#a-failed-task-is-retried-only-where-your-model-writes-retries).
+A task listener without the attribute behaves as before. Every release of version 1 which served
+such a listener, 1.7.0 to 1.10.0, failed its job with no retries left, also where the listener wrote
+`retries`. So a listener which writes it now gets the retries it asks for. Write `retries` only
+where running the method a second time is safe. Why is decision 87 in
+[`DECISIONS.md`](./DECISIONS.md).
+
 The [README section](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/blob/main/README.md#listeners-somebody-modelled)
 and the [BPMN model](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#the-bpmn-model-for-camunda-8)
 section of the wiki carry the details.

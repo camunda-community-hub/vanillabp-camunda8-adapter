@@ -706,18 +706,18 @@ instance and for every completely configured SaaS adapter instance. The set of a
 always comes from the platform's core properties (ids of type `camunda8`); the overlay maps are
 only looked up per known id.
 
-|                    Property                     |  Applies to  |                                    Required                                    |                                  Description                                  |
-|-------------------------------------------------|--------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| `vanillabp.adapters.<id>.mode`                  | both         | no (default `self-managed`)                                                    | `self-managed` or `saas`                                                      |
-| `vanillabp.adapters.<id>.rest-address`          | self-managed | no (default `http://localhost:8088` on 8.8, `http://localhost:8080` otherwise) | REST API address, e.g. `http://camunda:8080`                                  |
-| `vanillabp.adapters.<id>.grpc-address`          | self-managed | no (default `http://localhost:26500`)                                          | gRPC address, e.g. `http://camunda:26500`                                     |
-| `vanillabp.adapters.<id>.prefer-rest-over-grpc` | self-managed | no (default `true`)                                                            | use the REST API (recommended) or gRPC                                        |
-| `vanillabp.adapters.<id>.cluster-id`            | saas         | yes                                                                            | SaaS cluster ID                                                               |
-| `vanillabp.adapters.<id>.region`                | saas         | yes                                                                            | SaaS region                                                                   |
-| `vanillabp.adapters.<id>.client-id`             | saas         | yes                                                                            | OAuth client ID                                                               |
-| `vanillabp.adapters.<id>.client-secret`         | saas         | yes                                                                            | OAuth client secret                                                           |
-| `vanillabp.adapters.<id>.tenant-id`             | both         | no                                                                             | Camunda 8 multi-tenancy tenant, also settable per workflow module             |
-| `vanillabp.adapters.<id>.auth.*`                | both         | no (default: no credentials)                                                   | how the adapter authenticates, see [below](#authenticating-against-a-cluster) |
+|                        Property                         |  Applies to  |                                    Required                                    |                                  Description                                  |
+|---------------------------------------------------------|--------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| `vanillabp.adapters.<adapter-id>.mode`                  | both         | no (default `self-managed`)                                                    | `self-managed` or `saas`                                                      |
+| `vanillabp.adapters.<adapter-id>.rest-address`          | self-managed | no (default `http://localhost:8088` on 8.8, `http://localhost:8080` otherwise) | REST API address, e.g. `http://camunda:8080`                                  |
+| `vanillabp.adapters.<adapter-id>.grpc-address`          | self-managed | no (default `http://localhost:26500`)                                          | gRPC address, e.g. `http://camunda:26500`                                     |
+| `vanillabp.adapters.<adapter-id>.prefer-rest-over-grpc` | self-managed | no (default `true`)                                                            | use the REST API (recommended) or gRPC                                        |
+| `vanillabp.adapters.<adapter-id>.cluster-id`            | saas         | yes                                                                            | SaaS cluster ID                                                               |
+| `vanillabp.adapters.<adapter-id>.region`                | saas         | yes                                                                            | SaaS region                                                                   |
+| `vanillabp.adapters.<adapter-id>.client-id`             | saas         | yes                                                                            | OAuth client ID                                                               |
+| `vanillabp.adapters.<adapter-id>.client-secret`         | saas         | yes                                                                            | OAuth client secret                                                           |
+| `vanillabp.adapters.<adapter-id>.tenant-id`             | both         | no                                                                             | Camunda 8 multi-tenancy tenant, also settable per workflow module             |
+| `vanillabp.adapters.<adapter-id>.auth.*`                | both         | no (default: no credentials)                                                   | how the adapter authenticates, see [below](#authenticating-against-a-cluster) |
 
 Example (self-managed):
 
@@ -873,7 +873,7 @@ integration tests hid it: every cluster here ran with
 passed all of them. `Camunda8AuthenticationIT` is the test that would have caught it, and it
 runs against a cluster where nothing is unprotected.
 
-`vanillabp.adapters.<id>.auth.*` carries the credentials of one adapter instance, at adapter
+`vanillabp.adapters.<adapter-id>.auth.*` carries the credentials of one adapter instance, at adapter
 level only: a credential is a property of the connection, and a per-workflow level would be a
 promise the connection cannot keep.
 
@@ -1052,7 +1052,7 @@ committed.
 `Camunda8JobHandler` reports the job key as the delivery id, and the core remembers a processed
 delivery by that id. A key is stable across every redelivery of that job and is never handed out
 twice, but only within one cluster. The delivery key of the core starts with the adapter id
-(`TaskDeliveryKey`: `<adapterId>|<workflowModuleId>|<bpmnProcessId>|<event>|<deliveryId>`). So
+(`TaskDeliveryKey`: `<adapter-id>|<workflow-module-id>|<bpmn-process-id>|<event>|<delivery-id>`). So
 two adapter ids have separate identities, and a migration between two clusters works even though
 both count their keys from the same range.
 
@@ -1114,7 +1114,7 @@ per adapter, workflow module, workflow and MESSAGE. That is the same most-specif
 machinery `job-timeout` uses, with a message as the most specific level instead of a task:
 
 ```
-vanillabp.workflow-modules.<m>.workflows.<w>.messages.<messageName>.adapters.<id>.message-time-to-live
+vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.messages.<message-name>.adapters.<adapter-id>.message-time-to-live
 ```
 
 The number does two jobs which pull in opposite directions. It BUFFERS a message published
@@ -1124,7 +1124,7 @@ legitimately repeats every minute, and another one whose message is published lo
 workflow reaches it. So one number for the whole application has to be wrong for one of them.
 Nothing configured means nothing set: the client's own default applies, as it always did.
 
-`<w>` is the process whose model waits for the message. A correlation goes through the process
+`<bpmn-process-id>` is the id of the process whose model waits for the message. A correlation goes through the process
 service of the process at the top, but the event which waits may sit in a called process, and
 that is where its time-to-live is configured. The cluster does not say which subscription will
 take a message, and a message may be published before anything waits for it. So the deployed
@@ -1271,7 +1271,7 @@ waits once, before the first of those rounds, and repeats none of them
 answers it even without secondary storage and without a tenant. That is exactly why it is asked
 first: the requirement of a searchable cluster comes after it, and a cluster which is merely
 booting must not fail that requirement. The waiting ends when the cluster answers, when
-`vanillabp.adapters.<id>.startup-wait` runs out, or when `Camunda8Errors` classifies an answer
+`vanillabp.adapters.<adapter-id>.startup-wait` runs out, or when `Camunda8Errors` classifies an answer
 as permanent. The last one ends the start at once, and that is what lets the default be as long
 as ten minutes. Before the first attempt, a line names the address and the deadline. Every few
 seconds another line gives the time gone and the cluster's last answer. So a typo in the address
@@ -1369,7 +1369,7 @@ ms behind a blocking handler and 13 ms with four threads, and a poll scheduled w
 still. The second half is why this was worth a story of its own: no client-side signal showed
 the backlog.
 
-`vanillabp.adapters.<id>.worker-threads` takes a positive number or the literal `virtual`,
+`vanillabp.adapters.<adapter-id>.worker-threads` takes a positive number or the literal `virtual`,
 and it sits at adapter level because the executor is per client. A workflow-module level
 would be a lie.
 
@@ -1565,7 +1565,8 @@ kinds of worker. The listener somebody modelled is not among them yet.
 `retry-backoff` travels with every fail command which leaves the job retries. Its default is
 `PT10S`. Like `job-timeout` it can be set per module, workflow and task, and it is resolved per
 COMMAND and not per worker, so nothing has to be aligned between the processes one worker
-serves. A job failed with `retries(0)` carries none, because there is no next attempt. The error
+serves. A job failed with `retries(0)` carries none, because there is no next attempt
+(`Camunda8ModelledRetriesTest#noRetriesLeftMeansNoBackoff`). The error
 message of a fail command carries the exception's TYPE next to its message. That text is what an
 operator reads in Operate, and `NullPointerException` used to write just `null` there. Held by
 `Camunda8JobTimeoutOverlayTest#retryBackoffResolvesThroughAllFourLevels`,
@@ -1934,6 +1935,10 @@ A lease has one more cost, and it comes from the cluster. Where the cluster acti
 for a request which has already ended, it cannot give the job back, and the job waits for the
 lock of that lost activation. See
 [a job activated for a worker which never saw it](#a-job-activated-for-a-worker-which-never-saw-it).
+Until Camunda fixes this, the boot message and the wiki advise `do-not-use`. Switching to `use`
+later costs nothing, because a job which was never leased can be leased at any time. Why the adapter
+advises and does not decide, and why the tests of this repository keep `use`, is decision 88 in the
+repository's DECISIONS.md.
 
 ### A job type has to be a name, not an expression
 
@@ -2005,13 +2010,13 @@ unless the application says so. A company writes element templates for its own p
 tasks as well, and passing those over would leave a task this very application serves without a
 worker and without a validation.
 
-`vanillabp.adapters.<id>.allow-connectors` is the switch, default `false`, resolvable at three
+`vanillabp.adapters.<adapter-id>.allow-connectors` is the switch, default `false`, resolvable at three
 levels with the most specific configured value winning:
 
 ```
-vanillabp.adapters.<id>.allow-connectors
-vanillabp.workflow-modules.<m>.adapters.<id>.allow-connectors
-vanillabp.workflow-modules.<m>.workflows.<w>.adapters.<id>.allow-connectors
+vanillabp.adapters.<adapter-id>.allow-connectors
+vanillabp.workflow-modules.<workflow-module-id>.adapters.<adapter-id>.allow-connectors
+vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.adapters.<adapter-id>.allow-connectors
 ```
 
 There is no TASK level. That level is keyed by the task DEFINITION, and the task definition of a
@@ -2065,13 +2070,13 @@ incident and without a line in any log. VanillaBP 1 served such a listener with 
 method and said nothing about it; this version serves it where the application asks for it, and says
 what that costs.
 
-`vanillabp.adapters.<id>.allow-listeners` is the switch, default `false`, resolvable at three levels
+`vanillabp.adapters.<adapter-id>.allow-listeners` is the switch, default `false`, resolvable at three levels
 with the most specific configured value winning:
 
 ```
-vanillabp.adapters.<id>.allow-listeners
-vanillabp.workflow-modules.<m>.adapters.<id>.allow-listeners
-vanillabp.workflow-modules.<m>.workflows.<w>.adapters.<id>.allow-listeners
+vanillabp.adapters.<adapter-id>.allow-listeners
+vanillabp.workflow-modules.<workflow-module-id>.adapters.<adapter-id>.allow-listeners
+vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.adapters.<adapter-id>.allow-listeners
 ```
 
 There is no TASK level here either, but for a different reason than for `allow-connectors`. A
@@ -2155,6 +2160,14 @@ Where the switch is on, the listener is a task like any other one:
   issue 23702. In these last two cases a change of the aggregate is kept by the application and
   reaches the cluster at the next real sync point of that workflow. On Camunda 7 every listener writes in
   the engine's own transaction, which is worth knowing when a module runs on both.
+- a failed job follows the rule of a task. It keeps one retry less only where the listener writes
+  `retries` on its own `zeebe:executionListener` or `zeebe:taskListener`. Without it, the job keeps
+  no retry and the cluster raises the incident at once. The `zeebe:taskDefinition` of the element
+  does not count for its listeners. The answer comes from the model of the job's process version
+  (`Camunda8ModelledRetries#retriesModelledForListener`), and one line per listener says when a
+  failure raises the incident for that reason. A method serving a listener may write, so it runs a
+  second time only where somebody said this is safe, see
+  [decision 87](./DECISIONS.md#87-a-listener-somebody-modelled-is-retried-only-where-the-model-asks-for-it-like-a-task).
 
 The event is part of the listener's identity: the wiring made one task of one listener, so one
 method serves one event of one element. `@TaskEvent` receives `TaskEvent.Event#CREATED` for
@@ -2304,7 +2317,7 @@ and the list. It says that the name is not on the method and that the value can 
 the workflow aggregate. So the cluster raises an incident instead of the handler computing on
 a value which was quietly dropped.
 
-Snapshots of version 2.0 had the key `vanillabp.adapters.<id>.fetch-variables: all`, which
+Snapshots of version 2.0 had the key `vanillabp.adapters.<adapter-id>.fetch-variables: all`, which
 made a worker fetch everything. It is gone, because in version 2.0 a handler reads its data
 from the workflow aggregate. An application which still sets it, at any of the four levels, does not
 start. The message names every key which sets it and says what applies instead.
@@ -2448,7 +2461,7 @@ that one is renamed here and not in the cluster.
 A BPMN file goes to the cluster as a whole, so a workflow module may deploy a process which no
 `@WorkflowService` class claims. The core ends the start over such a process unless the
 application marks it with
-`vanillabp.workflow-modules.<module>.workflows.<process>.implemented-externally=true`. So a
+`vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.implemented-externally=true`. So a
 process which reaches `wireBpmn` unclaimed is one somebody else serves, and `wireBpmn` returns
 for it right away. No listener, no multi-instance mapping and no correlation key is written into
 it, no worker is opened for its jobs, and no check ends the boot or warns because of it. What
@@ -2597,7 +2610,7 @@ The question costs nothing. Both tenants come out of configuration, so no reques
 cluster, and the core asks once per pair of workflow modules rather than once per process.
 
 **The tenant name is resolved per workflow module**, the module's own section first
-(`vanillabp.workflow-modules.<module>.adapters.<id>.tenant-id`) and the adapter's after it. That
+(`vanillabp.workflow-modules.<workflow-module-id>.adapters.<adapter-id>.tenant-id`) and the adapter's after it. That
 is what makes the way out of the refusal above possible to write. The message tells the
 developer to give one of the two modules a scope of its own, and before this an application
 could only write one name for every module at once. There is no name per workflow, because a
@@ -3374,7 +3387,7 @@ its list, so the probe would answer about the other one's instance and end the e
 wrong adapter. There the search, which filters by scope, is the whole answer as before.
 
 The adapter reports a window for the rest (`workflowVisibilityDelay()`, configured as
-`vanillabp.adapters.<id>.workflow-visibility-timeout`, default 10 seconds, zero switches it
+`vanillabp.adapters.<adapter-id>.workflow-visibility-timeout`, default 10 seconds, zero switches it
 off). The core keeps asking for that long, but only while it probes an adapter which its
 `WorkflowAdapterCache` names for that workflow. VanillaBP fills that cache after phase two of a
 start and on every inbound delivery. A workflow nobody ever started has no such hint and still
@@ -3386,7 +3399,7 @@ the probe above answers before the waiting begins. A workflow the engine no long
 been in the read model for as long as it ran. What is still on its way there is the END of it:
 176 to 445 ms on 8.10.0-alpha5, 255 ms on 8.9.19 and 2068 ms on 8.8.37. So for a workflow for
 which its own probe just got a 404, the adapter answers
-`vanillabp.adapters.<id>.ended-workflow-visibility-timeout`, 3 seconds by default. For
+`vanillabp.adapters.<adapter-id>.ended-workflow-visibility-timeout`, 3 seconds by default. For
 everything else it answers the long window. The core asks `workflowVisibilityDelay(workflowId)`
 right after the probe and on the same thread, which is how the adapter knows which of the two
 cases it is in. A probe which was skipped, one which failed and one which found the instance all
@@ -3483,7 +3496,7 @@ every user task it manages, and the cluster delivers `CANCELED` for it straight 
 record naming such a user task is answered with "cannot say" by default, and every other record
 of the same process is answered with what the cluster said.
 
-`vanillabp.adapters.<id>.probe-open-user-tasks: true` adds the question for whoever wants
+`vanillabp.adapters.<adapter-id>.probe-open-user-tasks: true` adds the question for whoever wants
 task-level certainty anyway. It sends an empty `UpdateUserTask` per user task of an instance
 which is still running: `204` for a task which is open, `404` for a task which is gone, `409`
 for a task standing in `UPDATING` or one whose listener denied the update, which both mean it is
@@ -3702,6 +3715,20 @@ moment a long poll of its own ended just as the lock of the job ran out. That te
 of five minutes back then, and it failed after waiting two. Nothing is lost here either, but a
 leased job waits for one lock instead of a few milliseconds. This is a defect of the cluster, and
 the lease is where it shows.
+
+`Camunda8LongPollRaceIT` hits the moment on purpose. It runs only when asked for, with
+`-Dcamunda8.measure.long-poll-race=true`. Measured against `camunda/camunda:8.10.5` on 2026-10-28.
+The race is inside the gateway. Its own timer ends the long poll while an activation for that poll
+is still on its way to the broker. A job which became free 6 to 40 ms before the empty answer was
+stuck in 16 of 345 tries. Without a lease it was stuck in none of 183, and the gateway gave all 9
+jobs it could not send straight back. A client which waits five seconds longer than the long poll
+instead of one changes nothing (7 stuck in 183), because the client never ends the request first.
+A worker which fails each job once with a retry backoff of ten seconds, under a long poll of ten
+seconds, met it in 19 of 300 retries. The retry came after 40 or 71 seconds, one or two locks of 30
+seconds, instead of after ten. Without a lease it met it in none of 300. A long poll of 13 seconds
+only moves the window: then handlers which paused 2.6 to 2.9 seconds before they failed met it, 3
+of 300. Against `camunda/camunda:8.9.26` the gateway lost 19 sends in 183 tries and gave every one
+of them back, because there is no lease on that line.
 
 **The gateway does not notice.** Over REST the response is written when the request ends, so a
 connection which died while the request was parked is found too late for the reactivation above.

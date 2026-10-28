@@ -114,6 +114,11 @@ public class Camunda8JobLeaseTest {
         failure.getMessage().contains("cannot be taken back"),
         "the message says why there is no default: "
             + failure.getMessage());
+    assertTrue(
+        failure.getMessage().contains("vanillabp.adapters.c8.job-timeout") && failure.getMessage()
+            .contains("'do-not-use' is the safer choice for now"),
+        "the message says what a lease costs until Camunda fixes its gateway: "
+            + failure.getMessage());
 
   }
 
