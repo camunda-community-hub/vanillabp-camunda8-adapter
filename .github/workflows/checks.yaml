@@ -127,12 +127,12 @@ jobs:
           record="${RUNNER_TEMP}/camunda8-client-read.properties"
           cat > "$record" <<'PROPERTIES'
           # a comment, and spaces around one '='
-          line-9.1 = 9.1.4
-          line-9.2=9.2.7
-          line-9.3=9.3.0-alpha2
+          line-4711.1 = 4711.1.4
+          line-4711.2=4711.2.7
+          line-4711.3=4711.3.0-alpha2
           PROPERTIES
           twice="${RUNNER_TEMP}/twice.properties"
-          printf 'line-9.2=9.2.6\nline-9.2=9.2.7\n' > "$twice"
+          printf 'line-4711.2=4711.2.6\nline-4711.2=4711.2.7\n' > "$twice"
           answers() {
             status=0
             bin/client-api-read.sh "$1" "$2" "$3" || status=$?
@@ -142,17 +142,17 @@ jobs:
             }
           }
           echo "Read, so these turn the check green:"
-          answers 9.2 9.2.7 "$record" 0
-          answers 9.2 9.2.6 "$record" 0
-          answers 9.1 9.1.4 "$record" 0
-          answers 9.3 9.3.0-alpha2 "$record" 0
+          answers 4711.2 4711.2.7 "$record" 0
+          answers 4711.2 4711.2.6 "$record" 0
+          answers 4711.1 4711.1.4 "$record" 0
+          answers 4711.3 4711.3.0-alpha2 "$record" 0
           echo "Not read, so these keep it red:"
-          answers 9.2 9.2.8 "$record" 1
-          answers 9.3 9.3.0-alpha3 "$record" 1
-          answers 9.0 9.0.1 "$record" 1
-          answers 9.2 9.2.7 "${RUNNER_TEMP}/gone.properties" 1
+          answers 4711.2 4711.2.8 "$record" 1
+          answers 4711.3 4711.3.0-alpha3 "$record" 1
+          answers 4711.0 4711.0.1 "$record" 1
+          answers 4711.2 4711.2.7 "${RUNNER_TEMP}/gone.properties" 1
           echo "Cannot be read, and has to say so:"
-          answers 9.2 9.2.7 "$twice" 2
+          answers 4711.2 4711.2.7 "$twice" 2
       - name: The read record of this repository names every line
         # the fixture says the reading works, this says the file of this repository is
         # still written the way the reading expects
