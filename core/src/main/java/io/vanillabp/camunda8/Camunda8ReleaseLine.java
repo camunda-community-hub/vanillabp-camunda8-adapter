@@ -6,11 +6,14 @@ import java.util.Properties;
 /**
  * The release line this build of the adapter belongs to.
  * <p>
- * The adapter is published once per line, e.g. <code>2.1.0-8.9</code>. Camunda promises a
- * client only against clusters of its own version and newer. So the client a build was
- * compiled against is the lowest cluster version that build accepts. A line therefore brings
- * every VanillaBP fix to users who cannot upgrade their cluster yet. The newest line brings
- * what only the newest cluster can do.
+ * The adapter is published once per line, e.g. <code>2.1.0-8.9</code>. Camunda support
+ * accepts a client against a cluster of the same minor version and of the next one. A
+ * cluster older than the client is not covered. So the line of a build should have the minor
+ * version of the cluster. A line therefore brings every VanillaBP fix to users who cannot
+ * upgrade their cluster yet. The newest line brings what only the newest cluster can do.
+ * <p>
+ * The start compares the cluster with the client and says what it thinks of the pair, but it
+ * never refuses a cluster. That is decision 90 in the repository's DECISIONS.md.
  * <p>
  * The line reaches the runtime for MESSAGES, not for behaviour. What the adapter does
  * follows what the cluster answers, never what the build believes. That is why nothing here
@@ -38,8 +41,8 @@ public final class Camunda8ReleaseLine {
   }
 
   /**
-   * The Camunda 8 minor this build belongs to. It is the lowest cluster version the build
-   * accepts.
+   * The Camunda 8 minor this build belongs to. A cluster of the same minor version is the
+   * one it fits.
    *
    * @return The line, e.g. <code>8.9</code>, or <code>unknown</code> where the descriptor was
    *         not readable

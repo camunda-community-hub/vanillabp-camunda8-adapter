@@ -241,6 +241,12 @@ profiles. A fix exists on every line with the same commit. Line-specific source 
 the rare real difference and stay empty otherwise, and the API identity check keeps the public
 surface identical across lines. See [Release lines](./README.md#release-lines).
 
+**Note (2026-10-28, decision 90):** "minimum cluster version" is the version a line is MEANT for,
+not one the adapter enforces. The adapter has never refused a cluster. Since decision 90 the start
+compares cluster and client and says what it thinks of the pair, but it still refuses nothing.
+Decisions 15 and 60 say "the lowest cluster version it accepts" in the same sense. The reason for
+one line per minor version is unchanged.
+
 ### 12. A task id is decimal, and version 1's hexadecimal ids are a data migration
 
 VanillaBP 1 could hand out a task key in hexadecimal (`task-id-as-hex-string`, off by default). An
@@ -3773,3 +3779,58 @@ with a short lock of its own.
 
 **When Camunda fixes it**, run the IT with the lease against the fixed version. If no job is stuck,
 remove the advice from the boot message, the README and the wiki, and mark this entry superseded.
+
+### 90. The start compares the cluster with the client, and never refuses the cluster
+
+Built by story 2011 on 2026-10-28.
+
+Before, the start only wrote which client a build was compiled against and called it "the lowest
+cluster version it accepts". It compared that with nothing. So a cluster older than the client
+was noticed in production, for example as HTTP 400 on `tenantFilter` against 8.8.34. And the
+word "accepts" sounded as if the adapter refused other clusters. It never did.
+
+What Camunda supports comes from Camunda support, asked by the maintainer in October 2026. There
+is no public documentation of it. First the answer was that only a client and a cluster of the
+same minor version are supported. Asked how an upgrade is meant to work then, support added that
+a client one minor version OLDER than the cluster is supported as well, for example client 8.9
+against cluster 8.10. Nothing was said about a client newer than its cluster. There is no ticket
+number to cite.
+
+Now the start reads the version of the cluster and compares it with the client. Only the minor
+version counts. A patch level changes nothing about support, so client 8.10.5 against cluster
+8.10.0 is the same minor version.
+
+|      Cluster against client      | Level |                      Why                      |
+|----------------------------------|-------|-----------------------------------------------|
+| same minor version               | INFO  | the pair Camunda supports without a condition |
+| one minor version newer          | WARN  | supported, but meant to end with the upgrade  |
+| one minor version older          | WARN  | support has not confirmed this direction      |
+| more than one minor version away | ERROR | some calls may fail                           |
+| a version that cannot be read    | INFO  | says it could not compare, and nothing more   |
+
+The pair one minor version apart is a WARN in both directions, even where support allows it. A
+WARN appears at every start, so the operator is reminded until the upgrade is done. The line for
+an older cluster also says that support has not confirmed that direction.
+
+**The start never ends because of the versions.** Otherwise production may stand still only
+because somebody forgot to update a client. An ERROR in the log costs nothing. A start which
+fails in production costs a lot. So the check only reports, and the operator decides.
+
+Every line names the cluster version, the client version and the release line of the build. It
+also names the way out: the adapter release line which has the minor version of the cluster, and
+for an older cluster the upgrade of the cluster as the other way.
+
+The version comes from the topology request with which the start waits for its cluster (decision
+17). That request is made anyway, so the check costs no extra request. Two starts do not make
+it:
+
+- With `startup-wait: PT0S` the start asks nothing before it goes on. It writes an INFO which says
+  so, and which minor version the cluster should have.
+- An adapter id with nothing to deploy does not wait, so it does not compare either.
+
+A cluster which does not answer during the wait ends the start as before. The comparison comes
+in the same moment as the line "the cluster answered after ...". Nothing is compared later. The
+health check still shows the version as `gatewayVersion` for anybody who asks.
+
+`businesscockpit-camunda8-adapter` gets no check of its own. It uses the client of this adapter,
+and its application runs this check when it starts.

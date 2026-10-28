@@ -653,12 +653,11 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
 
     VanillaBpParts.requireAdapterFitsPlatform(ADAPTER_TYPE, Camunda8DeploymentService.class);
 
-    // which release line this application runs, once per adapter id. The client named
-    // here is the LOWEST cluster version these artifacts accept. A reader who compares it
-    // with their cluster sees at a glance whether they are on the right line
+    // which release line this application runs, once per adapter id. The cluster is
+    // compared with the client once it answered the wait of the start (see decision 90 in
+    // the repository's DECISIONS.md)
     log.info(
-        "Camunda8[{}]: release line {} of the adapter, built against Camunda client {}, "
-            + "which is the lowest cluster version it accepts",
+        "Camunda8[{}]: release line {} of the adapter, built against Camunda client {}",
         adapterId,
         Camunda8ReleaseLine.id(),
         Camunda8ReleaseLine.clientVersion());

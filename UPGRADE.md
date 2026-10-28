@@ -44,7 +44,11 @@ Without the preset, plain Maven versioning would sooner or later offer you an up
 line, because Maven sorts `2.2.0-8.8` above `2.1.0-8.9`.
 
 At startup each configured `camunda8` adapter id logs its release line and the client it was built
-against. That client is the lowest cluster version it accepts.
+against. Once the cluster answers, the start compares the cluster's minor version with the
+client's. The same minor version is an INFO. One minor version apart is a WARN, and more than one
+is an ERROR. Version 1 compared nothing. The start never stops because of this, so an application
+which ran on a cluster of another minor version still starts. Each line names the release line
+which matches your cluster. Move to it, and the WARN or ERROR is gone.
 
 All three lines get bugfixes. New features land on 8.10. 8.8 and 8.9 get fixes for as long as
 they are carried. The project does not end a line on the day the next minor goes GA (general
@@ -806,8 +810,8 @@ your workflow aggregates live in. What the cluster side costs is on the wiki pag
 [Sizing](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Sizing).
 
 There is no factor for how much slower or faster this is, and there cannot be one yet. A run which
-compares version 1 with version 2 needs one cluster version which both accept. The lowest cluster
-each side accepts is the client it was built against. The last release of version 1, 1.10.0, was
+compares version 1 with version 2 needs one cluster version which both fit. Each side fits the
+cluster of the client it was built against. The last release of version 1, 1.10.0, was
 built against the Camunda client 8.8.33. So only the 8.8 line of version 2 shares a cluster
 generation with it. For the 8.9 and 8.10 lines there is no such cluster. A run which gave each side
 a cluster of its own would measure Camunda, not VanillaBP.

@@ -86,9 +86,23 @@ one at a time. Read the pins there.
 
 The tested cluster has the version of the pinned client. The cluster image is built from the
 same property, so the two cannot drift apart. No other cluster version is supported here. A
-newer cluster is not tested, which is not the same as not supported. Camunda documents its
-clients as forward compatible, so a line normally serves clusters above its pin as well. But
-that is Camunda's promise and not this project's test result.
+newer patch level of the same minor version is not tested, which is not the same as not
+supported. A line normally serves the patch levels above its pin as well. But that is Camunda's
+promise and not this project's test result.
+
+The start compares the cluster with the client it was built against. Only the minor version
+counts, and the start never stops because of it:
+
+|      Cluster against client      | Log line |
+|----------------------------------|----------|
+| same minor version               | INFO     |
+| one minor version newer or older | WARN     |
+| more than one minor version away | ERROR    |
+
+Each line names the cluster, the client, the release line and the line to move to. The version
+comes from the topology request with which the start waits for its cluster, so the check sends no
+request of its own. With `startup-wait: PT0S`, or with nothing to deploy, the start asks nothing
+and compares nothing. The reasons are decision 90.
 
 A client downgrade inside a line is not supported. Camunda adds enum literals and interface
 methods in patch releases and does not count that as breaking. So a build compiled against
