@@ -353,7 +353,10 @@ public class Camunda8JobHandler implements JobHandler {
       // the core rolled the local transaction back. Fail the job, so Camunda 8
       // applies its retry semantics (retries reach 0 -> incident).
       final var retriesLeft = retriesLeftAfterThisFailure(job, bpmnProcessId, taskDefinition);
-      final var retryBackoff = retryBackoffOf(job, bpmnProcessId, taskDefinition);
+      // no backoff where no attempt is left. There is nothing to delay.
+      final var retryBackoff = retriesLeft > 0
+          ? retryBackoffOf(job, bpmnProcessId, taskDefinition)
+          : null;
       if (retriesLeft > 0) {
         log.warn(
             "Camunda8[{}]: processing job '{}' (type '{}') of BPMN process '{}' failed - failing the job "
@@ -384,24 +387,29 @@ public class Camunda8JobHandler implements JobHandler {
           taskDefinition,
           job.getDeadline(),
           drain::isShuttingDown,
-          () -> Camunda8JobLease
-              .withToken(
-                  client
-                      .newFailCommand(job.getKey())
-                      .retries(retriesLeft)
-                      // without it, the cluster hands the job out again at once. A
-                      // handler failing on something which needs a moment would use up
-                      // its retries before the cause has a chance to pass.
-                      .retryBackoff(retryBackoff)
-                      // the type belongs into the incident as much as the message does.
-                      // On its own, a NullPointerException just says 'null'.
-                      .errorMessage(Camunda8Errors
-                          .incidentMessage(e, Camunda8ReportErrorsAsStackTraceResolver
-                              .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId,
-                                  taskDefinition))),
-                  Camunda8JobLease.tokenOf(job))
-              .send()
-              .join());
+          () -> {
+            var command = client
+                .newFailCommand(job.getKey())
+                .retries(retriesLeft);
+            if (retryBackoff != null) {
+              // without it, the cluster hands the job out again at once. A handler failing
+              // on something which needs a moment would use up its retries before the
+              // cause has a chance to pass.
+              command = command.retryBackoff(retryBackoff);
+            }
+            Camunda8JobLease
+                .withToken(
+                    command
+                        // the type belongs into the incident as much as the message does.
+                        // On its own, a NullPointerException just says 'null'.
+                        .errorMessage(Camunda8Errors
+                            .incidentMessage(e, Camunda8ReportErrorsAsStackTraceResolver
+                                .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId,
+                                    taskDefinition))),
+                    Camunda8JobLease.tokenOf(job))
+                .send()
+                .join();
+          });
       return;
     }
 

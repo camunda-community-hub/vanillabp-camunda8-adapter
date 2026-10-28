@@ -2,6 +2,8 @@ package io.vanillabp.camunda8.wiring;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import io.camunda.client.api.response.ActivatedJob;
 import io.camunda.client.api.search.enums.JobKind;
@@ -119,6 +121,19 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
   private final Camunda8OpenTaskProbe openTaskProbe;
 
   /**
+   * Answers whether the model of a listener asks for retries, see decision 87 in the
+   * repository's DECISIONS.md. May be <code>null</code> (tests). Then a failed job keeps one
+   * retry less, as Camunda does on its own.
+   */
+  private final Camunda8ModelledRetries.ListenerModels modelledRetries;
+
+  /**
+   * The listeners whose model was already reported as unreadable, or as writing no
+   * <code>retries</code>. Each is reported once, not once per failed job.
+   */
+  private final Set<String> retriesReported = ConcurrentHashMap.newKeySet();
+
+  /**
    * What kind of worker this is, in the messages about a shutdown.
    */
   static final String KIND = "modelled listener";
@@ -141,6 +156,8 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
    *          <code>null</code> for the default
    * @param openTaskProbe What asks the cluster about the other open tasks of the workflow, or
    *          <code>null</code> to ask nothing
+   * @param modelledRetries Whether the model of a listener asks for retries, or
+   *          <code>null</code> to keep one retry less, as Camunda does on its own
    */
   @Builder
   public Camunda8ModelledListenerHandler(
@@ -153,9 +170,11 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
       final Camunda8FetchVariables.Selection fetchVariables,
       final Camunda8RetryBackoffResolver retryBackoffResolver,
       final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver,
-      final Camunda8OpenTaskProbe openTaskProbe) {
+      final Camunda8OpenTaskProbe openTaskProbe,
+      final Camunda8ModelledRetries.ListenerModels modelledRetries) {
 
     this.openTaskProbe = openTaskProbe;
+    this.modelledRetries = modelledRetries;
     this.fetchVariables = fetchVariables == null
         ? Camunda8FetchVariables.Selection.everything()
         : fetchVariables;
@@ -259,11 +278,16 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
   /**
    * How a failed listener job is reported to the cluster.
    * <p>
-   * The delivery which just failed used one attempt. So what is left is one less than what
-   * arrived. A job with nothing left is failed with nothing left and no backoff. The
-   * incident is raised right away, and there is no next attempt to delay. A negative number
-   * would give a command the cluster refuses. A listener modelled with {@code retries="0"} is
-   * in that state on its first delivery.
+   * The same rule applies as for the job of a task (decision 83 in the repository's
+   * DECISIONS.md, extended to listeners by decision 87). Where the listener in the model of
+   * the job's process version writes <code>retries</code>, the job keeps one retry less and
+   * gets a backoff. Where it does not, the job keeps none, and the cluster raises the
+   * incident at once. A listener may write, and running it again is safe only where somebody
+   * said so.
+   * <p>
+   * A job with nothing left is failed with nothing left and no backoff. There is no next
+   * attempt to delay. A negative number would give a command the cluster refuses. A listener
+   * modelled with {@code retries="0"} is in that state on its first delivery.
    *
    * @param job The listener job
    * @param bpmnProcessId The plain BPMN process id
@@ -277,7 +301,7 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
 
     final var withStackTrace = Camunda8ReportErrorsAsStackTraceResolver
         .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId, taskDefinition);
-    final var retriesLeft = job.getRetries() - 1;
+    final var retriesLeft = retriesLeftAfterThisFailure(job, bpmnProcessId, taskDefinition);
     if (retriesLeft <= 0) {
       return Camunda8ListenerJobs.Failure.NO_RETRIES_LEFT.withStackTrace(withStackTrace);
     }
@@ -285,6 +309,111 @@ public class Camunda8ModelledListenerHandler implements JobHandler {
         retriesLeft, Camunda8RetryBackoffResolver
             .resolve(retryBackoffResolver, workflowModuleId, bpmnProcessId, taskDefinition)
             .duration(), withStackTrace);
+
+  }
+
+  /**
+   * How many retries a failed listener job keeps: one less than it arrived with where the
+   * listener writes <code>retries</code> in the model, and none where it does not.
+   * <p>
+   * A model which cannot be read leaves the decision to Camunda, which counts down by one,
+   * exactly as for a task. One more attempt does no harm then, and the next failure asks the
+   * model again. An incident would wait for an operator because of a model nobody could read
+   * for a moment.
+   *
+   * @param job The listener job
+   * @param bpmnProcessId The plain BPMN process id
+   * @param taskDefinition The task definition, which is the job type of the listener
+   * @return The retries the fail command leaves, never negative
+   */
+  private int retriesLeftAfterThisFailure(
+      final ActivatedJob job,
+      final String bpmnProcessId,
+      final String taskDefinition) {
+
+    final var countedDown = Math.max(0, job.getRetries() - 1);
+    if (modelledRetries == null) {
+      return countedDown;
+    }
+    final Boolean modelled;
+    try {
+      // the job type as the cluster reports it. The model as deployed carries the same one,
+      // prefix included where the workflow module avoids name clashes that way.
+      modelled = modelledRetries
+          .retriesModelledForListener(
+              workflowModuleId, bpmnProcessId, job.getProcessDefinitionVersion(), job.getElementId(), job
+                  .getType());
+    } catch (final RuntimeException e) {
+      reportModelNotRead(job, bpmnProcessId, taskDefinition, e);
+      return countedDown;
+    }
+    if (modelled == null) {
+      reportModelNotRead(job, bpmnProcessId, taskDefinition, null);
+      return countedDown;
+    }
+    if (modelled) {
+      return countedDown;
+    }
+    if (countedDown > 0) {
+      reportNoRetriesModelled(job, bpmnProcessId, taskDefinition);
+    }
+    return 0;
+
+  }
+
+  private void reportModelNotRead(
+      final ActivatedJob job,
+      final String bpmnProcessId,
+      final String taskDefinition,
+      final RuntimeException cause) {
+
+    if (!retriesReported.add(onceKeyOf("unread", job, bpmnProcessId))) {
+      return;
+    }
+    log
+        .warn(
+            "Camunda8[{}]: the model of version {} of BPMN process '{}' (workflow module '{}') could "
+                + "not be read, so it is unknown whether the listener '{}' of element '{}' writes "
+                + "'retries'. A failed job of it keeps one retry less, as Camunda does on its own, and "
+                + "the next failure asks the model again",
+            adapterId,
+            job.getProcessDefinitionVersion(),
+            bpmnProcessId,
+            workflowModuleId,
+            taskDefinition,
+            job.getElementId(),
+            cause);
+
+  }
+
+  private void reportNoRetriesModelled(
+      final ActivatedJob job,
+      final String bpmnProcessId,
+      final String taskDefinition) {
+
+    if (!retriesReported.add(onceKeyOf("none", job, bpmnProcessId))) {
+      return;
+    }
+    log
+        .info(
+            "Camunda8[{}]: the listener '{}' of element '{}' (BPMN process '{}', version {}) writes no "
+                + "'retries' in the model, so a failed job of it raises the incident at once. Write "
+                + "'retries' on the listener where running it again is safe",
+            adapterId,
+            taskDefinition,
+            job.getElementId(),
+            bpmnProcessId,
+            job.getProcessDefinitionVersion());
+
+  }
+
+  private static String onceKeyOf(
+      final String what,
+      final ActivatedJob job,
+      final String bpmnProcessId) {
+
+    return "%s/%s/%s/%s/%s"
+        .formatted(what, bpmnProcessId, job.getProcessDefinitionVersion(), job.getElementId(), job.getType());
 
   }
 

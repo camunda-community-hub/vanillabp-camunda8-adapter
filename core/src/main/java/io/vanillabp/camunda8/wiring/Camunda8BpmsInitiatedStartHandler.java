@@ -206,18 +206,24 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
           startEventId,
           job.getDeadline(),
           drain::isShuttingDown,
-          () -> Camunda8JobLease
-              .withToken(
-                  client
-                      .newFailCommand(job.getKey())
-                      .retries(job.getRetries() - 1)
-                      .retryBackoff(retryBackoff)
-                      .errorMessage(Camunda8Errors
-                          .incidentMessage(e, Camunda8ReportErrorsAsStackTraceResolver
-                              .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId, null))),
-                  Camunda8JobLease.tokenOf(job))
-              .send()
-              .join());
+          () -> {
+            var command = client
+                .newFailCommand(job.getKey())
+                .retries(job.getRetries() - 1);
+            // no backoff where no attempt is left. There is nothing to delay.
+            if (job.getRetries() > 1) {
+              command = command.retryBackoff(retryBackoff);
+            }
+            Camunda8JobLease
+                .withToken(
+                    command
+                        .errorMessage(Camunda8Errors
+                            .incidentMessage(e, Camunda8ReportErrorsAsStackTraceResolver
+                                .resolve(reportErrorsAsStackTraceResolver, workflowModuleId, bpmnProcessId, null))),
+                    Camunda8JobLease.tokenOf(job))
+                .send()
+                .join();
+          });
     } finally {
       drain.jobFinished(job.getKey());
     }
