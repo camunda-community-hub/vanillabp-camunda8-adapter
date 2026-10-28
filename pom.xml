@@ -113,7 +113,7 @@
     <lombok.version>1.18.48</lombok.version>
     <spi-for-java.version>2.0.0-SNAPSHOT</spi-for-java.version>
     <adapter-platform.version>2.0.0-SNAPSHOT</adapter-platform.version>
-    <springboot.version>4.1.1</springboot.version>
+    <springboot.version>4.1.2</springboot.version>
     <quarkus.version>3.40.1.1</quarkus.version>
     <!-- The Netty version the Quarkus platform manages, which is the one a Quarkus
          application runs the adapter on. It is named here because this repository imports
