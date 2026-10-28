@@ -222,10 +222,13 @@ says how.
 - `line-pins-verified`, which reads the GA lines out of the matrix;
 - `renovate-configuration`, which runs the Renovate validator over the configuration of this
   repository and over the shared preset;
-- `client-api-changes`, which says on the pull request what a client version bump added;
-- `client-api-changes-selftest`, which tests that check against three published client bumps.
+- `client-api-changes`, which says on the pull request what a client version bump added. On a GA
+  line it stays red until `camunda8-client-read.properties` says a person read the additions;
+- `client-api-changes-selftest`, which tests that check against three published client bumps
+  and against a read record.
 
-While one of them is red, GitHub does not offer the merge.
+While one of them is red, GitHub does not offer the merge. Nobody can bypass a check, an admin
+included. The README says how to turn a red `client-api-changes` green.
 
 ## License
 
