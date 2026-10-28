@@ -2363,6 +2363,10 @@ public class Camunda8AdapterConfiguration {
    * On a release line whose client has no lease, the key is accepted and ignored. One log
    * line says so. An application moves between lines with one configuration. Refusing a key
    * there would be the one thing that makes such a move hurt.
+   * <p>
+   * Until Camunda fixes its gateway, the message advises <code>do-not-use</code>. A lease makes
+   * a job which the gateway could not hand out wait one job timeout. Why the adapter advises and
+   * does not decide is decision 88 in the repository's DECISIONS.md.
    *
    * @param adapterId The adapter id
    * @param logger Sink for the line which says the key does nothing here. It is not a
@@ -2402,12 +2406,19 @@ public class Camunda8AdapterConfiguration {
             never removes a lease from a job, a worker of the same job type which does not lease never \
             sees a leased job again, and an application rolled back onto an older line therefore leaves \
             the jobs it leased standing.
+            Until Camunda fixes its gateway, a lease also costs time. Sometimes the cluster activates a \
+            job for a long poll which ended in the same moment. Without a lease the gateway gives that job \
+            back at once. With a lease it cannot, and the job waits one '%s' for nobody. So '%s' is the \
+            safer choice for now. Switching to '%s' later costs nothing, only the way back does.
             Write '%s: %s' to switch it on, or '%s: %s' to keep what every line before this one does."""
             .formatted(
                 adapterId,
                 propertyKey(adapterId, "job-lease"),
                 valueOf(JobLease.USE),
                 valueOf(JobLease.DO_NOT_USE),
+                propertyKey(adapterId, "job-timeout"),
+                valueOf(JobLease.DO_NOT_USE),
+                valueOf(JobLease.USE),
                 propertyKey(adapterId, "job-lease"),
                 valueOf(JobLease.USE),
                 propertyKey(adapterId, "job-lease"),
