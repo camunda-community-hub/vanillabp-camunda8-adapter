@@ -7,6 +7,12 @@ name: Client API changes
 # patch of a pin merges itself once the checks pass, so without this the change nobody
 # documents is also the change nobody reads.
 #
+# On a GA line such a find makes the check red, and the check is required, so the pull
+# request cannot merge. It turns green when camunda8-client-read.properties names the new
+# version for that line. The person who read the additions raises that entry with one
+# commit on the pull request's branch, and 'synchronize' runs this again. See decision 86
+# in the repository's DECISIONS.md.
+#
 # It is written once and called from businesscockpit-camunda8-adapter, which compiles
 # against the same client.
 #
@@ -109,6 +115,17 @@ jobs:
             echo "a red check. It belongs next to ${script}." >&2
             exit 1
           fi
+          # Who read what is recorded in the repository of the pull request, so the file is
+          # read from this checkout and not from the one the scripts came from.
+          client_read="$(dirname "$script")/client-api-read.sh"
+          read_record=camunda8-client-read.properties
+          if [ ! -x "$client_read" ]; then
+            echo "${client_read} is missing, so nobody could tell whether a find was read." >&2
+            echo "It belongs next to ${script}." >&2
+            exit 1
+          fi
+          unread="${RUNNER_TEMP}/unread"
+          : > "$unread"
 
           pins() {
             sed -n 's|.*<\(camunda8\.version\.line-[^>]*\)>\([^<]*\)</.*|\1 \2|p' "$1"
@@ -147,7 +164,32 @@ jobs:
                 echo "_Line ${line} is the preview line, so this is a note and not a red check._" >> "$report"
                 echo >> "$report"
               else
-                blocking=1
+                read_status=0
+                "$client_read" "$line" "$new_version" "$read_record" || read_status=$?
+                [ $read_status -le 1 ] || exit $read_status
+                if [ $read_status -eq 0 ]; then
+                  {
+                    echo "_\`${read_record}\` names ${new_version} or newer for line ${line}, so a person"
+                    echo "has read this, and the check is green. \`git log ${read_record}\` says who._"
+                    echo
+                  } >> "$report"
+                else
+                  blocking=1
+                  echo "line-${line}=${new_version}" >> "$unread"
+                  {
+                    echo "**This check stays red until a person has read this.** Read every member"
+                    echo "above and check the code which uses it. Then push one commit to this"
+                    echo "pull request's branch which sets this entry in \`${read_record}\`:"
+                    echo
+                    echo '```properties'
+                    echo "line-${line}=${new_version}"
+                    echo '```'
+                    echo
+                    echo "The check runs again on that commit and turns green. Renovate does not"
+                    echo "merge a branch somebody else pushed to, so merge it yourself."
+                    echo
+                  } >> "$report"
+                fi
               fi
             fi
           done < "${RUNNER_TEMP}/head-pins"
@@ -157,6 +199,7 @@ jobs:
           fi
           {
             echo "blocking=${blocking}"
+            echo "unread=${unread}"
             echo "report=${report}"
             [ -s "$report" ] && echo "says=yes" || echo "says=no"
           } >> "$GITHUB_OUTPUT"
@@ -185,9 +228,25 @@ jobs:
               | gh api --method POST "repos/${{ github.repository }}/issues/${PULL_REQUEST}/comments" --input -
           fi
       - name: A GA line may not merge this unread
+        env:
+          UNREAD: "${{ steps.report.outputs.unread }}"
+        # There is no merge by hand: the check is required and nobody may bypass it. So
+        # the message says what turns it green.
         run: |
           [ "${{ steps.report.outputs.blocking }}" = "1" ] || exit 0
-          echo "This bump adds enum literals or interface methods on a GA line. Read the" >&2
-          echo "comment on the pull request, check every place which compares against one" >&2
-          echo "literal or implements one of those interfaces, and merge by hand." >&2
+          {
+            echo "This bump adds enum literals or interface methods on a GA line, and nobody"
+            echo "has said yet that they read them. To merge it:"
+            echo
+            echo "1. Read the comment 'What this client bump added' on the pull request."
+            echo "2. Check every place which compares against one of those literals or"
+            echo "   implements one of those interfaces."
+            echo "3. Push one commit to this pull request's branch which sets these entries"
+            echo "   in camunda8-client-read.properties:"
+            echo
+            sed 's/^/     /' "$UNREAD"
+            echo
+            echo "This check runs again on that commit and turns green. Renovate does not"
+            echo "merge a branch somebody else pushed to, so merge the pull request yourself."
+          } >&2
           exit 1
