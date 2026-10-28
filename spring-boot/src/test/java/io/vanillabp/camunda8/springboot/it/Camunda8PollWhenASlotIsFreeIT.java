@@ -63,6 +63,12 @@ public class Camunda8PollWhenASlotIsFreeIT extends SpringBootTestOnTheSharedClus
     // workflow module configures elsewhere. So a machine which stops this JVM for seconds
     // cannot stretch the block into an expired lock
     registry.add("vanillabp.workflow-modules.test-app.adapters.c8.job-timeout", () -> "PT2M");
+    // no lease in this class. The gateway of 8.10 can lose a leased job on its way to a
+    // worker, and such a job stays locked until its lock runs out (decision 88). Here that is
+    // two minutes, far longer than this test waits, and the short long poll above makes the
+    // race more likely. What this test measures is back pressure, and the lease plays no part
+    // in it. The other classes of this module keep the lease
+    registry.add("vanillabp.adapters.c8.job-lease", () -> "do-not-use");
 
   }
 
