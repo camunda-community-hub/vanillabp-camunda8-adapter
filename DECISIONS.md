@@ -3780,6 +3780,13 @@ with a short lock of its own.
 **When Camunda fixes it**, run the IT with the lease against the fixed version. If no job is stuck,
 remove the advice from the boot message, the README and the wiki, and mark this entry superseded.
 
+*Note 2026-10-28: Camunda has the defect as SUPPORT-35241. That ticket tells when "until Camunda
+fixes the gateway" is over. Since story 2017, two tests run without a lease:
+`Camunda8PollWhenASlotIsFreeIT` and `Camunda8KeepsAskingWhileAHandlerRunsIT`. Each has a long poll
+of two seconds and a lock of two minutes, and waits less than one lock, so one of them met the stall
+in a pull request run. Both measure polling. Every other test keeps `use`, and so does
+`Camunda8JobLeaseIT`.*
+
 ### 90. The start compares the cluster with the client, and never refuses the cluster
 
 Built by story 2011 on 2026-10-28.
