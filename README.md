@@ -1914,6 +1914,10 @@ A lease has one more cost, and it comes from the cluster. Where the cluster acti
 for a request which has already ended, it cannot give the job back, and the job waits for the
 lock of that lost activation. See
 [a job activated for a worker which never saw it](#a-job-activated-for-a-worker-which-never-saw-it).
+Until Camunda fixes this, the boot message and the wiki advise `do-not-use`. Switching to `use`
+later costs nothing, because a job which was never leased can be leased at any time. Why the adapter
+advises and does not decide, and why the tests of this repository keep `use`, is decision 88 in the
+repository's DECISIONS.md.
 
 ### A job type has to be a name, not an expression
 
@@ -3682,6 +3686,20 @@ moment a long poll of its own ended just as the lock of the job ran out. That te
 of five minutes back then, and it failed after waiting two. Nothing is lost here either, but a
 leased job waits for one lock instead of a few milliseconds. This is a defect of the cluster, and
 the lease is where it shows.
+
+`Camunda8LongPollRaceIT` hits the moment on purpose. It runs only when asked for, with
+`-Dcamunda8.measure.long-poll-race=true`. Measured against `camunda/camunda:8.10.5` on 2026-10-28.
+The race is inside the gateway. Its own timer ends the long poll while an activation for that poll
+is still on its way to the broker. A job which became free 6 to 40 ms before the empty answer was
+stuck in 16 of 345 tries. Without a lease it was stuck in none of 183, and the gateway gave all 9
+jobs it could not send straight back. A client which waits five seconds longer than the long poll
+instead of one changes nothing (7 stuck in 183), because the client never ends the request first.
+A worker which fails each job once with a retry backoff of ten seconds, under a long poll of ten
+seconds, met it in 19 of 300 retries. The retry came after 40 or 71 seconds, one or two locks of 30
+seconds, instead of after ten. Without a lease it met it in none of 300. A long poll of 13 seconds
+only moves the window: then handlers which paused 2.6 to 2.9 seconds before they failed met it, 3
+of 300. Against `camunda/camunda:8.9.26` the gateway lost 19 sends in 183 tries and gave every one
+of them back, because there is no lease on that line.
 
 **The gateway does not notice.** Over REST the response is written when the request ends, so a
 connection which died while the request was parked is found too late for the reactivation above.

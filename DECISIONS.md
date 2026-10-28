@@ -3658,3 +3658,50 @@ The Quarkus Tools plugin for IntelliJ IDEA (by Red Hat, checked in version 2.6.1
 file. It finds the keys in the `@ConfigMapping` interfaces themselves and writes every map key as
 `{*}`. So the names help the generated documentation and everybody who reads the file. They do not
 change what this plugin offers while you type.
+
+### 88. Until Camunda fixes its gateway, the adapter advises against a lease, and its own tests keep one
+
+Built by story 2002 on 2026-10-28.
+
+The gateway of Camunda 8.10 parks an activation request which found no job. Its own timer answers
+the request empty when the long poll runs out. If that timer fires while an activation for the
+request is still on its way to the broker, the gateway cannot send the job. It then gives the job
+back with a FAIL command, built in `RoundRobinActivateJobsHandler.toFailJobRequest`. That command
+carries no lease token. So the broker refuses it for a leased job, and the job stays locked for
+nobody until the lock of the lost activation runs out. The signature is `Failed to send 1 activated
+jobs` followed by `Failed to reactivate job ... a matching lease token must be provided`.
+
+**What was measured.** `Camunda8LongPollRaceIT` against `camunda/camunda:8.10.5`, on 2026-10-28.
+It runs only when asked for (`-Dcamunda8.measure.long-poll-race=true`). The numbers are in the
+README section [A job activated for a worker which never saw it](./README.md#a-job-activated-for-a-worker-which-never-saw-it).
+Four of them decide this entry:
+
+- A job which becomes free just before the long poll ends: 16 of 345 tries stuck with a lease, 0 of
+  183 without one.
+- A client which waits five seconds longer than the long poll instead of one: still 7 of 183 stuck.
+  The client never ends the request first, so its HTTP timeout plays no part.
+- A worker whose retry backoff equals its long poll, ten seconds each: 19 of 300 retries late by one
+  or two locks with a lease, 0 of 300 without one.
+- A long poll of 13 seconds against the same backoff: 3 of 300 late, from handlers which paused
+  about three seconds. Two clocks of different length still meet, only at another handler duration.
+
+So only the missing lease brings the rate to zero. A longer HTTP timeout and a long poll which
+differs from the retry backoff do not. On 8.8 and 8.9 there is no lease, and the gateway's FAIL is
+accepted. There the same race costs a few milliseconds (19 lost sends in 183 tries against
+`camunda/camunda:8.9.26`, every job given back at once).
+
+**The adapter advises, it does not decide.** Decision 36 stands: the application chooses, and
+there is no default. The boot message, the README and the wiki now say that `do-not-use` is the
+safer choice until Camunda fixes the gateway, and that switching to `use` later costs nothing. The
+adapter does not switch the lease off on its own. That would overrule an application which chose
+it. And the ratchet still holds on 8.10.5, measured in the same IT: after its lock ran out, a leased
+job went to the next activation with a lease and not to one without. So an adapter which dropped
+the lease by itself would strand the jobs which an application leased before.
+
+**The tests of this repository keep `use`.** Many of them activate jobs with a lease themselves,
+and they guard the code an application runs when it chooses the lease. A test whose wait is
+shorter than one `job-timeout` can still meet the stall. `Camunda8JobLeaseIT` protects itself
+with a short lock of its own.
+
+**When Camunda fixes it**, run the IT with the lease against the fixed version. If no job is stuck,
+remove the advice from the boot message, the README and the wiki, and mark this entry superseded.
