@@ -316,7 +316,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
       - name: Install Renovate
         # The version is named rather than left open, because this step installs whatever
         # the registry calls newest and that is not always installable: 44.131.1 and
