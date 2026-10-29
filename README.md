@@ -2725,6 +2725,18 @@ does not say which of them deployed the process), and where the engine answers `
 instance is gone. Why a stopped exporter may slow a push down but not lose it is decision 64 in
 the repository's `DECISIONS.md`.
 
+Where the request carries no key and the search finds the workflow, the adapter tells the core
+which instance it found (`PhaseTwoRequest#reportFoundWorkflow`). The core then writes the start
+row that was missing. So the next operation gets the key and does not search again. That is how a
+workflow which version 1 started gets its row: it is searched for once, at its first global push.
+The search filters by the aggregate's ID, and a called process carries that ID as well. So the
+adapter reports only an instance without a parent, the one the aggregate IS. Where the search finds
+only a called instance, the push still writes into it, but nothing is reported. Nothing is reported
+either where the core handed in a key and the adapter searched anyway, because then a row is there
+already. `Camunda8ReportsTheWorkflowItFoundTest` holds these rules, and
+`Camunda8AggregateChangedIT#aWorkflowWithoutAStartRowIsSearchedForOnce` shows against a cluster that
+the second push no longer searches.
+
 The global push also writes into the called instances below the workflow. A called instance gets
 a copy of its caller's variables when the call activity starts it, and nothing the caller is
 told later reaches it
