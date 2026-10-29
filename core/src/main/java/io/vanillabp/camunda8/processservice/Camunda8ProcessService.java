@@ -18,6 +18,7 @@ import io.camunda.client.api.search.enums.ElementInstanceType;
 import io.camunda.client.api.search.enums.ProcessInstanceState;
 import io.camunda.client.api.search.enums.UserTaskState;
 import io.camunda.client.api.search.response.Job;
+import io.camunda.client.api.search.response.ProcessInstance;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
 import io.camunda.zeebe.model.bpmn.instance.AdHocSubProcess;
 import io.camunda.zeebe.model.bpmn.instance.FlowNode;
@@ -2199,11 +2200,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         pushIntoTheCalledInstances(request, keyOfTheStartRow, variables);
         return;
       }
-      final var processInstanceKey = processInstanceKeyOf(
+      final var found = activeInstanceOf(
           WorkflowScope.of(request.workflowModuleId(), request.bpmnProcessId()),
           request.aggregatePersistence(),
           request.workflowAggregateId());
-      if (processInstanceKey == null) {
+      if (found == null) {
         // what remains of at-least-once. The workflow ended between the election at
         // dispatch time and now, so there is nothing left to write to
         log.warn(
@@ -2213,6 +2214,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
             request.workflowAggregateId());
         return;
       }
+      final long processInstanceKey = found.getProcessInstanceKey();
       clientFactory
           .getClient()
           .newSetVariablesCommand(processInstanceKey)
@@ -2227,6 +2229,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           adapterId,
           request.workflowAggregateId(),
           processInstanceKey);
+      reportTheWorkflowTheSearchFound(request, found);
       pushIntoTheCalledInstances(request, processInstanceKey, variables);
       return;
     }
@@ -2554,14 +2557,21 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The key of the ACTIVE process instance carrying the aggregate's ID variable -
-   * VanillaBP finds a workflow by that variable, so the eventually-consistent query API answers
-   * (like {@link #awarenessOfWorkflow}).
+   * The ACTIVE process instance carrying the aggregate's ID variable. VanillaBP finds a
+   * workflow by that variable, so the eventually-consistent query API answers (like
+   * {@link #awarenessOfWorkflow}).
+   * <p>
+   * A called process gets a copy of that variable from its caller. So the search may also
+   * find an instance which a call activity started. The instance at the top is the one the
+   * aggregate IS, so it wins. A called instance is returned only where the search found none
+   * at the top. The push then writes into that one, as it always did.
    *
+   * @param scope The workflow module and BPMN process of the push
+   * @param aggregatePersistence The persistence of the aggregate, which names the variable
    * @param workflowAggregateId The aggregate's ID
-   * @return The process instance key or <code>null</code> if none is active
+   * @return The process instance or <code>null</code> if none is active
    */
-  private Long processInstanceKeyOf(
+  private ProcessInstance activeInstanceOf(
       final WorkflowScope scope,
       final AggregatePersistenceAware<A> aggregatePersistence,
       final Object workflowAggregateId) {
@@ -2581,13 +2591,73 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
         .join();
     // writing into the instance of ANOTHER adapter id of this cluster would put the
     // values of one half of a migration into the other half
-    return found
+    final var inScope = found
         .items()
         .stream()
         .filter(instance -> isInScope(scope, instance.getTenantId(), instance.getProcessDefinitionId()))
+        .toList();
+    return inScope
+        .stream()
+        .filter(Camunda8ProcessService::isAtTheTop)
         .findFirst()
-        .map(instance -> instance.getProcessInstanceKey())
-        .orElse(null);
+        .orElse(inScope.isEmpty()
+            ? null
+            : inScope.getFirst());
+
+  }
+
+  /**
+   * Whether no call activity started this instance.
+   *
+   * @param instance The instance as the query API reports it
+   * @return Whether it has no parent
+   */
+  private static boolean isAtTheTop(
+      final ProcessInstance instance) {
+
+    return instance.getParentProcessInstanceKey() == null;
+
+  }
+
+  /**
+   * Tells VanillaBP which workflow the search found, so the next operation about it gets the
+   * key and needs no search. VanillaBP writes the key down only where it knows none yet.
+   * <p>
+   * Nothing is reported where the core handed in a key. Then the search ran because the key
+   * could not be used (a cluster which other adapter ids share, or an instance the engine no
+   * longer holds), and a row is there already. Nothing is reported for a called instance
+   * either. The row names the workflow the aggregate IS, and a called instance is only a part
+   * of it. Its key would send the next push to the wrong instance.
+   *
+   * @param request The push
+   * @param found The instance the search found and the push wrote into
+   */
+  private void reportTheWorkflowTheSearchFound(
+      final PhaseTwoRequest<A> request,
+      final ProcessInstance found) {
+
+    if (request.workflowId() != null) {
+      return;
+    }
+    if (!isAtTheTop(found)) {
+      log
+          .debug(
+              "Camunda8[{}]: the search found only process instance '{}' of aggregate '{}', which "
+                  + "process instance '{}' called - not reporting it as the workflow of the aggregate",
+              adapterId,
+              found.getProcessInstanceKey(),
+              request.workflowAggregateId(),
+              found.getParentProcessInstanceKey());
+      return;
+    }
+    request.reportFoundWorkflow(String.valueOf(found.getProcessInstanceKey()));
+    log
+        .info(
+            "Camunda8[{}]: found process instance '{}' of aggregate '{}' by a search and reported it, "
+                + "so the next operation addresses it by its key",
+            adapterId,
+            found.getProcessInstanceKey(),
+            request.workflowAggregateId());
 
   }
 
