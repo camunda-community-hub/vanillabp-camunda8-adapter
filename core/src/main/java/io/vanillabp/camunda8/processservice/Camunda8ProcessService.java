@@ -2628,6 +2628,8 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * longer holds), and a row is there already. Nothing is reported for a called instance
    * either. The row names the workflow the aggregate IS, and a called instance is only a part
    * of it. Its key would send the next push to the wrong instance.
+   * <p>
+   * This is decision 91 in the repository's DECISIONS.md.
    *
    * @param request The push
    * @param found The instance the search found and the push wrote into

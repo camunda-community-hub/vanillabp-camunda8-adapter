@@ -191,7 +191,7 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
           .duration();
       // never below zero. A job arrives with none left where the model writes retries="0".
       // The cluster takes -1 on a failure today, but refuses it as an update of the retries,
-      // and the log line would tell the operator about -1 retries.
+      // and the log line would tell the operator about -1 retries. See decision 92.
       final var retriesLeft = Math.max(0, job.getRetries() - 1);
       log.warn(
           "Camunda8[{}]: building the workflow aggregate for the start event '{}' of BPMN process '{}' "

@@ -10,6 +10,7 @@ vanillabp:
       type: camunda8
       request-timeout: PT5S
       job-lease: use
+      job-timeout: PT30S
       name-clash-avoidance: use-prefix
   prioritized-adapters:
     - c8
