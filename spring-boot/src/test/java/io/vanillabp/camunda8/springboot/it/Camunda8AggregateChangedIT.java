@@ -11,7 +11,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,8 @@ import io.camunda.client.api.search.response.Variable;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.camunda8.test.ClusterUnderTest;
+import io.vanillabp.integration.spi.TaskDelivery;
+import io.vanillabp.integration.spi.TaskDeliveryLog;
 import io.vanillabp.integration.test.utils.CapturedOutput;
 import io.vanillabp.integration.test.utils.SuppressOutputExtension;
 
@@ -55,6 +59,9 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
 
   @Autowired
   private Camunda8ClientFactoryRegistry clientFactoryRegistry;
+
+  @Autowired
+  private TaskDeliveryLog deliveryLog;
 
   private CamundaClient client() {
 
@@ -375,6 +382,71 @@ public class Camunda8AggregateChangedIT extends SpringBootTestOnTheSharedCluster
         processInstanceKey,
         notes.getFirst().getScopeKey(),
         "the value has to live at the workflow's own scope");
+
+  }
+
+  @Test
+  @DisplayName("a workflow without a start row is searched for once, and then addressed by its key")
+  public void aWorkflowWithoutAStartRowIsSearchedForOnce(
+      final CapturedOutput output) throws Exception {
+
+    // a workflow which version 1 started: the cluster runs it, and VanillaBP holds no row
+    // about its start. So the test starts it at the cluster directly
+    final var aggregateId = transactionTemplate
+        .execute(status -> workflowService.saveAggregate().getId());
+    assertNotNull(aggregateId);
+    client()
+        .newCreateInstanceCommand()
+        .bpmnProcessId(THE_PUSH_PROCESS)
+        .latestVersion()
+        .variables(Map.of("id", String.valueOf(aggregateId), "note", "before"))
+        .send()
+        .join();
+    awaitUntil(() -> taskIdsOf(aggregateId) != null, "the workflow to park at its asynchronous task");
+    awaitUntil(
+        () -> processInstanceKeyOf(THE_PUSH_PROCESS, aggregateId) != null,
+        "the query API to know the instance");
+    final var processInstanceKey = processInstanceKeyOf(THE_PUSH_PROCESS, aggregateId);
+    assertTrue(
+        startRowOf(aggregateId).isEmpty(),
+        "the workflow must have no start row, otherwise this test proves nothing");
+    final var theReport = "found process instance '%s' of aggregate '%s' by a search and reported it"
+        .formatted(processInstanceKey, aggregateId);
+
+    transactionTemplate
+        .executeWithoutResult(status -> workflowService.pushGlobally(aggregateId, "first-push"));
+    awaitUntil(() -> startRowOf(aggregateId).isPresent(), "the core to write down the workflow the push found");
+    final var startRow = startRowOf(aggregateId).orElseThrow();
+    assertEquals("c8", startRow.adapterId(), "the row has to name the adapter which found the workflow");
+    assertEquals(
+        String.valueOf(processInstanceKey),
+        startRow.workflowId(),
+        "the row has to name the instance the aggregate IS");
+    assertTrue(output.getAllOfThisTest().contains(theReport), output.getAllOfThisTest());
+
+    transactionTemplate
+        .executeWithoutResult(status -> workflowService.pushGlobally(aggregateId, "second-push"));
+    awaitUntil(
+        () -> notesOf(processInstanceKey)
+            .stream()
+            .anyMatch(variable -> variable.getValue().contains("second-push")),
+        "the second push to arrive at the cluster");
+    assertEquals(
+        1,
+        output.getAllOfThisTest().split(Pattern.quote(theReport), -1).length - 1,
+        "the second push got the key from the row, so it did not search and reported nothing");
+
+  }
+
+  /**
+   * The row VanillaBP writes about the start of a workflow of the push process.
+   */
+  private Optional<TaskDelivery> startRowOf(
+      final Long aggregateId) {
+
+    return deliveryLog
+        .workflowStartOf("test-app", "AggregateChangedProcess", aggregateId.toString())
+        .filter(row -> row.workflowId() != null);
 
   }
 

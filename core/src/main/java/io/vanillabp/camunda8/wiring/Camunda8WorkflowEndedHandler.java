@@ -202,6 +202,10 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
       final var retryBackoff = Camunda8RetryBackoffResolver
           .resolve(retryBackoffResolver, workflowModuleId, bpmnProcessId, null)
           .duration();
+      // never below zero. A job arrives with none left where the model writes retries="0".
+      // The cluster takes -1 on a failure today, but refuses it as an update of the retries,
+      // and the log line would tell the operator about -1 retries. See decision 92.
+      final var retriesLeft = Math.max(0, job.getRetries() - 1);
       log.warn(
           "Camunda8[{}]: reporting the end of the instance '{}' of BPMN process '{}' (job '{}') failed - "
               + "failing the job with {} retries left, to be handed out again in {}",
@@ -209,7 +213,7 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
           job.getProcessInstanceKey(),
           bpmnProcessId,
           job.getKey(),
-          job.getRetries() - 1,
+          retriesLeft,
           retryBackoff,
           e);
       Camunda8CommandRetry.sendUnlessTheJobIsGone(
@@ -222,9 +226,9 @@ public class Camunda8WorkflowEndedHandler implements JobHandler {
           () -> {
             var command = client
                 .newFailCommand(job.getKey())
-                .retries(job.getRetries() - 1);
+                .retries(retriesLeft);
             // no backoff where no attempt is left. There is nothing to delay.
-            if (job.getRetries() > 1) {
+            if (retriesLeft > 0) {
               command = command.retryBackoff(retryBackoff);
             }
             Camunda8JobLease

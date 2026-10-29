@@ -3841,3 +3841,74 @@ health check still shows the version as `gatewayVersion` for anybody who asks.
 
 `businesscockpit-camunda8-adapter` gets no check of its own. It uses the client of this adapter,
 and its application runs this check when it starts.
+
+### 91. A push which had to search reports the workflow it found, and only the one at the top
+
+Built by story 997 on 2026-10-29.
+
+A workflow which version 1 started has no start row. So the core hands in no process instance key,
+and the global `aggregateChanged` searches by the aggregate's ID, on every push. Since this entry,
+the push reports the instance it found through `PhaseTwoRequest#reportFoundWorkflow`. The core
+writes the start row that was missing, in a transaction of its own and never over a row which is
+there. The next operation on this workflow gets the key as `PhaseTwoRequest#workflowId()` and
+asks the engine by key. A `correlateMessage` and the election read the same row. So such a
+workflow is searched for once, at its first global push, and not again.
+
+What is reported follows from three rules.
+
+- Only the instance at the top is reported. The search filters by the variable which holds the aggregate's
+  ID. A call activity copies that variable into the instance it starts. So the search can find a
+  called instance as well, and the order of the answer says nothing. The push prefers the instance
+  without a parent, because that is the one the aggregate IS. Where the search found only a called
+  instance, the push writes into it as before, but reports nothing. The key of a called instance in
+  the start row would send every later push to a part of the workflow, and the core never replaces
+  a row.
+- Only a push which got no key from the core reports. The push also searches where it got a key but could not
+  use it: on a cluster which other adapter ids share, and after the engine answered `404`. Then a
+  row exists already, and there is nothing to add.
+- The report comes only after the engine accepted the write. The search reads a copy which may be behind. An instance
+  which the engine accepted a `SetVariables` for is running. So the adapter never reports an instance it only guessed.
+
+What is not reported, and why:
+
+- A task-scoped push finds the scope of its task, not the workflow. The job or user task it reads
+  names a process instance, but it may be a called one, and nothing on the job says which. Such a
+  push mostly has a task row anyway, which names the instance.
+- `correlateMessage` publishes a message by its correlation key and searches for nothing in phase
+  two.
+- The viewer and the questions an extension asks run outside phase two, and the adapter SPI gives
+  them no way to report.
+
+### 92. A failed job never gets a retry count below zero
+
+Built by story 2015 on 2026-10-29.
+
+Every worker of this adapter fails a job with one retry less than it had, or with none. Two
+handlers counted down without a floor: the start listener (`Camunda8BpmsInitiatedStartHandler`)
+and the listener for the end of a workflow (`Camunda8WorkflowEndedHandler`). A job which arrived
+with no retries left was failed with `-1`. Now these two use `Math.max(0, retries - 1)`, like
+the handlers of tasks and of modelled listeners already did. Where the count is zero, the job
+gets no backoff, because there is no next attempt to delay.
+
+**A job can arrive with no retries.** A model which writes `retries="0"` on a task or on a
+listener hands out its job with zero retries on the first delivery. An operator cannot bring a
+job back with none. The cluster refuses to resolve the incident of a job without retries, and it
+refuses to set the retries of a job to zero or less.
+
+**What the cluster does with `-1`.** It accepts the fail command and raises the incident, the
+same as for `0`. So the old code did not leave a job locked. But `-1` is no count the cluster
+stands behind: it refuses the same number as an update of the retries. And the log line told
+the operator about `-1` retries left. The floor costs nothing and makes every fail path say the
+same thing.
+
+Measured with `Camunda8NegativeRetriesCanaryIT` on 2026-10-29, against `camunda/camunda:8.8.44`,
+`8.9.26` and `8.10.5`, with the same result on all three:
+
+- A fail command with retries `-1` is accepted. The cluster raises the incident
+  `JOB_NO_RETRIES`, and the job is not handed out again.
+- Updating the retries to `1` and resolving the incident hands the job out again with one retry.
+- Updating the retries to `0` or `-1` is refused with `400 INVALID_ARGUMENT`.
+- Resolving the incident of a job without retries is refused with `409 INVALID_STATE`.
+- A task and an execution listener modelled with `retries="0"` each hand out a job with zero
+  retries. The canary asserts this, because it is the reason for the floor.
+
