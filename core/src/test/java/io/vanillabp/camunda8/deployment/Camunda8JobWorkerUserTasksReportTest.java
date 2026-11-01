@@ -50,8 +50,8 @@ import io.vanillabp.integration.test.utils.SuppressOutputExtension;
  * {@code formKey} VanillaBP 1 read the task definition from up to its release 1.6.3, and an
  * upgrading application finds those by searching its models for that word. The other carries
  * no {@code formKey} at all, so no such search finds it, while the cluster does exactly the
- * same with it: it hands out a job nobody fetches, and the workflow stands at the element
- * until the job's retries are used up.
+ * same with it: it creates a job nobody fetches, and the workflow stands at the element with
+ * no incident, because a job nobody fetches never loses a retry.
  * <p>
  * The cluster is an address nothing listens on, so the count of open tasks is the one thing
  * these runs cannot have. That the message says so instead of a number is asserted as well.

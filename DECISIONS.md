@@ -672,6 +672,14 @@ does not collect this element. It produces no task spec, so no validation misses
 deployment says it itself, once per BPMN process. It names the element, what it costs and the two
 ways out.
 
+A correction, added by story 2043 on 2026-11-01. The paragraph above says that the job "which the cluster activated ends in an incident once its
+retries are used up". Both halves are wrong. The cluster only creates the job, nobody activates it,
+and no incident follows. The wiki section [a job nobody fetches](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-job-nobody-fetches) holds the
+measurement against `camunda/camunda:8.10.6`: such a job keeps all of its retries for fifteen
+minutes and longer, and the workflow stays `ACTIVE` without an incident. A job loses a retry only
+when a worker fails it. So the workflow stands still for good, and only Operate or the job search
+show it. The decision itself stands, and so do its reasons.
+
 It is a warning and not a refused deployment, for the same reason as for a BPMN process which
 nobody serves. The other processes of that workflow module are fine. A file travels to the cluster
 as a whole, so ending the boot would take an application down over one element of one model. A
@@ -2380,6 +2388,13 @@ stands at the element until the job's retries are used up. No notification arriv
 while the cluster expects a user-task key. Nobody sees any of that until somebody waits for a task
 which never appears.
 
+A correction, added by story 2043 on 2026-11-01. The paragraph above says that the workflow "stands at the element until the job's retries are
+used up". There is no such end. No incident follows. The wiki section [a job nobody fetches](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-job-nobody-fetches) holds the
+measurement against `camunda/camunda:8.10.6`: such a job keeps all of its retries for fifteen
+minutes and longer, and the workflow stays `ACTIVE` without an incident. A job loses a retry only
+when a worker fails it. So the workflow stands still for good, and only Operate or the job search
+show it. The decision itself stands, and so do its reasons.
+
 A `@WorkflowService` class which claims a BPMN process says that this application stands in for
 the process. So the deployment refuses such a process. The message names the process and the
 elements per shape, and it names the ways out. Either make the user task one which Camunda
@@ -2431,6 +2446,13 @@ the process. So no element of such a process may be left standing. Where the clu
 and nothing answers it, the workflow stops inside the element, and both sides stay quiet. There is
 no incident until the job's retries are used up, and there is nothing in any log at all. So the
 deployment refuses the process. A process which nobody claims keeps the WARN it always had.
+
+A correction, added by story 2043 on 2026-11-01. The paragraph above says "there is no incident until the job's retries are used up". The retries
+are never used up, so there is no incident at all. The wiki section [a job nobody fetches](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-job-nobody-fetches) holds the
+measurement against `camunda/camunda:8.10.6`: such a job keeps all of its retries for fifteen
+minutes and longer, and the workflow stays `ACTIVE` without an incident. A job loses a retry only
+when a worker fails it. So the workflow stands still for good, and only Operate or the job search
+show it. The decision itself stands, and so do its reasons.
 
 Before this entry there were warnings about two elements. Both are now refused for a claimed
 process.

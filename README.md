@@ -1798,9 +1798,10 @@ application.
 A user task WITHOUT `zeebe:userTask` is a user task which a job worker serves, and this adapter
 does not accept that shape. Only the shape of the element counts. Nothing asks whether some
 worker would fetch the job, because the model already says who serves the task. Refusing is the
-kind answer, and what the shape would cost shows why: the cluster hands out a job of
+kind answer, and what the shape would cost shows why: the cluster creates a job of
 `io.camunda.zeebe:userTask`, this version opens no worker on that job type, and the workflow
-stands at the element until the job's retries are used up. Nothing else catches it: `tasksOf`
+stands at the element with no incident. A job nobody fetches never loses a retry, see
+[a job nobody fetches](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-job-nobody-fetches) in the wiki. Nothing else catches it: `tasksOf`
 reads service-like tasks only, and `userTasksOf` skips anything without the marker.
 `Camunda8TaskWiring#jobWorkerUserTasksOf` looks for it on purpose and splits it into the two
 shapes the message has to keep apart. One shape carries the `formKey` from which version 1 read
@@ -2246,8 +2247,8 @@ ad-hoc subprocess carrying a `zeebe:taskDefinition` of its own expects a worker 
 by round which activities to activate, by completing the job with
 `newCompleteJobCommand(key).withResult(r -> r.forAdHocSubProcess().activateElement(...))`. Neither
 the `@WorkflowTask` contract nor the adapter SPI can express that outcome, so no worker is opened,
-the workflow stops at the element and the job ends in an incident once its retries are used up.
-Nothing later in the boot sees it, because the element produces no task spec and no validation
+the workflow stops at the element. The cluster creates the job and nothing fetches it, so it
+never loses a retry and no incident is raised. Nothing later in the boot sees it, because the element produces no task spec and no validation
 misses a method.
 
 What happens next is in `refuseUnservedAdHocSubProcesses`. Where a `@WorkflowService` class
@@ -3783,10 +3784,14 @@ CREATED notification of a user task did not arrive within three minutes, and the
 carries the gateway line of the first shape for exactly that listener job and nothing else. Both
 measured shapes recover within seconds, so something after the reactivation kept that job from
 being fetched again, and the logs of that run do not say what. The state of the job at the
-deadline would say it. A job the cluster still reports as CREATED was there to be fetched, and
-nobody fetched it. A job which is gone reached somebody. So the wait for a listener notification
-now asks the query API for the jobs of the workflow before it gives up, and says every quarter
-minute what it is still missing.
+deadline would say part of it. A job which is gone reached somebody. A job the cluster still
+reports as CREATED may be one nobody fetched, or one a worker holds right now: the job search does
+not show an activation. Measured against `camunda/camunda:8.10.7` on 2026-11-01 by
+`Camunda8JobSearchOfAnActivatedJobCanaryIT`: half a minute after a worker took a job, the search
+still listed it as CREATED, with an empty worker, no deadline and its creation time as the last
+update. So the wait for a listener notification asks the query API for the jobs of the workflow
+before it gives up, and says every quarter minute what it is still missing. A CREATED job in that
+answer says that the job still waits for its answer, not who holds it.
 
 An adapter which cannot poll was the first suspect, and it used to be a real one on the 8.8
 line, where the client gave a single executor both jobs. The adapter now hands the client an
