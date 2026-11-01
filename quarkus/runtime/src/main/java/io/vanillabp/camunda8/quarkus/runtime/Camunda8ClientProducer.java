@@ -162,7 +162,6 @@ public class Camunda8ClientProducer {
     keys.requestTimeout().ifPresent(configuration::setRequestTimeout);
     keys.streamEnabled().ifPresent(configuration::setStreamEnabled);
     keys.streamTimeout().ifPresent(configuration::setStreamTimeout);
-    keys.messageTimeToLive().ifPresent(configuration::setMessageTimeToLive);
     keys.maxMessageSize().ifPresent(configuration::setMaxMessageSize);
     keys.keepAlive().ifPresent(configuration::setKeepAlive);
     keys.maxHttpConnections().ifPresent(configuration::setMaxHttpConnections);

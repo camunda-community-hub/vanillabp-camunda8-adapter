@@ -41,6 +41,7 @@ import io.vanillabp.camunda8.springboot.SpringBootTestOnTheSharedCluster;
 import io.vanillabp.camunda8.springboot.client.VanillaBpCamunda8Properties;
 import io.vanillabp.camunda8.test.ClusterLog;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
+import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.adapter.spi.WorkflowScope;
 import io.vanillabp.integration.spi.PhaseOperation;
@@ -118,6 +119,13 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
 
   @Autowired
   private VanillaBpCamunda8Properties overlay;
+
+  /**
+   * The platform's view of the configuration. It resolves the message time-to-live for every
+   * adapter.
+   */
+  @Autowired
+  private MigrationAdapterProperties coreProperties;
 
   @Autowired
   private DataSource dataSource;
@@ -636,30 +644,28 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
   }
 
   @Test
-  @DisplayName("The message time-to-live resolves through all four levels, message first")
-  public void messageTimeToLiveResolvesThroughAllFourLevels() {
+  @DisplayName("The message time-to-live resolves through its three levels, message first")
+  public void messageTimeToLiveResolvesThroughItsThreeLevels() {
 
     // message level (most specific). A catch event whose message may repeat every minute,
     // for good reason. A per-message override is for exactly this
     assertEquals(
         Duration.ofMinutes(1),
-        overlay.messageTimeToLiveFor("test-app", "TaskProcess", "OfferRequested", "c8"));
+        coreProperties.messageTimeToLive("test-app", "TaskProcess", "OfferRequested"));
     // workflow level
     assertEquals(
         Duration.ofHours(4),
-        overlay.messageTimeToLiveFor("test-app", "TaskProcess", "SomeOtherMessage", "c8"));
-    // workflow-module level
+        coreProperties.messageTimeToLive("test-app", "TaskProcess", "SomeOtherMessage"));
+    // workflow-module level (least specific)
     assertEquals(
         Duration.ofHours(5),
-        overlay.messageTimeToLiveFor("test-app", "FailProcess", "SomeMessage", "c8"));
-    // adapter level (base)
-    assertEquals(
-        Duration.ofHours(6),
-        overlay.messageTimeToLiveFor("unknown-module", "SomeProcess", "SomeMessage", "c8"));
+        coreProperties.messageTimeToLive("test-app", "FailProcess", "SomeMessage"));
+    // nothing for the whole application: the client's own default applies
+    assertNull(coreProperties.messageTimeToLive("unknown-module", "SomeProcess", "SomeMessage"));
     // a task name is not a message name. The two most specific levels are different maps
     assertEquals(
         Duration.ofHours(4),
-        overlay.messageTimeToLiveFor("test-app", "TaskProcess", "happyTask", "c8"));
+        coreProperties.messageTimeToLive("test-app", "TaskProcess", "happyTask"));
 
   }
 
@@ -1616,7 +1622,7 @@ public class Camunda8TaskProcessingIT extends SpringBootTestOnTheSharedCluster {
     // A repetition inside the window is refused. The same one after it is a new message
     assertEquals(
         Duration.ofSeconds(2),
-        overlay.messageTimeToLiveFor("test-app", "MessageProcess", "C8PaymentReceived", "c8"),
+        coreProperties.messageTimeToLive("test-app", "MessageProcess", "C8PaymentReceived"),
         "the per-message override is what this test rests on");
 
     final var aggregateId = transactionTemplate.execute(status -> repository

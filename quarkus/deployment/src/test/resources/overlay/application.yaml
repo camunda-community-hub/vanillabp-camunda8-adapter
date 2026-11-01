@@ -17,7 +17,6 @@ vanillabp:
       request-timeout: PT20S
       stream-enabled: true
       stream-timeout: PT30M
-      message-time-to-live: PT6H
       max-message-size: 8388608
       keep-alive: PT30S
       max-http-connections: 64
@@ -33,6 +32,7 @@ vanillabp:
     - c8
   workflow-modules:
     test-app:
+      message-time-to-live: PT5H
       adapters:
         c8:
           resources-location: classpath:test-app/processes
@@ -40,17 +40,16 @@ vanillabp:
           job-timeout: PT20S
           retry-backoff: PT20S
           report-errors-as-stack-trace: false
-          message-time-to-live: PT5H
           allow-connectors: false
           allow-listeners: false
       workflows:
         TaskProcess:
+          message-time-to-live: PT4H
           adapters:
             c8:
               job-timeout: PT10S
               retry-backoff: PT10S
               report-errors-as-stack-trace: true
-              message-time-to-live: PT4H
               allow-connectors: true
               allow-listeners: true
           tasks:
@@ -64,6 +63,4 @@ vanillabp:
                   allow-listeners: true
           messages:
             OfferRequested:
-              adapters:
-                c8:
-                  message-time-to-live: PT1M
+              message-time-to-live: PT1M

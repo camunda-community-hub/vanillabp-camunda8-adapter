@@ -93,8 +93,8 @@ public class EveryMapKeyHasANameTest {
         "vanillabp.adapters.\"adapter-id\".",
         "vanillabp.workflow-modules.\"workflow-module-id\".adapters.\"adapter-id\".",
         "vanillabp.workflow-modules.\"workflow-module-id\".workflows.\"bpmn-process-id\".adapters.\"adapter-id\".",
-        "vanillabp.workflow-modules.\"workflow-module-id\".workflows.\"bpmn-process-id\".tasks.\"task-definition\".adapters.\"adapter-id\".",
-        "vanillabp.workflow-modules.\"workflow-module-id\".workflows.\"bpmn-process-id\".messages.\"message-name\".adapters.\"adapter-id\".")) {
+        // the message level is the platform's own since the platform resolves the time-to-live
+        "vanillabp.workflow-modules.\"workflow-module-id\".workflows.\"bpmn-process-id\".tasks.\"task-definition\".adapters.\"adapter-id\".")) {
       assertTrue(keys
           .stream()
           .anyMatch(key -> key.startsWith(prefix)),

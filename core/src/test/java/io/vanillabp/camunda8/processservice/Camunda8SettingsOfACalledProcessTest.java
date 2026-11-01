@@ -75,9 +75,18 @@ public class Camunda8SettingsOfACalledProcessTest {
   private final CamundaClient client = mock(CamundaClient.class);
 
   /**
-   * The processes the time-to-live was asked for, in order.
+   * The time-to-live configured for each process. Each one is different, so the value on
+   * the published command names the process it was read for.
    */
-  private final List<String> processesAskedForTheTimeToLive = new ArrayList<>();
+  private static final Map<String, Duration> TIME_TO_LIVE_OF = Map.of(
+      CALLER, Duration.ofMinutes(5),
+      CHILD, Duration.ofMinutes(6),
+      OTHER_CHILD, Duration.ofMinutes(7));
+
+  /**
+   * The command which the correlation published.
+   */
+  private PublishMessageCommandStep1 published;
 
   /**
    * Which process instances the changed aggregate was written to.
@@ -109,10 +118,7 @@ public class Camunda8SettingsOfACalledProcessTest {
         .setMessageTimeToLiveResolver((
             workflowModuleId,
             bpmnProcessId,
-            messageName) -> {
-          processesAskedForTheTimeToLive.add(bpmnProcessId);
-          return Duration.ofMinutes(5);
-        });
+            messageName) -> TIME_TO_LIVE_OF.get(bpmnProcessId));
 
   }
 
@@ -126,7 +132,7 @@ public class Camunda8SettingsOfACalledProcessTest {
 
     correlate();
 
-    assertEquals(List.of(CHILD), processesAskedForTheTimeToLive);
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(TIME_TO_LIVE_OF.get(CHILD));
 
   }
 
@@ -140,7 +146,7 @@ public class Camunda8SettingsOfACalledProcessTest {
 
     correlate();
 
-    assertEquals(List.of(CALLER), processesAskedForTheTimeToLive);
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(TIME_TO_LIVE_OF.get(CALLER));
 
   }
 
@@ -155,7 +161,34 @@ public class Camunda8SettingsOfACalledProcessTest {
 
     correlate();
 
-    assertEquals(List.of(CALLER), processesAskedForTheTimeToLive);
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(TIME_TO_LIVE_OF.get(CALLER));
+
+  }
+
+  @Test
+  @DisplayName("A start by message gets the time-to-live of the process whose start event has the message")
+  public void aStartByMessageIsResolvedLikeEveryOtherMessage() {
+
+    deployed(CALLER, startedBy(CALLER, MESSAGE));
+    deployed(CHILD, waitingFor(CHILD, null));
+    publishesAreAccepted();
+    // a value only for this message of the started process, the most specific level
+    processService
+        .setMessageTimeToLiveResolver((
+            workflowModuleId,
+            bpmnProcessId,
+            messageName) -> CALLER.equals(bpmnProcessId) && MESSAGE.equals(messageName)
+                ? Duration.ofMinutes(9)
+                : TIME_TO_LIVE_OF.get(bpmnProcessId));
+
+    processService
+        .phaseOperations()
+        .get(PhaseOperation.START_WORKFLOW_BY_MESSAGE)
+        .phaseTwo(
+            new PhaseTwoRequest<>(
+                MODULE, CALLER, null, "56", Map.of(PhaseTwoCall.ARG_MESSAGE_NAME, MESSAGE)));
+
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(Duration.ofMinutes(9));
 
   }
 
@@ -260,6 +293,33 @@ public class Camunda8SettingsOfACalledProcessTest {
 
   }
 
+  /**
+   * @param processId The process
+   * @param messageName The message its start event is started by
+   * @return A BPMN file
+   */
+  private static String startedBy(
+      final String processId,
+      final String messageName) {
+
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+            id="Definitions_%1$s" targetNamespace="http://bpmn.io/schema/bpmn">
+          <bpmn:message id="TheMessage" name="%2$s" />
+          <bpmn:process id="%1$s" isExecutable="true">
+            <bpmn:startEvent id="Start">
+              <bpmn:outgoing>ToTheEnd</bpmn:outgoing>
+              <bpmn:messageEventDefinition messageRef="TheMessage" />
+            </bpmn:startEvent>
+            <bpmn:sequenceFlow id="ToTheEnd" sourceRef="Start" targetRef="End" />
+            <bpmn:endEvent id="End"><bpmn:incoming>ToTheEnd</bpmn:incoming></bpmn:endEvent>
+          </bpmn:process>
+        </bpmn:definitions>
+        """.formatted(processId, messageName);
+
+  }
+
   private void publishesAreAccepted() {
 
     final var command = mock(
@@ -276,6 +336,7 @@ public class Camunda8SettingsOfACalledProcessTest {
                     : Mockito.RETURNS_DEFAULTS.answer(invocation)));
     Mockito.lenient().when(((PublishMessageCommandStep3) command).send()).thenAnswer(invocation -> future(null));
     Mockito.lenient().when(client.newPublishMessageCommand()).thenReturn(command);
+    published = command;
 
   }
 

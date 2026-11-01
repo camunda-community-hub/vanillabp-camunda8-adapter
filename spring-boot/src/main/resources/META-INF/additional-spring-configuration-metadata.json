@@ -149,11 +149,6 @@
       "defaultValue": false
     },
     {
-      "name": "vanillabp.adapters.camunda8.message-time-to-live",
-      "type": "java.time.Duration",
-      "description": "How long the cluster keeps a published message. It buffers a message which arrives before its subscription, and a second message with the same id is dropped while the first one lives. It is also read per workflow module, per workflow and per message, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.messages.<message-name>.adapters.<id>.message-time-to-live'. Default: the client's."
-    },
-    {
       "name": "vanillabp.adapters.camunda8.allow-connectors",
       "type": "java.lang.Boolean",
       "description": "Whether an element built from an element template, usually a Camunda connector, is left to the runtime which owns it. It is also read per workflow module and per workflow, and the most specific value wins: 'vanillabp.workflow-modules.<module>.workflows.<workflow>.adapters.<id>.allow-connectors'. There is no task level.",
