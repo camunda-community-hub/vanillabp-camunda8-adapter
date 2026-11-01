@@ -173,14 +173,14 @@ public class Camunda8JobSearchOfAnActivatedJobCanaryIT extends TestOnTheSharedCl
   private static String describe(
       final Job job) {
 
-    return "state=%s worker='%s' deadline=%s retries=%s creationTime=%s lastUpdateTime=%s"
+    // No creation or update time: the Job of the 8.8 client has neither, and this class is
+    // compiled against every line.
+    return "state=%s worker='%s' deadline=%s retries=%s"
         .formatted(
             job.getState(),
             job.getWorker(),
             job.getDeadline(),
-            job.getRetries(),
-            job.getCreationTime(),
-            job.getLastUpdateTime());
+            job.getRetries());
 
   }
 
