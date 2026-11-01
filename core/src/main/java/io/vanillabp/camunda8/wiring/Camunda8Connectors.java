@@ -264,6 +264,24 @@ public final class Camunda8Connectors {
   public static final String FRAME_LINE = "=".repeat(100);
 
   /**
+   * What a workflow looks like which waits for a job nobody fetches. Every message about such an
+   * element says it, so a reader finds the same sentences wherever the boot names one. A job
+   * loses a retry only when a worker fails it. So such a job never ends in an incident, and the
+   * message tells the reader where to look instead. The job search lists a job a worker holds
+   * just like one nobody fetched, which {@code Camunda8JobSearchOfAnActivatedJobCanaryIT}
+   * measures. So the message names time as the sign, and not the fields of the job. The wiki
+   * section it names holds the measurement.
+   */
+  public static final String A_JOB_NOBODY_FETCHES = """
+      Nothing raises an incident for it: a job loses a retry only when a worker fails it, and \
+      nobody fails a job nobody fetches. So the workflow stays ACTIVE at the element until \
+      something takes the job. You find it in Operate, or in the job search of \
+      the cluster, which lists the job in state CREATED with an empty worker and no deadline. The \
+      search shows a job a worker holds right now the same way, so the sign is time: the job stays \
+      there far longer than its task ever takes. See \
+      https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-job-nobody-fetches""";
+
+  /**
    * What an application gives up while it runs connectors, in the words of the startup
    * report. It is kept here, because the same sentences also belong into the guidance
    * which a boot WITHOUT the property writes. A reader must find them unchanged in both
@@ -273,8 +291,9 @@ public final class Camunda8Connectors {
       VanillaBP validates none of these elements against your @WorkflowTask methods, opens no job \
       worker for their job types and cannot tell whether anything serves them. Where no connector \
       runtime runs on this cluster, or where it does not see this tenant, a workflow reaches such \
-      an element, stops there, and its job ends in an incident once the retries are used up. \
-      Nothing a boot can ask detects that in advance, which is why this message exists.""";
+      an element and stops there. %s Nothing a boot can ask detects that in advance, which is why \
+      this message exists."""
+      .formatted(A_JOB_NOBODY_FETCHES);
 
   /**
    * Reports keys the application set at TASK level, where this one does not resolve. Then it

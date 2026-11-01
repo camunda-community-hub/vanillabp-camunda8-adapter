@@ -124,7 +124,7 @@ public class Camunda8RetryCountNeverBelowZeroTest {
         .thenThrow(new IllegalStateException("the aggregate could not be built"));
 
     new Camunda8BpmsInitiatedStartHandler(
-        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null, null)
+        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null)
         .handle(jobClient, jobWithNoRetriesLeft("startEvent"));
 
     verifyFailedWithNoRetriesLeft();
@@ -141,7 +141,7 @@ public class Camunda8RetryCountNeverBelowZeroTest {
         .when(invoker)
         .workflowEnded(anyString(), anyString(), any());
 
-    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null, null)
+    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null)
         .handle(jobClient, jobWithNoRetriesLeft("workflowEnded"));
 
     verifyFailedWithNoRetriesLeft();

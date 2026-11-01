@@ -131,8 +131,9 @@ lifecycle listeners itself.
 
 That grep finds what version 1 served, but not every element this applies to. A user task without
 any `formKey` is a plain BPMN user task too, and the cluster treats it exactly the same way. It
-hands out a job of `io.camunda.zeebe:userTask`, which VanillaBP 2 does not fetch. So the workflow
-waits at the element until the job's retries are used up. Measured on 2026-09-28 against
+creates a job of `io.camunda.zeebe:userTask`, which VanillaBP 2 does not fetch. So the workflow
+waits at the element, and no incident tells you. A job loses a retry only when a worker fails it,
+see [a job nobody fetches](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-job-nobody-fetches) in the wiki. Measured on 2026-09-28 against
 `camunda/camunda:8.9.21` and `camunda/camunda:8.10.0-rc1`: the model is accepted, the job appears,
 and the cluster keeps no user-task record for such a task at all. The way out is the one above. If
 you want a search which finds both, look for `bpmn:userTask` elements whose extension elements have
@@ -623,8 +624,8 @@ attribute gets the warning about two writers on one aggregate, whichever flavour
 Nothing here serves the flavour with a `zeebe:taskDefinition` of its own. A worker would have to
 complete its job with a result which names the activities to activate, and a `@WorkflowTask`
 method cannot say that. **If one of your `@WorkflowService` classes claims the process, your
-application does not boot.** A workflow would reach the element and stop there, and the job ends in
-an incident once its retries are used up. The message names the element and the two ways out.
+application does not boot.** A workflow would reach the element and stop there, with no incident,
+because nothing fetches its job. The message names the element and the two ways out.
 Either let the model say which activities to run, and fill the aggregate attribute which that
 expression reads. Or leave the element to a runtime which does serve it. A process which none of
 your classes claims is not checked. Nothing at all is said about an element which also has a

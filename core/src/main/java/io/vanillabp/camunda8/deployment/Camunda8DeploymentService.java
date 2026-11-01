@@ -2535,9 +2535,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * A <code>&#64;WorkflowService</code> class which claims a process says that the
    * application serves that process. So the boot ends over such an element. The cost of the
    * shape shows why ending the boot is the kinder answer. The cluster hands out a job of its
-   * own user-task type, and nothing here fetches it. The workflow stands at the element until
-   * the retries of the job are used up. Nobody sees that until somebody waits for a task
-   * which never appears.
+   * own user-task type, and nothing here fetches it. The workflow stands at the element with
+   * no incident, because a job nobody fetches never loses a retry. Nobody sees that until
+   * somebody waits for a task which never appears.
    * <p>
    * The two shapes are named apart, because only one of them can be searched for. Up to
    * release 1.6.3, VanillaBP 1 served this element and read its task definition off the
@@ -2582,10 +2582,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
             task a job worker serves, and this adapter does not accept that shape: %s. A \
             @WorkflowService class of this application claims this process, so the application \
             stands in for it, and VanillaBP serves a user task only where the CLUSTER manages it. \
-            What the shape would cost you: the cluster hands out a job of '%s', nothing here \
-            fetches it, and the workflow stands at the element until the job's retries are used \
-            up. Nobody sees that until somebody waits for a task which never appears, so the boot \
-            ends here instead. Two ways out. Make the user task a Camunda-managed one \
+            What the shape would cost you: the cluster creates a job of '%s', nothing here \
+            fetches it, and the workflow stands at the element. %s Nobody sees that until somebody \
+            waits for a task which never appears, so the boot ends here instead. Two ways out. Make the user task a Camunda-managed one \
             ('zeebe:userTask') and set 'External form reference' (zeebe:formDefinition \
             externalReference) to the task definition your @WorkflowTask method names - VanillaBP \
             then wires its lifecycle listeners itself. Or take the element out of the model, if \
@@ -2602,6 +2601,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
                 found.all().size(),
                 whichShapeEachOfThemIs(found),
                 Camunda8TaskWiring.TASKDEFINITION_USERTASK_WORKER_V1,
+                Camunda8Connectors.A_JOB_NOBODY_FETCHES,
                 howManyAreOpen));
 
   }
@@ -2748,7 +2748,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
       Where the cluster evaluates the expression, the job it creates carries the RESULT while the \
       worker waits for the expression; where it does not, the job carries the expression itself \
       and no @WorkflowTask method can be named after it. Either way a workflow reaches the \
-      element and stands there, and the job ends in an incident once its retries are used up.""";
+      element and stands there. %s"""
+      .formatted(Camunda8Connectors.A_JOB_NOBODY_FETCHES);
 
   /**
    * Ends the boot if a BPMN process which this application claims names a job type by a FEEL
@@ -2983,8 +2984,9 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * reason as {@link #WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_IS}.
    */
   private static final String WHAT_A_JOB_WORKER_AD_HOC_SUBPROCESS_COSTS = """
-      A workflow reaches the subprocess and stops there, and the job the cluster activated is \
-      fetched by nothing and ends in an incident once its retries are used up.""";
+      A workflow reaches the subprocess and stops there. The cluster creates a job for it, and \
+      nothing fetches that job. %s"""
+      .formatted(Camunda8Connectors.A_JOB_NOBODY_FETCHES);
 
   /**
    * Ends the boot if a BPMN process which this application claims carries an ad-hoc subprocess
@@ -2992,8 +2994,8 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
    * here.
    * <p>
    * The element deploys, and the workflow runs up to it. There it stops. The job of the
-   * subprocess is activated, and nothing fetches it. Once the retries of that job are used up,
-   * the cluster raises an incident. Nothing later in the boot detects that, because the wiring
+   * subprocess is created, and nothing fetches it. The job never loses a retry, so the cluster
+   * raises no incident either. Nothing later in the boot detects that, because the wiring
    * does not collect the element. It produces no task spec, so no validation misses a method.
    * <p>
    * A <code>&#64;WorkflowService</code> class which claims the process says that this
@@ -4188,7 +4190,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .jobType(startEvent.listenerJobType())
               .handler(new Camunda8BpmsInitiatedStartHandler(
                   adapterId, workflowModuleId, plainProcessId, startEvent.startEventId(), startEvent.kind(), startEvent
-                      .signalName(), bpmsInitiatedStartInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
+                      .signalName(), bpmsInitiatedStartInvoker, drain, this::reportErrorsAsStackTraceFor))
               .timeout(
                   listenerLockOf(workflowModuleId, List.of(startEvent.bpmnProcessId()), "start-event", startEvent
                       .listenerJobType()))
@@ -4231,7 +4233,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .handler(new Camunda8WorkflowEndedHandler(
                   adapterId, workflowModuleId, plainProcessId, workflowTaskWiring
                       .resolveWorkflowAggregateIdName(workflowModuleId,
-                          plainProcessId), workflowEndedInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
+                          plainProcessId), workflowEndedInvoker, drain, this::reportErrorsAsStackTraceFor))
               .timeout(
                   listenerLockOf(workflowModuleId, List.of(scopedProcessId), "workflow-end", Camunda8TaskWiring
                       .workflowEndedJobTypeOf(scopedProcessId)))
@@ -4728,7 +4730,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         .newWorker()
         .jobType(jobType)
         .handler(new Camunda8WorkflowEndedHandler(
-            adapterId, workflowModuleId, bpmnProcessId, aggregateIdName, workflowEndedInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
+            adapterId, workflowModuleId, bpmnProcessId, aggregateIdName, workflowEndedInvoker, drain, this::reportErrorsAsStackTraceFor))
         .timeout(listenerLockOf(workflowModuleId, List.of(scopedBpmnProcessId), "workflow-end", jobType))
         .name("vanillabp-%s-%s".formatted(adapterId, scopedBpmnProcessId)), jobType),
         workflowModuleId,

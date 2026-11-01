@@ -1798,9 +1798,10 @@ application.
 A user task WITHOUT `zeebe:userTask` is a user task which a job worker serves, and this adapter
 does not accept that shape. Only the shape of the element counts. Nothing asks whether some
 worker would fetch the job, because the model already says who serves the task. Refusing is the
-kind answer, and what the shape would cost shows why: the cluster hands out a job of
+kind answer, and what the shape would cost shows why: the cluster creates a job of
 `io.camunda.zeebe:userTask`, this version opens no worker on that job type, and the workflow
-stands at the element until the job's retries are used up. Nothing else catches it: `tasksOf`
+stands at the element with no incident. A job nobody fetches never loses a retry, see
+[a job nobody fetches](https://github.com/camunda-community-hub/vanillabp-camunda8-adapter/wiki/Configuration#a-job-nobody-fetches) in the wiki. Nothing else catches it: `tasksOf`
 reads service-like tasks only, and `userTasksOf` skips anything without the marker.
 `Camunda8TaskWiring#jobWorkerUserTasksOf` looks for it on purpose and splits it into the two
 shapes the message has to keep apart. One shape carries the `formKey` from which version 1 read
@@ -2246,8 +2247,8 @@ ad-hoc subprocess carrying a `zeebe:taskDefinition` of its own expects a worker 
 by round which activities to activate, by completing the job with
 `newCompleteJobCommand(key).withResult(r -> r.forAdHocSubProcess().activateElement(...))`. Neither
 the `@WorkflowTask` contract nor the adapter SPI can express that outcome, so no worker is opened,
-the workflow stops at the element and the job ends in an incident once its retries are used up.
-Nothing later in the boot sees it, because the element produces no task spec and no validation
+the workflow stops at the element. The cluster creates the job and nothing fetches it, so it
+never loses a retry and no incident is raised. Nothing later in the boot sees it, because the element produces no task spec and no validation
 misses a method.
 
 What happens next is in `refuseUnservedAdHocSubProcesses`. Where a `@WorkflowService` class
@@ -2869,10 +2870,21 @@ every process of the module, an unclaimed one included. Such a process is left o
 because `wireBpmn` does nothing for a process nobody claims. Held by
 `Camunda8UnclaimedProcessTest#anUnclaimedProcessGetsNoWorkflowEndListener`.
 
+Both listeners are written with `retries="1"`, and both handlers fail a job with no retries
+left. Building the aggregate and a `@WorkflowEnded` method may write, and nobody modelled these
+listeners, so nobody asked for a second attempt. The first failure raises the incident. The one
+retry in the model is for a delivery the gateway lost, see
+[the retry a lost listener delivery needs](#the-retry-a-lost-listener-delivery-needs). The cancel
+listener of the process on the 8.10 line gets the same. Why: the addition to
+[decision 83](./DECISIONS.md#83-a-failed-job-is-retried-only-where-the-model-asks-for-it-and-a-user-task-which-is-ending-rolls-the-completion-back).
+
 `Camunda8BpmsInitiatedStartIT#timerStartCreatesTheAggregate` drives a timer start and the end
 behind it, `Camunda8WorkflowLifecycleTest#theClusterStartsAWorkflowOnItsOwn` the same on
 Quarkus, and `Camunda8OutcomeCommandRetryTest#theStartEventListenerFollowsTheSameRule` with
-`#theWorkflowEndListenerBacksItsFailureOff` the way both listeners report a failure.
+`#theWorkflowEndListenerLeavesNoRetry` the way both listeners report a failure.
+`Camunda8RetriesOfTheProcessListenersTest` holds what the model carries, and
+`Camunda8RetriesOfTheListenersVanillaBpWritesIT` that a failing start and a failing end are
+each tried once on a real cluster, and come back once an operator gives the job a retry.
 
 ### Versions of a process
 
@@ -3772,10 +3784,14 @@ CREATED notification of a user task did not arrive within three minutes, and the
 carries the gateway line of the first shape for exactly that listener job and nothing else. Both
 measured shapes recover within seconds, so something after the reactivation kept that job from
 being fetched again, and the logs of that run do not say what. The state of the job at the
-deadline would say it. A job the cluster still reports as CREATED was there to be fetched, and
-nobody fetched it. A job which is gone reached somebody. So the wait for a listener notification
-now asks the query API for the jobs of the workflow before it gives up, and says every quarter
-minute what it is still missing.
+deadline would say part of it. A job which is gone reached somebody. A job the cluster still
+reports as CREATED may be one nobody fetched, or one a worker holds right now: the job search does
+not show an activation. Measured against `camunda/camunda:8.10.7` on 2026-11-01 by
+`Camunda8JobSearchOfAnActivatedJobCanaryIT`: half a minute after a worker took a job, the search
+still listed it as CREATED, with an empty worker, no deadline and its creation time as the last
+update. So the wait for a listener notification asks the query API for the jobs of the workflow
+before it gives up, and says every quarter minute what it is still missing. A CREATED job in that
+answer says that the job still waits for its answer, not who holds it.
 
 An adapter which cannot poll was the first suspect, and it used to be a real one on the 8.8
 line, where the client gave a single executor both jobs. The adapter now hands the client an
@@ -3788,6 +3804,8 @@ free slots, so it was neither.
 
 The lifecycle listeners VanillaBP writes into a user task are modelled with `retries="1"`.
 Version 1 wrote `retries="0"` there and 2.0 did too, until a nightly run showed what that costs.
+The listener on each start event and the end and cancel listeners of the process carry the same
+number, for the same reason. Before, they carried none, so the cluster gave them three.
 
 The modelled number is not the number of retries a failed notification has left. Whatever the
 model says, the handler fails such a job with no retries left. So a notification which really

@@ -229,17 +229,18 @@ public class Camunda8ShutdownHandlingTest {
     when(invoker.startWorkflowByBpms(anyString(), anyString(), any()))
         .thenThrow(new IllegalStateException("interrupted by the shutdown"));
     return new Camunda8BpmsInitiatedStartHandler(
-        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null, null);
+        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null);
 
   }
 
   @Test
-  @DisplayName("A start listener failing outside a shutdown is failed with one retry less")
+  @DisplayName("A start listener failing outside a shutdown is failed with no retries left")
   public void aStartListenerFailingIsReported() {
 
     startHandler().handle(jobClient, job("startEvent"));
 
-    verify(jobClient.newFailCommand(4711L), times(1)).retries(2);
+    // the job arrives with three. Nobody modelled the listener, so nobody asked for another attempt
+    verify(jobClient.newFailCommand(4711L), times(1)).retries(0);
 
   }
 
@@ -264,17 +265,18 @@ public class Camunda8ShutdownHandlingTest {
         .doThrow(new IllegalStateException("interrupted by the shutdown"))
         .when(invoker)
         .workflowEnded(anyString(), anyString(), any());
-    return new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null, null);
+    return new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null);
 
   }
 
   @Test
-  @DisplayName("A workflow-end listener failing outside a shutdown is failed with one retry less")
+  @DisplayName("A workflow-end listener failing outside a shutdown is failed with no retries left")
   public void anEndListenerFailingIsReported() {
 
     endedHandler().handle(jobClient, job("workflowEnded"));
 
-    verify(jobClient.newFailCommand(4711L), times(1)).retries(2);
+    // the job arrives with three. Nobody modelled the listener, so nobody asked for another attempt
+    verify(jobClient.newFailCommand(4711L), times(1)).retries(0);
 
   }
 

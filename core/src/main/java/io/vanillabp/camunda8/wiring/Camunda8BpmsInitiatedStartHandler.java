@@ -31,15 +31,16 @@ import lombok.extern.slf4j.Slf4j;
  * <p>
  * The job is completed with the ID of the aggregate plus the values shared per
  * {@code @SyncWithBPMS}. The ID is named after the ID attribute of the aggregate, which is
- * how this adapter addresses workflows. A failing build fails the job with one retry less,
- * the way the handler of a service task does. So the cluster retries and finally raises an
- * incident. A workflow without an aggregate could never be processed.
+ * how this adapter addresses workflows. A failing build fails the job with no retries left.
+ * So the first failure raises the incident an operator acts on. Building the aggregate may
+ * write, and nobody modelled this listener, so nobody asked for a second attempt. A workflow
+ * without an aggregate could never be processed, so it waits at the start event for the
+ * operator. Why the handler leaves no retry is decision 83 in the repository's DECISIONS.md.
  * <p>
  * While the workflow module is shutting down, the job is left to its lock instead. A
  * listener cut off by a restart is not a defect of the application. The cluster hands the
  * job out again with its retries intact. Both commands this handler sends back are
- * repeated where the cluster rejected them for backpressure. A job which is failed after
- * all gets a <code>retry-backoff</code>.
+ * repeated where the cluster rejected them for backpressure.
  * <p>
  * A job the cluster no longer holds is a late answer and not a failure. A redelivery
  * answered it first, or the instance ended another way. So either command which meets it
@@ -82,13 +83,6 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
   static final String KIND = "start-event listener";
 
   /**
-   * How long the cluster waits before it hands a failed job out again. May be
-   * <code>null</code> (tests). Then
-   * {@link Camunda8RetryBackoffResolver#DEFAULT_RETRY_BACKOFF} applies.
-   */
-  private final Camunda8RetryBackoffResolver retryBackoffResolver;
-
-  /**
    * Whether the incident of a failed job carries the whole stack trace. May be
    * <code>null</code> (tests). Then
    * {@link Camunda8ReportErrorsAsStackTraceResolver#DEFAULT_REPORT_ERRORS_AS_STACK_TRACE}
@@ -98,7 +92,7 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
 
   /**
    * Builds the handler of one start event. The deployment service calls it. The drain and the
-   * two resolvers may be <code>null</code>, and each one says here what that means.
+   * resolver may be <code>null</code>, and each one says here what that means.
    *
    * @param adapterId The adapter id this handler belongs to
    * @param workflowModuleId The workflow module the start event belongs to
@@ -108,8 +102,6 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
    * @param signalName The signal name where the kind is a signal, <code>null</code> otherwise
    * @param bpmsInitiatedStartInvoker What the platform calls when the cluster starts a workflow
    * @param drain Where the running handler is counted, or <code>null</code> for a drain of its own
-   * @param retryBackoffResolver Answers how long the cluster waits before it offers a failed job
-   *          again, or <code>null</code> for VanillaBP's default of ten seconds
    * @param reportErrorsAsStackTraceResolver Answers whether an incident carries the stack
    *          trace, or <code>null</code> for no stack trace
    */
@@ -122,10 +114,8 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
       final String signalName,
       final BpmsInitiatedStartInvoker bpmsInitiatedStartInvoker,
       final Camunda8Drain drain,
-      final Camunda8RetryBackoffResolver retryBackoffResolver,
       final Camunda8ReportErrorsAsStackTraceResolver reportErrorsAsStackTraceResolver) {
 
-    this.retryBackoffResolver = retryBackoffResolver;
     this.reportErrorsAsStackTraceResolver = reportErrorsAsStackTraceResolver;
     this.drain = drain == null
         ? new Camunda8Drain(adapterId, workflowModuleId)
@@ -184,24 +174,20 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
       if (drain.leaveJobToItsLock(job.getKey(), KIND, startEventId, e)) {
         return;
       }
-      // otherwise the same treatment a service task gets. The cluster counts the
-      // retries down and raises an incident once they are used up.
-      final var retryBackoff = Camunda8RetryBackoffResolver
-          .resolve(retryBackoffResolver, workflowModuleId, bpmnProcessId, null)
-          .duration();
-      // never below zero. A job arrives with none left where the model writes retries="0".
-      // The cluster takes -1 on a failure today, but refuses it as an update of the retries,
-      // and the log line would tell the operator about -1 retries. See decision 92.
-      final var retriesLeft = Math.max(0, job.getRetries() - 1);
+      // no retry left, whatever the job carries. Nobody modelled this listener, so nobody
+      // asked for a second attempt, and the work may have written. The one retry in the
+      // model is for a delivery the gateway lost. See decision 83 in the repository's
+      // DECISIONS.md. A version the cluster still holds may carry the default of three,
+      // and this answer covers it as well.
+      final var retriesLeft = 0;
       log.warn(
           "Camunda8[{}]: building the workflow aggregate for the start event '{}' of BPMN process '{}' "
-              + "(job '{}') failed - failing the job with {} retries left, to be handed out again in {}",
+              + "(job '{}') failed - failing the job with {} retries left, so the cluster raises an incident",
           adapterId,
           startEventId,
           bpmnProcessId,
           job.getKey(),
           retriesLeft,
-          retryBackoff,
           e);
       Camunda8CommandRetry.sendUnlessTheJobIsGone(
           adapterId,
@@ -211,13 +197,10 @@ public class Camunda8BpmsInitiatedStartHandler implements JobHandler {
           job.getDeadline(),
           drain::isShuttingDown,
           () -> {
-            var command = client
+            // no backoff, because no attempt is left. There is nothing to delay.
+            final var command = client
                 .newFailCommand(job.getKey())
                 .retries(retriesLeft);
-            // no backoff where no attempt is left. There is nothing to delay.
-            if (retriesLeft > 0) {
-              command = command.retryBackoff(retryBackoff);
-            }
             Camunda8JobLease
                 .withToken(
                     command

@@ -314,7 +314,7 @@ public class Camunda8OutcomeCommandRetryTest {
   // --- the workers which serve no task ---------------------------------------------------
 
   @Test
-  @DisplayName("A start-event listener repeats its completion and backs its failure off")
+  @DisplayName("A start-event listener repeats its completion")
   public void theStartEventListenerFollowsTheSameRule() {
 
     final var attempts = new AtomicInteger();
@@ -327,7 +327,7 @@ public class Camunda8OutcomeCommandRetryTest {
                 "42", "id", Map.of("id", "42"), true));
 
     new Camunda8BpmsInitiatedStartHandler(
-        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null, null)
+        "c8", "test-module", "TestProcess", "Event_Timer", BpmsStartTrigger.Kind.TIMER, null, invoker, drain, null)
         .handle(jobClient, job());
 
     assertEquals(3, attempts.get());
@@ -335,8 +335,8 @@ public class Camunda8OutcomeCommandRetryTest {
   }
 
   @Test
-  @DisplayName("A workflow-end listener fails with a backoff, too")
-  public void theWorkflowEndListenerBacksItsFailureOff() {
+  @DisplayName("A workflow-end listener fails with no retries left, and so without a backoff")
+  public void theWorkflowEndListenerLeavesNoRetry() {
 
     final var invoker = mock(WorkflowEndedInvoker.class);
     Mockito
@@ -349,11 +349,11 @@ public class Camunda8OutcomeCommandRetryTest {
     // event the job reports tells them apart
     when(endListenerJob.getListenerEventType()).thenReturn(ListenerEventType.END);
 
-    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null, null)
+    new Camunda8WorkflowEndedHandler("c8", "test-module", "TestProcess", "id", invoker, drain, null)
         .handle(jobClient, endListenerJob);
 
-    verify(jobClient.newFailCommand(4711L).retries(2), times(1))
-        .retryBackoff(Camunda8RetryBackoffResolver.DEFAULT_RETRY_BACKOFF);
+    verify(jobClient.newFailCommand(4711L), times(1)).retries(0);
+    verify(jobClient.newFailCommand(4711L).retries(0), never()).retryBackoff(any(Duration.class));
 
   }
 

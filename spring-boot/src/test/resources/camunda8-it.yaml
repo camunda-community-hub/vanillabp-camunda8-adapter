@@ -88,6 +88,10 @@ vanillabp:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
             - '*'
+        OwnListenerRetriesProcess:
+          allow-full-sync-with-bpms: true
+          declared-aggregate-values:
+            - '*'
         QuickProcess:
           allow-full-sync-with-bpms: true
           declared-aggregate-values:
