@@ -84,7 +84,7 @@ public class Camunda8JobTimeoutOverlayTest {
   }
 
   @Test
-  public void messageTimeToLiveResolvesThroughAllFourLevels() {
+  public void messageTimeToLiveResolvesThroughItsThreeLevels() {
 
     // the platform resolves the time-to-live for every adapter, so it is read there
     final var coreProperties = Arc
@@ -96,19 +96,17 @@ public class Camunda8JobTimeoutOverlayTest {
     // minute. A per-message override is meant for that
     Assertions.assertEquals(
         Duration.ofMinutes(1),
-        coreProperties.messageTimeToLive("test-app", "TaskProcess", "OfferRequested", "c8"));
+        coreProperties.messageTimeToLive("test-app", "TaskProcess", "OfferRequested"));
     // workflow level
     Assertions.assertEquals(
         Duration.ofHours(4),
-        coreProperties.messageTimeToLive("test-app", "TaskProcess", "SomeOtherMessage", "c8"));
-    // workflow-module level
+        coreProperties.messageTimeToLive("test-app", "TaskProcess", "SomeOtherMessage"));
+    // workflow-module level (least specific)
     Assertions.assertEquals(
         Duration.ofHours(5),
-        coreProperties.messageTimeToLive("test-app", "OtherProcess", "SomeMessage", "c8"));
-    // adapter level (base)
-    Assertions.assertEquals(
-        Duration.ofHours(6),
-        coreProperties.messageTimeToLive("unknown-module", "SomeProcess", "SomeMessage", "c8"));
+        coreProperties.messageTimeToLive("test-app", "OtherProcess", "SomeMessage"));
+    // nothing for the whole application: the client's own default applies
+    Assertions.assertNull(coreProperties.messageTimeToLive("unknown-module", "SomeProcess", "SomeMessage"));
 
   }
 
@@ -129,7 +127,7 @@ public class Camunda8JobTimeoutOverlayTest {
         overlay.jobTimeoutFor("test-app", "TaskProcess", "happyTask", "c8"));
     Assertions.assertEquals(
         Duration.ofHours(4),
-        coreProperties.messageTimeToLive("test-app", "TaskProcess", "happyTask", "c8"),
+        coreProperties.messageTimeToLive("test-app", "TaskProcess", "happyTask"),
         "a task name is not a message name - this falls back to the workflow level");
 
   }
@@ -400,7 +398,6 @@ public class Camunda8JobTimeoutOverlayTest {
     Assertions.assertEquals(Duration.ofSeconds(20), keys.requestTimeout().orElseThrow());
     Assertions.assertTrue(keys.streamEnabled().orElseThrow());
     Assertions.assertEquals(Duration.ofMinutes(30), keys.streamTimeout().orElseThrow());
-    Assertions.assertEquals(Duration.ofHours(6), keys.messageTimeToLive().orElseThrow());
     Assertions.assertEquals(8388608, keys.maxMessageSize().orElseThrow());
     Assertions.assertEquals(Duration.ofSeconds(30), keys.keepAlive().orElseThrow());
     Assertions.assertEquals(64, keys.maxHttpConnections().orElseThrow());
@@ -422,7 +419,8 @@ public class Camunda8JobTimeoutOverlayTest {
     Assertions.assertEquals(Duration.ofMillis(250), clientConfiguration.getDefaultJobPollInterval());
     Assertions.assertEquals(Duration.ofSeconds(20), clientConfiguration.getDefaultRequestTimeout());
     Assertions.assertTrue(clientConfiguration.getDefaultJobWorkerStreamEnabled());
-    Assertions.assertEquals(Duration.ofHours(6), clientConfiguration.getDefaultMessageTimeToLive());
+    // no key of VanillaBP sets the client's default time-to-live
+    Assertions.assertEquals(Duration.ofHours(1), clientConfiguration.getDefaultMessageTimeToLive());
     Assertions.assertEquals(8388608, clientConfiguration.getMaxMessageSize());
     Assertions.assertEquals(Duration.ofSeconds(30), clientConfiguration.getKeepAlive());
     Assertions.assertEquals(64, clientConfiguration.getMaxHttpConnections());

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.BeanRegistrar;
 import org.springframework.beans.factory.BeanRegistry;
 import org.springframework.core.env.Environment;
 
+import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentService;
 import io.vanillabp.camunda8.observability.Camunda8Metrics;
@@ -74,11 +75,12 @@ public class Camunda8AdapterBeanRegistrar implements BeanRegistrar {
                 processService
                     .setConfiguredTenants(
                         workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));
-                // the platform resolves the time-to-live for every adapter which knows the key
-                processService
-                    .setMessageTimeToLiveResolver(supplierContext
-                        .bean(MigrationAdapterProperties.class)
-                        .messageTimeToLiveResolverFor(adapterId));
+                // the platform resolves the time-to-live, the same for every adapter. What the
+                // cluster can do with a value is checked here
+                final var coreProperties = supplierContext.bean(MigrationAdapterProperties.class);
+                Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive(
+                    adapterId, coreProperties.messageTimesToLiveWritten());
+                processService.setMessageTimeToLiveResolver(coreProperties.messageTimeToLiveResolver());
                 return processService;
               }));
 

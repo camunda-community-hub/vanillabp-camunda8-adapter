@@ -3,6 +3,7 @@ package io.vanillabp.camunda8.client;
 import java.time.Duration;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -1330,55 +1331,6 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * How long the cluster keeps a published message. The number does two jobs which pull in
-   * opposite directions. That is why it is resolvable per workflow module, workflow and
-   * MESSAGE, and not only per adapter. The platform resolves the four levels for every
-   * adapter (see {@link io.vanillabp.integration.adapter.spi.MessageTimeToLiveResolver}):
-   * <ul>
-   * <li>It BUFFERS a message published before its subscription exists. For that it should
-   * be large. Say the workflow is still two steps away from its catch event. The message
-   * is only correlated because the cluster held it.</li>
-   * <li>It is the window in which a message id is DEDUPLICATED. For that it should be
-   * small. As long as the message lives, a second publication of the same id is dropped
-   * without a word, even if it is fully legitimate.</li>
-   * </ul>
-   * Default: whatever the client uses, one hour at the time of writing. If nothing is
-   * configured, VanillaBP sets nothing on the command.
-   * <p>
-   * <b>Shortening it does not give a short deduplication window.</b> The cluster forgets an
-   * expired message id on a sweep of its own, not at the moment it expires. We measured it
-   * against camunda/camunda:8.9.16 on 2026-08-27. A two-second time-to-live still
-   * deduplicated five seconds later, and the id was forgotten after 75
-   * (see {@code Camunda8TaskProcessingIT#theTimeToLiveDecidesHowLongTheClustersNetLasts}).
-   * Two legitimate correlations are told apart by what they carry. That is a correlation
-   * id which varies, or the activation which VanillaBP puts into the message id.
-   */
-  private Duration messageTimeToLive;
-
-  /**
-   * How long the cluster keeps a published message, read at adapter level.
-   *
-   * @return The time to live, or <code>null</code> to leave the client's own default alone
-   */
-  public Duration getMessageTimeToLive() {
-
-    return messageTimeToLive;
-
-  }
-
-  /**
-   * How long the cluster keeps a published message, read at adapter level.
-   *
-   * @param messageTimeToLive The time to live, or <code>null</code> to leave the client's own default alone
-   */
-  public void setMessageTimeToLive(
-      final Duration messageTimeToLive) {
-
-    this.messageTimeToLive = messageTimeToLive;
-
-  }
-
-  /**
    * The largest inbound message the client accepts, in bytes. Default: the client's.
    */
   private Integer maxMessageSize;
@@ -1814,39 +1766,61 @@ public class Camunda8AdapterConfiguration {
   }
 
   /**
-   * Validates how long the cluster keeps a message this adapter publishes. It runs AT
-   * STARTUP, because at runtime a wrong value fails silently, in both directions. If it is
-   * too short, a message published before its subscription exists is gone. If it is too
-   * long, a second legitimate correlation of the same id is dropped without a word.
+   * Ends the boot where a <code>message-time-to-live</code> is zero or less. That number is how
+   * long the cluster keeps a published message, so zero drops every message the moment it
+   * arrives, and nothing at runtime says so. The platform resolves the keys for every adapter
+   * and says which values were written. What the cluster can do with them is checked here.
    * <p>
-   * Only the ADAPTER level is checked here, the same limit {@link #validateRetryBackoff}
-   * has. The deeper levels are resolved by the platform for every adapter, and this class
-   * does not see them. A value of zero or less there shows when that message is published.
+   * The number does two jobs which pull in opposite directions. That is why it is written per
+   * workflow module, workflow and MESSAGE:
+   * <ul>
+   * <li>It BUFFERS a message published before its subscription exists. For that it should
+   * be large. Say the workflow is still two steps away from its catch event. The message
+   * is only correlated because the cluster held it.</li>
+   * <li>It is the window in which a message id is DEDUPLICATED. For that it should be
+   * small. As long as the message lives, a second publication of the same id is dropped
+   * without a word, even if it is fully legitimate.</li>
+   * </ul>
+   * Where nothing is written, VanillaBP sets nothing on the command and the client's default
+   * applies, one hour at the time of writing.
+   * <p>
+   * <b>Shortening it does not give a short deduplication window.</b> The cluster forgets an
+   * expired message id on a sweep of its own, not at the moment it expires. We measured it
+   * against camunda/camunda:8.9.16 on 2026-08-27. A two-second time-to-live still
+   * deduplicated five seconds later, and the id was forgotten after 75
+   * (see {@code Camunda8TaskProcessingIT#theTimeToLiveDecidesHowLongTheClustersNetLasts}).
+   * Two legitimate correlations are told apart by what they carry. That is a correlation
+   * id which varies, or the activation which VanillaBP puts into the message id.
    *
    * @param adapterId The adapter id
-   * @throws IllegalStateException If the time-to-live is zero or negative
+   * @param written Every time-to-live written, keyed by its property key
+   * @throws IllegalStateException If a time-to-live is zero or negative
    */
-  public void validateMessageTimeToLive(
-      final String adapterId) {
+  public static void refuseNonPositiveMessageTimesToLive(
+      final String adapterId,
+      final Map<String, Duration> written) {
 
-    if ((messageTimeToLive == null) || (!messageTimeToLive.isZero() && !messageTimeToLive.isNegative())) {
+    final var wrong = written
+        .entrySet()
+        .stream()
+        .filter(entry -> entry.getValue().isZero() || entry.getValue().isNegative())
+        .map(entry -> "%s: %s".formatted(entry.getKey(), entry.getValue()))
+        .sorted()
+        .toList();
+    if (wrong.isEmpty()) {
       return;
     }
     throw new IllegalStateException(
         """
-            Camunda 8 adapter '%s' has '%s: %s'. That number is how long the cluster keeps a published \
-            message, so zero or less means every message this adapter publishes is dropped the moment \
-            it arrives - a workflow waiting for one would wait forever. Give it a duration, or remove \
-            the property to keep the client's own default of one hour. The number does two jobs which \
-            pull apart: it buffers a message whose subscription does not exist yet, which wants it \
-            large, and it is the window a message id deduplicates in, which wants it small. Where one \
-            number cannot serve both, set it per workflow module, workflow or message \
-            ('vanillabp.workflow-modules.<m>.workflows.<w>.messages.<message>.adapters.%s.message-time-to-live')."""
-            .formatted(
-                adapterId,
-                propertyKey(adapterId, "message-time-to-live"),
-                messageTimeToLive,
-                adapterId));
+            Camunda 8 adapter '%s' found a message time-to-live of zero or less: %s. That number is \
+            how long the cluster keeps a published message, so zero or less means every such message \
+            is dropped the moment it arrives - a workflow waiting for one would wait forever. Give it a \
+            duration, or remove the property to keep the client's own default of one hour. The number \
+            does two jobs which pull apart: it buffers a message whose subscription does not exist yet, \
+            which wants it large, and it is the window a message id deduplicates in, which wants it \
+            small. Where one number cannot serve both, set it per workflow module, workflow or message \
+            ('vanillabp.workflow-modules.<m>.workflows.<w>.messages.<message>.message-time-to-live')."""
+            .formatted(adapterId, String.join(", ", wrong)));
 
   }
 

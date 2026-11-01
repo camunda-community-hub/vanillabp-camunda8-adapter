@@ -95,10 +95,9 @@ public class VanillaBpCamunda8Properties {
    * adapter. A tenant id belongs to the deployment, and this adapter deploys once per
    * workflow module.</li>
    * </ul>
-   * <code>message-time-to-live</code> is not here. The platform reads it for every adapter,
-   * with a message instead of a task as the most specific level (see
-   * {@code MigrationAdapterProperties#messageTimeToLive}). Only the adapter level is bound
-   * here as well, because it is the default of the client.
+   * <code>message-time-to-live</code> is not here. It names no adapter, and the platform
+   * reads it for every adapter at the workflow module, the workflow and the message (see
+   * {@code MigrationAdapterProperties#messageTimeToLive}).
    */
   private Map<String, ModuleOverlay> workflowModules = Map.of();
 

@@ -1124,22 +1124,29 @@ cluster).
 ### How long the cluster keeps a message
 
 `message-time-to-live` decides it. Before, the client default applied. Now the value resolves
-per adapter, workflow module, workflow and MESSAGE. That is the most-specific-wins rule
-`job-timeout` follows, with a message as the most specific level instead of a task. The
-platform resolves it for every adapter which knows the key
-(`MigrationAdapterProperties#messageTimeToLive`), so the Camunda 7 family reads the same levels.
-Only the adapter level is bound here as well, because it is the default of the client:
+per workflow module, workflow and MESSAGE, and the most specific value wins. The key names no
+adapter, because it means the same on every BPMS. The platform resolves it for every adapter
+(`MigrationAdapterProperties#messageTimeToLive`), so the Camunda 7 family reads the same levels:
 
 ```
-vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.messages.<message-name>.adapters.<adapter-id>.message-time-to-live
+vanillabp.workflow-modules.<workflow-module-id>.message-time-to-live
+vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.message-time-to-live
+vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.messages.<message-name>.message-time-to-live
 ```
+
+There is no key for the whole application and none below `adapters.<adapter-id>`. The platform
+ends the startup for such a line and names the three keys. So VanillaBP never sets the default of
+the client. Zero or less ends the startup as well, because the cluster would drop every such
+message the moment it arrives. This adapter checks every written value for that
+(`Camunda8AdapterConfiguration#refuseNonPositiveMessageTimesToLive`).
 
 The number does two jobs which pull in opposite directions. It BUFFERS a message published
 before its subscription exists, which wants it large. And it is the window in which a message id
 DEDUPLICATES, which wants it small. One application may have a catch event whose message
 legitimately repeats every minute, and another one whose message is published long before the
 workflow reaches it. So one number for the whole application has to be wrong for one of them.
-Nothing configured means nothing set: the client's own default applies, as it always did.
+Nothing configured means nothing set: the client's own default of one hour applies, as it always
+did (`Camunda8ClientFactoryTest#everyPropertyReachesTheClient`).
 
 `<bpmn-process-id>` is the id of the process whose model waits for the message. A correlation goes through the process
 service of the process at the top, but the event which waits may sit in a called process, and
@@ -1160,16 +1167,17 @@ seconds later and forgotten after 75
 two legitimate correlations apart is what they carry: a varying correlation id, or the
 activation.
 
-`startWorkflowByMessagePhaseTwo` deliberately reads the ADAPTER level only. That message starts
-a workflow, so its deduplication is wanted for as long as possible, and the subscription of a
-message start event exists as long as the process is deployed. A per-message override meant for
-a repeating catch event must not shorten the protection against a double-started workflow.
+`startWorkflowByMessagePhaseTwo` deliberately reads the WORKFLOW MODULE level only, the widest
+level the key has. That message starts a workflow, so its deduplication is wanted for as long as
+possible, and the subscription of a message start event exists as long as the process is
+deployed. An override per workflow or per message, meant for a repeating catch event, must not
+shorten the protection against a double-started workflow.
 
-The four levels resolve the way `job-timeout` does
-(`Camunda8JobTimeoutOverlayTest#messageTimeToLiveResolvesThroughAllFourLevels`, and
-`Camunda8TaskProcessingIT#messageTimeToLiveResolvesThroughAllFourLevels` against a cluster).
-That a start message reads the adapter level alone is an assumption: nothing pins it, and a
-per-message `message-time-to-live` turning up on a start message would disprove it.
+The three levels resolve with the message as the most specific one
+(`Camunda8JobTimeoutOverlayTest#messageTimeToLiveResolvesThroughItsThreeLevels`, and
+`Camunda8TaskProcessingIT#messageTimeToLiveResolvesThroughItsThreeLevels` against a cluster).
+That a start message reads the workflow module level alone is an assumption: nothing pins it, and
+a per-message `message-time-to-live` turning up on a start message would disprove it.
 
 ### Which phase-two failures are repeated
 

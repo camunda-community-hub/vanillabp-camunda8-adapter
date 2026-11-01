@@ -66,10 +66,9 @@ public interface VanillaBpCamunda8Properties {
    * adapter. A tenant id belongs to the deployment, and this adapter deploys once per
    * workflow module.</li>
    * </ul>
-   * <code>message-time-to-live</code> is not here. The platform reads it for every adapter,
-   * with a message instead of a task as the most specific level (see
-   * {@code MigrationAdapterProperties#messageTimeToLive}). Only the adapter level is mapped
-   * here as well, because it is the default of the client.
+   * <code>message-time-to-live</code> is not here. It names no adapter, and the platform
+   * reads it for every adapter at the workflow module, the workflow and the message (see
+   * {@code MigrationAdapterProperties#messageTimeToLive}).
    *
    * @return The workflow-module sections, keyed by workflow module ID
    */
@@ -834,15 +833,6 @@ public interface VanillaBpCamunda8Properties {
      * @return The stream timeout
      */
     Optional<Duration> streamTimeout();
-
-    /**
-     * How long the cluster keeps a published message while it waits for a subscription.
-     * In the same window a message id removes duplicates. Default: the client's one
-     * hour.
-     *
-     * @return The message time-to-live
-     */
-    Optional<Duration> messageTimeToLive();
 
     /**
      * The client's maximum inbound message size in bytes. Default: the client's.

@@ -368,9 +368,6 @@ public class Camunda8ClientFactory implements AutoCloseable {
     if (configuration.getStreamEnabled() != null) {
       builder.defaultJobWorkerStreamEnabled(configuration.getStreamEnabled());
     }
-    if (configuration.getMessageTimeToLive() != null) {
-      builder.defaultMessageTimeToLive(configuration.getMessageTimeToLive());
-    }
 
   }
 

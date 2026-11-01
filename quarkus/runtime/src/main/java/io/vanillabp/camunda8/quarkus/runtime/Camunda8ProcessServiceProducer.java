@@ -91,8 +91,11 @@ public class Camunda8ProcessServiceProducer {
           processService
               .setConfiguredTenants(
                   workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));
-          // the platform resolves the time-to-live for every adapter which knows the key
-          processService.setMessageTimeToLiveResolver(properties.messageTimeToLiveResolverFor(adapterId));
+          // the platform resolves the time-to-live, the same for every adapter. What the
+          // cluster can do with a value is checked here
+          Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive(
+              adapterId, properties.messageTimesToLiveWritten());
+          processService.setMessageTimeToLiveResolver(properties.messageTimeToLiveResolver());
           return processService;
         })
         .toList();

@@ -292,7 +292,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Resolves how long the cluster keeps a message which this adapter publishes, per
-   * adapter, workflow module, workflow and message. May be <code>null</code> (tests, and a
+   * workflow module, workflow and message. May be <code>null</code> (tests, and a
    * platform written before this). Then the default of the client applies, and VanillaBP
    * sets nothing on the command.
    */
@@ -3014,12 +3014,15 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (startTenantId != null) {
         startCommand = startCommand.tenantId(startTenantId);
       }
-      // the ADAPTER level only, on purpose. This message starts a workflow, so its
-      // deduplication should last as long as possible. The subscription of a message START
-      // event exists as long as the process is deployed, so the buffering half of the
-      // number does not apply here at all. An override per message, meant for a repeating
-      // catch event, must not shorten the protection against a workflow started twice
-      final var startTimeToLive = clientFactory.getConfiguration().getMessageTimeToLive();
+      // the WORKFLOW MODULE level only, on purpose, the widest level the key has. This
+      // message starts a workflow, so its deduplication should last as long as possible. The
+      // subscription of a message START event exists as long as the process is deployed, so
+      // the buffering half of the number does not apply here at all. An override per
+      // workflow or per message, meant for a repeating catch event, must not shorten the
+      // protection against a workflow started twice
+      final var startTimeToLive = messageTimeToLiveResolver == null
+          ? null
+          : messageTimeToLiveResolver.configuredFor(request.workflowModuleId(), null, null);
       if (startTimeToLive != null) {
         startCommand = startCommand.timeToLive(startTimeToLive);
       }
