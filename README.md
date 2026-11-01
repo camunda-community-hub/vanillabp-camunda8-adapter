@@ -1061,6 +1061,48 @@ the engine, so a task which started to end a moment ago can still slip through. 
 of such a task with `409`. Measured on 8.10 on 2026-10-28: without the change both transactions
 committed.
 
+### A task of a suspended workflow
+
+A cluster of the 8.10 line can suspend a process instance, over REST and in Operate. While the
+instance is suspended, the cluster refuses every command about its jobs and user tasks with the same
+`409` (`INVALID_STATE`, on gRPC `FAILED_PRECONDITION`). That includes both commands of the phase-one
+check. The code is the one a user task in `CREATING` gets, so the code alone does not say why. After
+such a `409`, and only then, the adapter asks for the state of the instance: the job search or
+`newUserTaskGetRequest` names the instance, `newProcessInstanceGetRequest` gives its state. An
+answer on an active workflow costs nothing extra.
+
+- Phase one throws `io.vanillabp.spi.process.WorkflowSuspendedException`, with the refusal of the
+  cluster as its cause. The caller's transaction rolls back, and the task stays open. This holds for
+  `completeTask`, `cancelTask` and `completeUserTask`.
+- The awareness probe of a service task answers `ACTIVE`, because the cluster holds the task. Without
+  that, the election would read the `409` as an outage.
+- Phase two asks the outbox to wait (`PhaseTwoRetryLater`, 30 seconds). The wait uses no attempt and
+  lasts as long as the workflow is suspended. Each answer names a deadline just behind its own window,
+  so `vanillabp.outbox.wait-for-visibility-at-most` does not block an entry while its workflow is
+  suspended. After the resume, the answer is at most one window late.
+- The lines 8.8 and 8.9 ask nothing (`Camunda8Suspension` per line), because their clusters cannot
+  suspend.
+
+The query API runs behind the engine. It showed the suspension 129 to 530 ms after the command. A check
+in that moment reads `ACTIVE` and behaves as before. A user task then commits, and phase two waits for
+the resume instead.
+
+A job which a worker held when the workflow was suspended comes back when its lock ends, not at the
+resume. If the lock ended during the suspension, it comes back right at the resume. Measured against
+`camunda/camunda:8.10.7` on 2026-11-01, see `DECISIONS.pending/2070.md`. For an asynchronous task
+that costs nothing: the application answers it through the outbox, which completes the job by its key
+after the resume. A synchronous handler whose completion the cluster refused waits for the rest of its
+`job-timeout`. Then the delivery log answers the job with the recorded outcome. The adapter cannot
+give the lock back earlier: while the workflow is suspended, the cluster refuses the change of the
+lock as well, and the adapter is not told about the resume.
+
+A workflow started by a call activity is not suspended with its caller, and its tasks can be answered
+as usual.
+
+`Camunda8SuspendedWorkflowTest` holds every branch without a cluster. `Camunda8SuspendedWorkflowIT`
+suspends a real instance on the 8.10 line: a task and a user task are refused with the SPI exception
+and go through after the resume, and phase two of a completion waits and then goes through.
+
 ### The delivery identity is a job key, so it belongs to one cluster
 
 `Camunda8JobHandler` reports the job key as the delivery id, and the core remembers a processed

@@ -65,6 +65,12 @@ import lombok.extern.slf4j.Slf4j;
  * it. The newer run answered already, and failing the job would take it away from whoever
  * holds it now.
  * <p>
+ * A suspended workflow gives the same answer, to every command about its job. Nothing can be
+ * done about it while it lasts: a failure and a change of the lock are refused as well. So the
+ * command is dropped the same way. The cluster hands the job out again when its lock ends, if
+ * the workflow is resumed by then, or right at the resume, if the lock ended while the workflow
+ * was suspended. See {@code DECISIONS.pending/2070.md}.
+ * <p>
  * <b>A job which is gone.</b> {@link #sendUnlessTheJobIsGone} is the same retry for a caller
  * whose command may arrive after the cluster moved on. It takes the <code>404</code> as a late
  * answer and tells the caller so, instead of throwing it.
@@ -149,16 +155,21 @@ public final class Camunda8CommandRetry {
         return;
       } catch (final RuntimeException e) {
         if (Camunda8Errors.jobHeldByAnotherActivation(e)) {
-          // the lock of this job ran out while the work was running. The cluster handed
-          // the job out again, and that activation holds it now. The workflow goes on with
-          // that run. So this answer is not sent, not repeated and not a failure of
-          // anything. Both runs did the same work, and the newer one won
+          // usually the lock of this job ran out while the work was running. The cluster
+          // handed the job out again, and that activation holds it now. The workflow goes on
+          // with that run. Or the workflow of the job is suspended, and the cluster refuses
+          // every command about the job until it is resumed, a failure included. Either way
+          // this answer is not sent again and is no failure of anything. Telling the two
+          // apart would cost two searches per refusal and change nothing that follows
           log.info(
               """
-                  Camunda8[{}]: the {} of job {} ('{}') was refused because another activation holds \
-                  the job - the run converged with a redelivery, and what the cluster keeps is what \
-                  that run answered. The lock of this run had expired while its work was still \
-                  running, so the work was done twice.""",
+                  Camunda8[{}]: the {} of job {} ('{}') was refused with a 409. Usually another activation \
+                  holds the job - the run converged with a redelivery, and what the cluster keeps is what \
+                  that run answered. The lock of this run had expired while its work was still running, \
+                  so the work was done twice. Or the workflow of the job is suspended - then the cluster \
+                  hands the job out again when the lock of this run ends, after the workflow is resumed. \
+                  Where the application keeps a delivery log, the record of this delivery answers that \
+                  redelivery without running the work again.""",
               adapterId,
               command,
               jobKey,

@@ -188,6 +188,12 @@ public final class Camunda8Errors {
    * So this adapter follows the honest rule: a 409 of a JOB command means that somebody
    * else holds this activation, whatever the reason. Both readings end the same way. The
    * command is not repeated, because no repetition of it would be accepted either.
+   * <p>
+   * A suspended workflow is one more reason. Measured against <code>camunda/camunda:8.10.7</code>
+   * on 2026-11-01: while the instance is suspended, a completion, a failure, a BPMN error and an
+   * <code>UpdateJobTimeout</code> of its job get the same pair. So a caller which can do
+   * something about a suspension asks the state of the instance after this answer, and only
+   * then, see {@code DECISIONS.pending/2070.md}.
    *
    * @param throwable The failure of a job-based command
    * @return Whether another activation of that job is the one the cluster is holding
@@ -279,6 +285,11 @@ public final class Camunda8Errors {
    * which completes its user task right away addresses a task the cluster is still
    * creating. While that lasts, both the empty update and the completion get
    * <code>409</code>.
+   * <p>
+   * A suspended workflow gives the same answer, to the empty update and to the completion,
+   * measured against <code>camunda/camunda:8.10.7</code> on 2026-11-01. The task is there in that
+   * case as well, so the answer of this method stays right. Whether the workflow is suspended is
+   * asked after this answer, see {@code DECISIONS.pending/2070.md}.
    * <p>
    * HTTP <code>400</code> is NOT in here, on purpose, although the endpoint documents it.
    * No run has ever produced one for a user task. So what it would mean is a guess. A guess
