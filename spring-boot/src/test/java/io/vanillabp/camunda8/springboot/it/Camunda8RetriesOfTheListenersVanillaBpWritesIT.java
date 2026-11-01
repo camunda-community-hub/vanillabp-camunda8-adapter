@@ -2,6 +2,8 @@ package io.vanillabp.camunda8.springboot.it;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import org.junit.jupiter.api.AfterEach;
@@ -58,6 +60,14 @@ public class Camunda8RetriesOfTheListenersVanillaBpWritesIT extends SpringBootTe
    * just time out.
    */
   private static final long INCIDENT_WITHIN_MILLIS = 120_000;
+
+  /**
+   * The incidents a test of this class already resolved. The incident search reads the
+   * secondary storage, which on the 8.8 line still lists a resolved incident as active for a
+   * while. Without this, the second test of the class took the first test's incident for its
+   * own.
+   */
+  private static final Set<Long> RESOLVED_INCIDENTS = ConcurrentHashMap.newKeySet();
 
   @Autowired
   private OwnListenerRetriesDockerWorkflowService workflowService;
@@ -159,6 +169,7 @@ public class Camunda8RetriesOfTheListenersVanillaBpWritesIT extends SpringBootTe
         .newResolveIncidentCommand(incident.getIncidentKey())
         .send()
         .join();
+    RESOLVED_INCIDENTS.add(incident.getIncidentKey());
 
   }
 
@@ -173,7 +184,10 @@ public class Camunda8RetriesOfTheListenersVanillaBpWritesIT extends SpringBootTe
               .state(IncidentState.ACTIVE))
           .send()
           .join()
-          .items();
+          .items()
+          .stream()
+          .filter(incident -> !RESOLVED_INCIDENTS.contains(incident.getIncidentKey()))
+          .toList();
       if (!incidents.isEmpty()) {
         return incidents.getFirst();
       }
