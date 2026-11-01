@@ -1010,6 +1010,13 @@ hands the same job out again, until the instance reaches `TERMINATED`. Nothing e
 behind this listener, and a notification which failed once on a busy database deserves a second
 attempt.
 
+The paragraph above no longer holds. Added by story 2041 on 2026-11-01. A `@WorkflowEnded` method
+may write, and in VanillaBP a retry needs somebody to ask for it (decision 87). So the end and the
+cancel listener of the process now carry `retries="1"`, like the listeners of a user task, and a
+failed notification is failed with no retries left. The first failure raises the incident.
+Updating the retries and resolving the incident still hands the job out again. See the addition to
+decision 83.
+
 `Camunda8ListenersTest` holds what is read out of a model and what a pair of listeners amounts to.
 `Camunda8ListenersReportTest` holds the report of a boot together with the refusals, the listener
 handed to the core, the template on a user task which does not count, and the WARN of a templated
@@ -3594,6 +3601,19 @@ retries the cluster hands over.
 The last sentence is superseded by decision 87: a listener somebody modelled follows the same rule
 as a task.
 
+The sentence before it was not true for every listener. Added by story 2041 on 2026-11-01. Only
+the two lifecycle listeners of a user task carried their retries in the model. The listener on
+each start event, the end listener of the process and its cancel listener carried no `retries`
+attribute. So the cluster gave them three, and their handlers failed a job with one retry less. A
+start listener builds the workflow aggregate, and an end or cancel listener calls the
+`@WorkflowEnded` method. Both may write, and both ran up to three times without anybody asking for
+it. `Camunda8RetriesOfTheListenersVanillaBpWritesIT` measured that against the cluster. Now every
+listener VanillaBP writes carries `retries="1"`, as the user-task listeners do. Only a delivery the
+gateway lost uses that retry (see decision 27). Every handler of such a listener fails the job with
+no retries left, whatever the job carries, so the first failure raises the incident. That also
+covers a process version the cluster still holds with the old default. The sentence reads true
+now: no listener VanillaBP writes is tried a second time.
+
 **A user task which is ending.** The pre-commit check of `completeUserTask` sends an empty
 update. For a task in `CANCELING` or `COMPLETING` the engine answers `409`, the same answer as for
 a task which is still being created. Read alone, the transaction committed, and the completion
@@ -3911,4 +3931,8 @@ Measured with `Camunda8NegativeRetriesCanaryIT` on 2026-10-29, against `camunda/
 - Resolving the incident of a job without retries is refused with `409 INVALID_STATE`.
 - A task and an execution listener modelled with `retries="0"` each hand out a job with zero
   retries. The canary asserts this, because it is the reason for the floor.
+
+The start listener and the end listener no longer count down at all. Added by story 2041 on
+2026-11-01. Both fail a job with no retries left now, see the addition to decision 83. So the floor
+holds there without `Math.max`.
 

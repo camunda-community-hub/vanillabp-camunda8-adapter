@@ -48,7 +48,8 @@ public final class Camunda8CancelListeners {
    * @param listeners The execution listeners of the PROCESS element
    * @param jobType The job type the job of the listener carries
    * @param retries What the listener is modelled with, or <code>null</code> for the
-   *          default of the cluster. The end listener next to it uses that default too
+   *          default of the cluster. The adapter passes the retries of the end listener next
+   *          to it
    */
   public static void addProcessCancelListener(
       final ZeebeExecutionListeners listeners,

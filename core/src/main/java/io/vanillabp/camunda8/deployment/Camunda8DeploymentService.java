@@ -4188,7 +4188,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .jobType(startEvent.listenerJobType())
               .handler(new Camunda8BpmsInitiatedStartHandler(
                   adapterId, workflowModuleId, plainProcessId, startEvent.startEventId(), startEvent.kind(), startEvent
-                      .signalName(), bpmsInitiatedStartInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
+                      .signalName(), bpmsInitiatedStartInvoker, drain, this::reportErrorsAsStackTraceFor))
               .timeout(
                   listenerLockOf(workflowModuleId, List.of(startEvent.bpmnProcessId()), "start-event", startEvent
                       .listenerJobType()))
@@ -4231,7 +4231,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
               .handler(new Camunda8WorkflowEndedHandler(
                   adapterId, workflowModuleId, plainProcessId, workflowTaskWiring
                       .resolveWorkflowAggregateIdName(workflowModuleId,
-                          plainProcessId), workflowEndedInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
+                          plainProcessId), workflowEndedInvoker, drain, this::reportErrorsAsStackTraceFor))
               .timeout(
                   listenerLockOf(workflowModuleId, List.of(scopedProcessId), "workflow-end", Camunda8TaskWiring
                       .workflowEndedJobTypeOf(scopedProcessId)))
@@ -4728,7 +4728,7 @@ public class Camunda8DeploymentService implements AdapterDeploymentService<BpmnM
         .newWorker()
         .jobType(jobType)
         .handler(new Camunda8WorkflowEndedHandler(
-            adapterId, workflowModuleId, bpmnProcessId, aggregateIdName, workflowEndedInvoker, drain, retryBackoffResolver, this::reportErrorsAsStackTraceFor))
+            adapterId, workflowModuleId, bpmnProcessId, aggregateIdName, workflowEndedInvoker, drain, this::reportErrorsAsStackTraceFor))
         .timeout(listenerLockOf(workflowModuleId, List.of(scopedBpmnProcessId), "workflow-end", jobType))
         .name("vanillabp-%s-%s".formatted(adapterId, scopedBpmnProcessId)), jobType),
         workflowModuleId,

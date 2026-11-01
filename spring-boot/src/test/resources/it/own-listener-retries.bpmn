@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_OwnListenerRetries"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="OwnListenerRetriesProcess" isExecutable="true">
+    <bpmn:startEvent id="OwnListenerRetriesStart">
+      <bpmn:outgoing>Flow_ToOwnListenerRetriesEnd</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToOwnListenerRetriesEnd" sourceRef="OwnListenerRetriesStart"
+                       targetRef="OwnListenerRetriesEnd" />
+    <bpmn:endEvent id="OwnListenerRetriesEnd">
+      <bpmn:incoming>Flow_ToOwnListenerRetriesEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>

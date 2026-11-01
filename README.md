@@ -2869,10 +2869,21 @@ every process of the module, an unclaimed one included. Such a process is left o
 because `wireBpmn` does nothing for a process nobody claims. Held by
 `Camunda8UnclaimedProcessTest#anUnclaimedProcessGetsNoWorkflowEndListener`.
 
+Both listeners are written with `retries="1"`, and both handlers fail a job with no retries
+left. Building the aggregate and a `@WorkflowEnded` method may write, and nobody modelled these
+listeners, so nobody asked for a second attempt. The first failure raises the incident. The one
+retry in the model is for a delivery the gateway lost, see
+[the retry a lost listener delivery needs](#the-retry-a-lost-listener-delivery-needs). The cancel
+listener of the process on the 8.10 line gets the same. Why: the addition to
+[decision 83](./DECISIONS.md#83-a-failed-job-is-retried-only-where-the-model-asks-for-it-and-a-user-task-which-is-ending-rolls-the-completion-back).
+
 `Camunda8BpmsInitiatedStartIT#timerStartCreatesTheAggregate` drives a timer start and the end
 behind it, `Camunda8WorkflowLifecycleTest#theClusterStartsAWorkflowOnItsOwn` the same on
 Quarkus, and `Camunda8OutcomeCommandRetryTest#theStartEventListenerFollowsTheSameRule` with
-`#theWorkflowEndListenerBacksItsFailureOff` the way both listeners report a failure.
+`#theWorkflowEndListenerLeavesNoRetry` the way both listeners report a failure.
+`Camunda8RetriesOfTheProcessListenersTest` holds what the model carries, and
+`Camunda8RetriesOfTheListenersVanillaBpWritesIT` that a failing start and a failing end are
+each tried once on a real cluster, and come back once an operator gives the job a retry.
 
 ### Versions of a process
 
@@ -3788,6 +3799,8 @@ free slots, so it was neither.
 
 The lifecycle listeners VanillaBP writes into a user task are modelled with `retries="1"`.
 Version 1 wrote `retries="0"` there and 2.0 did too, until a nightly run showed what that costs.
+The listener on each start event and the end and cancel listeners of the process carry the same
+number, for the same reason. Before, they carried none, so the cluster gave them three.
 
 The modelled number is not the number of retries a failed notification has left. Whatever the
 model says, the handler fails such a job with no retries left. So a notification which really

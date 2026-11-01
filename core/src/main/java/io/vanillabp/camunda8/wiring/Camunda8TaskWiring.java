@@ -428,6 +428,7 @@ public final class Camunda8TaskWiring {
     listener
         .setEventType(ZeebeExecutionListenerEventType.end);
     listener.setType(jobType);
+    listener.setRetries(ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST);
     // LAST listener. Whatever the model itself does at the end of the process runs
     // before the application is told the workflow ended.
     listeners.addChildElement(listener);
@@ -464,10 +465,11 @@ public final class Camunda8TaskWiring {
       return true;
     }
 
-    // the retries of the end listener, which are the default of the model. A failed
-    // notification is failed with one attempt less. The last failure raises the
-    // incident an operator acts on.
-    Camunda8CancelListeners.addProcessCancelListener(listeners, jobType, null);
+    // the retries of the end listener next to it. Only a lost delivery uses the one
+    // retry. A failed notification is failed with none left, so it raises the incident
+    // an operator acts on at once.
+    Camunda8CancelListeners.addProcessCancelListener(listeners, jobType,
+        ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST);
     return true;
 
   }
@@ -768,9 +770,10 @@ public final class Camunda8TaskWiring {
 
   /**
    * Attaches a <code>start</code> execution listener to the start event, unless the
-   * model already carries it (wiring a model again which was already processed). Retries
-   * stay at the Camunda default. Unlike with the user-task listeners, a failure here means
-   * the workflow has no aggregate. That is worth retrying before it becomes an incident.
+   * model already carries it (wiring a model again which was already processed). It is
+   * written with one retry, like every listener of VanillaBP. Only a lost delivery uses it.
+   * Building the aggregate may write, and nobody asked for a second attempt. So a failed
+   * build raises the incident at once. See decision 83 in the repository's DECISIONS.md.
    * <p>
    * It costs the model one <code>zeebe:executionListeners</code> element per start event.
    * {@code Camunda8StartListenerCostTest} measures that.
@@ -818,6 +821,7 @@ public final class Camunda8TaskWiring {
     listener
         .setEventType(ZeebeExecutionListenerEventType.end);
     listener.setType(listenerJobType);
+    listener.setRetries(ONE_ATTEMPT_LEFT_FOR_A_DELIVERY_THE_GATEWAY_LOST);
     // the workflow aggregate is built here. So the listener of VanillaBP has to run
     // before any listener the model brings along.
     listeners.insertElementAfter(listener, null);
@@ -1158,9 +1162,12 @@ public final class Camunda8TaskWiring {
   }
 
   /**
-   * What the lifecycle listeners of a user task are modelled with.
+   * What every listener VanillaBP writes into a model is modelled with: the lifecycle
+   * listeners of a user task, the listener on each start event, and the end and cancel
+   * listeners of the process. Without the attribute, the cluster would give each of them
+   * three retries. Nobody modelled these listeners, so nobody asked for a retry.
    * <p>
-   * Version 1 wrote <code>retries="0"</code> here, and that number is not only what a failed
+   * Version 1 wrote <code>retries="0"</code> on the listeners of a user task, and that number is not only what a failed
    * notification has left. Sometimes a gateway cannot hand an activated batch to the request
    * it was activated for. Then it fails the job back to the broker WITH THE RETRIES IT HAD.
    * So a job modelled without one has nothing to be failed back with. The lost delivery
@@ -1168,10 +1175,11 @@ public final class Camunda8TaskWiring {
    * retry makes that job activatable again. This adapter documents that recovery for every
    * other job.
    * <p>
-   * It does not give a failed notification a second attempt. The handler fails such a job
+   * It does not give a failed notification a second attempt. Each handler fails such a job
    * with no retries left, whatever the model says. So the first failure raises the incident
    * an operator acts on, as before. See
-   * {@link Camunda8UserTaskListenerHandler} and
+   * {@link Camunda8UserTaskListenerHandler}, {@link Camunda8BpmsInitiatedStartHandler},
+   * {@link Camunda8WorkflowEndedHandler} and
    * {@code Camunda8ShutdownHandlingTest#aListenerFailingIsReported}.
    * <p>
    * Why these are two numbers and not one: see decision 27 in the repository's DECISIONS.md.
