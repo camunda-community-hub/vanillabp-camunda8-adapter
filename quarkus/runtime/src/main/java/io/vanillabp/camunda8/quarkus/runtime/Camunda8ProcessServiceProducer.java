@@ -94,7 +94,7 @@ public class Camunda8ProcessServiceProducer {
           // the platform resolves the time-to-live, the same for every adapter. What the
           // cluster can do with a value is checked here
           Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive(
-              adapterId, properties.messageTimesToLiveWritten());
+              adapterId, properties.messageTimesToLiveWrittenFor(adapterId));
           processService.setMessageTimeToLiveResolver(properties.messageTimeToLiveResolver());
           return processService;
         })

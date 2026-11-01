@@ -3014,15 +3014,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (startTenantId != null) {
         startCommand = startCommand.tenantId(startTenantId);
       }
-      // the WORKFLOW MODULE level only, on purpose, the widest level the key has. This
-      // message starts a workflow, so its deduplication should last as long as possible. The
-      // subscription of a message START event exists as long as the process is deployed, so
-      // the buffering half of the number does not apply here at all. An override per
-      // workflow or per message, meant for a repeating catch event, must not shorten the
-      // protection against a workflow started twice
-      final var startTimeToLive = messageTimeToLiveResolver == null
-          ? null
-          : messageTimeToLiveResolver.configuredFor(request.workflowModuleId(), null, null);
+      // resolved like every other message: the message, then the workflow, then the
+      // workflow module. It is read for the process whose model has the message start event,
+      // which is the process this message starts (see decision 77 in the repository's
+      // DECISIONS.md and its addendum)
+      final var startTimeToLive = messageTimeToLiveFor(
+          request.workflowModuleId(),
+          request.bpmnProcessId(),
+          request.messageName());
       if (startTimeToLive != null) {
         startCommand = startCommand.timeToLive(startTimeToLive);
       }

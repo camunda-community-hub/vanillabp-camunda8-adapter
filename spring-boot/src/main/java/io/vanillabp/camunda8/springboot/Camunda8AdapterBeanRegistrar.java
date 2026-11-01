@@ -79,7 +79,7 @@ public class Camunda8AdapterBeanRegistrar implements BeanRegistrar {
                 // cluster can do with a value is checked here
                 final var coreProperties = supplierContext.bean(MigrationAdapterProperties.class);
                 Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive(
-                    adapterId, coreProperties.messageTimesToLiveWritten());
+                    adapterId, coreProperties.messageTimesToLiveWrittenFor(adapterId));
                 processService.setMessageTimeToLiveResolver(coreProperties.messageTimeToLiveResolver());
                 return processService;
               }));

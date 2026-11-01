@@ -166,6 +166,33 @@ public class Camunda8SettingsOfACalledProcessTest {
   }
 
   @Test
+  @DisplayName("A start by message gets the time-to-live of the process whose start event has the message")
+  public void aStartByMessageIsResolvedLikeEveryOtherMessage() {
+
+    deployed(CALLER, startedBy(CALLER, MESSAGE));
+    deployed(CHILD, waitingFor(CHILD, null));
+    publishesAreAccepted();
+    // a value only for this message of the started process, the most specific level
+    processService
+        .setMessageTimeToLiveResolver((
+            workflowModuleId,
+            bpmnProcessId,
+            messageName) -> CALLER.equals(bpmnProcessId) && MESSAGE.equals(messageName)
+                ? Duration.ofMinutes(9)
+                : TIME_TO_LIVE_OF.get(bpmnProcessId));
+
+    processService
+        .phaseOperations()
+        .get(PhaseOperation.START_WORKFLOW_BY_MESSAGE)
+        .phaseTwo(
+            new PhaseTwoRequest<>(
+                MODULE, CALLER, null, "56", Map.of(PhaseTwoCall.ARG_MESSAGE_NAME, MESSAGE)));
+
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(Duration.ofMinutes(9));
+
+  }
+
+  @Test
   @DisplayName("A push without a task reaches the called instances which continue the aggregate")
   public void aPushWithoutATaskReachesTheCalledInstances() {
 
@@ -263,6 +290,33 @@ public class Camunda8SettingsOfACalledProcessTest {
             ? "ToTheEnd"
             : "ToTheWait",
         waits);
+
+  }
+
+  /**
+   * @param processId The process
+   * @param messageName The message its start event is started by
+   * @return A BPMN file
+   */
+  private static String startedBy(
+      final String processId,
+      final String messageName) {
+
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+            id="Definitions_%1$s" targetNamespace="http://bpmn.io/schema/bpmn">
+          <bpmn:message id="TheMessage" name="%2$s" />
+          <bpmn:process id="%1$s" isExecutable="true">
+            <bpmn:startEvent id="Start">
+              <bpmn:outgoing>ToTheEnd</bpmn:outgoing>
+              <bpmn:messageEventDefinition messageRef="TheMessage" />
+            </bpmn:startEvent>
+            <bpmn:sequenceFlow id="ToTheEnd" sourceRef="Start" targetRef="End" />
+            <bpmn:endEvent id="End"><bpmn:incoming>ToTheEnd</bpmn:incoming></bpmn:endEvent>
+          </bpmn:process>
+        </bpmn:definitions>
+        """.formatted(processId, messageName);
 
   }
 

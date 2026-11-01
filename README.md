@@ -1137,8 +1137,11 @@ vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.mess
 There is no key for the whole application and none below `adapters.<adapter-id>`. The platform
 ends the startup for such a line and names the three keys. So VanillaBP never sets the default of
 the client. Zero or less ends the startup as well, because the cluster would drop every such
-message the moment it arrives. This adapter checks every written value for that
-(`Camunda8AdapterConfiguration#refuseNonPositiveMessageTimesToLive`).
+message the moment it arrives. This adapter checks every value written for a workflow module it
+serves, the ones whose prioritized adapters name it
+(`Camunda8AdapterConfiguration#refuseNonPositiveMessageTimesToLive`,
+`MessageTimeToLiveOfTheServedModulesTest`). Zero in a module only the Camunda 7 family serves
+means "do not wait" there and stays allowed.
 
 The number does two jobs which pull in opposite directions. It BUFFERS a message published
 before its subscription exists, which wants it large. And it is the window in which a message id
@@ -1167,17 +1170,16 @@ seconds later and forgotten after 75
 two legitimate correlations apart is what they carry: a varying correlation id, or the
 activation.
 
-`startWorkflowByMessagePhaseTwo` deliberately reads the WORKFLOW MODULE level only, the widest
-level the key has. That message starts a workflow, so its deduplication is wanted for as long as
-possible, and the subscription of a message start event exists as long as the process is
-deployed. An override per workflow or per message, meant for a repeating catch event, must not
-shorten the protection against a double-started workflow.
+`startWorkflowByMessagePhaseTwo` resolves the time-to-live like every other message: message,
+workflow, workflow module. It reads it for the process whose model has the message start event,
+which is the process the message starts (decision 77 and its addendum,
+`Camunda8SettingsOfACalledProcessTest#aStartByMessageIsResolvedLikeEveryOtherMessage`). The
+deduplication of a start lasts as long as the time-to-live of its message, so write a long one
+for a start message where a double-started workflow would hurt.
 
 The three levels resolve with the message as the most specific one
 (`Camunda8JobTimeoutOverlayTest#messageTimeToLiveResolvesThroughItsThreeLevels`, and
 `Camunda8TaskProcessingIT#messageTimeToLiveResolvesThroughItsThreeLevels` against a cluster).
-That a start message reads the workflow module level alone is an assumption: nothing pins it, and
-a per-message `message-time-to-live` turning up on a start message would disprove it.
 
 ### Which phase-two failures are repeated
 
