@@ -7,7 +7,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import io.vanillabp.camunda8.wiring.Camunda8FetchVariables;
-import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
 import io.vanillabp.camunda8.wiring.Camunda8RetryBackoffResolver;
 
 /**
@@ -1333,7 +1332,8 @@ public class Camunda8AdapterConfiguration {
   /**
    * How long the cluster keeps a published message. The number does two jobs which pull in
    * opposite directions. That is why it is resolvable per workflow module, workflow and
-   * MESSAGE, and not only per adapter (see {@link Camunda8MessageTimeToLiveResolver}):
+   * MESSAGE, and not only per adapter. The platform resolves the four levels for every
+   * adapter (see {@link io.vanillabp.integration.adapter.spi.MessageTimeToLiveResolver}):
    * <ul>
    * <li>It BUFFERS a message published before its subscription exists. For that it should
    * be large. Say the workflow is still two steps away from its catch event. The message
@@ -1820,9 +1820,8 @@ public class Camunda8AdapterConfiguration {
    * long, a second legitimate correlation of the same id is dropped without a word.
    * <p>
    * Only the ADAPTER level is checked here, the same limit {@link #validateRetryBackoff}
-   * has. The deeper levels live in the configuration overlay of the platform, and this class
-   * cannot see them. A typo there shows when that message is published. That is the price
-   * of not walking the overlay twice, once in each platform module.
+   * has. The deeper levels are resolved by the platform for every adapter, and this class
+   * does not see them. A value of zero or less there shows when that message is published.
    *
    * @param adapterId The adapter id
    * @throws IllegalStateException If the time-to-live is zero or negative

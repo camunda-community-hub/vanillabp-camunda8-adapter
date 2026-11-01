@@ -91,12 +91,8 @@ public class Camunda8ProcessServiceProducer {
           processService
               .setConfiguredTenants(
                   workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));
-          processService
-              .setMessageTimeToLiveResolver((
-                  workflowModuleId,
-                  bpmnProcessId,
-                  messageName) -> overlay
-                      .messageTimeToLiveFor(workflowModuleId, bpmnProcessId, messageName, adapterId));
+          // the platform resolves the time-to-live for every adapter which knows the key
+          processService.setMessageTimeToLiveResolver(properties.messageTimeToLiveResolverFor(adapterId));
           return processService;
         })
         .toList();

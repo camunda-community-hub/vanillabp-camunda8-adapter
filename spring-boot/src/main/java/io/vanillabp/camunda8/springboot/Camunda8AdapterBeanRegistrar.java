@@ -13,6 +13,7 @@ import io.vanillabp.camunda8.processservice.Camunda8ProcessService;
 import io.vanillabp.camunda8.springboot.client.VanillaBpCamunda8Properties;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
+import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.adapter.spi.PreCommitRegistrar;
 import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
@@ -73,12 +74,11 @@ public class Camunda8AdapterBeanRegistrar implements BeanRegistrar {
                 processService
                     .setConfiguredTenants(
                         workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));
+                // the platform resolves the time-to-live for every adapter which knows the key
                 processService
-                    .setMessageTimeToLiveResolver((
-                        workflowModuleId,
-                        bpmnProcessId,
-                        messageName) -> overlay
-                            .messageTimeToLiveFor(workflowModuleId, bpmnProcessId, messageName, adapterId));
+                    .setMessageTimeToLiveResolver(supplierContext
+                        .bean(MigrationAdapterProperties.class)
+                        .messageTimeToLiveResolverFor(adapterId));
                 return processService;
               }));
 

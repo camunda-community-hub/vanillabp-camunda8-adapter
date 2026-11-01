@@ -75,9 +75,18 @@ public class Camunda8SettingsOfACalledProcessTest {
   private final CamundaClient client = mock(CamundaClient.class);
 
   /**
-   * The processes the time-to-live was asked for, in order.
+   * The time-to-live configured for each process. Each one is different, so the value on
+   * the published command names the process it was read for.
    */
-  private final List<String> processesAskedForTheTimeToLive = new ArrayList<>();
+  private static final Map<String, Duration> TIME_TO_LIVE_OF = Map.of(
+      CALLER, Duration.ofMinutes(5),
+      CHILD, Duration.ofMinutes(6),
+      OTHER_CHILD, Duration.ofMinutes(7));
+
+  /**
+   * The command which the correlation published.
+   */
+  private PublishMessageCommandStep1 published;
 
   /**
    * Which process instances the changed aggregate was written to.
@@ -109,10 +118,7 @@ public class Camunda8SettingsOfACalledProcessTest {
         .setMessageTimeToLiveResolver((
             workflowModuleId,
             bpmnProcessId,
-            messageName) -> {
-          processesAskedForTheTimeToLive.add(bpmnProcessId);
-          return Duration.ofMinutes(5);
-        });
+            messageName) -> TIME_TO_LIVE_OF.get(bpmnProcessId));
 
   }
 
@@ -126,7 +132,7 @@ public class Camunda8SettingsOfACalledProcessTest {
 
     correlate();
 
-    assertEquals(List.of(CHILD), processesAskedForTheTimeToLive);
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(TIME_TO_LIVE_OF.get(CHILD));
 
   }
 
@@ -140,7 +146,7 @@ public class Camunda8SettingsOfACalledProcessTest {
 
     correlate();
 
-    assertEquals(List.of(CALLER), processesAskedForTheTimeToLive);
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(TIME_TO_LIVE_OF.get(CALLER));
 
   }
 
@@ -155,7 +161,7 @@ public class Camunda8SettingsOfACalledProcessTest {
 
     correlate();
 
-    assertEquals(List.of(CALLER), processesAskedForTheTimeToLive);
+    Mockito.verify((PublishMessageCommandStep3) published).timeToLive(TIME_TO_LIVE_OF.get(CALLER));
 
   }
 
@@ -276,6 +282,7 @@ public class Camunda8SettingsOfACalledProcessTest {
                     : Mockito.RETURNS_DEFAULTS.answer(invocation)));
     Mockito.lenient().when(((PublishMessageCommandStep3) command).send()).thenAnswer(invocation -> future(null));
     Mockito.lenient().when(client.newPublishMessageCommand()).thenReturn(command);
+    published = command;
 
   }
 

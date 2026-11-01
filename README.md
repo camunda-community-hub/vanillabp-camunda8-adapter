@@ -1124,8 +1124,11 @@ cluster).
 ### How long the cluster keeps a message
 
 `message-time-to-live` decides it. Before, the client default applied. Now the value resolves
-per adapter, workflow module, workflow and MESSAGE. That is the same most-specific-wins
-machinery `job-timeout` uses, with a message as the most specific level instead of a task:
+per adapter, workflow module, workflow and MESSAGE. That is the most-specific-wins rule
+`job-timeout` follows, with a message as the most specific level instead of a task. The
+platform resolves it for every adapter which knows the key
+(`MigrationAdapterProperties#messageTimeToLive`), so the Camunda 7 family reads the same levels.
+Only the adapter level is bound here as well, because it is the default of the client:
 
 ```
 vanillabp.workflow-modules.<workflow-module-id>.workflows.<bpmn-process-id>.messages.<message-name>.adapters.<adapter-id>.message-time-to-live
@@ -1145,7 +1148,9 @@ take a message, and a message may be published before anything waits for it. So 
 models decide: the process of the call if its own model waits for the message, otherwise the one
 other process of the workflow module whose model does. If none does, or several others do, the
 process of the call is used (`Camunda8SettingsOfACalledProcessTest`, decision 77 in the
-repository's DECISIONS.md).
+repository's DECISIONS.md). This adapter reads the models, and the platform's
+`MessageTimeToLiveResolver` applies the rule. It reads them only where the processes of the
+module would answer differently.
 
 **Shortening it does not buy a short deduplication window.** The cluster forgets an expired
 message id on a sweep of its own, not at the moment it expires. Measured against
