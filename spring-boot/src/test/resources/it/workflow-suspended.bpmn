@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_WorkflowSuspended"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- An asynchronous service task and a user task, both answered by the application, so a test
+       can suspend the instance while either of them waits for its answer. -->
+  <bpmn:process id="SuspendableProcess" isExecutable="true">
+    <bpmn:startEvent id="SuspendableStart">
+      <bpmn:outgoing>Flow_ToAsyncTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToAsyncTask" sourceRef="SuspendableStart" targetRef="Activity_AsyncTask" />
+    <bpmn:serviceTask id="Activity_AsyncTask">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="answeredWhileSuspendable" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToAsyncTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToUserTask</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_ToUserTask" sourceRef="Activity_AsyncTask" targetRef="Activity_UserTask" />
+    <bpmn:userTask id="Activity_UserTask">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition externalReference="userTaskAnsweredWhileSuspendable" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToUserTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToSuspendableEnd</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_ToSuspendableEnd" sourceRef="Activity_UserTask" targetRef="Event_SuspendableEnd" />
+    <bpmn:endEvent id="Event_SuspendableEnd">
+      <bpmn:incoming>Flow_ToSuspendableEnd</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>
