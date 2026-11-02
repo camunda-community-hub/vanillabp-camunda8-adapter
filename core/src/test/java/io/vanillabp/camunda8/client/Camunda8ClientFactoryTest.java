@@ -132,7 +132,6 @@ public class Camunda8ClientFactoryTest {
     configuration.setPollInterval(Duration.ofMillis(250));
     configuration.setRequestTimeout(Duration.ofSeconds(20));
     configuration.setStreamEnabled(true);
-    configuration.setMessageTimeToLive(Duration.ofHours(6));
     configuration.setMaxMessageSize(8 * 1024 * 1024);
     configuration.setKeepAlive(Duration.ofSeconds(30));
     configuration.setMaxHttpConnections(64);
@@ -145,7 +144,9 @@ public class Camunda8ClientFactoryTest {
       assertEquals(Duration.ofMillis(250), clientConfiguration.getDefaultJobPollInterval());
       assertEquals(Duration.ofSeconds(20), clientConfiguration.getDefaultRequestTimeout());
       assertTrue(clientConfiguration.getDefaultJobWorkerStreamEnabled());
-      assertEquals(Duration.ofHours(6), clientConfiguration.getDefaultMessageTimeToLive());
+      // no key of VanillaBP sets the client's default time-to-live. A message without a
+      // configured one gets the client's own default
+      assertEquals(Duration.ofHours(1), clientConfiguration.getDefaultMessageTimeToLive());
       assertEquals(8 * 1024 * 1024, clientConfiguration.getMaxMessageSize());
       assertEquals(Duration.ofSeconds(30), clientConfiguration.getKeepAlive());
       assertEquals(64, clientConfiguration.getMaxHttpConnections());

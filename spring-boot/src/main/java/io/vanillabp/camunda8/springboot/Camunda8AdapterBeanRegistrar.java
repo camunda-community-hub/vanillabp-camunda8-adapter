@@ -6,6 +6,7 @@ import org.springframework.beans.factory.BeanRegistrar;
 import org.springframework.beans.factory.BeanRegistry;
 import org.springframework.core.env.Environment;
 
+import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactoryRegistry;
 import io.vanillabp.camunda8.deployment.Camunda8DeploymentService;
 import io.vanillabp.camunda8.observability.Camunda8Metrics;
@@ -13,6 +14,7 @@ import io.vanillabp.camunda8.processservice.Camunda8ProcessService;
 import io.vanillabp.camunda8.springboot.client.VanillaBpCamunda8Properties;
 import io.vanillabp.camunda8.wiring.Camunda8JobTimeoutResolver;
 import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
+import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.adapter.spi.PreCommitRegistrar;
 import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
@@ -73,12 +75,12 @@ public class Camunda8AdapterBeanRegistrar implements BeanRegistrar {
                 processService
                     .setConfiguredTenants(
                         workflowModuleId -> overlay.configuredTenantFor(adapterId, workflowModuleId));
-                processService
-                    .setMessageTimeToLiveResolver((
-                        workflowModuleId,
-                        bpmnProcessId,
-                        messageName) -> overlay
-                            .messageTimeToLiveFor(workflowModuleId, bpmnProcessId, messageName, adapterId));
+                // the platform resolves the time-to-live, the same for every adapter. What the
+                // cluster can do with a value is checked here
+                final var coreProperties = supplierContext.bean(MigrationAdapterProperties.class);
+                Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive(
+                    adapterId, coreProperties.messageTimesToLiveWrittenFor(adapterId));
+                processService.setMessageTimeToLiveResolver(coreProperties.messageTimeToLiveResolver());
                 return processService;
               }));
 

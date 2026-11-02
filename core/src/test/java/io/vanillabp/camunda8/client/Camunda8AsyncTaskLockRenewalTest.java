@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -115,25 +117,29 @@ public class Camunda8AsyncTaskLockRenewalTest {
     // zero means the cluster drops every message this adapter publishes the moment it
     // arrives, and nothing at runtime says so. A workflow which waits for one waits forever
     for (final var wrong : List.of(Duration.ZERO, Duration.ofSeconds(-1))) {
-      final var configuration = new Camunda8AdapterConfiguration();
-      configuration.setMessageTimeToLive(wrong);
+      final var written = new LinkedHashMap<String, Duration>();
+      written.put("vanillabp.workflow-modules.loans.message-time-to-live", Duration.ofMinutes(1));
+      written.put("vanillabp.workflow-modules.loans.workflows.Loan.messages.Signed.message-time-to-live", wrong);
 
       final var message = assertThrows(
           IllegalStateException.class,
-          () -> configuration.validateMessageTimeToLive("c8")).getMessage();
+          () -> Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive("c8", written)).getMessage();
 
-      assertTrue(message.contains("vanillabp.adapters.c8.message-time-to-live"), message);
+      assertTrue(message.contains("Camunda 8 adapter 'c8'"), message);
+      assertTrue(message.contains(
+          "vanillabp.workflow-modules.loans.workflows.Loan.messages.Signed.message-time-to-live: "
+              + wrong),
+          message);
       assertTrue(message.contains("dropped the moment"), message);
       // and the way out, including the level where a number goes which cannot serve everything
-      assertTrue(message.contains("messages.<message>"), message);
+      assertTrue(message.contains("messages.<message>.message-time-to-live"), message);
     }
 
     // nothing configured is the normal case. The client's default applies, and
     // VanillaBP sets nothing on the command
-    assertDoesNotThrow(() -> new Camunda8AdapterConfiguration().validateMessageTimeToLive("c8"));
-    final var configured = new Camunda8AdapterConfiguration();
-    configured.setMessageTimeToLive(Duration.ofMinutes(1));
-    assertDoesNotThrow(() -> configured.validateMessageTimeToLive("c8"));
+    assertDoesNotThrow(() -> Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive("c8", Map.of()));
+    assertDoesNotThrow(() -> Camunda8AdapterConfiguration.refuseNonPositiveMessageTimesToLive(
+        "c8", Map.of("vanillabp.workflow-modules.loans.message-time-to-live", Duration.ofMinutes(1))));
 
   }
 

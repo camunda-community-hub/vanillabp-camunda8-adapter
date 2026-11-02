@@ -60,14 +60,15 @@ public interface VanillaBpCamunda8Properties {
    * <ul>
    * <li><code>job-timeout</code>, <code>retry-backoff</code> and
    * <code>report-errors-as-stack-trace</code>, over all four levels.</li>
-   * <li><code>message-time-to-live</code>, with a MESSAGE instead of a task as the most
-   * specific level.</li>
    * <li><code>allow-connectors</code> and <code>allow-listeners</code>, with the workflow
    * as the most specific level.</li>
    * <li><code>tenant-id</code>, with the workflow module as the ONLY level below the
    * adapter. A tenant id belongs to the deployment, and this adapter deploys once per
    * workflow module.</li>
    * </ul>
+   * <code>message-time-to-live</code> is not here. It names no adapter, and the platform
+   * reads it for every adapter at the workflow module, the workflow and the message (see
+   * {@code MigrationAdapterProperties#messageTimeToLive}).
    *
    * @return The workflow-module sections, keyed by workflow module ID
    */
@@ -418,40 +419,6 @@ public interface VanillaBpCamunda8Properties {
   }
 
   /**
-   * Resolves the time-to-live of a published message. The most specific level wins, and
-   * here the MOST specific level is the message, not a task. Without a value at a scope
-   * level, the adapter level counts. Without that the result is <code>null</code>: the
-   * command stays as it is, and the client's own default applies.
-   *
-   * @param workflowModuleId The workflow module ID
-   * @param bpmnProcessId The BPMN process ID
-   * @param messageName The BPMN message name as the application wrote it
-   * @param adapterId The adapter ID
-   * @return The most specific configured time-to-live or <code>null</code>
-   */
-  default Duration messageTimeToLiveFor(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final String messageName,
-      final String adapterId) {
-
-    final var scoped = messageScopedKeysMostSpecificFirst(
-        workflowModuleId, bpmnProcessId, messageName, adapterId)
-        .map(Camunda8ScopedKeys::messageTimeToLive)
-        .filter(Optional::isPresent)
-        .map(Optional::get)
-        .findFirst();
-    if (scoped.isPresent()) {
-      return scoped.get();
-    }
-    final var adapter = adapters().get(adapterId);
-    return (adapter == null) || adapter.messageTimeToLive().isEmpty()
-        ? null
-        : adapter.messageTimeToLive().get();
-
-  }
-
-  /**
    * Resolves whether an element built from an element template is left to the runtime which
    * owns it. There are THREE levels here, not four: workflow, workflow module, adapter. The
    * most specific configured value wins, both for on and for off. This is a deliberate
@@ -533,52 +500,6 @@ public interface VanillaBpCamunda8Properties {
                         module.getKey(), workflow.getKey(), task.getKey(), adapterId,
                         Camunda8Connectors.ALLOW_CONNECTORS_KEY))))
         .toList();
-
-  }
-
-  /**
-   * The <code>adapters.&lt;id&gt;</code> sections of the three levels below the adapter for
-   * a MESSAGE, most specific first. This is separate from
-   * {@link #scopedKeysMostSpecificFirst} because the most specific level is a different
-   * map. A message is not a task. If a message used the task level, a value meant for one
-   * would also apply to the other.
-   *
-   * @param workflowModuleId The workflow module ID
-   * @param bpmnProcessId The BPMN process ID
-   * @param messageName The BPMN message name
-   * @param adapterId The adapter ID
-   * @return The sections which exist, most specific first
-   */
-  private Stream<Camunda8ScopedKeys> messageScopedKeysMostSpecificFirst(
-      final String workflowModuleId,
-      final String bpmnProcessId,
-      final String messageName,
-      final String adapterId) {
-
-    final var module = workflowModuleId != null
-        ? workflowModules().get(workflowModuleId)
-        : null;
-    final var workflow = (module != null) && (bpmnProcessId != null)
-        ? module.workflows().get(bpmnProcessId)
-        : null;
-    final var message = (workflow != null) && (messageName != null)
-        ? workflow.messages().get(messageName)
-        : null;
-
-    final var levelsMostSpecificFirst = new LinkedList<Map<String, ? extends Camunda8ScopedKeys>>();
-    if (message != null) {
-      levelsMostSpecificFirst.add(message.adapters());
-    }
-    if (workflow != null) {
-      levelsMostSpecificFirst.add(workflow.adapters());
-    }
-    if (module != null) {
-      levelsMostSpecificFirst.add(module.adapters());
-    }
-    return levelsMostSpecificFirst
-        .stream()
-        .<Camunda8ScopedKeys>map(level -> level.get(adapterId))
-        .filter(Objects::nonNull);
 
   }
 
@@ -914,15 +835,6 @@ public interface VanillaBpCamunda8Properties {
     Optional<Duration> streamTimeout();
 
     /**
-     * How long the cluster keeps a published message while it waits for a subscription.
-     * In the same window a message id removes duplicates. Default: the client's one
-     * hour.
-     *
-     * @return The message time-to-live
-     */
-    Optional<Duration> messageTimeToLive();
-
-    /**
      * The client's maximum inbound message size in bytes. Default: the client's.
      *
      * @return The maximum message size
@@ -1129,13 +1041,6 @@ public interface VanillaBpCamunda8Properties {
     Optional<String> fetchVariables();
 
     /**
-     * How long the cluster keeps a published message, at this level.
-     *
-     * @return The message time-to-live
-     */
-    Optional<Duration> messageTimeToLive();
-
-    /**
      * Whether an element built from an element template is left to the runtime which owns
      * it, at this level. It is empty, not <code>false</code>, where nothing is configured.
      * This lets a workflow module switch OFF what the adapter switched on.
@@ -1217,15 +1122,6 @@ public interface VanillaBpCamunda8Properties {
     @ConfigDocMapKey("task-definition")
     Map<String, TaskOverlay> tasks();
 
-    /**
-     * The message sections of the workflow, keyed by message name. They are the most
-     * specific level of the keys which are about a MESSAGE and not about a task.
-     *
-     * @return The message sections
-     */
-    @ConfigDocMapKey("message-name")
-    Map<String, MessageOverlay> messages();
-
   }
 
   /**
@@ -1236,22 +1132,6 @@ public interface VanillaBpCamunda8Properties {
 
     /**
      * The task-level adapter sections, keyed by adapter ID.
-     *
-     * @return The adapter sections
-     */
-    @ConfigDocMapKey("adapter-id")
-    Map<String, Camunda8ScopedKeys> adapters();
-
-  }
-
-  /**
-   * The Camunda 8 adapter's view of one message section. It is the MOST specific level for
-   * a key about a published message.
-   */
-  interface MessageOverlay {
-
-    /**
-     * The message-level adapter sections, keyed by adapter ID.
      *
      * @return The adapter sections
      */

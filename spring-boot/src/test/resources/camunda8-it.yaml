@@ -15,11 +15,11 @@ vanillabp:
       job-timeout: PT30S
       retry-backoff: PT30S
       async-task-lock-renewal: PT2M
-      message-time-to-live: PT6H
   prioritized-adapters:
     - c8
   workflow-modules:
     test-app:
+      message-time-to-live: PT5H
       declared-task-params:
         - approved
         - results
@@ -29,7 +29,6 @@ vanillabp:
           resources-location: classpath*:it
           job-timeout: PT20S
           retry-backoff: PT20S
-          message-time-to-live: PT5H
       workflows:
         AdHocProcess:
           allow-full-sync-with-bpms: true
@@ -151,19 +150,17 @@ vanillabp:
         MessageProcess:
           messages:
             C8PaymentReceived:
-              adapters:
-                c8:
-                  message-time-to-live: PT2S
+              message-time-to-live: PT2S
         SilentUserTaskProcess:
           tasks:
             SUT_task:
               implemented-externally: true
         TaskProcess:
+          message-time-to-live: PT4H
           adapters:
             c8:
               job-timeout: PT10S
               retry-backoff: PT10S
-              message-time-to-live: PT4H
           tasks:
             happyTask:
               adapters:
@@ -172,9 +169,7 @@ vanillabp:
                   retry-backoff: PT2S
           messages:
             OfferRequested:
-              adapters:
-                c8:
-                  message-time-to-live: PT1M
+              message-time-to-live: PT1M
         AsyncProcess:
           tasks:
             asyncTask:

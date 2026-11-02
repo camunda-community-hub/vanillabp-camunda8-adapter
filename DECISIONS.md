@@ -3448,6 +3448,16 @@ call activity and the fix.
 `Camunda8ViewerUnderAPrefixTest` the viewer, and `Camunda8FetchVariablesTest#theMessagesNameTheWayOut`
 the message.
 
+**Addendum (story 2062).** Decided by the maintainer on 2026-11-01. Story 2062 of the platform moved
+`message-time-to-live` out of `adapters.<id>`. The key names no adapter now, and its widest level is the
+workflow module. So the adapter level which a start by message read above is gone. A start by message
+now gets the full resolution like every other message: the message, then the workflow, then the
+workflow module. It is read for the process whose model has the message start event, by the same model
+rule as above, and that is the process the message starts. The deduplication of a start is therefore as
+long as the time-to-live of its message, and a short value written for that message shortens it.
+`Camunda8SettingsOfACalledProcessTest#aStartByMessageIsResolvedLikeEveryOtherMessage` holds it. The text
+above stays as it was written.
+
 ### 78. A task-scoped push searches for its scope once, and phase two does not sleep
 
 *Merged into decision 64 on 2026-10-12, before the 2.0 release.*

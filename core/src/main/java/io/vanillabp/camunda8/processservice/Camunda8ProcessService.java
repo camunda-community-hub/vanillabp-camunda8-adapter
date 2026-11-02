@@ -37,7 +37,6 @@ import io.vanillabp.camunda8.client.Camunda8RefusedStart;
 import io.vanillabp.camunda8.client.Camunda8UserTaskProbe;
 import io.vanillabp.camunda8.deployment.Camunda8ModelsTheClusterHolds;
 import io.vanillabp.camunda8.wiring.Camunda8ConfiguredTenant;
-import io.vanillabp.camunda8.wiring.Camunda8MessageTimeToLiveResolver;
 import io.vanillabp.camunda8.wiring.Camunda8MultiInstance;
 import io.vanillabp.camunda8.wiring.Camunda8Scoping;
 import io.vanillabp.camunda8.wiring.Camunda8TaskWiring;
@@ -300,11 +299,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * Resolves how long the cluster keeps a message which this adapter publishes, per
-   * adapter, workflow module, workflow and message. May be <code>null</code> (tests, and a
+   * workflow module, workflow and message. May be <code>null</code> (tests, and a
    * platform written before this). Then the default of the client applies, and VanillaBP
    * sets nothing on the command.
    */
-  private Camunda8MessageTimeToLiveResolver messageTimeToLiveResolver;
+  private io.vanillabp.integration.adapter.spi.MessageTimeToLiveResolver messageTimeToLiveResolver;
 
   /**
    * The platform module injects it after construction, like the scoping next to it. It is
@@ -314,7 +313,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * @param messageTimeToLiveResolver The resolver, or <code>null</code>
    */
   public void setMessageTimeToLiveResolver(
-      final Camunda8MessageTimeToLiveResolver messageTimeToLiveResolver) {
+      final io.vanillabp.integration.adapter.spi.MessageTimeToLiveResolver messageTimeToLiveResolver) {
 
     this.messageTimeToLiveResolver = messageTimeToLiveResolver;
 
@@ -322,10 +321,12 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
 
   /**
    * How long the cluster keeps the given message, or <code>null</code> if nothing
-   * configures it.
+   * configures it. It is read for the process whose model waits for the message, which may
+   * be a called process (see decision 77 in the repository's DECISIONS.md). The platform
+   * decides which process that is. The deployed models tell it which ones wait.
    *
    * @param workflowModuleId The workflow module
-   * @param bpmnProcessId The BPMN process
+   * @param bpmnProcessId The BPMN process the correlation names
    * @param messageName The message name as the application wrote it
    * @return The time-to-live or <code>null</code>
    */
@@ -334,9 +335,21 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final String bpmnProcessId,
       final String messageName) {
 
-    return messageTimeToLiveResolver == null
-        ? null
-        : messageTimeToLiveResolver.messageTimeToLiveFor(workflowModuleId, bpmnProcessId, messageName);
+    if (messageTimeToLiveResolver == null) {
+      return null;
+    }
+    final var deployed = clientFactory
+        .getDeployedProcesses()
+        .ofWorkflowModule(workflowModuleId);
+    return messageTimeToLiveResolver.resolveFor(
+        workflowModuleId,
+        bpmnProcessId,
+        messageName,
+        deployed
+            .stream()
+            .map(io.vanillabp.camunda8.deployment.Camunda8DeployedProcesses.DeployedProcess::bpmnProcessId)
+            .toList(),
+        () -> processesWaitingForTheMessage(workflowModuleId, messageName, deployed));
 
   }
 
@@ -2001,7 +2014,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
     }
     final var timeToLive = messageTimeToLiveFor(
         request.workflowModuleId(),
-        processWaitingForTheMessage(request.workflowModuleId(), request.bpmnProcessId(), request.messageName()),
+        request.bpmnProcessId(),
         request.messageName());
     if (timeToLive != null) {
       // per message, because the number buffers AND deduplicates, and those two want it
@@ -2051,45 +2064,30 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   }
 
   /**
-   * The BPMN process whose model waits for a message, which is the process a time-to-live
-   * configured for that message belongs to.
-   * <p>
-   * A process service belongs to the process at the top, so the correlation names that
-   * process. But the event which waits may sit in a called process. Whoever configures the
-   * time-to-live of that message writes it under the called process
-   * (<code>workflows.&lt;called process&gt;.messages.&lt;message&gt;</code>). The cluster does
-   * not say which subscription will take a message, and it may take one which is published
-   * before anything waits. So the deployed models answer. It is the process of the call, if
-   * its own model waits for the message. Otherwise it is the one other process of the
-   * workflow module whose model does. If none does, or several others do, the process of
-   * the call stays the answer, as before. See decision 77 in the repository's DECISIONS.md.
+   * The processes of a workflow module whose deployed model waits for a message. The cluster
+   * does not say which subscription will take a message, and it may take one which is
+   * published before anything waits. So the models answer, not a subscription search.
    *
    * @param workflowModuleId The workflow module of the correlation
-   * @param bpmnProcessId The BPMN process of the call
    * @param messageName The message name as the application wrote it
-   * @return The plain id of the process the time-to-live is read for
+   * @param deployed The processes the workflow module deployed
+   * @return The plain ids of the processes whose model waits for the message
    */
-  private String processWaitingForTheMessage(
+  private List<String> processesWaitingForTheMessage(
       final String workflowModuleId,
-      final String bpmnProcessId,
-      final String messageName) {
+      final String messageName,
+      final java.util.Collection<io.vanillabp.camunda8.deployment.Camunda8DeployedProcesses.DeployedProcess> deployed) {
 
     final var scopedMessageName = scopedIdentifier(workflowModuleId, messageName);
-    final var waiting = clientFactory
-        .getDeployedProcesses()
-        .ofWorkflowModule(workflowModuleId)
+    return deployed
         .stream()
-        .filter(deployed -> waitsForTheMessage(
-            deployed.model(),
-            scopedProcessId(workflowModuleId, deployed.bpmnProcessId()),
+        .filter(process -> waitsForTheMessage(
+            process.model(),
+            scopedProcessId(workflowModuleId, process.bpmnProcessId()),
             scopedMessageName))
         .map(io.vanillabp.camunda8.deployment.Camunda8DeployedProcesses.DeployedProcess::bpmnProcessId)
         .distinct()
         .toList();
-    if (waiting.contains(bpmnProcessId) || (waiting.size() != 1)) {
-      return bpmnProcessId;
-    }
-    return waiting.getFirst();
 
   }
 
@@ -3054,12 +3052,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       if (startTenantId != null) {
         startCommand = startCommand.tenantId(startTenantId);
       }
-      // the ADAPTER level only, on purpose. This message starts a workflow, so its
-      // deduplication should last as long as possible. The subscription of a message START
-      // event exists as long as the process is deployed, so the buffering half of the
-      // number does not apply here at all. An override per message, meant for a repeating
-      // catch event, must not shorten the protection against a workflow started twice
-      final var startTimeToLive = clientFactory.getConfiguration().getMessageTimeToLive();
+      // resolved like every other message: the message, then the workflow, then the
+      // workflow module. It is read for the process whose model has the message start event,
+      // which is the process this message starts (see decision 77 in the repository's
+      // DECISIONS.md and its addendum)
+      final var startTimeToLive = messageTimeToLiveFor(
+          request.workflowModuleId(),
+          request.bpmnProcessId(),
+          request.messageName());
       if (startTimeToLive != null) {
         startCommand = startCommand.timeToLive(startTimeToLive);
       }
