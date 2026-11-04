@@ -14,6 +14,7 @@ import io.vanillabp.integration.adapter.migration.config.MigrationAdapterPropert
 import io.vanillabp.integration.adapter.spi.MigratableProcessService;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.adapter.spi.PreCommitRegistrar;
+import io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter;
 import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
@@ -53,6 +54,8 @@ public class Camunda8ProcessServiceProducer {
    * @param preCommitRegistrar Where phase one hooks its check into the caller's unit of work
    * @param aggregateSync Which aggregate attributes reach the cluster
    * @param scoping How identifiers are kept apart where two adapter ids share a cluster
+   * @param suspendedWorkflowReporter Where a workflow found suspended is reported, so that the
+   *          extensions hear about it
    * @return One service per configured adapter id of this type
    */
   @Produces
@@ -61,7 +64,8 @@ public class Camunda8ProcessServiceProducer {
       final Camunda8ClientFactoryRegistry clientFactoryRegistry,
       final PreCommitRegistrar preCommitRegistrar,
       final WorkflowAggregateSync aggregateSync,
-      final NameClashAvoidanceSupport scoping) {
+      final NameClashAvoidanceSupport scoping,
+      final SuspendedWorkflowReporter suspendedWorkflowReporter) {
 
     final var overlay = ConfigProvider
         .getConfig()
@@ -84,7 +88,8 @@ public class Camunda8ProcessServiceProducer {
               : Camunda8AdapterConfiguration.DEFAULT_ASYNC_TASK_LOCK_RENEWAL;
           final var processService = new Camunda8ProcessService<>(
               adapterId, clientFactoryRegistry
-                  .getFactory(adapterId), asyncTaskLockRenewal, preCommitRegistrar, aggregateSync);
+                  .getFactory(
+                      adapterId), asyncTaskLockRenewal, preCommitRegistrar, aggregateSync, suspendedWorkflowReporter);
           processService.setScoping(scoping);
           // the tenant a module's operations run in. It is resolved per workflow module,
           // and the tenant name of the adapter is the fallback

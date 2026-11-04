@@ -2,10 +2,13 @@ package io.vanillabp.camunda8.processservice;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.OptionalLong;
 
 import io.vanillabp.camunda8.client.Camunda8ClientFactory;
 import io.vanillabp.camunda8.client.Camunda8Errors;
 import io.vanillabp.camunda8.client.Camunda8Suspension;
+import io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter;
+import io.vanillabp.integration.extension.spi.runtime.SuspendedWorkflowFound;
 import io.vanillabp.integration.spi.PhaseTwoRetryLater;
 import io.vanillabp.spi.process.WorkflowSuspendedException;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +32,10 @@ import lombok.extern.slf4j.Slf4j;
  * is accepted, see {@code DECISIONS.pending/2070.md}.
  * <p>
  * A cluster of the lines 8.8 and 8.9 cannot suspend. On those lines nothing is asked.
+ * <p>
+ * Where the answer is "suspended", the extensions hear it before the call is refused or the
+ * outbox entry waits. The core tells them, and nothing they do changes what is thrown here (see
+ * {@code DECISIONS.pending/2074.md}).
  */
 @Slf4j
 final class Camunda8SuspendedWorkflow {
@@ -45,13 +52,35 @@ final class Camunda8SuspendedWorkflow {
 
   private final Camunda8ClientFactory clientFactory;
 
+  private final SuspendedWorkflowReporter reporter;
+
   Camunda8SuspendedWorkflow(
       final String adapterId,
-      final Camunda8ClientFactory clientFactory) {
+      final Camunda8ClientFactory clientFactory,
+      final SuspendedWorkflowReporter reporter) {
 
     this.adapterId = adapterId;
     this.clientFactory = clientFactory;
+    this.reporter = reporter == null
+        ? SuspendedWorkflowReporter.NOBODY_LISTENS
+        : reporter;
 
+  }
+
+  /**
+   * The call whose task met a suspended workflow, as far as the extensions hear about it.
+   *
+   * @param workflowModuleId The workflow module of the call
+   * @param bpmnProcessId The BPMN process of the call, as the application wrote it
+   * @param workflowAggregateId The aggregate id of the call, or <code>null</code> where it is not
+   *          known
+   * @param taskId The task of the call
+   */
+  record TheCall(
+                 String workflowModuleId,
+                 String bpmnProcessId,
+                 String workflowAggregateId,
+                 String taskId) {
   }
 
   /**
@@ -59,14 +88,15 @@ final class Camunda8SuspendedWorkflow {
    *
    * @param refusal What the command threw
    * @param jobKey The job the command was about
-   * @return Whether the workflow of the job is suspended
+   * @return The key of the suspended process instance of the job, or empty where the refusal
+   *         had another reason
    */
-  boolean refusedTheJob(
+  OptionalLong suspendedInstanceOfTheJob(
       final Throwable refusal,
       final long jobKey) {
 
     if (!Camunda8Suspension.theClusterCanSuspend() || !Camunda8Errors.jobHeldByAnotherActivation(refusal)) {
-      return false;
+      return OptionalLong.empty();
     }
     try {
       final var jobs = clientFactory
@@ -82,16 +112,19 @@ final class Camunda8SuspendedWorkflow {
                 + "suspended workflow",
             adapterId,
             jobKey);
-        return false;
+        return OptionalLong.empty();
       }
-      return Camunda8Suspension.isSuspended(clientFactory.getClient(), jobs.getFirst().getProcessInstanceKey());
+      final long processInstanceKey = jobs.getFirst().getProcessInstanceKey();
+      return Camunda8Suspension.isSuspended(clientFactory.getClient(), processInstanceKey)
+          ? OptionalLong.of(processInstanceKey)
+          : OptionalLong.empty();
     } catch (final RuntimeException e) {
       log.debug(
           "Camunda8[{}]: could not find out whether the workflow of job {} is suspended",
           adapterId,
           jobKey,
           e);
-      return false;
+      return OptionalLong.empty();
     }
 
   }
@@ -101,14 +134,15 @@ final class Camunda8SuspendedWorkflow {
    *
    * @param refusal What the command threw
    * @param userTaskKey The user task the command was about
-   * @return Whether the workflow of the user task is suspended
+   * @return The key of the suspended process instance of the user task, or empty where the
+   *         refusal had another reason
    */
-  boolean refusedTheUserTask(
+  OptionalLong suspendedInstanceOfTheUserTask(
       final Throwable refusal,
       final long userTaskKey) {
 
     if (!Camunda8Suspension.theClusterCanSuspend() || !Camunda8Errors.refusedAboutAUserTaskItHolds(refusal)) {
-      return false;
+      return OptionalLong.empty();
     }
     try {
       final var processInstanceKey = clientFactory
@@ -118,7 +152,9 @@ final class Camunda8SuspendedWorkflow {
           .join()
           .getProcessInstanceKey();
       return (processInstanceKey != null) && Camunda8Suspension.isSuspended(clientFactory.getClient(),
-          processInstanceKey);
+          processInstanceKey)
+              ? OptionalLong.of(processInstanceKey)
+              : OptionalLong.empty();
     } catch (final RuntimeException e) {
       // a task which is still being created may not be in the search yet. That is the
       // common reason for a 409 about a user task, and it is no suspension
@@ -127,26 +163,31 @@ final class Camunda8SuspendedWorkflow {
           adapterId,
           userTaskKey,
           e);
-      return false;
+      return OptionalLong.empty();
     }
 
   }
 
   /**
    * What phase one throws for a task of a suspended workflow. The caller's transaction rolls
-   * back, and the task stays open.
+   * back, and the task stays open. The extensions hear about it first.
    *
    * @param kindOfTask <code>task</code> or <code>user task</code>, for the message
-   * @param taskId The task the caller named
+   * @param call The call the caller made
+   * @param processInstanceKey The suspended process instance of the task
    * @param operationDescription What was attempted, for the message
    * @param refusal What the cluster answered the check with
    * @return The exception to throw
    */
   WorkflowSuspendedException refuseTheCall(
       final String kindOfTask,
-      final String taskId,
+      final TheCall call,
+      final long processInstanceKey,
       final String operationDescription,
       final Throwable refusal) {
+
+    final var taskId = call.taskId();
+    tellTheExtensions(call, processInstanceKey, SuspendedWorkflowFound.Phase.CALL);
 
     log.info(
         "Camunda8[{}]: the pre-commit check found the workflow of {} '{}' suspended - the cluster refused "
@@ -178,15 +219,23 @@ final class Camunda8SuspendedWorkflow {
    * The refused command changed nothing in the cluster. So the next attempt may look like a
    * first one, which is what the outbox expects of this answer.
    *
+   * <p>
+   * The extensions hear about it on every attempt. They filter out the repetitions themselves.
+   *
    * @param kindOfTask <code>task</code> or <code>user task</code>, for the message
-   * @param taskId The task of the entry
+   * @param call The call the entry carries
+   * @param processInstanceKey The suspended process instance of the task
    * @param operationDescription What waits, for the message
    * @return The failure to throw
    */
   PhaseTwoRetryLater waitInTheOutbox(
       final String kindOfTask,
-      final String taskId,
+      final TheCall call,
+      final long processInstanceKey,
       final String operationDescription) {
+
+    final var taskId = call.taskId();
+    tellTheExtensions(call, processInstanceKey, SuspendedWorkflowFound.Phase.WAITING);
 
     return new PhaseTwoRetryLater(
         """
@@ -203,6 +252,31 @@ final class Camunda8SuspendedWorkflow {
                 operationDescription), WAIT_WHILE_SUSPENDED, Instant
                     .now()
                     .plus(WAIT_WHILE_SUSPENDED.multipliedBy(2)));
+
+  }
+
+  /**
+   * Tells the extensions through the core. Nothing of it may come out: the caller throws what
+   * it would have thrown anyway. The core already catches what an extension throws, so this
+   * catch is only the net for a value the record refuses.
+   */
+  private void tellTheExtensions(
+      final TheCall call,
+      final long processInstanceKey,
+      final SuspendedWorkflowFound.Phase phase) {
+
+    try {
+      reporter
+          .found(new SuspendedWorkflowFound(
+              adapterId, call.workflowModuleId(), call.bpmnProcessId(), call.workflowAggregateId(), Long
+                  .toString(processInstanceKey), call.taskId(), Instant.now(), phase));
+    } catch (final RuntimeException e) {
+      log.warn(
+          "Camunda8[{}]: could not tell the extensions that the workflow of task '{}' is suspended",
+          adapterId,
+          call.taskId(),
+          e);
+    }
 
   }
 

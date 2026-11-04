@@ -17,6 +17,7 @@ import io.vanillabp.integration.adapter.AdapterBeanRegistrarSupport;
 import io.vanillabp.integration.adapter.migration.config.MigrationAdapterProperties;
 import io.vanillabp.integration.adapter.spi.NameClashAvoidanceSupport;
 import io.vanillabp.integration.adapter.spi.PreCommitRegistrar;
+import io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter;
 import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
 import io.vanillabp.integration.spi.startup.StartupReport;
 
@@ -66,7 +67,9 @@ public class Camunda8AdapterBeanRegistrar implements BeanRegistrar {
                             supplierContext.bean(VanillaBpCamunda8Properties.class),
                             adapterId), supplierContext
                                 .bean(PreCommitRegistrar.class), supplierContext
-                                    .bean(WorkflowAggregateSync.class));
+                                    .bean(WorkflowAggregateSync.class), supplierContext
+                                        .beanProvider(SuspendedWorkflowReporter.class)
+                                        .getIfAvailable());
                 processService.setScoping(
                     supplierContext.bean(NameClashAvoidanceSupport.class));
                 final var overlay = supplierContext.bean(VanillaBpCamunda8Properties.class);
