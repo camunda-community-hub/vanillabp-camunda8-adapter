@@ -35,7 +35,7 @@ import lombok.extern.slf4j.Slf4j;
  * <p>
  * Where the answer is "suspended", the extensions hear it before the call is refused or the
  * outbox entry waits. The core tells them, and nothing they do changes what is thrown here (see
- * {@code DECISIONS.pending/2074.md}).
+ * decision 93 in the repository's DECISIONS.md).
  */
 @Slf4j
 final class Camunda8SuspendedWorkflow {
