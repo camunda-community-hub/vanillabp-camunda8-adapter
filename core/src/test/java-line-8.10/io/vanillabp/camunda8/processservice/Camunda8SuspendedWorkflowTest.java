@@ -38,8 +38,10 @@ import io.camunda.client.api.search.response.SearchResponse;
 import io.camunda.client.api.search.response.UserTask;
 import io.vanillabp.camunda8.client.Camunda8AdapterConfiguration;
 import io.vanillabp.camunda8.client.Camunda8ClientFactory;
+import io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.adapter.spi.WorkflowScope;
+import io.vanillabp.integration.extension.spi.runtime.SuspendedWorkflowFound;
 import io.vanillabp.integration.spi.PhaseOperation;
 import io.vanillabp.integration.spi.PhaseTwoCall;
 import io.vanillabp.integration.spi.PhaseTwoRetryLater;
@@ -66,6 +68,30 @@ public class Camunda8SuspendedWorkflowTest {
   private final CamundaClient client = mock(CamundaClient.class);
 
   private final List<Runnable> preCommitChecks = new ArrayList<>();
+
+  /**
+   * What the extensions heard through the core.
+   */
+  private final List<SuspendedWorkflowFound> heard = new ArrayList<>();
+
+  private SuspendedWorkflowReporter reporter = heard::add;
+
+  private void theExtensionsHeard(
+      final SuspendedWorkflowFound.Phase phase,
+      final String workflowAggregateId) {
+
+    assertEquals(1, heard.size(), "one report per refusal: %s".formatted(heard));
+    final var found = heard.getFirst();
+    assertEquals("c8", found.adapterId());
+    assertEquals("test-module", found.workflowModuleId());
+    assertEquals("TestProcess", found.bpmnProcessId());
+    assertEquals(workflowAggregateId, found.workflowAggregateId());
+    assertEquals(Long.toString(PROCESS_INSTANCE), found.workflowId(), "the instance the adapter asked about");
+    assertEquals(TASK_ID, found.taskId());
+    assertEquals(phase, found.phase());
+    assertNotNull(found.foundAt());
+
+  }
 
   private static ProblemException refusedBecauseSuspended(
       final String command) {
@@ -97,6 +123,7 @@ public class Camunda8SuspendedWorkflowTest {
         "the message names the task, the adapter and what to do: "
             + thrown.getMessage());
     assertSame(refusal, thrown.getCause(), "the answer of the cluster travels along as the cause");
+    theExtensionsHeard(SuspendedWorkflowFound.Phase.CALL, null);
 
   }
 
@@ -114,6 +141,7 @@ public class Camunda8SuspendedWorkflowTest {
         () -> preCommitChecks.getFirst().run(),
         "an active workflow refuses a user task which is still being created, and the completion of "
             + "phase two waits that out");
+    assertTrue(heard.isEmpty(), "nothing is suspended, so nobody is told");
 
   }
 
@@ -132,6 +160,7 @@ public class Camunda8SuspendedWorkflowTest {
         thrown.getMessage().contains(TASK_ID) && thrown.getMessage().contains("completing"),
         "the message names the task and what was attempted: "
             + thrown.getMessage());
+    theExtensionsHeard(SuspendedWorkflowFound.Phase.CALL, null);
 
   }
 
@@ -148,6 +177,7 @@ public class Camunda8SuspendedWorkflowTest {
 
     final var thrown = assertThrows(ProblemException.class, () -> preCommitChecks.getFirst().run());
     assertSame(refusal, thrown, "nothing is made up about a refusal the adapter cannot explain");
+    assertTrue(heard.isEmpty(), "nothing is suspended, so nobody is told");
 
   }
 
@@ -177,6 +207,7 @@ public class Camunda8SuspendedWorkflowTest {
         WorkflowAwareness.ACTIVE,
         aService().awarenessOfTask(WorkflowScope.of("test-module", "TestProcess"), "4711", TASK_ID),
         "the cluster holds the task, and BPMS_UNAVAILABLE would send the caller into retries");
+    assertTrue(heard.isEmpty(), "the check of phase one reports it, the probe before it does not");
 
   }
 
@@ -193,6 +224,11 @@ public class Camunda8SuspendedWorkflowTest {
     final var service = aService();
     final var thrown = assertThrows(PhaseTwoRetryLater.class, () -> phaseTwo(service, PhaseOperation.COMPLETE_TASK));
     theWaitLastsAsLongAsTheSuspension(service, thrown);
+    theExtensionsHeard(SuspendedWorkflowFound.Phase.WAITING, "4711");
+
+    // the next attempt of the outbox entry is reported again, the extension filters it out
+    assertThrows(PhaseTwoRetryLater.class, () -> phaseTwo(service, PhaseOperation.COMPLETE_TASK));
+    assertEquals(2, heard.size());
 
   }
 
@@ -221,6 +257,7 @@ public class Camunda8SuspendedWorkflowTest {
                 "4711",
                 PhaseOperations.args(PhaseTwoCall.ARG_TASK_ID, TASK_ID, PhaseTwoCall.ARG_BPMN_ERROR_CODE, "E")));
     theWaitLastsAsLongAsTheSuspension(service, thrown);
+    theExtensionsHeard(SuspendedWorkflowFound.Phase.WAITING, "4711");
 
   }
 
@@ -239,6 +276,7 @@ public class Camunda8SuspendedWorkflowTest {
         PhaseTwoRetryLater.class,
         () -> phaseTwo(service, PhaseOperation.COMPLETE_USER_TASK));
     theWaitLastsAsLongAsTheSuspension(service, thrown);
+    theExtensionsHeard(SuspendedWorkflowFound.Phase.WAITING, "4711");
 
   }
 
@@ -255,6 +293,7 @@ public class Camunda8SuspendedWorkflowTest {
 
     final var thrown = assertThrows(ProblemException.class, () -> phaseTwo(aService(), PhaseOperation.COMPLETE_TASK));
     assertSame(refusal, thrown);
+    assertTrue(heard.isEmpty(), "nothing is suspended, so nobody is told");
 
   }
 
@@ -271,6 +310,23 @@ public class Camunda8SuspendedWorkflowTest {
 
     Mockito.verify(client, Mockito.never()).newProcessInstanceGetRequest(Mockito.anyLong());
     Mockito.verify(client, Mockito.never()).newJobSearchRequest();
+
+  }
+
+  @Test
+  @DisplayName("A report which fails leaves the refusal of the caller as it was")
+  public void aFailingReportChangesNothing() {
+
+    reporter = found -> {
+      throw new IllegalStateException("a reporter which breaks");
+    };
+    theClusterRefusesTheJobTimeoutUpdate(refusedBecauseSuspended("UPDATE_TIMEOUT"));
+    theJobSearchReportsTheInstance();
+    theInstanceIs(ProcessInstanceState.SUSPENDED);
+
+    phaseOne(PhaseOperation.COMPLETE_TASK);
+
+    assertThrows(WorkflowSuspendedException.class, () -> preCommitChecks.getFirst().run());
 
   }
 
@@ -346,7 +402,7 @@ public class Camunda8SuspendedWorkflowTest {
     return new Camunda8ProcessService<>(
         "c8", clientFactory, Duration.ofDays(14), (
             aggregateClass,
-            check) -> preCommitChecks.add(check), null);
+            check) -> preCommitChecks.add(check), null, found -> reporter.found(found));
 
   }
 

@@ -47,6 +47,7 @@ import io.vanillabp.integration.adapter.spi.PhaseOneRequest;
 import io.vanillabp.integration.adapter.spi.PhaseOperationHandler;
 import io.vanillabp.integration.adapter.spi.PhaseTwoRequest;
 import io.vanillabp.integration.adapter.spi.PreCommitRegistrar;
+import io.vanillabp.integration.adapter.spi.SuspendedWorkflowReporter;
 import io.vanillabp.integration.adapter.spi.WorkflowAggregateSync;
 import io.vanillabp.integration.adapter.spi.WorkflowAwareness;
 import io.vanillabp.integration.adapter.spi.WorkflowScope;
@@ -150,12 +151,37 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
       final PreCommitRegistrar preCommitRegistrar,
       final WorkflowAggregateSync aggregateSync) {
 
+    this(adapterId, clientFactory, asyncTaskLockRenewal, preCommitRegistrar, aggregateSync, null);
+
+  }
+
+  /**
+   * Builds the process service of one configured adapter id, with the core's reporter of a
+   * suspended workflow. Both platform beans use this one.
+   *
+   * @param adapterId The configured adapter id this instance answers for
+   * @param clientFactory The clients of that adapter id
+   * @param asyncTaskLockRenewal How far a probe pushes the lock of a job it looks at
+   * @param preCommitRegistrar Where phase one hooks its check into the caller's unit of work
+   * @param aggregateSync Which aggregate attributes reach the cluster, or <code>null</code>
+   *          to send the aggregate id alone
+   * @param suspendedWorkflowReporter Where a workflow found suspended is reported, so that the
+   *          extensions hear about it. <code>null</code> reports nothing
+   */
+  public Camunda8ProcessService(
+      final String adapterId,
+      final Camunda8ClientFactory clientFactory,
+      final Duration asyncTaskLockRenewal,
+      final PreCommitRegistrar preCommitRegistrar,
+      final WorkflowAggregateSync aggregateSync,
+      final SuspendedWorkflowReporter suspendedWorkflowReporter) {
+
     this.adapterId = adapterId;
     this.clientFactory = clientFactory;
     this.asyncTaskLockRenewal = asyncTaskLockRenewal;
     this.preCommitRegistrar = preCommitRegistrar;
     this.aggregateSync = aggregateSync;
-    this.suspendedWorkflow = new Camunda8SuspendedWorkflow(adapterId, clientFactory);
+    this.suspendedWorkflow = new Camunda8SuspendedWorkflow(adapterId, clientFactory, suspendedWorkflowReporter);
 
   }
 
@@ -615,7 +641,7 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
             Camunda8Errors.rejection(e));
         return WorkflowAwareness.ACTIVE;
       }
-      if (suspendedWorkflow.refusedTheJob(e, taskKeyOf(taskId))) {
+      if (suspendedWorkflow.suspendedInstanceOfTheJob(e, taskKeyOf(taskId)).isPresent()) {
         // the cluster holds the job, and its workflow is suspended. The task is there, so the
         // probe says so. The check of phase one then tells the caller why it cannot answer
         // the task now
@@ -652,14 +678,56 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
   private void preflightCompleteTask(
       final PhaseOneRequest<A> request) {
 
-    registerPreCommitExistenceCheck(aggregateClassOf(request.aggregatePersistence()), request.taskId(), "completing");
+    registerPreCommitExistenceCheck(request, "completing");
 
   }
 
   private void preflightCancelTask(
       final PhaseOneRequest<A> request) {
 
-    registerPreCommitExistenceCheck(aggregateClassOf(request.aggregatePersistence()), request.taskId(), "canceling");
+    registerPreCommitExistenceCheck(request, "canceling");
+
+  }
+
+  /**
+   * What the extensions hear about a phase-one call whose workflow is suspended. The aggregate
+   * id is asked of the persistence only here, after the cluster refused. It is left out where
+   * the persistence cannot say it, because the caller's exception must not change.
+   */
+  private Camunda8SuspendedWorkflow.TheCall theCallOf(
+      final PhaseOneRequest<A> request) {
+
+    String workflowAggregateId = null;
+    try {
+      if (request.aggregatePersistence() != null) {
+        final var id = request
+            .aggregatePersistence()
+            .getAggregateId(request.workflowAggregate());
+        workflowAggregateId = id == null
+            ? null
+            : id.toString();
+      }
+    } catch (final RuntimeException e) {
+      log.debug("Camunda8[{}]: could not read the aggregate id of the call on task '{}'", adapterId, request.taskId(),
+          e);
+    }
+    return new Camunda8SuspendedWorkflow.TheCall(
+        request.workflowModuleId(), request.bpmnProcessId(), workflowAggregateId, request.taskId());
+
+  }
+
+  /**
+   * What the extensions hear about a phase-two entry whose workflow is suspended.
+   */
+  private Camunda8SuspendedWorkflow.TheCall theCallOf(
+      final PhaseTwoRequest<A> request) {
+
+    return new Camunda8SuspendedWorkflow.TheCall(
+        request.workflowModuleId(), request.bpmnProcessId(), request.workflowAggregateId() == null
+            ? null
+            : request
+                .workflowAggregateId()
+                .toString(), request.taskId());
 
   }
 
@@ -693,11 +761,11 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
    * on the side, and it never advances the process.
    */
   private void registerPreCommitExistenceCheck(
-      final Class<?> workflowAggregateClass,
-      final String taskId,
+      final PhaseOneRequest<A> request,
       final String operationDescription) {
 
-    preCommitRegistrar.beforeCommit(workflowAggregateClass, () -> {
+    final var taskId = request.taskId();
+    preCommitRegistrar.beforeCommit(aggregateClassOf(request.aggregatePersistence()), () -> {
       try {
         updateJobTimeout(taskId);
       } catch (final Exception e) {
@@ -710,8 +778,10 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
                   .formatted(taskId, operationDescription),
               e);
         }
-        if (suspendedWorkflow.refusedTheJob(e, taskKeyOf(taskId))) {
-          throw suspendedWorkflow.refuseTheCall("task", taskId, operationDescription, e);
+        final var suspended = suspendedWorkflow.suspendedInstanceOfTheJob(e, taskKeyOf(taskId));
+        if (suspended.isPresent()) {
+          throw suspendedWorkflow.refuseTheCall("task", theCallOf(request), suspended.getAsLong(), operationDescription,
+              e);
         }
         throw e;
       }
@@ -947,12 +1017,14 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
                   .formatted(whatThe404WasAbout(request.taskId(), "empty UpdateUserTask of this check")),
               e);
         }
-        if (suspendedWorkflow.refusedTheUserTask(e, taskKeyOf(request.taskId()))) {
+        final var suspended = suspendedWorkflow.suspendedInstanceOfTheUserTask(e, taskKeyOf(request.taskId()));
+        if (suspended.isPresent()) {
           // a suspended workflow refuses the empty update with the same 409 as a task which is
           // still being created. Read as the second, the transaction would commit, and the
           // completion of phase two would wait until the workflow is resumed. The caller can
           // still be told now, so it is
-          throw suspendedWorkflow.refuseTheCall("user task", request.taskId(), "completing", e);
+          throw suspendedWorkflow.refuseTheCall("user task", theCallOf(request), suspended.getAsLong(), "completing",
+              e);
         }
         if (Camunda8Errors.refusedAboutAUserTaskItHolds(e)) {
           // the same answer comes for a task the cluster is already ENDING. It is canceling
@@ -1069,8 +1141,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           request.bpmnProcessId(),
           request.workflowModuleId());
     } catch (final RuntimeException e) {
-      if (suspendedWorkflow.refusedTheUserTask(e, taskKeyOf(request.taskId()))) {
-        throw suspendedWorkflow.waitInTheOutbox("user task", request.taskId(), "completion");
+      final var suspended = suspendedWorkflow.suspendedInstanceOfTheUserTask(e, taskKeyOf(request.taskId()));
+      if (suspended.isPresent()) {
+        throw suspendedWorkflow.waitInTheOutbox("user task", theCallOf(request), suspended.getAsLong(), "completion");
       }
       if (!Camunda8Errors.jobAlreadyGone(e)) {
         throw e;
@@ -1139,8 +1212,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           request.bpmnProcessId(),
           request.workflowModuleId());
     } catch (final RuntimeException e) {
-      if (suspendedWorkflow.refusedTheJob(e, taskKeyOf(request.taskId()))) {
-        throw suspendedWorkflow.waitInTheOutbox("task", request.taskId(), "completion");
+      final var suspended = suspendedWorkflow.suspendedInstanceOfTheJob(e, taskKeyOf(request.taskId()));
+      if (suspended.isPresent()) {
+        throw suspendedWorkflow.waitInTheOutbox("task", theCallOf(request), suspended.getAsLong(), "completion");
       }
       if (!Camunda8Errors.jobAlreadyGone(e)) {
         throw e;
@@ -1178,8 +1252,9 @@ public class Camunda8ProcessService<A> implements MigratableProcessService<A> {
           request.bpmnProcessId(),
           request.workflowModuleId());
     } catch (final RuntimeException e) {
-      if (suspendedWorkflow.refusedTheJob(e, taskKeyOf(request.taskId()))) {
-        throw suspendedWorkflow.waitInTheOutbox("task", request.taskId(), "cancellation");
+      final var suspended = suspendedWorkflow.suspendedInstanceOfTheJob(e, taskKeyOf(request.taskId()));
+      if (suspended.isPresent()) {
+        throw suspendedWorkflow.waitInTheOutbox("task", theCallOf(request), suspended.getAsLong(), "cancellation");
       }
       if (!Camunda8Errors.jobAlreadyGone(e)) {
         throw e;
