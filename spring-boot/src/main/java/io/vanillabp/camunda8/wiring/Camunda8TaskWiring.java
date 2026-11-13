@@ -183,6 +183,11 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
         
     }
 
+    public void doCleanup() {
+        taskHandlers.clear();
+        workers.clear();
+    }
+
     @SuppressWarnings("unchecked")
     public Stream<Camunda8Connectable> connectablesForType(
             final String workerModuleId,
@@ -248,7 +253,9 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                         + element.getId()
                                                         + "' of process '"
                                                         + process.getId()
-                                                        + "' having no external reference set!");
+                                                        + "' (version '"
+                                                        + versionInfo
+                                                        + "') having no external reference set!");
                                         });
                         }
                     } else if (UserTask.class.isAssignableFrom(type)) { // worker-based user task
@@ -265,12 +272,23 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                 formKey,
                                                 null)),
                                         () -> {
-                                            throw new RuntimeException(
+                                            result
+                                                    .add(new Camunda8Connectable(
+                                                            workerModuleId,
+                                                            process,
+                                                            versionInfo,
+                                                            element.getId(),
+                                                            Type.USERTASK,
+                                                            element.getId(),
+                                                            null));
+                                            logger.trace(
                                                     "Found user task '"
                                                     + element.getId()
                                                     + "' of process '"
                                                     + process.getId()
-                                                    + "' having no form key set!");
+                                                    + "' (version '"
+                                                    + versionInfo
+                                                    + "') having no form key set! Will use element-id instead.");
                                         });
                     } else {
                         Optional
