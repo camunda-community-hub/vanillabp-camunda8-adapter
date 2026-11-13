@@ -272,14 +272,23 @@ public class Camunda8TaskWiring extends TaskWiringBase<Camunda8Connectable, Camu
                                                 formKey,
                                                 null)),
                                         () -> {
-                                            throw new RuntimeException(
+                                            result
+                                                    .add(new Camunda8Connectable(
+                                                            workerModuleId,
+                                                            process,
+                                                            versionInfo,
+                                                            element.getId(),
+                                                            Type.USERTASK,
+                                                            element.getId(),
+                                                            null));
+                                            logger.trace(
                                                     "Found user task '"
                                                     + element.getId()
                                                     + "' of process '"
                                                     + process.getId()
                                                     + "' (version '"
                                                     + versionInfo
-                                                    + "') having no form key set!");
+                                                    + "') having no form key set! Will use element-id instead.");
                                         });
                     } else {
                         Optional
